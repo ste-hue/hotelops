@@ -1,15 +1,20 @@
 [build-system]
-requires = ["setuptools>=68.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "hotelops"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "pyyaml>=6.0",
-    "openpyxl>=3.1",
+  "pyyaml>=6.0",
+  "openpyxl>=3.1",
+  "bank-reconcile",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.4"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["actions*", "pipelines*", "lib*"]
