@@ -23,6 +23,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from lib.contracts import SchemaViolationError, validate_columns
+
 try:
     import openpyxl  # noqa: F401 - presence check
     HAS_EXCEL = True
@@ -118,11 +120,26 @@ def parse_date(s: str) -> datetime:
 
 # -- Readers ------------------------------------------------------------------
 
+SELLA_REQUIRED_COLUMNS = {
+    "Codice identificativo", "Data operazione", "Data valuta",
+    "Descrizione", "Divisa", "Debito", "Credito",
+    "Categoria", "Sottocategoria", "Etichette", "Note",
+}
+
+MPS_REQUIRED_COLUMNS = {"Data", "Valuta", "Dare", "Avere", "Descrizione operazioni"}
+
+
 def read_sella_csv(path: Path, logger: logging.Logger) -> list[dict]:
     logger.info(f"Reading Sella CSV: {path.name}")
     rows = []
     with open(path, "r", encoding="utf-8") as f:
-        for i, row in enumerate(csv.DictReader(f), start=2):
+        reader = csv.DictReader(f)
+        validate_columns(
+            found=reader.fieldnames or [],
+            required=SELLA_REQUIRED_COLUMNS,
+            context=f"Sella CSV {path.name}",
+        )
+        for i, row in enumerate(reader, start=2):
             rows.append({
                 "riga": i,
                 "codice": row.get("Codice identificativo", ""),
@@ -153,11 +170,11 @@ def read_mps_excel(path: Path, logger: logging.Logger) -> list[dict]:
 
     logger.info(f"Reading MPS Excel: {path.name}")
     df = pd.read_excel(path)
-    required = ["Data", "Valuta", "Dare", "Avere", "Descrizione operazioni"]
-    missing = [c for c in required if c not in df.columns]
-    if missing:
-        logger.error(f"Missing columns: {missing}")
-        return []
+    validate_columns(
+        found=list(df.columns),
+        required=MPS_REQUIRED_COLUMNS,
+        context=f"MPS Excel {path.name}",
+    )
 
     rows = []
     for i, r in df.iterrows():
@@ -282,10 +299,15 @@ def process_file(filepath: Path, datahub: Path, mappings: dict, hashes: set,
     meta["filename"] = filepath.name
 
     # Read
-    if meta["ext"] == "csv":
-        raw_rows = read_sella_csv(filepath, logger)
-    else:
-        raw_rows = read_mps_excel(filepath, logger)
+    try:
+        if meta["ext"] == "csv":
+            raw_rows = read_sella_csv(filepath, logger)
+        else:
+            raw_rows = read_mps_excel(filepath, logger)
+    except SchemaViolationError as e:
+        logger.error(f"Schema violation: {e}")
+        stats["errors"] = 1
+        return stats
 
     stats["total"] = len(raw_rows)
     fact_table = datahub / "fatti" / "f_banche_movimenti.csv"

@@ -34,24 +34,29 @@ Four layers: **Ontology** (Obsidian) → **Datahub** (Google Drive) → **Pipeli
 
 ### Code structure
 
-- `pipelines/` — ETL modules that read from `ingresso/` and append to `fatti/`. Currently only `banca/ingest.py` (bank transaction ingestion supporting Sella CSV and MPS Excel formats).
+- `pipelines/` — ETL modules that read from `ingresso/` and append to `fatti/`. Currently `banca/ingest.py` (bank transaction ingestion supporting Sella CSV and MPS Excel formats).
 - `actions/` — Runtime actions called by the agent. Currently `reconcile_banca.py` (matches bank transactions against ledger using `bank-reconcile` library's cascade matcher).
-- `lib/` — Shared utilities. `datahub.py` provides `read_facts()` for reading CSV fact tables with column-based filtering.
+- `lib/` — Shared utilities:
+  - `datahub.py` — `read_facts()` for reading CSV fact tables with column-based filtering.
+  - `contracts.py` — `validate_columns()` + `SchemaViolationError` for fail-fast schema validation on inputs.
 - `tests/` — pytest test directory.
 
 ### Data model
 
 Every fact row carries **5 dimensions**: `societa`, `business_unit`, `funzione`, `location`, `oggetto`. The datahub has this structure:
 - `ingresso/` — raw input files
-- `fatti/` — fact tables (CSV)
+- `fatti/` — fact tables (CSV, append-only)
 - `dimensioni/mappature/` — dimension mapping files
-- `meta/` — logs and action run outputs
+- `meta/` — logs, action run outputs, and run registry
 
 ### Key patterns
 
 - **Filename convention**: `YYYY-MM-DD__FUNZIONE__SOCIETA_BANCA__DETTAGLIO.ext` — metadata is extracted from filenames via `parse_filename()`.
 - **Deduplication**: MD5 hash-based (`hash_riga` column) to prevent duplicate rows on re-runs.
 - **Deterministic run IDs**: SHA256 hash of parameters for idempotent reconciliation runs.
+- **Data contracts**: `validate_columns()` is called at ingestion (CSV/Excel readers) and before reconciliation mapping. Raises `SchemaViolationError` on missing columns — fail fast, not silent corruption.
+- **Lineage**: `file_sorgente` and `riga_sorgente` flow from ingestion through reconciliation output. Every match row traces back to its source bank file and row number.
+- **Action run lifecycle**: `reconcile_banca` writes `metrics.json` with `status: "running"` at start, updates to `"completed"` or `"failed"` at end. Includes `inputs`/`outputs` manifest with paths and row counts. Append-only `runs.csv` registry at `meta/actions/reconcile_banca/runs.csv`.
 - **Logging**: Pipeline logs go to `{datahub}/meta/pipeline/logs/`.
 
 ## Governance Rules
