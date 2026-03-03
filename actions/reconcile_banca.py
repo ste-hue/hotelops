@@ -255,7 +255,12 @@ def run_reconciliation(
         ledger_txns = [_ledger_to_txn(r) for r in ledger_facts]
 
         # -- Engine --
-        config = CascadeConfig(dayfirst=True)
+        config = CascadeConfig(
+            dayfirst=True,
+            date_weight=0.8,
+            text_weight=0.2,
+            auto_threshold=0.6,
+        )
         result = reconcile_cascade(bank_txns, ledger_txns, config=config)
 
         # -- Write outputs --

@@ -17,4 +17,4 @@ dev = ["pytest>=8.0", "ruff>=0.4"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["actions*", "pipelines*", "lib*"]
+include = ["actions*", "pipelines*", "lib*", "services*"]
