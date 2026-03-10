@@ -1,0 +1,90 @@
+# HotelOps Ontology Schema v1
+# Source of truth for entity types and relation types.
+# Obsidian notes are instances; this file defines the shapes.
+
+entity_types:
+  Societa:
+    description: "Persona giuridica, societa' di capitali/persone"
+    maps_to_dimension: dim_societa
+    frontmatter_keys: [type, status, role, business_model, revenue_sources, debt_exposure]
+    obsidian_folder: companies
+
+  Struttura:
+    description: "Asset fisico, immobile, concessione"
+    maps_to_dimension: dim_location
+    frontmatter_keys: [type, status, owner]
+    obsidian_folder: assets
+
+  Reparto:
+    description: "Unita' organizzativa interna"
+    maps_to_dimension: dim_funzione
+    frontmatter_keys: [type, status, parent_division]
+    obsidian_folder: departments
+
+  Persona:
+    description: "Individuo: dipendente, consulente, controparte"
+    maps_to_dimension: null
+    frontmatter_keys: [type, status, role, societa]
+    obsidian_folder: people
+
+  Fornitore:
+    description: "Azienda/individuo che vende beni o servizi"
+    maps_to_dimension: null
+    frontmatter_keys: [type, status, settore]
+    obsidian_folder: companies
+
+  Banca:
+    description: "Istituto di credito"
+    maps_to_dimension: null
+    frontmatter_keys: [type, status]
+    obsidian_folder: banks
+
+  Progetto:
+    description: "Iniziativa con budget, timeline, deliverable"
+    maps_to_dimension: dim_oggetto
+    frontmatter_keys: [type, status, budget, timeline]
+    obsidian_folder: projects
+
+  Contratto:
+    description: "Accordo formale con obblighi"
+    maps_to_dimension: dim_oggetto
+    frontmatter_keys: [type, status, parties]
+    obsidian_folder: null
+
+  Strumento_Finanziario:
+    description: "Mutuo, finanziamento, linea di credito"
+    maps_to_dimension: dim_oggetto
+    frontmatter_keys: [type, status, category, borrower, lender, tasso, criticality]
+    obsidian_folder: [financial, loans]
+
+  Consulente:
+    description: "Professionista esterno con incarico ricorrente"
+    maps_to_dimension: null
+    frontmatter_keys: [type, status, role]
+    obsidian_folder: advisors
+
+# Relation types — from entity_protocol_v1.md
+relation_types:
+  owns:        { description: "Ownership of asset or equity" }
+  operates:    { description: "Operational management" }
+  employs:     { description: "Employment relationship" }
+  advises:     { description: "Advisory/consulting relationship" }
+  supplies:    { description: "Supplier relationship" }
+  lends_to:    { description: "Lending/credit relationship" }
+  part_of:     { description: "Organizational hierarchy" }
+  tenant_of:   { description: "Rental/lease relationship" }
+  guarantees:  { description: "Personal or corporate guarantee" }
+  manages:     { description: "Project/team management" }
+  shareholder: { description: "Equity participation" }
+
+# Folder → type fallback (when frontmatter is missing)
+folder_type_map:
+  companies: Societa
+  banks: Banca
+  people: Persona
+  advisors: Consulente
+  departments: Reparto
+  financial: Strumento_Finanziario
+  loans: Strumento_Finanziario
+  projects: Progetto
+  assets: Struttura

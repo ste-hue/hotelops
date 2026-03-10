@@ -2,10 +2,10 @@
 """
 Bank transaction ingestion pipeline.
 
-Reads raw bank files from datahub ingresso/banca/banca_grezza/,
+Reads raw bank files from datahub ingresso/banca/estratti/,
 transforms them to 5D fact rows, appends to fatti/f_banche_movimenti.csv.
 
-Supports: Sella CSV, MPS Excel.
+Supports: Sella CSV, MPS Excel, Intesa Excel.
 
 Usage:
     python -m pipelines.banca.ingest --datahub /path/to/datahub --all
@@ -16,6 +16,7 @@ Usage:
 import argparse
 import csv
 import hashlib
+import io
 import logging
 import re
 import sys
@@ -39,7 +40,13 @@ FILENAME_PATTERN = re.compile(
 )
 
 SOCIETA_MAP = {"INTUR": "INTUR", "ORTI": "ORTI", "MPS": "ORTI"}
-BANCA_MAP = {"INTUR_SELLA": "SELLA", "SELLA": "SELLA", "MPS": "MPS"}
+BANCA_MAP = {"INTUR_SELLA": "SELLA", "SELLA": "SELLA", "MPS": "MPS", "INTESA": "INTESA"}
+
+# For path-based inference (staging traversal)
+SOCIETA_KEYWORDS = {"INTUR": "INTUR", "ORTI": "ORTI"}
+BANCA_KEYWORDS = {"MPS KROSS": "MPS_KROSS", "INTESA": "INTESA", "SELLA": "SELLA", "MPS": "MPS"}
+
+EXCEL_EXTENSIONS = {".xls", ".xlsx"}
 
 DEFAULT_FUNZIONE = "FINANZA"
 DEFAULT_BU = "HQ"
@@ -86,6 +93,21 @@ def parse_filename(name: str) -> Optional[dict]:
     }
 
 
+def meta_from_path(filepath: Path) -> Optional[dict]:
+    """Infer metadata from staging folder path (e.g. MOVIMENTI BANCARI ESTRATTI/ORTI/ORTI-MPS/file.xls)."""
+    path_str = " / ".join(filepath.parts).upper()
+    societa = next((v for k, v in SOCIETA_KEYWORDS.items() if k in path_str), "UNKNOWN")
+    banca = next((v for k, v in BANCA_KEYWORDS.items() if k in path_str), "UNKNOWN")
+    ext = filepath.suffix.lstrip(".").lower()
+    return {
+        "data_ingresso": datetime.now().strftime("%Y-%m-%d"),
+        "funzione": "FINANZA",
+        "societa_banca": f"{societa}_{banca}",
+        "ext": ext,
+        "filename": filepath.name,
+    }
+
+
 def infer_ids(societa_banca: str) -> tuple[str, str]:
     societa = next((v for k, v in SOCIETA_MAP.items() if k in societa_banca), "UNKNOWN")
     banca = next((v for k, v in BANCA_MAP.items() if k in societa_banca), "UNKNOWN")
@@ -110,7 +132,7 @@ def md5(*args) -> str:
 
 
 def parse_date(s: str) -> datetime:
-    for fmt in ("%d/%m/%y", "%d/%m/%Y", "%Y-%m-%d"):
+    for fmt in ("%d/%m/%y", "%d/%m/%Y", "%Y-%m-%d", "%d.%m.%Y", "%d.%m.%y"):
         try:
             return datetime.strptime(s.strip(), fmt)
         except ValueError:
@@ -127,6 +149,11 @@ SELLA_REQUIRED_COLUMNS = {
 }
 
 MPS_REQUIRED_COLUMNS = {"Data", "Valuta", "Dare", "Avere", "Descrizione operazioni"}
+MPS2026_REQUIRED_COLUMNS = {"DATA CONT.", "DATA VAL.", "DESCRIZIONE", "IMPORTO(€)"}
+
+INTESA_REQUIRED_COLUMNS = {"Data Contabile", "Data Valuta", "Dare", "Avere"}
+
+SELLA_XLS_REQUIRED_COLUMNS = {"Codice identificativo", "Data operazione", "Descrizione", "Debito"}
 
 
 def read_sella_csv(path: Path, logger: logging.Logger) -> list[dict]:
@@ -200,6 +227,205 @@ def read_mps_excel(path: Path, logger: logging.Logger) -> list[dict]:
             "tipo": causale,
             "note": "",
         })
+    logger.info(f"  {len(rows)} rows")
+    return rows
+
+
+def read_intesa_excel(path: Path, logger: logging.Logger) -> list[dict]:
+    if not HAS_EXCEL:
+        logger.error("openpyxl not installed, cannot read Excel")
+        return []
+
+    logger.info(f"Reading Intesa Excel: {path.name}")
+    wb = openpyxl.load_workbook(io.BytesIO(path.read_bytes()), data_only=True)
+    ws = wb.active
+
+    # Find header row dynamically (look for "Data Contabile" in first column)
+    header_idx = None
+    header_row = None
+    for i, row in enumerate(ws.iter_rows(values_only=True), start=1):
+        if row[0] == "Data Contabile":
+            header_idx = i
+            header_row = row
+            break
+
+    if header_idx is None:
+        raise SchemaViolationError(f"Intesa Excel {path.name}: cannot find header row")
+
+    validate_columns(
+        found=[c for c in header_row if c],
+        required=INTESA_REQUIRED_COLUMNS,
+        context=f"Intesa Excel {path.name}",
+    )
+
+    col = {name: idx for idx, name in enumerate(header_row) if name}
+
+    rows = []
+    for i, row in enumerate(ws.iter_rows(min_row=header_idx + 1, values_only=True), start=header_idx + 1):
+        dare_val = row[col["Dare"]]
+        avere_val = row[col["Avere"]]
+        if dare_val is None and avere_val is None:
+            continue
+
+        dare = abs(float(dare_val)) if dare_val is not None else 0.0
+        avere = abs(float(avere_val)) if avere_val is not None else 0.0
+
+        def fmt_date(v):
+            if v is None:
+                return ""
+            if hasattr(v, "strftime"):
+                return v.strftime("%d/%m/%Y")
+            return str(v)
+
+        desc_parts = []
+        for col_name in ["Descrizione Causale ABI/SWIFT", "Descrizioni Aggiuntive", "Descrizione Causale Banca"]:
+            if col_name in col:
+                v = row[col[col_name]]
+                if v:
+                    desc_parts.append(str(v).strip())
+
+        causale = str(row[col["Causale ABI/Swift"]] or "").strip() if "Causale ABI/Swift" in col else ""
+        cro = str(row[col["Rif. Banca (CRO)"]] or "").strip() if "Rif. Banca (CRO)" in col else ""
+
+        rows.append({
+            "riga": i,
+            "codice": cro,
+            "data_op": fmt_date(row[col["Data Contabile"]]),
+            "data_val": fmt_date(row[col["Data Valuta"]]),
+            "desc": " | ".join(p for p in desc_parts if p),
+            "divisa": "EUR",
+            "debito": dare,
+            "credito": avere,
+            "cat": causale,
+            "subcat": "",
+            "tipo": causale,
+            "note": "",
+        })
+
+    logger.info(f"  {len(rows)} rows")
+    return rows
+
+
+def read_mps2026_excel(path: Path, logger: logging.Logger) -> list[dict]:
+    if not HAS_EXCEL:
+        logger.error("openpyxl not installed, cannot read Excel")
+        return []
+
+    logger.info(f"Reading MPS 2026 Excel: {path.name}")
+    wb = openpyxl.load_workbook(io.BytesIO(path.read_bytes()), data_only=True)
+    ws = wb.active
+
+    # Find header row by looking for "DATA CONT." in column B (index 1)
+    header_idx = None
+    for i, row in enumerate(ws.iter_rows(values_only=True), start=1):
+        if row[1] == "DATA CONT.":
+            header_idx = i
+            header_row = row
+            break
+
+    if header_idx is None:
+        raise SchemaViolationError(f"MPS 2026 Excel {path.name}: cannot find header row")
+
+    validate_columns(
+        found=[c for c in header_row if c],
+        required=MPS2026_REQUIRED_COLUMNS,
+        context=f"MPS 2026 Excel {path.name}",
+    )
+
+    col = {name: idx for idx, name in enumerate(header_row) if name}
+
+    rows = []
+    for i, row in enumerate(ws.iter_rows(min_row=header_idx + 1, values_only=True), start=header_idx + 1):
+        importo = row[col["IMPORTO(€)"]]
+        if importo is None:
+            continue
+
+        importo = float(importo)
+        dare = abs(importo) if importo < 0 else 0.0
+        avere = importo if importo > 0 else 0.0
+
+        def fmt_date(v):
+            if v is None:
+                return ""
+            if hasattr(v, "strftime"):
+                return v.strftime("%d/%m/%Y")
+            return str(v)
+
+        causale = str(row[col.get("CAUSALE", 3)] or "").strip() if "CAUSALE" in col else ""
+        desc = str(row[col["DESCRIZIONE"]] or "").strip()
+
+        rows.append({
+            "riga": i,
+            "codice": "",
+            "data_op": fmt_date(row[col["DATA CONT."]]),
+            "data_val": fmt_date(row[col["DATA VAL."]]),
+            "desc": f"{causale} {desc}".strip() if causale else desc,
+            "divisa": "EUR",
+            "debito": dare,
+            "credito": avere,
+            "cat": causale,
+            "subcat": "",
+            "tipo": causale,
+            "note": "",
+        })
+
+    logger.info(f"  {len(rows)} rows")
+    return rows
+
+
+def read_sella_xls(path: Path, logger: logging.Logger) -> list[dict]:
+    try:
+        import pandas as pd
+    except ImportError:
+        logger.error("pandas not installed, cannot read XLS")
+        return []
+
+    logger.info(f"Reading Sella XLS: {path.name}")
+    df = pd.read_excel(path, header=0, engine="xlrd")
+
+    validate_columns(
+        found=list(df.columns),
+        required=SELLA_XLS_REQUIRED_COLUMNS,
+        context=f"Sella XLS {path.name}",
+    )
+
+    rows = []
+    for i, r in df.iterrows():
+        debito_raw = r.get("Debito", 0)
+        credito_raw = r.get("Credito", 0)
+
+        try:
+            debito = abs(float(debito_raw)) if debito_raw not in (None, "", ".") else 0.0
+        except (ValueError, TypeError):
+            debito = 0.0
+        try:
+            credito = abs(float(credito_raw)) if credito_raw not in (None, "", ".") else 0.0
+        except (ValueError, TypeError):
+            credito = 0.0
+
+        if debito == 0 and credito == 0:
+            continue
+
+        data_op = str(r.get("Data operazione", ""))
+        data_val = str(r.get("Data valuta", ""))
+        if data_val in ("-", "None", "nan", ""):
+            data_val = data_op
+
+        rows.append({
+            "riga": i + 2,
+            "codice": str(r.get("Codice identificativo", "") or ""),
+            "data_op": data_op,
+            "data_val": data_val,
+            "desc": str(r.get("Descrizione", "") or ""),
+            "divisa": str(r.get("Divisa", "EUR") or "EUR"),
+            "debito": debito,
+            "credito": credito,
+            "cat": str(r.get("Categoria", "") or ""),
+            "subcat": str(r.get("Sottocategoria", "") or ""),
+            "tipo": str(r.get("Etichette", "") or ""),
+            "note": str(r.get("Note", "") or ""),
+        })
+
     logger.info(f"  {len(rows)} rows")
     return rows
 
@@ -288,20 +514,33 @@ def load_hashes(fact_table: Path) -> set:
 
 
 def process_file(filepath: Path, datahub: Path, mappings: dict, hashes: set,
-                 logger: logging.Logger, dry_run: bool = False) -> dict:
+                 logger: logging.Logger, dry_run: bool = False, meta: dict = None) -> dict:
     stats = {"file": filepath.name, "total": 0, "written": 0, "dupes": 0, "errors": 0}
 
-    meta = parse_filename(filepath.name)
-    if not meta:
-        logger.error(f"Bad filename: {filepath.name}")
-        stats["errors"] = 1
-        return stats
-    meta["filename"] = filepath.name
+    if meta is None:
+        meta = parse_filename(filepath.name)
+        if not meta:
+            logger.error(f"Bad filename: {filepath.name}")
+            stats["errors"] = 1
+            return stats
+        meta["filename"] = filepath.name
+
+    # Detect actual format from content (Rosa's files often have .xls but are xlsx)
+    if meta["ext"] in ("xls", "xlsx"):
+        with open(filepath, "rb") as f:
+            meta["ext"] = "xlsx" if f.read(2) == b"PK" else "xls"
 
     # Read
     try:
+        sb = meta["societa_banca"].upper()
         if meta["ext"] == "csv":
             raw_rows = read_sella_csv(filepath, logger)
+        elif "INTESA" in sb:
+            raw_rows = read_intesa_excel(filepath, logger)
+        elif "SELLA" in sb and meta["ext"] == "xls":
+            raw_rows = read_sella_xls(filepath, logger)
+        elif "MPS" in sb and meta["ext"] == "xlsx":
+            raw_rows = read_mps2026_excel(filepath, logger)
         else:
             raw_rows = read_mps_excel(filepath, logger)
     except SchemaViolationError as e:
@@ -340,11 +579,18 @@ def process_file(filepath: Path, datahub: Path, mappings: dict, hashes: set,
     return stats
 
 
+def collect_files(source: Path) -> list[Path]:
+    """Recursively collect all bank files from staging folder."""
+    files = []
+    for ext in ("*.csv", "*.xls", "*.xlsx", "*.XLS", "*.XLSX"):
+        files.extend(source.rglob(ext))
+    return sorted(files)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Bank transaction ingestion")
     parser.add_argument("--datahub", required=True, help="Path to datahub root")
-    parser.add_argument("--file", "-f", help="Process specific file in ingresso/banca/banca_grezza/")
-    parser.add_argument("--all", "-a", action="store_true", help="Process all files")
+    parser.add_argument("--source", "-s", help="Staging folder from rclone sync (default: auto)")
     parser.add_argument("--dry-run", "-d", action="store_true")
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
@@ -363,24 +609,22 @@ def main():
     hashes = load_hashes(datahub / "fatti" / "f_banche_movimenti.csv")
     logger.info(f"Existing hashes: {len(hashes)}")
 
-    ingresso = datahub / "ingresso" / "banca" / "banca_grezza"
-    files = []
-    if args.file:
-        p = ingresso / args.file
-        if not p.exists():
-            logger.error(f"File not found: {p}")
-            sys.exit(1)
-        files = [p]
-    elif args.all:
-        files = sorted(ingresso.glob("*.csv")) + sorted(ingresso.glob("*.xls*"))
-    else:
-        parser.print_help()
+    source = Path(args.source) if args.source else Path.home() / ".cache/hotelops/tesoreria_staging"
+    if not source.exists():
+        logger.error(f"Source not found: {source} — run fetch_drive.py first")
         sys.exit(1)
 
-    logger.info(f"Files to process: {len(files)}")
+    files = collect_files(source)
+    logger.info(f"Files found in staging: {len(files)}")
 
-    for f in files:
-        stats = process_file(f, datahub, mappings, hashes, logger, args.dry_run)
+    for filepath in files:
+        # Try convention filename first, fall back to path inference
+        meta = parse_filename(filepath.name) or meta_from_path(filepath)
+        if not meta:
+            logger.warning(f"Cannot infer metadata: {filepath.name}, skipping")
+            continue
+        meta["filename"] = filepath.name
+        stats = process_file(filepath, datahub, mappings, hashes, logger, args.dry_run, meta=meta)
         logger.info(f"  {stats['file']}: {stats['total']} total, {stats['written']} written, {stats['dupes']} dupes, {stats['errors']} errors")
 
     logger.info("Bank ingestion pipeline DONE")
