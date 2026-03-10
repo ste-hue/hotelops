@@ -1,37 +1,50 @@
 # hotelops
 
-Pipeline code for Gruppo Panorama data processing.
+Data engineering for Gruppo Panorama (INTUR + ORTI). Syncs raw bank files from Google Drive via rclone, parses and deduplicates them, and loads structured fact rows into BigQuery for analysis in Looker.
 
 ## Architecture
 
 | Layer | Location | What |
 |-------|----------|------|
-| **Ontology** | Obsidian `Work/HotelOps/` | Entities, relationships, strategy |
-| **Datahub** | Google Drive `hotelops_datahub/` | 5D dimensional model, facts, raw ingress |
-| **Pipelines** | This repo | Code that transforms raw → facts |
-| **Agent** | NanoClaw `groups/hotelops/` | Runtime that orchestrates all three |
-
-## Governance
-
-- Pipeline code lives here. Data lives in the datahub.
-- Every pipeline reads from `ingresso/` and appends to `fatti/`.
-- Every fact row carries 5 dimensions: societa, business_unit, funzione, location, oggetto.
-- Datahub `RULES.md` is law. This repo enforces it in code.
-- No speculative modules. Pipelines are born from real data flows.
+| **Ingress** | Google Drive `hotelops_datahub/ingresso/` | Raw files uploaded by operations team |
+| **Staging** | `~/.cache/hotelops/` | Local mirror synced by rclone |
+| **Pipelines** | This repo | Parse → transform → deduplicate → BigQuery |
+| **Warehouse** | BigQuery `hotelops-suite.hotelops` | Fact tables + views |
+| **BI** | Looker | Dashboards on top of BigQuery |
 
 ## Pipelines
 
-| Pipeline | Source | Status |
-|----------|--------|--------|
-| `banca` | Sella CSV, MPS Excel | Active |
+| Pipeline | Source | Destinations | Status |
+|----------|--------|--------------|--------|
+| `banca` | Sella CSV, MPS Excel, Intesa Excel | `f_banche_movimenti` | Active |
+| `mastrino` | Accounting export (PDC) | `f_ledger_movimenti` | Pending real data |
+
+## How it works
+
+1. Rosa uploads bank exports to `TESORERIA_ingresso/` in Google Drive
+2. `run_banca.sh` syncs them locally via rclone, then ingests
+3. Ingest reads each file, deduplicates by content hash, appends only new rows to BigQuery
+4. BigQuery views (`v_movimenti_classificati`, `v_cashflow_mensile`) classify movements and aggregate
+5. Looker reads the views
 
 ## Usage
 
 ```bash
-hotelops                # teleport here
-pip install -e .        # install in dev mode
+# Full pipeline (sync + ingest)
+./run_banca.sh
 
-# The agent calls these, or run manually:
-python -m pipelines.banca.ingest --all
-python -m pipelines.banca.ingest --file FILENAME --dry-run
+# Dry run (no writes)
+./run_banca.sh --dry-run   # not yet wired — pass via ingest directly:
+python -m pipelines.banca.ingest --datahub "$DATAHUB" --dry-run
+
+# Dev setup
+pip install -e .
 ```
+
+## Governance
+
+- Pipeline code lives here. Data lives in Google Drive / BigQuery.
+- Every pipeline reads from `ingresso/` and writes to BigQuery `hotelops` dataset.
+- Every fact row carries 5 dimensions: societa, business_unit, funzione, location, oggetto.
+- Ingestion is idempotent: content hash deduplication prevents double-counting.
+- No speculative modules. Pipelines are born from real data flows.

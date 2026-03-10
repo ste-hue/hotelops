@@ -24,6 +24,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import pandas as pd
+from google.cloud import bigquery
+
 from lib.contracts import SchemaViolationError, validate_columns
 
 try:
@@ -31,6 +34,9 @@ try:
     HAS_EXCEL = True
 except ImportError:
     HAS_EXCEL = False
+
+BQ_PROJECT = "hotelops-suite"
+BQ_TABLE = "hotelops-suite.hotelops.f_banche_movimenti"
 
 
 # -- Config -------------------------------------------------------------------
@@ -375,55 +381,62 @@ def read_mps2026_excel(path: Path, logger: logging.Logger) -> list[dict]:
 
 def read_sella_xls(path: Path, logger: logging.Logger) -> list[dict]:
     try:
-        import pandas as pd
+        import xlrd
     except ImportError:
-        logger.error("pandas not installed, cannot read XLS")
+        logger.error("xlrd not installed, cannot read XLS")
         return []
 
     logger.info(f"Reading Sella XLS: {path.name}")
-    df = pd.read_excel(path, header=0, engine="xlrd")
+    wb = xlrd.open_workbook(str(path))
+    ws = wb.sheet_by_index(0)
 
+    header = [str(ws.cell_value(0, c)).strip() for c in range(ws.ncols)]
     validate_columns(
-        found=list(df.columns),
+        found=header,
         required=SELLA_XLS_REQUIRED_COLUMNS,
         context=f"Sella XLS {path.name}",
     )
+    col = {name: idx for idx, name in enumerate(header)}
+
+    def cell(row_idx, col_name):
+        return ws.cell_value(row_idx, col[col_name]) if col_name in col else ""
+
+    def num(v):
+        try:
+            return abs(float(v)) if v not in (None, "", ".") else 0.0
+        except (ValueError, TypeError):
+            return 0.0
+
+    def xldate(v, row_idx, col_name):
+        cell_obj = ws.cell(row_idx, col[col_name]) if col_name in col else None
+        if cell_obj and cell_obj.ctype == xlrd.XL_CELL_DATE:
+            t = xlrd.xldate_as_tuple(v, wb.datemode)
+            from datetime import date
+            return date(*t[:3]).strftime("%d/%m/%Y")
+        return str(v).split(".")[0] if v else ""
 
     rows = []
-    for i, r in df.iterrows():
-        debito_raw = r.get("Debito", 0)
-        credito_raw = r.get("Credito", 0)
-
-        try:
-            debito = abs(float(debito_raw)) if debito_raw not in (None, "", ".") else 0.0
-        except (ValueError, TypeError):
-            debito = 0.0
-        try:
-            credito = abs(float(credito_raw)) if credito_raw not in (None, "", ".") else 0.0
-        except (ValueError, TypeError):
-            credito = 0.0
-
+    for i in range(1, ws.nrows):
+        debito = num(cell(i, "Debito"))
+        credito = num(cell(i, "Credito"))
         if debito == 0 and credito == 0:
             continue
-
-        data_op = str(r.get("Data operazione", ""))
-        data_val = str(r.get("Data valuta", ""))
-        if data_val in ("-", "None", "nan", ""):
-            data_val = data_op
-
+        data_op = xldate(cell(i, "Data operazione"), i, "Data operazione")
+        data_val_raw = cell(i, "Data valuta") if "Data valuta" in col else ""
+        data_val = xldate(data_val_raw, i, "Data valuta") if data_val_raw not in ("", "-") else data_op
         rows.append({
-            "riga": i + 2,
-            "codice": str(r.get("Codice identificativo", "") or ""),
+            "riga": i + 1,
+            "codice": str(cell(i, "Codice identificativo") or ""),
             "data_op": data_op,
             "data_val": data_val,
-            "desc": str(r.get("Descrizione", "") or ""),
-            "divisa": str(r.get("Divisa", "EUR") or "EUR"),
+            "desc": str(cell(i, "Descrizione") or ""),
+            "divisa": str(cell(i, "Divisa") or "EUR") or "EUR",
             "debito": debito,
             "credito": credito,
-            "cat": str(r.get("Categoria", "") or ""),
-            "subcat": str(r.get("Sottocategoria", "") or ""),
-            "tipo": str(r.get("Etichette", "") or ""),
-            "note": str(r.get("Note", "") or ""),
+            "cat": str(cell(i, "Categoria") or ""),
+            "subcat": str(cell(i, "Sottocategoria") or ""),
+            "tipo": str(cell(i, "Etichette") or ""),
+            "note": str(cell(i, "Note") or ""),
         })
 
     logger.info(f"  {len(rows)} rows")
@@ -506,14 +519,18 @@ def transform(raw: dict, meta: dict, counter: int) -> dict:
 
 # -- Pipeline -----------------------------------------------------------------
 
-def load_hashes(fact_table: Path) -> set:
-    if not fact_table.exists():
+def load_hashes(bq_client: bigquery.Client) -> set:
+    try:
+        result = bq_client.query(
+            f"SELECT hash_riga FROM `{BQ_TABLE}` WHERE hash_riga IS NOT NULL"
+        ).result()
+        return {row.hash_riga for row in result}
+    except Exception as e:
+        logging.getLogger("ingest_banca").warning(f"Could not load hashes from BQ: {e}")
         return set()
-    with open(fact_table, "r", encoding="utf-8") as f:
-        return {row["hash_riga"] for row in csv.DictReader(f) if row.get("hash_riga")}
 
 
-def process_file(filepath: Path, datahub: Path, mappings: dict, hashes: set,
+def process_file(filepath: Path, bq_client: bigquery.Client, mappings: dict, hashes: set,
                  logger: logging.Logger, dry_run: bool = False, meta: dict = None) -> dict:
     stats = {"file": filepath.name, "total": 0, "written": 0, "dupes": 0, "errors": 0}
 
@@ -549,7 +566,6 @@ def process_file(filepath: Path, datahub: Path, mappings: dict, hashes: set,
         return stats
 
     stats["total"] = len(raw_rows)
-    fact_table = datahub / "fatti" / "f_banche_movimenti.csv"
     new_rows = []
 
     for i, raw in enumerate(raw_rows, 1):
@@ -567,14 +583,14 @@ def process_file(filepath: Path, datahub: Path, mappings: dict, hashes: set,
         logger.info(f"DRY RUN: would write {len(new_rows)} rows")
         stats["written"] = 0
     elif new_rows:
-        exists = fact_table.exists()
-        with open(fact_table, "a", encoding="utf-8", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=FACT_HEADER)
-            if not exists:
-                w.writeheader()
-            w.writerows(new_rows)
+        df = pd.DataFrame(new_rows, columns=FACT_HEADER)
+        df["data_operazione"] = pd.to_datetime(df["data_operazione"])
+        df["data_valuta"] = pd.to_datetime(df["data_valuta"])
+        df["riga_sorgente"] = df["riga_sorgente"].astype(int)
+        job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
+        bq_client.load_table_from_dataframe(df, BQ_TABLE, job_config=job_config).result()
         stats["written"] = len(new_rows)
-        logger.info(f"Wrote {len(new_rows)} rows")
+        logger.info(f"Wrote {len(new_rows)} rows → BigQuery")
 
     return stats
 
@@ -589,8 +605,9 @@ def collect_files(source: Path) -> list[Path]:
 
 def main():
     parser = argparse.ArgumentParser(description="Bank transaction ingestion")
-    parser.add_argument("--datahub", required=True, help="Path to datahub root")
+    parser.add_argument("--datahub", required=True, help="Path to datahub root (for mappings and logs)")
     parser.add_argument("--source", "-s", help="Staging folder from rclone sync (default: auto)")
+    parser.add_argument("--project", default=BQ_PROJECT, help="GCP project")
     parser.add_argument("--dry-run", "-d", action="store_true")
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
@@ -605,8 +622,9 @@ def main():
     logger.info("=" * 60)
     logger.info("Bank ingestion pipeline START")
 
+    bq_client = bigquery.Client(project=args.project)
     mappings = load_mappings(datahub / "dimensioni" / "mappature" / "dim_mapping_banca.csv", logger)
-    hashes = load_hashes(datahub / "fatti" / "f_banche_movimenti.csv")
+    hashes = load_hashes(bq_client)
     logger.info(f"Existing hashes: {len(hashes)}")
 
     source = Path(args.source) if args.source else Path.home() / ".cache/hotelops/tesoreria_staging"
@@ -618,13 +636,12 @@ def main():
     logger.info(f"Files found in staging: {len(files)}")
 
     for filepath in files:
-        # Try convention filename first, fall back to path inference
         meta = parse_filename(filepath.name) or meta_from_path(filepath)
         if not meta:
             logger.warning(f"Cannot infer metadata: {filepath.name}, skipping")
             continue
         meta["filename"] = filepath.name
-        stats = process_file(filepath, datahub, mappings, hashes, logger, args.dry_run, meta=meta)
+        stats = process_file(filepath, bq_client, mappings, hashes, logger, args.dry_run, meta=meta)
         logger.info(f"  {stats['file']}: {stats['total']} total, {stats['written']} written, {stats['dupes']} dupes, {stats['errors']} errors")
 
     logger.info("Bank ingestion pipeline DONE")
