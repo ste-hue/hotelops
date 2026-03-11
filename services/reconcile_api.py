@@ -7,7 +7,7 @@ Load bank transactions into OpenRefine, reconcile against this service.
 
 Usage:
     python -m services.reconcile_api --datahub /path/to/hotelops_datahub
-    python -m services.reconcile_api --datahub /path/to/datahub --societa ORTI --banca MPS --port 8000
+    python -m services.reconcile_api --datahub /path/to/datahub --port 8000
 """
 
 import argparse
@@ -40,8 +40,6 @@ DECISIONS: list[dict] = []
 
 # Paths set at startup
 DATAHUB: Path = Path(".")
-SOCIETA: str = ""
-BANCA: str = ""
 DECISIONS_PATH: Path = Path(".")
 MAPPINGS_PATH: Path = Path(".")
 
@@ -99,14 +97,12 @@ def _load_decisions(path: Path) -> list[dict]:
         return list(csv.DictReader(f))
 
 
-def init_data(datahub: Path, societa: str, banca: str, port: int):
+def init_data(datahub: Path, port: int):
     """Load all data at startup."""
     global LEDGER_TRANSACTIONS, LEDGER_BY_AMOUNT, LEARNED_MAPPINGS, DECISIONS
-    global DATAHUB, SOCIETA, BANCA, DECISIONS_PATH, MAPPINGS_PATH
+    global DATAHUB, DECISIONS_PATH, MAPPINGS_PATH
 
     DATAHUB = datahub
-    SOCIETA = societa
-    BANCA = banca
 
     run_base = datahub / "meta" / "actions" / "reconcile_banca"
     DECISIONS_PATH = run_base / "decisions.csv"
@@ -117,7 +113,7 @@ def init_data(datahub: Path, societa: str, banca: str, port: int):
     LEARNED_MAPPINGS = _load_mappings(MAPPINGS_PATH)
     DECISIONS = _load_decisions(DECISIONS_PATH)
 
-    print(f"Loaded {len(LEDGER_TRANSACTIONS)} ledger transactions for {societa}/{banca}")
+    print(f"Loaded {len(LEDGER_TRANSACTIONS)} ledger transactions")
     print(f"Loaded {len(LEARNED_MAPPINGS)} learned mappings")
     print(f"Loaded {len(DECISIONS)} prior decisions")
 
@@ -133,7 +129,7 @@ BASE_URL = "http://localhost:8000"
 def manifest():
     return {
         "versions": ["0.2"],
-        "name": f"Reconcile Banca — {SOCIETA}/{BANCA}",
+        "name": "Hotelops — Riconcilia Banca",
         "identifierSpace": f"{BASE_URL}/entity/",
         "schemaSpace": f"{BASE_URL}/schema/",
         "defaultTypes": [{"id": "LedgerEntry", "name": "Registrazione Mastrino"}],
@@ -162,7 +158,7 @@ def propose_properties(type: str = "LedgerEntry", limit: int = 10):
     return {
         "properties": [
             {"id": "amount", "name": "Importo"},
-            {"id": "date", "name": "Data"},
+            {"id": "date", "name": "Data Valuta"},
             {"id": "societa", "name": "Societa"},
         ]
     }
@@ -281,7 +277,7 @@ def suggest_property(prefix: str = "", query: str = ""):
     term = (query or prefix).lower()
     props = [
         {"id": "amount", "name": "Importo", "description": "Importo transazione"},
-        {"id": "date", "name": "Data", "description": "Data operazione"},
+        {"id": "date", "name": "Data Valuta", "description": "Data valuta (piu vicina alla data ERP)"},
         {"id": "societa", "name": "Societa", "description": "Societa ID (ORTI, INTUR)"},
     ]
     if not term:
@@ -376,8 +372,6 @@ def reload_all():
 def health():
     return {
         "status": "ok",
-        "societa": SOCIETA,
-        "banca": BANCA,
         "ledger_loaded": len(LEDGER_TRANSACTIONS),
         "learned_mappings": len(LEARNED_MAPPINGS),
         "decisions": len(DECISIONS),
@@ -390,8 +384,6 @@ def main():
     parser = argparse.ArgumentParser(
         description="Reconcile Banca — OpenRefine Reconciliation Service")
     parser.add_argument("--datahub", required=True, help="Path to hotelops_datahub")
-    parser.add_argument("--societa", default="ORTI")
-    parser.add_argument("--banca", default="MPS")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--host", default="0.0.0.0")
     args = parser.parse_args()
@@ -404,7 +396,7 @@ def main():
     global BASE_URL
     BASE_URL = f"http://localhost:{args.port}"
 
-    init_data(datahub, args.societa, args.banca, args.port)
+    init_data(datahub, args.port)
 
     print()
     print("Reconcile Banca — OpenRefine Service")

@@ -41,16 +41,9 @@ BQ_TABLE = "hotelops-suite.hotelops.f_banche_movimenti"
 
 # -- Config -------------------------------------------------------------------
 
-FILENAME_PATTERN = re.compile(
-    r"^(\d{4}-\d{2}-\d{2})__([A-Z_]+)__([A-Z_]+)__(.+)\.(csv|xls|xlsx)$"
-)
-
-SOCIETA_MAP = {"INTUR": "INTUR", "ORTI": "ORTI", "MPS": "ORTI"}
-BANCA_MAP = {"INTUR_SELLA": "SELLA", "SELLA": "SELLA", "MPS": "MPS", "INTESA": "INTESA"}
-
-# For path-based inference (staging traversal)
 SOCIETA_KEYWORDS = {"INTUR": "INTUR", "ORTI": "ORTI"}
-BANCA_KEYWORDS = {"MPS KROSS": "MPS_KROSS", "INTESA": "INTESA", "SELLA": "SELLA", "MPS": "MPS"}
+# Longer keys first so MPS_KROSS is matched before MPS
+BANCA_KEYWORDS = {"MPS_KROSS": "MPS_KROSS", "MPS KROSS": "MPS_KROSS", "INTESA": "INTESA", "SELLA": "SELLA", "MPS": "MPS"}
 
 EXCEL_EXTENSIONS = {".xls", ".xlsx"}
 
@@ -86,37 +79,33 @@ def setup_logging(log_dir: Path, verbose: bool = False) -> logging.Logger:
     return logger
 
 
-def parse_filename(name: str) -> Optional[dict]:
-    m = FILENAME_PATTERN.match(name)
-    if not m:
-        return None
+def infer_meta(filepath: Path) -> dict:
+    """Infer societa and banca from keywords in filename, falling back to folder path."""
+    name_upper = filepath.name.upper()
+    path_upper = str(filepath).upper()
+    date_match = re.search(r"\d{4}-\d{2}-\d{2}", filepath.name)
+    data_ingresso = date_match.group(0) if date_match else datetime.now().strftime("%Y-%m-%d")
+    # Try filename first, then full path
+    societa = (
+        next((v for k, v in SOCIETA_KEYWORDS.items() if k in name_upper), None)
+        or next((v for k, v in SOCIETA_KEYWORDS.items() if k in path_upper), "UNKNOWN")
+    )
+    banca = (
+        next((v for k, v in BANCA_KEYWORDS.items() if k in name_upper), None)
+        or next((v for k, v in BANCA_KEYWORDS.items() if k in path_upper), "UNKNOWN")
+    )
     return {
-        "data_ingresso": m.group(1),
-        "funzione": m.group(2),
-        "societa_banca": m.group(3),
-        "dettaglio": m.group(4),
-        "ext": m.group(5),
-    }
-
-
-def meta_from_path(filepath: Path) -> Optional[dict]:
-    """Infer metadata from staging folder path (e.g. MOVIMENTI BANCARI ESTRATTI/ORTI/ORTI-MPS/file.xls)."""
-    path_str = " / ".join(filepath.parts).upper()
-    societa = next((v for k, v in SOCIETA_KEYWORDS.items() if k in path_str), "UNKNOWN")
-    banca = next((v for k, v in BANCA_KEYWORDS.items() if k in path_str), "UNKNOWN")
-    ext = filepath.suffix.lstrip(".").lower()
-    return {
-        "data_ingresso": datetime.now().strftime("%Y-%m-%d"),
-        "funzione": "FINANZA",
+        "data_ingresso": data_ingresso,
+        "funzione": DEFAULT_FUNZIONE,
         "societa_banca": f"{societa}_{banca}",
-        "ext": ext,
+        "ext": filepath.suffix.lstrip(".").lower(),
         "filename": filepath.name,
     }
 
 
 def infer_ids(societa_banca: str) -> tuple[str, str]:
-    societa = next((v for k, v in SOCIETA_MAP.items() if k in societa_banca), "UNKNOWN")
-    banca = next((v for k, v in BANCA_MAP.items() if k in societa_banca), "UNKNOWN")
+    societa = next((v for k, v in SOCIETA_KEYWORDS.items() if k in societa_banca), "UNKNOWN")
+    banca = next((v for k, v in BANCA_KEYWORDS.items() if k in societa_banca), "UNKNOWN")
     return societa, banca
 
 
@@ -535,12 +524,7 @@ def process_file(filepath: Path, bq_client: bigquery.Client, mappings: dict, has
     stats = {"file": filepath.name, "total": 0, "written": 0, "dupes": 0, "errors": 0}
 
     if meta is None:
-        meta = parse_filename(filepath.name)
-        if not meta:
-            logger.error(f"Bad filename: {filepath.name}")
-            stats["errors"] = 1
-            return stats
-        meta["filename"] = filepath.name
+        meta = infer_meta(filepath)
 
     # Detect actual format from content (Rosa's files often have .xls but are xlsx)
     if meta["ext"] in ("xls", "xlsx"):
@@ -636,11 +620,10 @@ def main():
     logger.info(f"Files found in staging: {len(files)}")
 
     for filepath in files:
-        meta = parse_filename(filepath.name) or meta_from_path(filepath)
-        if not meta:
-            logger.warning(f"Cannot infer metadata: {filepath.name}, skipping")
+        meta = infer_meta(filepath)
+        if "UNKNOWN" in meta["societa_banca"]:
+            logger.warning(f"SKIP — cannot infer societa/banca from filename or path: {filepath}")
             continue
-        meta["filename"] = filepath.name
         stats = process_file(filepath, bq_client, mappings, hashes, logger, args.dry_run, meta=meta)
         logger.info(f"  {stats['file']}: {stats['total']} total, {stats['written']} written, {stats['dupes']} dupes, {stats['errors']} errors")
 
