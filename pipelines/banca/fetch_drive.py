@@ -12,7 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-REMOTE = "mywork:hotelops_datahub/ingresso/TESORERIA_ingresso"
+REMOTE = "mywork:00_hotelops_datahub/ingresso/TESORERIA_ingresso"
 
 
 def main():

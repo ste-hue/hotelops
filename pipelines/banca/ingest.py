@@ -51,6 +51,14 @@ DEFAULT_FUNZIONE = "FINANZA"
 DEFAULT_BU = "HQ"
 DEFAULT_LOCATION = "N_A"
 
+FOOTER_DESCRIPTIONS = {"totale (€)", "totale(€)", "totale"}
+FOOTER_PREFIXES = ("saldo al",)
+
+
+def is_footer_row(raw: dict) -> bool:
+    desc = (raw.get("desc") or "").strip().lower()
+    return desc in FOOTER_DESCRIPTIONS or any(desc.startswith(p) for p in FOOTER_PREFIXES)
+
 FACT_HEADER = [
     "id_movimento", "societa_id", "business_unit_id", "funzione_id",
     "location_id", "oggetto_id", "banca_id", "data_operazione", "data_valuta",
@@ -549,6 +557,7 @@ def process_file(filepath: Path, bq_client: bigquery.Client, mappings: dict, has
         stats["errors"] = 1
         return stats
 
+    raw_rows = [r for r in raw_rows if not is_footer_row(r)]
     stats["total"] = len(raw_rows)
     new_rows = []
 
@@ -570,6 +579,7 @@ def process_file(filepath: Path, bq_client: bigquery.Client, mappings: dict, has
         df = pd.DataFrame(new_rows, columns=FACT_HEADER)
         df["data_operazione"] = pd.to_datetime(df["data_operazione"])
         df["data_valuta"] = pd.to_datetime(df["data_valuta"])
+        df["data_ingresso"] = pd.to_datetime(df["data_ingresso"])
         df["riga_sorgente"] = df["riga_sorgente"].astype(int)
         job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
         bq_client.load_table_from_dataframe(df, BQ_TABLE, job_config=job_config).result()
