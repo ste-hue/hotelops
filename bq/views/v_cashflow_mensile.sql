@@ -11,6 +11,10 @@ WITH base AS (
     ROUND(SUM(CASE WHEN importo_netto < 0 THEN ABS(importo_netto) ELSE 0 END), 2) AS uscite,
     ROUND(SUM(importo_netto), 2) AS netto
   FROM hotelops.f_banche_movimenti
+  WHERE descrizione NOT IN ('Totale (€)', 'TOTALE')
+    AND descrizione IS NOT NULL
+    AND UPPER(COALESCE(tipo_movimento, '')) NOT LIKE '%FINANZIAMENTO%'
+    AND UPPER(COALESCE(tipo_movimento, '')) NOT LIKE '%ZS%'
   GROUP BY 1, 2
 )
 
