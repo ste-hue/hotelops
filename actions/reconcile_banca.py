@@ -188,6 +188,7 @@ def run_reconciliation(
     conto: str,
     date_from: str,
     date_to: str,
+    min_score: float = 0.0,
 ) -> dict:
     datahub = Path(datahub_path)
     oggetto_id = f"CONTO_{societa}_{conto}"
@@ -208,6 +209,7 @@ def run_reconciliation(
         "oggetto_id": oggetto_id,
         "date_from": date_from,
         "date_to": date_to,
+        "min_score": min_score,
         "status": "running",
         "started_at": started_at.isoformat(),
         "completed_at": None,
@@ -262,6 +264,26 @@ def run_reconciliation(
             auto_threshold=0.6,
         )
         result = reconcile_cascade(bank_txns, ledger_txns, config=config)
+
+        # -- Post-filter review bucket by min_score --
+        if min_score > 0.0:
+            kept_review, dropped_to_no_match = [], []
+            for cs in result["review"]:
+                filtered_candidates = [
+                    (c, s) for c, s in zip(cs["candidates"], cs["scores"])
+                    if s >= min_score
+                ]
+                if filtered_candidates:
+                    cs = dict(cs)
+                    cs["candidates"], cs["scores"] = zip(*filtered_candidates)
+                    cs["candidates"] = list(cs["candidates"])
+                    cs["scores"] = list(cs["scores"])
+                    kept_review.append(cs)
+                else:
+                    dropped_to_no_match.append({"bank_txn": cs["bank_txn"]})
+            result = dict(result)
+            result["review"] = kept_review
+            result["no_match"] = list(result["no_match"]) + dropped_to_no_match
 
         # -- Write outputs --
         auto_path = run_dir / "matches_auto.csv"
@@ -337,11 +359,15 @@ def main():
     parser.add_argument("--conto", required=True)
     parser.add_argument("--from", dest="date_from", required=True)
     parser.add_argument("--to", dest="date_to", required=True)
+    parser.add_argument("--min-score", dest="min_score", type=float, default=0.0,
+                        help="Minimum score threshold for review matches (0.0–1.0). "
+                             "Candidates below this are moved to no_match.")
     args = parser.parse_args()
 
     try:
         metrics = run_reconciliation(
-            args.datahub, args.societa, args.conto, args.date_from, args.date_to)
+            args.datahub, args.societa, args.conto, args.date_from, args.date_to,
+            min_score=args.min_score)
     except Exception:
         traceback.print_exc()
         sys.exit(1)

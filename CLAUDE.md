@@ -49,6 +49,12 @@ bq query --use_legacy_sql=false --project_id=hotelops-suite 'SELECT societa_id, 
 | Table | Description |
 |-------|-------------|
 | `f_banche_movimenti` | Bank transactions — all banks, all entities |
+| `f_accodamenti` | Vendite da HotelCube PMS → Esolver: corrispettivi, caparre, fatture attive. Solo lato ricavi — costi/stipendi/fornitori NON sono qui, sono nel mastrino Esolver completo. |
+| `f_bilancino` | Bilancio di verifica Esolver (export manuale). Solo leaf nodes. Una riga per conto per mese per società. |
+| `f_movimenti_contabili` | Lista movimenti contabili Esolver (prima nota completa). ORTI 2025→, INTUR dic2024→. Tipi: PNC/COR/FTA/FTV. CodConto senza punti (es. 479502 = 47.95.02). |
+| `d_budget_costi_fissi` | Budget costi fissi INTUR+ORTI con split per BU. 2025 actuals. |
+| `d_personale_mensile` | Costi personale mensili 2026 per Divisione. |
+| `d_piano_conti` | Piano dei conti Esolver — 2103 conti con codice, descrizione, tipo (CE/SP), sezione. Dimension table. |
 
 **Useful agent queries:**
 ```sql
@@ -73,6 +79,9 @@ LIMIT 24
 - `pipelines/` — ETL modules. Read from Drive staging, write to BigQuery.
   - `banca/fetch_drive.py` — rclone sync from Google Drive `tesoreria_ingresso` to local staging
   - `banca/ingest.py` — bank transaction ingestion. Supports: Sella CSV, Sella XLS, MPS Excel (pre-2026), MPS Excel (2026 format), Intesa Excel
+  - `banca/ingest_accodamenti.py` — Esolver accodamenti ingestion. Parses pipe-delimited TXT from `amministrativa_ingresso/accodamenti/`. Uses `esolver-accodamenti` package (`pip install -e /path/to/reconciliation_dino`).
+  - `amministrativa/ingest_bilancino.py` — Bilancio di verifica (trial balance) ingestion. Reads XLS export from Esolver → f_bilancino. CLI: `--file XLS --societa ORTI --mese 2026-01`.
+  - `amministrativa/ingest_piano_conti.py` — One-shot loader for full chart of accounts → d_piano_conti. Source: `reconciliation_dino/docs/pianodeiconti.xlsx`.
 - `actions/` — Runtime actions callable by the agent.
   - `reconcile_banca.py` — matches bank transactions against ledger using `bank-reconcile` cascade matcher
 - `lib/` — Shared utilities:
@@ -127,10 +136,60 @@ NanoClaw (WhatsApp agent) can interact with this system. When acting as the hote
 
 ## Entities
 
+### Società (legal entities)
 - **INTUR** — main operating company
 - **ORTI** — secondary entity
-- Banks: **MPS**, **MPS_KROSS**, **SELLA**, **INTESA**
+
+### Business Units — canonical IDs and aliases
+| business_unit_id | Nome canonico | Alias frequenti | Note |
+|---|---|---|---|
+| `HOTEL` | Hotel Panorama | Panorama, HPAN | Hotel 4* a Maiori |
+| `RESIDENCE` | Angelina Residence | Angelina, ANGELINA, Angelina Residence | Residence/appartamenti |
+| `CVM` | Casa Vacanze Maiori | Home Holiday, Casa Vacanze, CVM | Appartamenti vacanza |
+| `LIDO` | Lido / Spiaggia | Beach, Spiaggia | Concessione balneare |
+| `HQ` | Sede / Amministrazione | Amministrazione, HQ | Funzioni centrali |
+
+> Note: nei file bancari e nei journal "Angelina" e "Residence" si riferiscono sempre a `RESIDENCE`. "Panorama" si riferisce a `HOTEL`. "CVM", "Home Holiday" e "Casa Vacanze" si riferiscono a `CVM`.
+
+### Banks
+- **MPS** — Monte dei Paschi di Siena (conto principale)
+- **MPS_KROSS** — MPS conto Kross (separato)
+- **SELLA** — Banca Sella
+- **INTESA** — Intesa Sanpaolo
+
+## Esolver Accodamenti — Formato file
+
+File in `amministrativa_ingresso/accodamenti/` generati da HotelCube PMS.
+
+**Prefisso = struttura** (non tipo di record):
+- `H_*.txt` → Hotel Panorama (business_unit_id = HOTEL)
+- `R_*.txt` → Angelina Residence (business_unit_id = RESIDENCE)
+- `C_*.txt` → Casa Vacanze Maiori (business_unit_id = CVM)
+
+**Suffisso = tipo contenuto**:
+- `*_Movimenti.txt` — movimenti contabili (GEN + PAR): incasso caparra, giro caparra
+- `*_Corrispettivi.txt` — corrispettivi giornalieri (TES + RIG + GEN)
+- `*_Fatture.txt` — fatture emesse (TES + RIG + IVA)
+- `*_Clienti.txt` — anagrafica clienti (SKIP — nessun movimento)
+
+**Formato**: pipe-delimited (`|`), encoding UTF-8, CRLF.
+
+**Tipi record GEN — indici campi (0-based)**:
+- Movimenti: `[4]`=data_doc (DDMMYYYY), `[8]`=progressivo, `[10]`=conto_esolver, `[17]`=importo_avere, `[18]`=importo_dare, `[22]`=descrizione, `[-1]`=metodo_pagamento
+- Corrispettivi: `[4]`=data_doc, `[26]`=conto_esolver, `[33]`=importo, `[41]`=descrizione
+
+**Conti chiave**:
+- `199001`/`199006` = POS fisico (MASTER/VISA/CC)
+- `199002` = GestPay (POS online)
+- `199003` = PayByLink
+- `199007` = Bonifici
+- `190303` = Cassa contanti
+- `390521` = Caparre ricevute (clienti)
+- `110301` = Crediti vs clienti (fatture)
+
+**Parser**: `esolver-accodamenti` da `reconciliation_dino/src/parser.py`.
+Per installare: `pip install -e /Users/stefanodellapietra/dev/Projects/reconciliation_dino`
 
 ## Dependencies
 
-Python ≥3.11. Core: `pyyaml`, `openpyxl`, `bank-reconcile`, `pandas`, `google-cloud-bigquery`. Dev: `pytest`, `ruff`.
+Python ≥3.11. Core: `pyyaml`, `openpyxl`, `bank-reconcile`, `pandas`, `google-cloud-bigquery`, `esolver-accodamenti`. Dev: `pytest`, `ruff`.

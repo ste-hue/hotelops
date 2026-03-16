@@ -12,8 +12,15 @@ entity_types:
   Struttura:
     description: "Asset fisico, immobile, concessione"
     maps_to_dimension: dim_location
-    frontmatter_keys: [type, status, owner]
+    frontmatter_keys: [type, status, owner, business_unit_id]
     obsidian_folder: assets
+    # Istanze canoniche — business_unit_id → nome → alias
+    instances:
+      HOTEL:     { nome: "Hotel Panorama",       alias: [Panorama, HPAN] }
+      RESIDENCE: { nome: "Angelina Residence",    alias: [Angelina, "Angelina Residence"] }
+      CVM:       { nome: "Casa Vacanze Maiori",   alias: ["Home Holiday", "Casa Vacanze", CVM] }
+      LIDO:      { nome: "Lido / Spiaggia",       alias: [Beach, Spiaggia, Lido] }
+      HQ:        { nome: "Sede Amministrativa",   alias: [Amministrazione, HQ] }
 
   Reparto:
     description: "Unita' organizzativa interna"

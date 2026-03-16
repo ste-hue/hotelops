@@ -15,6 +15,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.4"]
 dashboard = ["streamlit>=1.35", "plotly>=5.0", "db-dtypes>=1.0"]
+# Installa il parser Esolver con: pip install -e /path/to/reconciliation_dino
+# esolver = ["esolver-accodamenti"]
 
 [tool.setuptools.packages.find]
 where = ["."]
