@@ -5,7 +5,7 @@ CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_cashflow_mensile` AS
 
 WITH base AS (
   SELECT
-    FORMAT_DATE('%Y-%m', data_operazione) AS mese,
+    DATE_TRUNC(data_operazione, MONTH) AS mese,
     societa_id,
     ROUND(SUM(CASE WHEN importo_netto > 0 THEN importo_netto ELSE 0 END), 2) AS entrate,
     ROUND(SUM(CASE WHEN importo_netto < 0 THEN ABS(importo_netto) ELSE 0 END), 2) AS uscite,
