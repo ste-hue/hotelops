@@ -99,12 +99,12 @@ VOCE_MAP: dict[str, str] = {
     "Canoni e servizi":         "USCITE_CANONI",
     "Deposito Fitto":           "USCITE_DEPOSITO_FITTO",
     # INTUR-specific voci
-    "Fitto Hotel":              "ENTRATE_FITTO_HOTEL",
-    "Fitto AR":                 "ENTRATE_FITTO_AR",
-    "Entrate Farmacia":         "ENTRATE_FARMACIA",
+    "Fitto Hotel":              "ENTRATE_AFFITTI_INTUR",   # canone ORTI→INTUR (conto 53.xx)
+    "Fitto AR":                 "ENTRATE_AFFITTI_INTUR",   # affitto ramo d'azienda (same 53.xx)
+    "Entrate Farmacia":         "ENTRATE_AFFITTI_MINORI",  # affitto farmacia (47.95.xx)
     "Entrate Spiaggia":         "ENTRATE_SPIAGGIA",
-    "Caparre da girocantare":   "ENTRATE_CAPARRE_GIRO",
-    "Godimento Benidi Terzi":   "USCITE_GODIMENTO_BENI",  # INTUR typo
+    "Caparre da girocantare":   "ENTRATE_CAPARRE_INTUR",   # was CAPARRE_GIRO → align to d_voci
+    "Godimento Benidi Terzi":   "USCITE_GODIMENTO_BENI",   # INTUR typo
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

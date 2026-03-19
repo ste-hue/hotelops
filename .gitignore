@@ -6,3 +6,6 @@ build/
 .venv/
 *.db
 .DS_Store
+output/
+logs/
+~$*

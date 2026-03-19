@@ -45,7 +45,6 @@ actuals AS (
         CONCAT(SUBSTR(cod_conto, 1, 2), '.', SUBSTR(cod_conto, 3, 2), '.', SUBSTR(cod_conto, 5))
       ELSE cod_conto
     END AS codice_conto_display,
-    descrizione_conto,
     SUM(imp_dare) AS tot_dare,
     SUM(imp_avere) AS tot_avere,
     -- Net: for costs (dare > avere), for revenues (avere > dare)
@@ -59,10 +58,10 @@ actuals AS (
 -- Piano dei conti per descrizione canonica
 pdc AS (
   SELECT
-    REPLACE(codice, '.', '') AS cod_conto_norm,
-    codice,
+    REPLACE(codice_conto, '.', '') AS cod_conto_norm,
+    codice_conto,
     descrizione,
-    tipo,
+    tipo_conto,
     sezione
   FROM `hotelops-suite.hotelops.d_piano_conti`
 )
@@ -73,8 +72,8 @@ SELECT
   COALESCE(b.mese, a.mese) AS mese,
   COALESCE(b.cod_conto_norm, a.cod_conto_norm) AS cod_conto,
   COALESCE(b.codice_conto, a.codice_conto_display) AS codice_conto_display,
-  COALESCE(pdc.descrizione, b.budget_descrizione, a.descrizione_conto) AS descrizione,
-  COALESCE(pdc.tipo, 'CE') AS tipo_conto,
+  COALESCE(pdc.descrizione, b.budget_descrizione) AS descrizione,
+  COALESCE(pdc.tipo_conto, 'CE') AS tipo_conto,
   COALESCE(pdc.sezione, '') AS sezione,
   b.tipo_costo,
   b.categoria_ce,

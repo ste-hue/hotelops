@@ -119,6 +119,35 @@ class BancaMovimentoRow(BaseModel):
     file_sorgente: str
 
 
+# ── f_chiusura_mensile ────────────────────────────────────────────────────────
+
+class ChiusuraMensileRow(BaseModel):
+    """Schema for f_chiusura_mensile — monthly close snapshot.
+
+    Saves the forecast vs actual delta at close time, so prediction
+    accuracy can be tracked over time. Once written, never overwritten.
+    """
+    societa_id: SocietaId
+    anno: int
+    mese: int
+    voce_id: str
+    voce_label: str
+    sezione: Sezione
+    importo_consuntivo: float
+    importo_previsione: float
+    delta: float
+    delta_pct: Optional[float] = None
+    saldo_banca_fine_mese: Optional[float] = None
+    data_chiusura: str  # ISO date when close was run
+
+    @field_validator("mese")
+    @classmethod
+    def mese_range(cls, v: int) -> int:
+        if not 1 <= v <= 12:
+            raise ValueError(f"mese fuori range: {v}")
+        return v
+
+
 # ── Validation helper ────────────────────────────────────────────────────────
 
 class SchemaViolationError(Exception):

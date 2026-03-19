@@ -18,6 +18,12 @@ dashboard = ["streamlit>=1.35", "plotly>=5.0", "db-dtypes>=1.0"]
 # Installa il parser Esolver con: pip install -e /path/to/reconciliation_dino
 # esolver = ["esolver-accodamenti"]
 
+[project.scripts]
+hotelops = "cli:main"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["actions*", "pipelines*", "lib*", "services*"]
+
+[tool.setuptools]
+py-modules = ["cli"]

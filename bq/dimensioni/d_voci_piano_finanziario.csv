@@ -11,20 +11,19 @@ ENTRATE_SUPERMERCATO,Entrate Supermercato,ENTRATE,Ricavi,ORTI,ESOLVER,4795,,,,90
 ENTRATE_RIENTRO_SOSPESI,Rientro Sospesi,ENTRATE,Banca,ORTI,BANCHE,,,,SOSPESI,100,,Ricavi,IP
 ENTRATE_CAPARRE,Caparre da Intur,ENTRATE,Caparre,ORTI,ESOLVER,390521,,,,110,,Ricavi,IP
 USCITE_SALARI,Salari e Stipendi,USCITE,Personale,,ESOLVER,67,,,,200,,Costi del Personale,P
-USCITE_UTENZE_ENERGIA,Utenze Energia Elettrica,USCITE,Utenze,,ESOLVER,570913,,,,210,,Costi Produttivi,F
-USCITE_UTENZE_ACQUA,Utenze Acqua,USCITE,Utenze,,ESOLVER,570917,,,,220,,Costi Produttivi,F
-USCITE_UTENZE_GAS,Utenze Gas,USCITE,Utenze,,ESOLVER,570919,,,,230,,Costi Produttivi,F
-USCITE_UTENZE_TEL,Utenze Telefoniche,USCITE,Utenze,,ESOLVER,57090101,,,,240,,Costi Produttivi,F
-USCITE_UTENZE_CONNETTIVITA,Utenze Connettività Internet,USCITE,Utenze,,ESOLVER,570909,,,,245,,Costi Produttivi,F
+USCITE_UTENZE,Utenze (Energia+Acqua+Gas+Tel+Internet),USCITE,Utenze,,ESOLVER,5709,,,,210,,Costi Produttivi,F
 USCITE_MATERIE_PRIME,Materie Prime / Consumo,USCITE,Acquisti,,ESOLVER,55,,,,250,,Costi Produttivi,V
 USCITE_TASSE,Tasse e Imposte,USCITE,Fiscale,,ESOLVER,63051,710104,710107,,260,,Oneri Tributari,F
 USCITE_MUTUI,Mutui e Finanziamenti (rate mensili),USCITE,Finanziario,,BANCHE,,,,PAGAMENTO RATA,270,,Oneri Finanziari,X
 USCITE_MUTUI_SEMESTRALE,Rimborso Finanziamenti (semestrale),USCITE,Finanziario,ORTI,BANCHE,,,,RIMBORSO FINANZIAMENTI,275,,Oneri Finanziari,X
 USCITE_SPESE_BANCARIE,Commissioni e Spese Bancarie,USCITE,Finanziario,,ESOLVER,7501,,,,278,,Oneri Finanziari,X
-USCITE_CONSULENZE,Consulenze,USCITE,Consulenze,,ESOLVER,6101,,,,280,,Costi Amministrativi,F
+USCITE_CONSULENZE,Consulenze e Marketing,USCITE,Consulenze,,ESOLVER,6101,650604,,,280,,Costi Amministrativi,F
 USCITE_GODIMENTO_BENI,Godimento Beni di Terzi (Fitti Passivi),USCITE,Godimento Beni,,ESOLVER,650105,,,,290,,Costi Produttivi,F
-USCITE_COMMISSIONI,Commissioni Portali,USCITE,Commissioni,ORTI,ESOLVER,570101,570151,,,300,,Costi Commerciali,V
+USCITE_COMMISSIONI,Commissioni OTA e Portali,USCITE,Commissioni,ORTI,ESOLVER,570101,570151,6302,,300,,Costi Commerciali,V
 USCITE_CANONI,Canoni e Servizi,USCITE,Canoni,,ESOLVER,6503,6505,6590,,310,,Costi Produttivi,F
 USCITE_CANONE_PASSIVO,Canone Affitto Ramo Azienda (INTUR→ORTI),USCITE,Affitti,ORTI,ESOLVER,6511,,,,315,,Costi Produttivi,F
-USCITE_VARIE,Varie ed Eventuali,USCITE,Varie,,ESOLVER,6301,63059,570190,,320,,Costi Produttivi,V
+USCITE_DEPOSITO_FITTO,Deposito Fitto (una tantum),USCITE,Affitti,,MANUALE,,,,,,,,F
+USCITE_MARKETING,Marketing e Pubblicità,USCITE,Marketing,,ESOLVER,6304,,,,316,,Costi Commerciali,V
+USCITE_SERVIZI_PRODUZIONE,Servizi per la Produzione,USCITE,Servizi,,ESOLVER,570150,570190,,,317,,Costi Produttivi,V
+USCITE_VARIE,Varie ed Eventuali,USCITE,Varie,,ESOLVER,6301,63059,640503,,320,,Costi Produttivi,V
 USCITE_VARIE_EXT,Varie ed Eventuali,USCITE,Varie,,ESOLVER,5711,5903,71019,,321,,Costi Produttivi,V
