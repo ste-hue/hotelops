@@ -1,0 +1,141 @@
+-- v_piano_finanziario_mensile: Budget vs Consuntivo, rolling 18 mesi
+--
+-- Scaffold: d_voci_piano_finanziario × finestra [-6m, +12m] × {INTUR, ORTI}
+-- LEFT JOIN:
+--   v_piano_finanziario_consuntivo   → importo_consuntivo
+--   f_budget_mensile                 → importo_budget (via cod_conto LIKE patterns)
+--   f_piano_finanziario_input        → addendo a importo_budget (voci MANUALE)
+--
+-- tipo_periodo:
+--   CONSUNTIVO = mese < mese corrente
+--   BUDGET     = mese >= mese corrente
+
+CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_piano_finanziario_mensile` AS
+
+WITH
+
+-- ── Finestra rolling 18 mesi (−6 → +12) ──────────────────────────────────────
+mesi AS (
+  SELECT
+    mese_date,
+    EXTRACT(YEAR  FROM mese_date) AS anno,
+    EXTRACT(MONTH FROM mese_date) AS mese,
+    FORMAT('%d-%02d', EXTRACT(YEAR FROM mese_date), EXTRACT(MONTH FROM mese_date)) AS periodo,
+    CASE
+      WHEN mese_date < DATE_TRUNC(CURRENT_DATE('Europe/Rome'), MONTH) THEN 'CONSUNTIVO'
+      ELSE 'BUDGET'
+    END AS tipo_periodo
+  FROM UNNEST(GENERATE_DATE_ARRAY(
+    DATE_TRUNC(DATE_SUB(CURRENT_DATE('Europe/Rome'), INTERVAL 6 MONTH), MONTH),
+    DATE_TRUNC(DATE_ADD(CURRENT_DATE('Europe/Rome'), INTERVAL 12 MONTH), MONTH),
+    INTERVAL 1 MONTH
+  )) AS mese_date
+),
+
+-- ── Società (le due entità) ────────────────────────────────────────────────────
+societa AS (
+  SELECT societa_id FROM UNNEST(['INTUR', 'ORTI']) AS societa_id
+),
+
+-- ── Scaffold: voce × mese × società ──────────────────────────────────────────
+scaffold AS (
+  SELECT
+    s.societa_id,
+    v.voce_id,
+    v.voce_label,
+    v.sezione,
+    v.categoria,
+    v.ord,
+    m.anno,
+    m.mese,
+    m.periodo,
+    m.tipo_periodo,
+    m.mese_date
+  FROM `hotelops-suite.hotelops.d_voci_piano_finanziario` v
+  CROSS JOIN mesi m
+  CROSS JOIN societa s
+  -- Voci con societa_id specifico: espandi solo per quella società
+  WHERE (v.societa_id IS NULL OR v.societa_id = s.societa_id)
+),
+
+-- ── Consuntivo da v_piano_finanziario_consuntivo ───────────────────────────────
+consuntivo AS (
+  SELECT
+    societa_id,
+    voce_id,
+    anno,
+    mese,
+    SUM(importo) AS importo_consuntivo
+  FROM `hotelops-suite.hotelops.v_piano_finanziario_consuntivo`
+  GROUP BY 1, 2, 3, 4
+),
+
+-- ── Budget da f_budget_mensile (codice_conto puntato → normalizzato via REPLACE) ─
+budget_costi AS (
+  SELECT
+    b.societa_id,
+    v.voce_id,
+    b.anno,
+    b.mese,
+    -- Budget costi: dare - avere (positivo = uscita), coerente con v_piano_consuntivo
+    SUM(b.importo) AS importo_budget
+  FROM `hotelops-suite.hotelops.f_budget_mensile` b
+  JOIN `hotelops-suite.hotelops.d_voci_piano_finanziario` v
+    ON v.fonte = 'ESOLVER'
+    AND (
+         REPLACE(b.codice_conto, '.', '') LIKE CONCAT(v.cod_conto_pattern, '%')
+      OR (v.cod_conto_pat2 IS NOT NULL AND REPLACE(b.codice_conto, '.', '') LIKE CONCAT(v.cod_conto_pat2, '%'))
+      OR (v.cod_conto_pat3 IS NOT NULL AND REPLACE(b.codice_conto, '.', '') LIKE CONCAT(v.cod_conto_pat3, '%'))
+    )
+    AND (v.societa_id IS NULL OR v.societa_id = b.societa_id)
+  GROUP BY 1, 2, 3, 4
+),
+
+-- ── Input manuale (prospettivo) da f_piano_finanziario_input ──────────────────
+input_manuale AS (
+  SELECT
+    societa_id,
+    voce_id,
+    anno,
+    mese,
+    SUM(importo) AS importo_manuale
+  FROM `hotelops-suite.hotelops.f_piano_finanziario_input`
+  GROUP BY 1, 2, 3, 4
+)
+
+-- ── Assemblaggio finale ────────────────────────────────────────────────────────
+SELECT
+  sc.societa_id,
+  sc.voce_id,
+  sc.voce_label,
+  sc.sezione,
+  sc.categoria,
+  sc.ord,
+  sc.anno,
+  sc.mese,
+  sc.periodo,
+  sc.tipo_periodo,
+  ROUND(COALESCE(c.importo_consuntivo, 0), 2)                                    AS importo_consuntivo,
+  ROUND(COALESCE(bc.importo_budget, 0) + COALESCE(im.importo_manuale, 0), 2)    AS importo_budget,
+  ROUND(
+    COALESCE(c.importo_consuntivo, 0) -
+    (COALESCE(bc.importo_budget, 0) + COALESCE(im.importo_manuale, 0)),
+    2
+  )                                                                               AS scostamento,
+  CASE
+    WHEN (COALESCE(bc.importo_budget, 0) + COALESCE(im.importo_manuale, 0)) = 0 THEN NULL
+    ELSE ROUND(
+      (COALESCE(c.importo_consuntivo, 0) -
+       (COALESCE(bc.importo_budget, 0) + COALESCE(im.importo_manuale, 0))) /
+      ABS(COALESCE(bc.importo_budget, 0) + COALESCE(im.importo_manuale, 0)) * 100,
+      1
+    )
+  END                                                                             AS scostamento_pct
+FROM scaffold sc
+LEFT JOIN consuntivo      c  ON c.societa_id = sc.societa_id AND c.voce_id = sc.voce_id
+                             AND c.anno = sc.anno AND c.mese = sc.mese
+LEFT JOIN budget_costi    bc ON bc.societa_id = sc.societa_id AND bc.voce_id = sc.voce_id
+                             AND bc.anno = sc.anno AND bc.mese = sc.mese
+LEFT JOIN input_manuale   im ON im.societa_id = sc.societa_id AND im.voce_id = sc.voce_id
+                             AND im.anno = sc.anno AND im.mese = sc.mese
+ORDER BY sc.societa_id, sc.mese_date, sc.ord

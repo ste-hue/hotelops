@@ -137,8 +137,19 @@ NanoClaw (WhatsApp agent) can interact with this system. When acting as the hote
 ## Entities
 
 ### Società (legal entities)
-- **INTUR** — main operating company
-- **ORTI** — secondary entity
+
+- **INTUR** — proprietà e aspetti finanziari (mutui, IVA, fatture, riconciliazione bancaria). Gestisce direttamente solo il **Lido** (spiaggia). Per tutto il resto è holding finanziaria.
+- **ORTI** — gestione operativa: vendite, acquisti, costi di Hotel, Residence, CVM. Tutti i movimenti gestionali (accodamenti, consumi economato, personale) sono ORTI tranne Lido.
+
+**Regola pratica:**
+- Consumi / ricavi / costi operativi Hotel+Residence+CVM → `societa_id = ORTI`
+- Lido (spiaggia) → `societa_id = INTUR`
+- Movimenti bancari, mutui, IVA → `societa_id = INTUR`
+
+**Stagionalità:**
+- Hotel Panorama: apre/chiude stagionalmente (aprile–ottobre circa). Unica BU con date di apertura/chiusura.
+- Residence e CVM: aperti tutto l'anno.
+- Lido: stagione balneare (INTUR).
 
 ### Business Units — canonical IDs and aliases
 | business_unit_id | Nome canonico | Alias frequenti | Note |
