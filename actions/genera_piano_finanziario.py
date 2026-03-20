@@ -24,7 +24,6 @@ from __future__ import annotations
 import argparse
 import sys
 from datetime import date
-from pathlib import Path
 
 try:
     from google.cloud import bigquery
@@ -33,7 +32,7 @@ except ImportError:
     sys.exit(1)
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, numbers
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 BQ_PROJECT = "hotelops-suite"
@@ -140,7 +139,7 @@ def build_pf_sheet(wb: Workbook, sheet_name: str, societa: str, anno: int,
 
     ws["A2"] = "Generato da BigQuery"
     ws["A2"].font = Font(name="Arial", italic=True, size=9, color="888888")
-    ws["A3"] = f"Nero = consuntivo | Blu = previsione (modificabile) | Verde = formula"
+    ws["A3"] = "Nero = consuntivo | Blu = previsione (modificabile) | Verde = formula"
     ws["A3"].font = Font(name="Arial", size=9, color="666666")
 
     # Column headers: A=Voce, B=Categoria, C-N=Gen-Dic, O=Totale, P=2025
@@ -230,6 +229,8 @@ def build_pf_sheet(wb: Workbook, sheet_name: str, societa: str, anno: int,
     # Find row ranges for ENTRATE and USCITE
     entrate_rows = []
     uscite_rows = []
+    current = None
+    section_start = 6
     for r in range(6, row):
         val = ws.cell(r, 1).value
         if val and "══ ENTRATE ══" in str(val):
@@ -318,7 +319,7 @@ def main():
     anno = args.anno
     output = args.output or f"Piano_Finanziario_{anno}_{date.today().isoformat()}.xlsx"
 
-    print(f"Fetching data from BigQuery...")
+    print("Fetching data from BigQuery...")
 
     voci = fetch_voci()
     print(f"  Voci: {len(voci)}")
@@ -341,8 +342,8 @@ def main():
 
     wb.save(output)
     print(f"\n✓ {output} generato ({len(wb.sheetnames)} fogli)")
-    print(f"  Nero = consuntivo reale | Blu su giallo = previsione da modificare")
-    print(f"  Dopo la sessione con Rosa: usa 'hotelops previsione' per riscrivere in BQ")
+    print("  Nero = consuntivo reale | Blu su giallo = previsione da modificare")
+    print("  Dopo la sessione con Rosa: usa 'hotelops previsione' per riscrivere in BQ")
 
 
 if __name__ == "__main__":

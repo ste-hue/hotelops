@@ -24,8 +24,6 @@ import argparse
 import csv
 import hashlib
 import sys
-from datetime import date, datetime
-from pathlib import Path
 
 try:
     from google.cloud import bigquery
@@ -143,7 +141,7 @@ def run_wizard(bq, societa, from_ym, to_ym, sezione_filter, voce_filter, fonte, 
     print(f"\n{BOLD}{'='*70}{RESET}")
     print(f"{BOLD}  Budget Wizard — {societa}  {from_ym} → {to_ym}{RESET}")
     print(f"  {len(voci)} voci × {len(mesi)} mesi = {len(voci)*len(mesi)} valori")
-    print(f"  Comandi: <numero> | = (ripeti) | s (salta) | ? (storico) | q (salva+esci)")
+    print("  Comandi: <numero> | = (ripeti) | s (salta) | ? (storico) | q (salva+esci)")
     print(f"{BOLD}{'='*70}{RESET}\n")
 
     total = len(voci) * len(mesi)
@@ -255,7 +253,7 @@ def _save(rows, output_path, societa, fonte):
         w.writerows(rows)
 
     print(f"\n  {rows[0]['fonte']} {societa}: {len(rows)} valori → {output_path}")
-    print(f"\n  Per caricare in BQ:")
+    print("\n  Per caricare in BQ:")
     print(f"  python -m pipelines.amministrativa.ingest_piano_finanziario_input --file {output_path}")
 
 

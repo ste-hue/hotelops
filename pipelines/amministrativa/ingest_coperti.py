@@ -28,7 +28,6 @@ import argparse
 import csv
 import hashlib
 import logging
-import re
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path

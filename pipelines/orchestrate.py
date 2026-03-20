@@ -498,7 +498,7 @@ def main() -> None:
                 logger.info(f"  Syncing for {p.name}...")
                 try:
                     p.sync_fn(ctx)
-                    logger.info(f"  ✓ Sync OK")
+                    logger.info("  ✓ Sync OK")
                 except Exception as e:
                     logger.error(f"  ✗ Sync failed: {e}")
 
@@ -517,7 +517,7 @@ def main() -> None:
         logger.info(f"\n[{p.name}] {p.description}")
         pipeline_args = p.args_fn(ctx)
         if not pipeline_args:
-            logger.info(f"  ⊘ Nessun file trovato — skip")
+            logger.info("  ⊘ Nessun file trovato — skip")
             results[p.name] = "NO_FILES"
             continue
 
@@ -545,7 +545,7 @@ def main() -> None:
             continue
 
         if not arg_lists:
-            logger.info(f"  ⊘ Nessun file trovato — skip")
+            logger.info("  ⊘ Nessun file trovato — skip")
             results[name] = "NO_FILES"
             continue
 

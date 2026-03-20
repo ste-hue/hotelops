@@ -239,7 +239,7 @@ def parse_piano_finanziario(
     # Detect year and month columns
     anno, month_cols = _detect_year_and_month_block(ws)
     if not anno:
-        logger.warning(f"  Anno non rilevato — default 2026")
+        logger.warning("  Anno non rilevato — default 2026")
         anno = 2026
     if not month_cols:
         logger.error(f"  Colonne mesi non rilevate in {filepath.name}")

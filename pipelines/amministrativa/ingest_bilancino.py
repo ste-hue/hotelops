@@ -22,7 +22,7 @@ import csv
 import hashlib
 import logging
 import sys
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 try:
@@ -218,7 +218,7 @@ def write_to_csv(rows: list[dict], csv_path: Path, logger: logging.Logger):
 
     new_rows = [r for r in rows if r["hash_riga"] not in existing]
     if not new_rows:
-        logger.info(f"  CSV: nessuna nuova riga (già presenti)")
+        logger.info("  CSV: nessuna nuova riga (già presenti)")
         return
 
     write_header = not csv_path.exists()

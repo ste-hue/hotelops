@@ -256,7 +256,7 @@ def write_to_csv(rows: list[dict], csv_path: Path, logger: logging.Logger):
             existing = {r["hash_riga"] for r in csv.DictReader(f)}
     new_rows = [r for r in rows if r["hash_riga"] not in existing]
     if not new_rows:
-        logger.info(f"  CSV: nessuna nuova riga")
+        logger.info("  CSV: nessuna nuova riga")
         return
     write_header = not csv_path.exists()
     with open(csv_path, "a", newline="") as f:

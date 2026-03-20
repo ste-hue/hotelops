@@ -371,7 +371,7 @@ def inspect_file(path: Path):
         rt = line.split("|")[0].strip()
         record_types[rt] = record_types.get(rt, 0) + 1
     print(f"Tipi record: {record_types}")
-    print(f"Prime 5 righe:")
+    print("Prime 5 righe:")
     for i, line in enumerate(lines[:5], 1):
         fields = [f.strip() for f in line.split("|")]
         print(f"  [{i:2d}] {len(fields)} campi → {fields[:12]}{'...' if len(fields)>12 else ''}")

@@ -22,7 +22,6 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
 from google.cloud import bigquery
@@ -37,6 +36,7 @@ except ImportError:
 
 BQ_PROJECT = "hotelops-suite"
 BQ_TABLE = "hotelops-suite.hotelops.f_banche_movimenti"
+BQ_SNAPSHOT_TABLE = "hotelops-suite.hotelops.f_saldi_banca_snapshot"
 
 
 # -- Config -------------------------------------------------------------------
@@ -376,6 +376,81 @@ def read_mps2026_excel(path: Path, logger: logging.Logger) -> list[dict]:
     return rows
 
 
+def extract_saldo_mps2026(path: Path, meta: dict, logger: logging.Logger) -> dict | None:
+    """Extract Saldo Finale + date from MPS 2026 OOXML header rows (before DATA CONT.)."""
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(path.read_bytes()), data_only=True)
+        ws = wb.active
+        saldo_finale = None
+        data_finale = None
+        for row in ws.iter_rows(max_row=30, values_only=True):
+            for i, cell in enumerate(row):
+                if isinstance(cell, str) and "Saldo Finale" in cell:
+                    for v in row[i + 1:]:
+                        if v is None:
+                            continue
+                        if hasattr(v, "year"):
+                            data_finale = v.date() if hasattr(v, "date") else v
+                        elif isinstance(v, (int, float)):
+                            saldo_finale = float(v)
+                    break
+            if saldo_finale is not None:
+                break
+        if saldo_finale is None:
+            return None
+        societa, banca = infer_ids(meta["societa_banca"])
+        if data_finale is None:
+            from datetime import date as _date
+            data_finale = _date.today()
+            logger.warning(f"  data_finale not found in {path.name}, using today")
+        snapshot = {
+            "societa_id": societa,
+            "banca_id": banca,
+            "data_snapshot": data_finale.isoformat(),
+            "saldo_finale": saldo_finale,
+            "file_sorgente": path.name,
+            "data_caricamento": datetime.now().isoformat(),
+        }
+        logger.info(f"  Saldo Finale {societa}/{banca}: {data_finale} = €{saldo_finale:,.2f}")
+        return snapshot
+    except Exception as e:
+        logger.warning(f"  extract_saldo_mps2026 {path.name}: {e}")
+        return None
+
+
+def upsert_saldo_snapshot(bq_client: bigquery.Client, snapshot: dict, dry_run: bool, logger: logging.Logger):
+    """Write saldo snapshot to f_saldi_banca_snapshot (upsert by societa+banca+data_snapshot)."""
+    if dry_run:
+        logger.info(f"  DRY RUN saldo: {snapshot['societa_id']}/{snapshot['banca_id']} {snapshot['data_snapshot']} = €{snapshot['saldo_finale']:,.2f}")
+        return
+    from google.cloud import bigquery as bq_lib
+    table_id = BQ_SNAPSHOT_TABLE
+    try:
+        bq_client.get_table(table_id)
+    except Exception:
+        schema = [
+            bq_lib.SchemaField("societa_id", "STRING"),
+            bq_lib.SchemaField("banca_id", "STRING"),
+            bq_lib.SchemaField("data_snapshot", "DATE"),
+            bq_lib.SchemaField("saldo_finale", "FLOAT"),
+            bq_lib.SchemaField("file_sorgente", "STRING"),
+            bq_lib.SchemaField("data_caricamento", "TIMESTAMP"),
+        ]
+        bq_client.create_table(bq_lib.Table(table_id, schema=schema))
+        logger.info(f"  Created {table_id}")
+    bq_client.query(f"""
+    DELETE FROM `{table_id}`
+    WHERE societa_id = '{snapshot["societa_id"]}'
+      AND banca_id = '{snapshot["banca_id"]}'
+      AND data_snapshot = DATE('{snapshot["data_snapshot"]}')
+    """).result()
+    errors = bq_client.insert_rows_json(table_id, [snapshot])
+    if errors:
+        logger.error(f"  Snapshot errors: {errors[:2]}")
+    else:
+        logger.info(f"  ✓ Saldo snapshot saved: {snapshot['societa_id']}/{snapshot['banca_id']} {snapshot['data_snapshot']}")
+
+
 def read_sella_xls(path: Path, logger: logging.Logger) -> list[dict]:
     try:
         import xlrd
@@ -550,6 +625,9 @@ def process_file(filepath: Path, bq_client: bigquery.Client, mappings: dict, has
             raw_rows = read_sella_xls(filepath, logger)
         elif "MPS" in sb and meta["ext"] == "xlsx":
             raw_rows = read_mps2026_excel(filepath, logger)
+            snapshot = extract_saldo_mps2026(filepath, meta, logger)
+            if snapshot:
+                upsert_saldo_snapshot(bq_client, snapshot, dry_run, logger)
         else:
             raw_rows = read_mps_excel(filepath, logger)
     except SchemaViolationError as e:

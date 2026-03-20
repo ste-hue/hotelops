@@ -284,9 +284,15 @@ Ogni mese il modello si affina: le previsioni si aggiustano, gli snapshot tracci
 - d_categorie_conti: 167 mappings (needs reload if reset — source: Costi Ricavi file)
 
 ### Known data issues
-- USCITE_SALARI gen/feb: consuntivo €5.5K vs budget €170K — salari possibly not yet booked in Esolver for those months
-- USCITE_VARIE_EXT: budget negative (-€29K) — mapping issue in Gasparotto, needs investigation
-- USCITE_SERVIZI_PRODUZIONE: consuntivo but zero budget — new voce 57.01.50 (€680K) not in Gasparotto Master
+
+**🔴 BLOCCANTE — da risolvere con Rosa:**
+- **Saldo banca ORTI: −€3.26M senza senso** — f_banche_movimenti ha solo transazioni dal 2025-01-02, senza saldo iniziale di apertura. La somma cumulativa ≠ saldo reale. Serve l'estratto conto MPS al 01/01/2025 per inserire il saldo iniziale. Senza questo, `hotelops saldo`, `hotelops chiudi` e l'Excel PF mostrano saldi sbagliati per ORTI. (INTUR: +€818K sembra realistico.)
+- **USCITE_MUTUI doppia fonte** — f_piano_finanziario_input ha sia SCADENZIARIO (€129K/anno) che PIANO_FINANZIARIO (€496K/anno) per USCITE_MUTUI ORTI. La view li somma entrambi → budget mutui gonfiato di €129K. Decidere: SCADENZIARIO sostituisce o si aggiunge al PF?
+
+**🟠 SERIO:**
+- USCITE_SALARI gen/feb: consuntivo €5.5K vs budget €170K — salari possibly not yet booked in Esolver for those months (conti 67.01.01.xx assenti, solo 670313/670351/670391)
+- USCITE_VARIE_EXT: budget negative (−€28,926/mese) — mapping issue in Gasparotto, da investigare quale conto genera il segno invertito
+- USCITE_SERVIZI_PRODUZIONE: consuntivo €18K YTD but zero budget — conti 570150/570190 non nel Gasparotto Master. Rischio pattern overlap con USCITE_COMMISSIONI (570101, 570151)
 - Gasparotto budget uses flat 1/12 monthly split — needs seasonality adjustment
 - PF XLSX data from September 2025 — stale, needs update with Rosa
 
@@ -323,10 +329,12 @@ System prompt: `nanoclaw_hotelops_prompt.md`.
 
 ## Entities
 
-### Società (legal entities)
+### Società (legal entities) — vasi comunicanti
 
-- **INTUR** — proprietà e aspetti finanziari (mutui, IVA, fatture, riconciliazione bancaria). Gestisce direttamente solo il **Lido** (spiaggia). Per tutto il resto è holding finanziaria.
-- **ORTI** — gestione operativa: vendite, acquisti, costi di Hotel, Residence, CVM. Tutti i movimenti gestionali sono ORTI tranne Lido.
+- **INTUR** — proprietà e aspetti finanziari (mutui, IVA, fatture). Possiede Hotel+Spiaggia+Immobili. Gestisce direttamente solo il **Lido** (spiaggia). Per tutto il resto è holding finanziaria. Riceve fitto ramo d'azienda da ORTI (€732K/anno, 6 rate da €122K).
+- **ORTI** — gestione operativa: vendite, acquisti, costi di Hotel, Residence, CVM. Paga fitto a INTUR (conto 6511). È anche socio di INTUR (€3M aumento capitale). Tutti i movimenti gestionali sono ORTI tranne Lido.
+
+**Relazione critica**: Se ORTI non genera cash → non paga fitto → INTUR non paga mutui → rischio default. Il fitto ORTI→INTUR (USCITE_CANONE_PASSIVO / ENTRATE_AFFITTI_INTUR) è intercompany e si cancella nel consolidato. Dettagli completi: `meta/reference/INTUR_ORTI_relationship.md`.
 
 ### Business Units
 | business_unit_id | Nome canonico | Note |

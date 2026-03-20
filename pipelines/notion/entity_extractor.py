@@ -7,11 +7,9 @@ Quality rules:
 - Every entity gets last_seen + status frontmatter kept up to date
 - status lifecycle: draft → active → stale → archived
 """
-import re
 import os
 from pathlib import Path
-from datetime import date, timedelta
-from typing import Optional
+from datetime import date
 import yaml
 
 VAULT = Path(os.environ.get(

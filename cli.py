@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import json
 
 BQ_PROJECT = "hotelops-suite"
 
@@ -136,7 +135,7 @@ def cmd_bva(args):
     anno = args.anno or 2026
     mese = args.mese
 
-    mese_filter = f"AND mese = {mese}" if mese else f"AND mese <= EXTRACT(MONTH FROM CURRENT_DATE('Europe/Rome'))"
+    mese_filter = f"AND mese = {mese}" if mese else "AND mese <= EXTRACT(MONTH FROM CURRENT_DATE('Europe/Rome'))"
 
     sql = f"""
     SELECT codice_conto_display, descrizione, categoria_ce, mese,
@@ -295,6 +294,63 @@ def cmd_voci(args):
         print(f"    {r['voce_id']:<30s} {r['voce_label']}{soc}")
 
 
+# ── Saldo banca helper ──────────────────────────────────────────────────────
+
+def _compute_saldo_banca(societa: str, as_of_date: str) -> tuple[float, list[dict]]:
+    """Real bank balance at end of as_of_date via nearest snapshot + movement delta.
+
+    For each bank with a snapshot >= as_of_date: saldo = anchor_saldo - sum(movements
+    between as_of_date+1 and anchor_date).  Falls back to cumulative sum if no snapshots.
+
+    Returns (total, [{banca_id, saldo, anchor_date, note}]).
+    """
+    try:
+        rows = query(f"""
+        WITH anchors AS (
+          SELECT banca_id, data_snapshot AS anchor_date, saldo_finale AS anchor_saldo
+          FROM (
+            SELECT banca_id, data_snapshot, saldo_finale,
+              ROW_NUMBER() OVER (PARTITION BY banca_id ORDER BY data_snapshot ASC) AS rn
+            FROM `{BQ_PROJECT}.hotelops.f_saldi_banca_snapshot`
+            WHERE societa_id = '{societa}'
+              AND data_snapshot >= DATE('{as_of_date}')
+          )
+          WHERE rn = 1
+        ),
+        deltas AS (
+          SELECT m.banca_id,
+            ROUND(SUM(m.importo_netto), 2) AS delta
+          FROM `{BQ_PROJECT}.hotelops.f_banche_movimenti` m
+          JOIN anchors a USING (banca_id)
+          WHERE m.societa_id = '{societa}'
+            AND m.data_operazione > DATE('{as_of_date}')
+            AND m.data_operazione <= a.anchor_date
+          GROUP BY m.banca_id
+        )
+        SELECT a.banca_id, a.anchor_date,
+          ROUND(a.anchor_saldo - COALESCE(d.delta, 0), 0) AS saldo,
+          'ANCHOR' AS note
+        FROM anchors a
+        LEFT JOIN deltas d USING (banca_id)
+        """)
+        if rows:
+            return sum(r["saldo"] for r in rows), rows
+    except Exception:
+        pass
+    # Fallback: cumulative sum (no opening balance — inaccurate)
+    rows = query(f"""
+    SELECT banca_id,
+      ROUND(SUM(importo_netto), 0) AS saldo,
+      MAX(data_operazione) AS anchor_date,
+      'CUMSUM' AS note
+    FROM `{BQ_PROJECT}.hotelops.f_banche_movimenti`
+    WHERE societa_id = '{societa}'
+      AND data_operazione <= DATE('{as_of_date}')
+    GROUP BY banca_id
+    """)
+    return sum(r["saldo"] for r in rows), rows
+
+
 # ── Chiudi: chiusura mensile ────────────────────────────────────────────────
 
 def cmd_chiudi(args):
@@ -356,9 +412,11 @@ def cmd_chiudi(args):
         print(f"  {voce:<32s} {fmt_eur(c)} {fmt_eur(b)} {fmt_eur(d)}  {pct_s:>6s}{flag}")
 
         if sez == "ENTRATE":
-            tot_c_e += c; tot_b_e += b
+            tot_c_e += c
+            tot_b_e += b
         else:
-            tot_c_u += c; tot_b_u += b
+            tot_c_u += c
+            tot_b_u += b
 
         # Collect for snapshot
         snapshot_rows.append({
@@ -382,21 +440,15 @@ def cmd_chiudi(args):
     cf_b = tot_b_e - tot_b_u
     print(f"  {'CASH FLOW NETTO':<32s} {fmt_eur(cf_c)} {fmt_eur(cf_b)} {fmt_eur(cf_c - cf_b)}")
 
-    # 2. Saldo banca
-    print(f"\n  ── SALDO BANCA al {mese_chiuso:02d}/{anno} ──")
-    saldo_rows = query(f"""
-    SELECT banca_id,
-      ROUND(SUM(importo_netto), 0) AS saldo
-    FROM hotelops.f_banche_movimenti
-    WHERE societa_id = '{societa}'
-      AND data_operazione <= DATE('{anno}-{mese_chiuso:02d}-01') + INTERVAL 1 MONTH - INTERVAL 1 DAY
-    GROUP BY 1
-    ORDER BY 1
-    """)
-    totale_banca = 0
-    for r in saldo_rows:
-        print(f"    {r['banca_id']:<12s} {fmt_eur(r['saldo'])}")
-        totale_banca += r["saldo"]
+    # 2. Saldo banca (anchor-based)
+    import calendar
+    last_day = calendar.monthrange(anno, mese_chiuso)[1]
+    as_of_date = f"{anno}-{mese_chiuso:02d}-{last_day:02d}"
+    print(f"\n  ── SALDO BANCA al {last_day:02d}/{mese_chiuso:02d}/{anno} ──")
+    totale_banca, saldo_detail = _compute_saldo_banca(societa, as_of_date)
+    for r in saldo_detail:
+        method = "" if r.get("note") == "ANCHOR" else " (stima)"
+        print(f"    {r['banca_id']:<12s} {fmt_eur(r['saldo'])}{method}")
     print(f"    {'TOTALE':<12s} {fmt_eur(totale_banca)}")
 
     # Add saldo_banca to snapshot rows
@@ -404,22 +456,37 @@ def cmd_chiudi(args):
         sr["saldo_banca_fine_mese"] = float(totale_banca)
 
     # 3. Quick forward look
-    print(f"\n  ── PROIEZIONE PROSSIMI 3 MESI ──")
-    fwd_rows = query(f"""
-    SELECT mese,
-      ROUND(SUM(CASE WHEN sezione = 'ENTRATE' THEN importo_budget ELSE 0 END), 0) AS entrate_prev,
-      ROUND(SUM(CASE WHEN sezione = 'USCITE' THEN importo_budget ELSE 0 END), 0) AS uscite_prev
-    FROM `hotelops-suite.hotelops.v_piano_finanziario_mensile`
-    WHERE anno = {anno} AND societa_id = '{societa}'
-      AND mese BETWEEN {mese_chiuso + 1} AND {min(mese_chiuso + 3, 12)}
-    GROUP BY mese ORDER BY mese
-    """)
+    print("\n  ── PROIEZIONE PROSSIMI 3 MESI ──")
+    # Handle December: look into next year
+    if mese_chiuso >= 10:
+        fwd_sql = f"""
+        SELECT mese, anno AS fwd_anno,
+          ROUND(SUM(CASE WHEN sezione = 'ENTRATE' THEN importo_budget ELSE 0 END), 0) AS entrate_prev,
+          ROUND(SUM(CASE WHEN sezione = 'USCITE' THEN importo_budget ELSE 0 END), 0) AS uscite_prev
+        FROM `hotelops-suite.hotelops.v_piano_finanziario_mensile`
+        WHERE societa_id = '{societa}'
+          AND ((anno = {anno} AND mese > {mese_chiuso})
+               OR (anno = {anno + 1} AND mese <= {(mese_chiuso + 3) % 12 or 12}))
+        GROUP BY mese, anno ORDER BY anno, mese
+        """
+    else:
+        fwd_sql = f"""
+        SELECT mese, {anno} AS fwd_anno,
+          ROUND(SUM(CASE WHEN sezione = 'ENTRATE' THEN importo_budget ELSE 0 END), 0) AS entrate_prev,
+          ROUND(SUM(CASE WHEN sezione = 'USCITE' THEN importo_budget ELSE 0 END), 0) AS uscite_prev
+        FROM `hotelops-suite.hotelops.v_piano_finanziario_mensile`
+        WHERE anno = {anno} AND societa_id = '{societa}'
+          AND mese BETWEEN {mese_chiuso + 1} AND {min(mese_chiuso + 3, 12)}
+        GROUP BY mese ORDER BY mese
+        """
+    fwd_rows = query(fwd_sql)
     saldo_running = totale_banca
     for r in fwd_rows:
         netto = (r["entrate_prev"] or 0) - (r["uscite_prev"] or 0)
         saldo_running += netto
+        fwd_anno = r.get("fwd_anno", anno)
         danger = " ⛔ PERICOLO" if saldo_running < 0 else (" ⚠ ATTENZIONE" if saldo_running < 50000 else "")
-        print(f"    Mese {r['mese']:02d}: entrate {fmt_eur(r['entrate_prev'])} - uscite {fmt_eur(r['uscite_prev'])} = netto {fmt_eur(netto)} → saldo {fmt_eur(saldo_running)}{danger}")
+        print(f"    Mese {r['mese']:02d}/{fwd_anno}: entrate {fmt_eur(r['entrate_prev'])} - uscite {fmt_eur(r['uscite_prev'])} = netto {fmt_eur(netto)} → saldo {fmt_eur(saldo_running)}{danger}")
 
     if not fwd_rows:
         print("    (nessuna previsione disponibile per i prossimi mesi)")
@@ -428,7 +495,7 @@ def cmd_chiudi(args):
     if save and snapshot_rows:
         _save_chiusura_snapshot(societa, anno, mese_chiuso, snapshot_rows)
     elif not save:
-        print(f"\n  ℹ DRY RUN — snapshot NON salvato. Usa senza --dry-run per salvare.")
+        print("\n  ℹ DRY RUN — snapshot NON salvato. Usa senza --dry-run per salvare.")
 
 
 def _save_chiusura_snapshot(societa: str, anno: int, mese: int, rows: list[dict]):
@@ -473,39 +540,44 @@ def _save_chiusura_snapshot(societa: str, anno: int, mese: int, rows: list[dict]
         print(f"\n  ✗ Errori inserimento snapshot: {errors[:3]}")
     else:
         print(f"\n  ✓ Snapshot salvato: {len(rows)} righe → f_chiusura_mensile ({societa} {mese:02d}/{anno})")
-        print(f"    Nel tempo: hotelops chiudi mostra se le previsioni migliorano")
+        print("    Nel tempo: hotelops chiudi mostra se le previsioni migliorano")
 
 
 # ── Saldo: posizione banca corrente + proiezione ──────────────────────────
 
 def cmd_saldo(args):
-    """Saldo banca corrente e proiezione cash forward 12 mesi."""
+    """Saldo banca reale (da snapshot) + proiezione cash forward."""
+    import calendar
+    from datetime import date
+
     societa = args.societa or "ORTI"
     anno = args.anno or 2026
+    today = date.today()
 
-    print(f"\n  ═══ POSIZIONE DI CASSA — {societa} ═══\n")
+    # Starting saldo = end of last complete month
+    prev_mese = today.month - 1 if today.month > 1 else 12
+    prev_anno = today.year if today.month > 1 else today.year - 1
+    last_day = calendar.monthrange(prev_anno, prev_mese)[1]
+    as_of_date = f"{prev_anno}-{prev_mese:02d}-{last_day:02d}"
 
-    # Saldo banca corrente per banca
-    print("  ── SALDI BANCA (ultimo movimento) ──")
-    rows = query(f"""
-    SELECT banca_id,
-      MAX(data_operazione) AS ultima_op,
-      ROUND(SUM(importo_netto), 0) AS saldo
-    FROM hotelops.f_banche_movimenti
-    WHERE societa_id = '{societa}'
-    GROUP BY 1
-    ORDER BY 1
-    """)
-    totale_banca = 0
-    for r in rows:
-        print(f"    {r['banca_id']:<12s} {fmt_eur(r['saldo'])}  (ultimo: {r['ultima_op']})")
-        totale_banca += r["saldo"]
-    print(f"    {'─'*40}")
+    print(f"\n  ═══ POSIZIONE DI CASSA — {societa} ═══")
+    print(f"  Saldo reale al {last_day:02d}/{prev_mese:02d}/{prev_anno}\n")
+
+    totale_banca, saldo_rows = _compute_saldo_banca(societa, as_of_date)
+
+    print("  ── SALDI PER BANCA ──")
+    for r in saldo_rows:
+        method = f"  anchor {r['anchor_date']}" if r.get("note") == "ANCHOR" else "  ⚠ stima cumsum"
+        print(f"    {r['banca_id']:<12s} {fmt_eur(r['saldo'])}{method}")
+    print(f"    {'─'*48}")
     print(f"    {'TOTALE':<12s} {fmt_eur(totale_banca)}")
 
-    # Proiezione 12 mesi
-    print(f"\n  ── PROIEZIONE CASH FLOW {anno} ──")
-    print(f"  Saldo iniziale: {fmt_eur(totale_banca)} (dal primo mese con dati banca)")
+    if any(r.get("note") == "CUMSUM" for r in saldo_rows):
+        print("\n  ⚠  Saldo stimato — esegui pipeline banca per caricare snapshot reali")
+
+    # Forward projection: only months after the anchor month
+    mese_filter = f"AND mese > {prev_mese}" if prev_anno == anno else ""
+    print(f"\n  ── PROIEZIONE {anno} (partenza {fmt_eur(totale_banca)} al {as_of_date}) ──")
     print(f"  {'Mese':<8s} {'Entrate':>11s} {'Uscite':>11s} {'Netto':>11s} {'Saldo':>12s}")
     print(f"  {'─'*8} {'─'*11} {'─'*11} {'─'*11} {'─'*12}")
 
@@ -520,6 +592,7 @@ def cmd_saldo(args):
       MIN(tipo_periodo) AS tipo
     FROM `hotelops-suite.hotelops.v_piano_finanziario_mensile`
     WHERE anno = {anno} AND societa_id = '{societa}'
+      {mese_filter}
     GROUP BY mese ORDER BY mese
     """)
 
@@ -530,14 +603,10 @@ def cmd_saldo(args):
         netto = entrate - uscite
         saldo += netto
         tipo_tag = "📊" if r["tipo"] == "CONSUNTIVO" else "🔮"
-        danger = ""
-        if saldo < 0:
-            danger = " ⛔ NEGATIVO"
-        elif saldo < 50000:
-            danger = " ⚠ BASSO"
+        danger = " ⛔ NEGATIVO" if saldo < 0 else (" ⚠ BASSO" if saldo < 50000 else "")
         print(f"  {tipo_tag} {r['mese']:02d}/{anno}  {fmt_eur(entrate)} {fmt_eur(uscite)} {fmt_eur(netto)} {fmt_eur(saldo)}{danger}")
 
-    print(f"\n  📊 = consuntivo reale  |  🔮 = previsione")
+    print("\n  📊 = consuntivo reale  |  🔮 = previsione")
 
 
 # ── Main ────────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 """Notion API client — thin wrapper around the REST API."""
 import os
 import requests
-from datetime import date, timedelta
+from datetime import date
 from typing import Iterator
 
 NOTION_TOKEN = os.environ.get("NOTION_TOKEN", "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")

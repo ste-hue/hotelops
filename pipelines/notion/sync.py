@@ -9,7 +9,6 @@ Usage:
     python -m pipelines.notion.sync --dry-run    # print without writing
 """
 import argparse
-import sys
 from datetime import date, timedelta
 from pathlib import Path
 import os

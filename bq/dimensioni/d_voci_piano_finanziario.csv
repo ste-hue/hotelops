@@ -22,7 +22,7 @@ USCITE_GODIMENTO_BENI,Godimento Beni di Terzi (Fitti Passivi),USCITE,Godimento B
 USCITE_COMMISSIONI,Commissioni OTA e Portali,USCITE,Commissioni,ORTI,ESOLVER,570101,570151,6302,,300,,Costi Commerciali,V
 USCITE_CANONI,Canoni e Servizi,USCITE,Canoni,,ESOLVER,6503,6505,6590,,310,,Costi Produttivi,F
 USCITE_CANONE_PASSIVO,Canone Affitto Ramo Azienda (INTUR→ORTI),USCITE,Affitti,ORTI,ESOLVER,6511,,,,315,,Costi Produttivi,F
-USCITE_DEPOSITO_FITTO,Deposito Fitto (una tantum),USCITE,Affitti,,MANUALE,,,,,,,,F
+USCITE_DEPOSITO_FITTO,Deposito Fitto (una tantum),USCITE,Affitti,,MANUALE,,,,,325,,,F
 USCITE_MARKETING,Marketing e Pubblicità,USCITE,Marketing,,ESOLVER,6304,,,,316,,Costi Commerciali,V
 USCITE_SERVIZI_PRODUZIONE,Servizi per la Produzione,USCITE,Servizi,,ESOLVER,570150,570190,,,317,,Costi Produttivi,V
 USCITE_VARIE,Varie ed Eventuali,USCITE,Varie,,ESOLVER,6301,63059,640503,,320,,Costi Produttivi,V
