@@ -9,7 +9,7 @@ hotelops is the financial data platform for Gruppo Panorama hotel operations. It
 1. **Rosa (Tesoreria)** — Piano Finanziario: flussi di cassa mensili previsionali (entrate/uscite di cassa)
 2. **Gasparotto (Controllo di Gestione)** — Budget vs Consuntivo: CE per codice conto, break-even, KPI operativi
 
-**Architecture:** File grezzi → 18 pipeline di ingestione → 8 fact tables + 5 dimension tables in BigQuery → 6 views analitiche → CLI `hotelops` + NanoClaw (WhatsApp).
+**Architecture:** File grezzi → 18 pipeline di ingestione → 9 fact tables + 5 dimension tables in BigQuery → 7 views analitiche → CLI `hotelops` + NanoClaw (WhatsApp).
 
 Code lives here. Raw data lives in the Datahub (Google Drive). Analytics live in BigQuery.
 
@@ -21,9 +21,9 @@ Every financial event has three timestamps — understanding which dimension you
 |-----------|----------|-----|--------|--------|
 | **COMPETENZA** | Quando consumo/genero? | Gasparotto | f_movimenti_contabili → v_budget_vs_consuntivo | ✅ |
 | **CASSA** | Quando il soldo entra/esce? | Rosa | f_banche_movimenti + f_piano_finanziario_input → v_piano_finanziario_mensile | ✅ |
-| **IMPEGNO** | Quando devo pagare/incassare? | Entrambi | Partite aperte + Scadenzario (Esolver) | ❌ Missing |
+| **IMPEGNO** | Quando devo pagare/incassare? | Entrambi | f_partite_aperte_fornitori → v_previsione_cassa | ✅ (ORTI live, INTUR pending) |
 
-Example: fattura fornitore marzo (competenza=marzo), consumo aprile, pagamento giugno (cassa=giugno). Oggi copriamo competenza e cassa. Manca impegno: sapere cosa è già impegnato (fatture ricevute, scadenze concordate) ma non ancora pagato. Serviranno pipeline snapshot da Esolver: "Situazione Partite Fornitori" e "Scadenzario Fornitori".
+Example: fattura fornitore marzo (competenza=marzo), consumo aprile, pagamento giugno (cassa=giugno). Tutte e tre le dimensioni sono ora coperte per ORTI: f_partite_aperte_fornitori carica snapshot Esolver "Situazione Partite Fornitori" e v_previsione_cassa usa i dati di scadenza per proiettare il cash forward.
 
 ## GCP
 
@@ -139,6 +139,7 @@ ruff format .
 | `v_pl_movimenti` | P&L: ricavi - costi per categoria CE. | `bq/views/v_pl_movimenti.sql` |
 | `v_cashflow_mensile` | Cashflow mensile aggregato da banca. | `bq/views/v_cashflow_mensile.sql` |
 | `v_incassi_per_canale` | Entrate bancarie per canale (POS, bonifico, contante). | `bq/views/v_incassi_per_canale.sql` |
+| `v_previsione_cassa` | **Cash forward rolling 12 mesi**: ancora da f_saldi_banca_snapshot + PF stime + scadenzario info. Usata da `hotelops saldo`. | `bq/views/v_previsione_cassa.sql` |
 
 ### How the views connect
 
@@ -175,7 +176,7 @@ f_banche_movimenti ───────────┘                        (
 - `actions/reconcile_banca.py` — Bank vs ledger reconciliation.
 - `tools/budget_wizard.py` — Interactive budget input with BQ historical data.
 - `lib/schemas.py` — Pydantic models: BudgetMensileRow, PianoFinanziarioInputRow, etc.
-- `bq/views/` — BigQuery view SQL definitions (6 views).
+- `bq/views/` — BigQuery view SQL definitions (7 views, inclusa v_previsione_cassa).
 - `bq/dimensioni/` — Dimension CSV sources (d_voci_piano_finanziario.csv).
 - `bq/SCHEMA_CONTEXT.md` — Comprehensive BQ schema documentation.
 - `nanoclaw_hotelops_prompt.md` — System prompt for NanoClaw WhatsApp agent.
@@ -228,7 +229,7 @@ The 2026 chart of accounts restructured significantly from 2025:
 |------|------|
 | Gasparotto Master | `~/Desktop/WORK/artifacts/gasparotto_materialiereport/Master Completo Indici 2025 ORTI SRL_Budget26_AGG 17.03.xlsx` |
 | Costi Ricavi Budget | `~/Desktop/WORK/artifacts/Costi Ricavi 2025-2026 Budget.xlsx` |
-| Piano Finanziario XLSX | `~/work/pianifinanziari/` (11 files ORTI+INTUR) |
+| Piano Finanziario XLSX | `~/Desktop/WORK/pianifinanziari/` (11 files ORTI+INTUR, aggiornati mar 2026) |
 | Mappatura Costi | `~/work/artifacts/MAPPATURA DEI COSTI_v_2.xlsx` |
 | Incidenza Personale | `~/work/artifacts/Incidenza_costi_personale.xlsx` |
 | hotelops repo | `~/dev/Projects/hotelops` |
@@ -293,17 +294,22 @@ Ogni mese il modello si affina: le previsioni si aggiustano, gli snapshot tracci
 ## Current status (as of 2026-03-20)
 
 ### Deployed to BQ
-- All 6 views deployed and working
+- All 7 views deployed and working (inclusa v_previsione_cassa — nuova)
 - f_budget_mensile: 1380 rows (GASPAROTTO) + 837 rows (MAPPATURA+INCIDENZA)
-- f_piano_finanziario_input: 213 rows (PIANO_FINANZIARIO fonte)
+- f_piano_finanziario_input: 206 rows PIANO_FINANZIARIO (ricaricati con file marzo 2026: 116 ORTI + 90 INTUR)
+- f_partite_aperte_fornitori: 176 rows — snapshot ORTI 2026-03-20 (scadenzario fornitori)
+- f_saldi_banca_snapshot: 2 rows — ancora ORTI: MPS €67,724 + INTESA €66,922 al 28/02/2026
+- d_fornitori: 64 fornitori ORTI con voce_id e flag intercompany
 - d_voci_piano_finanziario: 28 voci
 - d_piano_conti: 160 CE accounts (needs reload if reset — source: Costi Ricavi file)
 - d_categorie_conti: 167 mappings (needs reload if reset — source: Costi Ricavi file)
 
 ### Known data issues
 
-**🔴 BLOCCANTE — da risolvere con Rosa:**
-- **Saldo banca ORTI: −€3.26M senza senso** — f_banche_movimenti ha solo transazioni dal 2025-01-02, senza saldo iniziale di apertura. La somma cumulativa ≠ saldo reale. Serve l'estratto conto MPS al 01/01/2025 per inserire il saldo iniziale. Senza questo, `hotelops saldo`, `hotelops chiudi` e l'Excel PF mostrano saldi sbagliati per ORTI. (INTUR: +€818K sembra realistico.)
+**🟡 RISOLTO:**
+- ~~Saldo banca ORTI: −€3.26M~~ → **RISOLTO**: f_saldi_banca_snapshot creata con ancora reale Feb 28 (€134,647). `hotelops saldo` usa v_previsione_cassa con saldo corretto.
+
+**🔴 DA DECIDERE:**
 - **USCITE_MUTUI doppia fonte** — f_piano_finanziario_input ha sia SCADENZIARIO (€129K/anno) che PIANO_FINANZIARIO (€496K/anno) per USCITE_MUTUI ORTI. La view li somma entrambi → budget mutui gonfiato di €129K. Decidere: SCADENZIARIO sostituisce o si aggiunge al PF?
 
 **🟠 SERIO:**
@@ -311,14 +317,18 @@ Ogni mese il modello si affina: le previsioni si aggiustano, gli snapshot tracci
 - USCITE_VARIE_EXT: budget negative (−€28,926/mese) — mapping issue in Gasparotto, da investigare quale conto genera il segno invertito
 - USCITE_SERVIZI_PRODUZIONE: consuntivo €18K YTD but zero budget — conti 570150/570190 non nel Gasparotto Master. Rischio pattern overlap con USCITE_COMMISSIONI (570101, 570151)
 - Gasparotto budget uses flat 1/12 monthly split — needs seasonality adjustment
-- PF XLSX data from September 2025 — stale, needs update with Rosa
 
 ### Pending work — Third Dimension (IMPEGNO)
-The biggest structural gap: we track competenza and cassa but NOT impegno (commitments/due dates). To close this:
-- **f_partite_aperte_fornitori** (snapshot) — "Situazione Partite Fornitori" export from Esolver. Shows what we owe and when. DELETE-INSERT per societa+data_snapshot. Transforms Rosa's forecast from estimates to "€180K certain outflows in April from open payables."
-- **f_scadenzario_fornitori** (snapshot) — "Scadenzario Fornitori" export. Payment deadlines by supplier. Enables cash-out projection by due date.
-- **f_partite_aperte_clienti** (snapshot) — Same for receivables. Combined with accodamenti (TUI at 60 days), enables cash-in projection by expected payment date.
-- **v_previsione_cassa** (future view) — Merges certain cash flows (scadenzario) with estimated (budget PF) to give Rosa a confidence-weighted projection.
+Stato: **parzialmente implementato** (ORTI fornitori live, resto pending).
+
+**✅ Live:**
+- **f_partite_aperte_fornitori** — snapshot ORTI caricato 2026-03-20 (176 fatture, €573K totale di cui €446K intercompany). Pipeline: `ingest_partite_aperte.py`. Aggiornare ogni mese con nuovo export Esolver.
+- **v_previsione_cassa** — rolling 12 mesi con ancora reale + scadenzario come colonna informativa.
+
+**❌ Ancora mancante:**
+- **f_affidamenti** — linee di credito bancarie (fidi). Senza questa, il saldo proiettato non include la liquidità disponibile via fido. Schema definito in `meta/skills/hotelops-data-analyst/references/tables/banche.md`.
+- **f_partite_aperte_clienti** — partite aperte clienti (crediti). Abiliterebbe proiezione cash-in da TUI, OTA, etc. (pagamenti a 30-60 gg).
+- Snapshot INTUR per partite aperte e saldi banca.
 
 ### Pending work — Other
 - Fix data anomalies (salari, varie_ext budget negativo)
