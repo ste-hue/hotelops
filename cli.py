@@ -546,67 +546,45 @@ def _save_chiusura_snapshot(societa: str, anno: int, mese: int, rows: list[dict]
 # ── Saldo: posizione banca corrente + proiezione ──────────────────────────
 
 def cmd_saldo(args):
-    """Saldo banca reale (da snapshot) + proiezione cash forward."""
-    import calendar
-    from datetime import date
-
+    """Saldo banca reale (da snapshot) + proiezione cash forward via v_previsione_cassa."""
     societa = args.societa or "ORTI"
-    anno = args.anno or 2026
-    today = date.today()
 
-    # Starting saldo = end of last complete month
-    prev_mese = today.month - 1 if today.month > 1 else 12
-    prev_anno = today.year if today.month > 1 else today.year - 1
-    last_day = calendar.monthrange(prev_anno, prev_mese)[1]
-    as_of_date = f"{prev_anno}-{prev_mese:02d}-{last_day:02d}"
-
-    print(f"\n  ═══ POSIZIONE DI CASSA — {societa} ═══")
-    print(f"  Saldo reale al {last_day:02d}/{prev_mese:02d}/{prev_anno}\n")
-
-    totale_banca, saldo_rows = _compute_saldo_banca(societa, as_of_date)
-
-    print("  ── SALDI PER BANCA ──")
-    for r in saldo_rows:
-        method = f"  anchor {r['anchor_date']}" if r.get("note") == "ANCHOR" else "  ⚠ stima cumsum"
-        print(f"    {r['banca_id']:<12s} {fmt_eur(r['saldo'])}{method}")
-    print(f"    {'─'*48}")
-    print(f"    {'TOTALE':<12s} {fmt_eur(totale_banca)}")
-
-    if any(r.get("note") == "CUMSUM" for r in saldo_rows):
-        print("\n  ⚠  Saldo stimato — esegui pipeline banca per caricare snapshot reali")
-
-    # Forward projection: only months after the anchor month
-    mese_filter = f"AND mese > {prev_mese}" if prev_anno == anno else ""
-    print(f"\n  ── PROIEZIONE {anno} (partenza {fmt_eur(totale_banca)} al {as_of_date}) ──")
-    print(f"  {'Mese':<8s} {'Entrate':>11s} {'Uscite':>11s} {'Netto':>11s} {'Saldo':>12s}")
-    print(f"  {'─'*8} {'─'*11} {'─'*11} {'─'*11} {'─'*12}")
-
-    fwd = query(f"""
-    SELECT mese,
-      ROUND(SUM(CASE WHEN sezione = 'ENTRATE' THEN
-        CASE WHEN tipo_periodo = 'CONSUNTIVO' THEN importo_consuntivo ELSE importo_budget END
-        ELSE 0 END), 0) AS entrate,
-      ROUND(SUM(CASE WHEN sezione = 'USCITE' THEN
-        CASE WHEN tipo_periodo = 'CONSUNTIVO' THEN importo_consuntivo ELSE importo_budget END
-        ELSE 0 END), 0) AS uscite,
-      MIN(tipo_periodo) AS tipo
-    FROM `hotelops-suite.hotelops.v_piano_finanziario_mensile`
-    WHERE anno = {anno} AND societa_id = '{societa}'
-      {mese_filter}
-    GROUP BY mese ORDER BY mese
+    rows = query(f"""
+    SELECT periodo, tipo_periodo, saldo_ancora, data_ancora,
+           entrate, uscite_pf, uscite_scad, n_fatture_scad,
+           netto_pf, saldo_proiettato, stato_liquidita
+    FROM `{BQ_PROJECT}.hotelops.v_previsione_cassa`
+    WHERE societa_id = '{societa}'
+    ORDER BY anno, mese
     """)
 
-    saldo = totale_banca
-    for r in fwd:
-        entrate = r["entrate"] or 0
-        uscite = r["uscite"] or 0
-        netto = entrate - uscite
-        saldo += netto
-        tipo_tag = "📊" if r["tipo"] == "CONSUNTIVO" else "🔮"
-        danger = " ⛔ NEGATIVO" if saldo < 0 else (" ⚠ BASSO" if saldo < 50000 else "")
-        print(f"  {tipo_tag} {r['mese']:02d}/{anno}  {fmt_eur(entrate)} {fmt_eur(uscite)} {fmt_eur(netto)} {fmt_eur(saldo)}{danger}")
+    if not rows:
+        print(f"\n  ⚠ Nessun dato per {societa}. Inserisci prima il saldo banca in f_saldi_banca_snapshot.")
+        return
 
-    print("\n  📊 = consuntivo reale  |  🔮 = previsione")
+    ancora = rows[0]
+    print(f"\n  ═══ POSIZIONE DI CASSA — {societa} ═══")
+    print(f"  Ancora: {fmt_eur(ancora['saldo_ancora'])} al {ancora['data_ancora']}\n")
+
+    print(f"  {'Mese':<8} {'Tipo':10} {'Entrate':>11} {'Uscite PF':>11} {'Scad.':>9} {'Netto':>10} {'Saldo':>12} {'Stato'}")
+    print(f"  {'─'*8} {'─'*10} {'─'*11} {'─'*11} {'─'*9} {'─'*10} {'─'*12} {'─'*9}")
+
+    for r in rows:
+        tipo_tag = "📊" if r["tipo_periodo"] == "CONSUNTIVO" else ("🔄" if r["tipo_periodo"] == "CORRENTE" else "🔮")
+        stato = {"PERICOLO": "⛔ PERICOLO", "ATTENZIONE": "⚠ BASSO", "OK": ""}.get(r["stato_liquidita"], "")
+        scad = f"{r['uscite_scad']:>9,.0f}" if r["uscite_scad"] else "         -"
+        print(
+            f"  {tipo_tag} {r['periodo']:8} "
+            f"{r['entrate'] or 0:>11,.0f} "
+            f"{r['uscite_pf'] or 0:>11,.0f} "
+            f"{scad} "
+            f"{r['netto_pf'] or 0:>10,.0f} "
+            f"{r['saldo_proiettato']:>12,.0f} "
+            f"{stato}"
+        )
+
+    print("\n  📊=consuntivo  🔄=mese corrente  🔮=previsione")
+    print("  Scad. = uscite certe da scadenzario fornitori (non entra nel saldo)")
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
