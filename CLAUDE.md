@@ -13,6 +13,18 @@ hotelops is the financial data platform for Gruppo Panorama hotel operations. It
 
 Code lives here. Raw data lives in the Datahub (Google Drive). Analytics live in BigQuery.
 
+### The Three Temporal Dimensions
+
+Every financial event has three timestamps — understanding which dimension you're looking at is the key concept:
+
+| Dimension | Question | Who | Source | Status |
+|-----------|----------|-----|--------|--------|
+| **COMPETENZA** | Quando consumo/genero? | Gasparotto | f_movimenti_contabili → v_budget_vs_consuntivo | ✅ |
+| **CASSA** | Quando il soldo entra/esce? | Rosa | f_banche_movimenti + f_piano_finanziario_input → v_piano_finanziario_mensile | ✅ |
+| **IMPEGNO** | Quando devo pagare/incassare? | Entrambi | Partite aperte + Scadenzario (Esolver) | ❌ Missing |
+
+Example: fattura fornitore marzo (competenza=marzo), consumo aprile, pagamento giugno (cassa=giugno). Oggi copriamo competenza e cassa. Manca impegno: sapere cosa è già impegnato (fatture ricevute, scadenze concordate) ma non ancora pagato. Serviranno pipeline snapshot da Esolver: "Situazione Partite Fornitori" e "Scadenzario Fornitori".
+
 ## GCP
 
 - **Project:** `hotelops-suite`
@@ -78,6 +90,8 @@ python -m pipelines.amministrativa.ingest_piano_conti_nuovo --file "Costi Ricavi
 python -m pipelines.amministrativa.ingest_categorie --file "Costi Ricavi 2025-2026 Budget.xlsx"
 python -m pipelines.amministrativa.ingest_budget_costi --mappatura MAPPATURA.xlsx --incidenza Incidenza.xlsx
 python -m pipelines.amministrativa.ingest_voci_piano_finanziario  # loads d_voci from CSV
+python -m pipelines.amministrativa.ingest_partite_aperte --file situazione_partite.xlsx  # SNAPSHOT: partite aperte fornitori (3rd dimension: IMPEGNO)
+python -m pipelines.amministrativa.ingest_partite_aperte --file situazione_partite.xlsx --societa INTUR --dry-run
 python -m actions.update_previsione --voce utenze --societa ORTI --mesi 4-12 --importo 22000
 python -m actions.reconcile_banca --datahub /path/to/datahub --societa INTUR --conto SELLA --from 2025-01-01 --to 2025-01-31
 
@@ -102,6 +116,8 @@ ruff format .
 | `f_consumi_economato` | Consumi materie prime per reparto/prodotto. | MD5 dedup |
 | `f_coperti_giornalieri` | Coperti pasto giornalieri per BU/tipo_ospite. | MD5 dedup |
 | `f_chiusura_mensile` | Snapshot chiusura mese: previsione vs consuntivo per voce + saldo banca. Scritto da `hotelops chiudi`. Serve per tracciare l'accuratezza delle previsioni nel tempo. | DELETE-INSERT per societa+anno+mese |
+| `f_saldi_banca_snapshot` | Saldo banca reale estratto dagli header degli Excel MPS (Saldo Finale). Usato da `_compute_saldo_banca()` come ancora per calcolare saldi a qualsiasi data. Auto-populated during bank pipeline. | DELETE-INSERT per societa+banca+data_snapshot |
+| `f_partite_aperte_fornitori` | Snapshot partite aperte fornitori da Esolver. TERZA DIMENSIONE (IMPEGNO): fatture registrate non ancora pagate, con data_scadenza. Flag intercompany per PANORAMA COMPANY. | DELETE-INSERT per societa+data_snapshot |
 
 ### Dimension tables
 
@@ -153,6 +169,7 @@ f_banche_movimenti ───────────┘                        (
   - `ingest_gasparotto.py` — Gasparotto Master Budget. MANUAL_COD_MAP aligned to PDC 2026 (20 codes remapped from old 61.xx → new 63.05.xx/65.90.xx).
   - `ingest_piano_finanziario_xlsx.py` — PF XLSX parser. Voce mapping aligned to d_voci_piano_finanziario.
   - `ingest_voci_piano_finanziario.py` — Loads d_voci dimension from CSV.
+  - `ingest_partite_aperte.py` — Situazione Partite Fornitori (snapshot). 3rd dimension IMPEGNO. DELETE-INSERT per societa+data_snapshot.
 - `actions/update_previsione.py` — Write budget forecasts to f_piano_finanziario_input (DELETE-INSERT per voce×mese×fonte). Has natural language voce aliases.
 - `actions/genera_piano_finanziario.py` — Generate PF Excel from BQ for Rosa session. Color-coded: nero=consuntivo, blu=previsione, verde=formula.
 - `actions/reconcile_banca.py` — Bank vs ledger reconciliation.
@@ -296,10 +313,16 @@ Ogni mese il modello si affina: le previsioni si aggiustano, gli snapshot tracci
 - Gasparotto budget uses flat 1/12 monthly split — needs seasonality adjustment
 - PF XLSX data from September 2025 — stale, needs update with Rosa
 
-### Pending work
+### Pending work — Third Dimension (IMPEGNO)
+The biggest structural gap: we track competenza and cassa but NOT impegno (commitments/due dates). To close this:
+- **f_partite_aperte_fornitori** (snapshot) — "Situazione Partite Fornitori" export from Esolver. Shows what we owe and when. DELETE-INSERT per societa+data_snapshot. Transforms Rosa's forecast from estimates to "€180K certain outflows in April from open payables."
+- **f_scadenzario_fornitori** (snapshot) — "Scadenzario Fornitori" export. Payment deadlines by supplier. Enables cash-out projection by due date.
+- **f_partite_aperte_clienti** (snapshot) — Same for receivables. Combined with accodamenti (TUI at 60 days), enables cash-in projection by expected payment date.
+- **v_previsione_cassa** (future view) — Merges certain cash flows (scadenzario) with estimated (budget PF) to give Rosa a confidence-weighted projection.
+
+### Pending work — Other
 - Fix data anomalies (salari, varie_ext budget negativo)
 - Seasonality: load 2023-2025 revenue data when Antonio provides it
-- Partite aperte fornitori: import from Esolver as new fact table for predictive outflows
 - Operational KPIs (cost per room, per cover) — needs occupancy data
 - NanoClaw deployment: mount BQ credentials in container
 

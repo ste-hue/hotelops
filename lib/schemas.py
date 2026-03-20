@@ -148,6 +148,31 @@ class ChiusuraMensileRow(BaseModel):
         return v
 
 
+# ── f_partite_aperte_fornitori ────────────────────────────────────────────────
+
+class PartitaApertaFornitoreRow(BaseModel):
+    """Schema for f_partite_aperte_fornitori — snapshot of open payables.
+
+    Each row is an unpaid invoice/credit note from Esolver's
+    "Situazione partite sintetica per fornitori".
+    Pattern: DELETE-INSERT per societa_id + data_snapshot.
+    """
+    societa_id: SocietaId
+    data_snapshot: date
+    codice_fornitore: int
+    nome_fornitore: str
+    tipo_documento: str  # FT, NC, AFT
+    numero_documento: str
+    data_documento: date
+    data_scadenza: date
+    importo_residuo: float  # negative = we owe
+    importo_abs: float  # always positive
+    codice_pagamento: str  # 04=Bonifico, 03=SDD, 10=Carta, etc.
+    metodo_pagamento: str  # Bonifico SEPA, SDD, Carta di credit, etc.
+    is_intercompany: bool = False  # True if PANORAMA COMPANY / INTUR
+    file_sorgente: str
+
+
 # ── Validation helper ────────────────────────────────────────────────────────
 
 class SchemaViolationError(Exception):
