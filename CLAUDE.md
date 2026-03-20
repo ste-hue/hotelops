@@ -326,7 +326,7 @@ Stato: **parzialmente implementato** (ORTI fornitori live, resto pending).
 - **v_previsione_cassa** — rolling 12 mesi con ancora reale + scadenzario come colonna informativa.
 
 **❌ Ancora mancante:**
-- **f_affidamenti** — linee di credito bancarie (fidi). Senza questa, il saldo proiettato non include la liquidità disponibile via fido. Schema definito in `meta/skills/hotelops-data-analyst/references/tables/banche.md`.
+- **f_affidamenti** ✅ LIVE — INTUR SELLA €50,000 fido di cassa (snapshot 2026-03-20). ORTI: nessun fido.
 - **f_partite_aperte_clienti** — partite aperte clienti (crediti). Abiliterebbe proiezione cash-in da TUI, OTA, etc. (pagamenti a 30-60 gg).
 - Snapshot INTUR per partite aperte e saldi banca.
 
