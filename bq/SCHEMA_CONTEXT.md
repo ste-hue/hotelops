@@ -4,7 +4,7 @@
 **Dataset**: `hotelops`
 **Aggiornato**: 2026-03-19
 **Entità operative**: ORTI (hotel operations), INTUR (holding finanziaria)
-**Banche attive**: ORTI → MPS, MPS_KROSS · INTUR → MPS, SELLA, INTESA
+**Banche attive**: ORTI → MPS, MPS_KROSS · INTUR → MPS, SELLA, INTESA, BCP
 
 ---
 
@@ -53,7 +53,7 @@
 **Fonte**: Estratti conto bancari (CSV export da home banking)
 **Righe**: ~3.745 · **Periodo**: 2025-01-01 → 2026-03-12
 **Dedup key**: `hash_riga` = MD5 su chiave movimento banca
-**Banche**: ORTI/MPS, ORTI/MPS_KROSS, INTUR/MPS, INTUR/SELLA, INTUR/INTESA
+**Banche**: ORTI/MPS, ORTI/MPS_KROSS, INTUR/MPS, INTUR/SELLA, INTUR/INTESA, INTUR/BCP
 
 | Colonna | Tipo | Note |
 |---|---|---|
@@ -63,7 +63,7 @@
 | `funzione_id` | STRING | Funzione operativa |
 | `location_id` | STRING | Sede |
 | `oggetto_id` | STRING | Oggetto transazione |
-| `banca_id` | STRING | MPS \| MPS_KROSS \| SELLA \| INTESA |
+| `banca_id` | STRING | MPS \| MPS_KROSS \| SELLA \| INTESA \| BCP |
 | `data_operazione` | DATE | Data operazione bancaria |
 | `data_valuta` | DATE | Data valuta |
 | `descrizione` | STRING | Descrizione movimento |
@@ -91,7 +91,7 @@
 **Fonte**: MAPPATURA DEI COSTI_v_2.xlsx (fogli budget_F_ORTI, budget_F_INTUR) + Incidenza_costi_personale.xlsx
 **Righe**: 837 · **Anno**: 2026
 **Pattern**: DELETE-INSERT per anno + fonte (idempotente)
-**Pipeline**: `pipelines/amministrativa/ingest_budget_costi.py`
+**Pipeline**: `ingest/amministrativa/ingest_budget_costi.py`
 
 | Colonna | Tipo | Note |
 |---|---|---|

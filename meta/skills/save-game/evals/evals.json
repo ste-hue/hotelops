@@ -1,0 +1,23 @@
+{
+  "skill_name": "save-game",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "save game",
+      "expected_output": "Reads current CLAUDE.md, scans config.py/schemas.py/views/pipelines/CLI, identifies discrepancies, updates CLAUDE.md, verifies with spot-checks, and gives a concise summary of what changed.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I just added a new ingest pipeline ingest/amministrativa/ingest_ricevute.py and a new fact table f_ricevute_fiscali in config.py and schemas.py. Save game.",
+      "expected_output": "Detects the new pipeline and table that aren't in CLAUDE.md, adds them to the appropriate sections, verifies the schema fields, updates the checkpoint date, and reports what was added.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "checkpoint - I think some stuff in the CLAUDE.md might be stale after the last few sessions, can you check?",
+      "expected_output": "Runs the full scan workflow, identifies any stale references (wrong file names, missing files, incorrect counts, outdated imports), fixes them, and gives a clean summary.",
+      "files": []
+    }
+  ]
+}

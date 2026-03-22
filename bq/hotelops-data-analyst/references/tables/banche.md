@@ -12,7 +12,7 @@ Bank transaction data sourced from CSV exports from home banking portals.
 **Row Count**: ~3,745
 **Period**: 2025-01-01 → 2026-03-12
 **Update**: CSV from home banking, run via `run_banca.sh`
-**Banks**: ORTI/MPS, ORTI/MPS_KROSS, INTUR/MPS, INTUR/SELLA, INTUR/INTESA
+**Banks**: ORTI/MPS, ORTI/MPS_KROSS, INTUR/MPS, INTUR/SELLA, INTUR/INTESA, INTUR/BCP
 
 | Column | Type | Description | Notes |
 |--------|------|-------------|-------|
@@ -22,7 +22,7 @@ Bank transaction data sourced from CSV exports from home banking portals.
 | `funzione_id` | STRING | Operational function | |
 | `location_id` | STRING | Location | |
 | `oggetto_id` | STRING | Transaction object | |
-| `banca_id` | STRING | MPS, MPS_KROSS, SELLA, INTESA | Key filter |
+| `banca_id` | STRING | MPS, MPS_KROSS, SELLA, INTESA, BCP | Key filter |
 | `data_operazione` | DATE | Transaction date | |
 | `data_valuta` | DATE | Value date | |
 | `descrizione` | STRING | Movement description | |

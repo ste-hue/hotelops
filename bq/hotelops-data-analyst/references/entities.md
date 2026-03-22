@@ -38,7 +38,10 @@
 - **ID Field**: `banca_id` in `f_banche_movimenti`
 - **Active Banks**:
   - ORTI: MPS, MPS_KROSS
-  - INTUR: MPS, SELLA, INTESA
+  - INTUR: MPS, SELLA, INTESA, BCP
+- **Esolver Cc# Mapping**:
+  - ORTI: Cc1 = INTESA, Cc2 = MPS_KROSS, Cc3 = MPS
+  - INTUR: Cc1 = SELLA, Cc2 = MPS, Cc3 = INTESA, Cc4 = BCP
 
 ---
 

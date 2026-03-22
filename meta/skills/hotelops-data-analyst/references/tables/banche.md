@@ -18,7 +18,7 @@ Dominio bancario: transazioni da estratti conto, cashflow, incassi per canale. F
 |---------|------|-------------|------|
 | `hash_riga` | STRING | Chiave dedup | |
 | `societa_id` | STRING | ORTI o INTUR | |
-| `banca_id` | STRING | MPS, MPS_KROSS, SELLA, INTESA | |
+| `banca_id` | STRING | MPS, MPS_KROSS, SELLA, INTESA, BCP | |
 | `data_operazione` | DATE | Data transazione | |
 | `data_valuta` | DATE | Data valuta | |
 | `descrizione` | STRING | Descrizione movimento | Testo libero dalla banca |
@@ -111,9 +111,10 @@ WHERE data_snapshot = (
 | Colonna | Tipo | Descrizione | Note |
 |---------|------|-------------|------|
 | `societa_id` | STRING | ORTI o INTUR | |
-| `banca_id` | STRING | MPS, MPS_KROSS, SELLA, INTESA | |
+| `banca_id` | STRING | MPS, MPS_KROSS, SELLA, INTESA, BCP | |
 | `data_snapshot` | DATE | Data dello snapshot saldo | |
 | `saldo_finale` | FLOAT | Saldo finale (€) | L'ancora per v_previsione_cassa |
+| `fonte` | STRING | SCHEDA_CONTABILE, BANCA_EXCEL | Primary source is SCHEDA_CONTABILE |
 | `file_sorgente` | STRING | File CSV/Excel origine | |
 | `data_caricamento` | TIMESTAMP | Timestamp caricamento | |
 
@@ -130,7 +131,7 @@ WHERE data_snapshot = (
 | Colonna | Tipo | Descrizione | Note |
 |---------|------|-------------|------|
 | `societa_id` | STRING REQUIRED | ORTI o INTUR | |
-| `banca_id` | STRING REQUIRED | MPS, MPS_KROSS, SELLA, INTESA | |
+| `banca_id` | STRING REQUIRED | MPS, MPS_KROSS, SELLA, INTESA, BCP | |
 | `tipo_affidamento` | STRING | Tipo | Fido di cassa, SBF, Anticipo fatture, Castelletto |
 | `importo_accordato` | FLOAT | Limite accordato (€) | Es: €200,000 |
 | `importo_utilizzato` | FLOAT | Quota già utilizzata (€) | |

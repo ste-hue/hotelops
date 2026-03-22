@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Last checkpoint:** 2026-03-22 | **Version:** 0.3.1
+
 ## Project Overview
 
 hotelops is the financial data platform for Gruppo Panorama hotel operations. It ingests data from banks, ERP (Esolver), PMS (HotelCube), and manual budgets into BigQuery, then provides views for two audiences:
@@ -9,9 +11,38 @@ hotelops is the financial data platform for Gruppo Panorama hotel operations. It
 1. **Rosa (Tesoreria)** — Piano Finanziario: flussi di cassa mensili previsionali (entrate/uscite di cassa)
 2. **Gasparotto (Controllo di Gestione)** — Budget vs Consuntivo: CE per codice conto, break-even, KPI operativi
 
-**Architecture:** File grezzi → 18 pipeline di ingestione → 9 fact tables + 5 dimension tables in BigQuery → 7 views analitiche → CLI `hotelops` + NanoClaw (WhatsApp).
+**Architecture:** Three layers — `core/` (world model), `ingest/` (reality capture), `condges/` (decision verticals). BigQuery is the source of truth.
 
-Code lives here. Raw data lives in the Datahub (Google Drive). Analytics live in BigQuery.
+```
+core/       ← schemas, config, BQ views, dimensions — the ontology
+ingest/     ← pipelines: Drive/Excel/CSV → BigQuery fact tables
+condges/    ← Vertical #1: Controllo di Gestione (Streamlit app, Excel gen, previsioni)
+cli.py      ← terminal interface (imports from core + condges)
+```
+
+Raw data lives in the Datahub (Google Drive: `hotelops_datahub/`). Analytics live in BigQuery. Verticals are containerizable.
+
+### Datahub Structure (Google Drive)
+
+```
+hotelops_datahub/
+├── banche/{ORTI,INTUR}/                ← Bank Excel files (MPS, Sella, Intesa) from home banking
+├── movimenti_contabili/{ORTI,INTUR}/   ← Esolver prima nota (LISTAMOVCONT.XLS)
+├── schede_contabili/{ORTI,INTUR}/      ← Esolver scheda contabile (bank account ledger) — CSV or XLSX
+├── partite_fornitori/{ORTI,INTUR}/     ← Esolver situazione partite fornitori (snapshot periodici)
+├── piani_finanziari/{ORTI,INTUR}/      ← Piano Finanziario Excel (Rosa, mensili)
+├── accodamenti/ORTI/                   ← HotelCube PMS TXT files (corrispettivi, fatture, movimenti)
+├── economato/                          ← Consumi materie prime per reparto (sottocartelle per reparto)
+├── coperti/                            ← Coperti giornalieri
+├── bilancino/{ORTI,INTUR}/             ← Bilancio di verifica Esolver
+├── gasparotto/                         ← Master Completo budget (aggiornamenti periodici)
+├── dimensioni/                         ← Dimension CSV sources
+├── fatti/                              ← Local fact CSV copies (pipeline output)
+└── meta/                               ← Pipeline manifests and logs
+```
+
+File naming convention for Esolver exports: `{SOCIETA}_{TIPO}_{BANCA}_{YYYYMMDD}.{ext}`
+Esolver CSV auto-naming: `{DATE}_Conto_{SOCIETA}_{Banca}{NOME}_Cc{N}_Saldo{AMOUNT}_Esercizio{YEAR}.csv`
 
 ### The Three Temporal Dimensions
 
@@ -54,46 +85,39 @@ hotelops health                            # Health check: freshness, gaps, aler
 hotelops voci                              # List PF voci
 hotelops previsione utenze 4-12 22000      # Update forecast: utenze ORTI Apr-Dec €22K/mo
 hotelops previsione "entrate hotel" aprile-ottobre 180000  # Natural language months
+hotelops classifica file1.xlsx file2.csv       # Classify files (show type + destination)
+hotelops classifica *.xlsx --route             # Classify + copy to correct datahub folder + rename
+hotelops classifica *.xlsx --route --ingest    # Classify + route + run BQ pipeline
+hotelops classifica *.xlsx --dry-run           # Show plan without executing
 
 # ═══════════════════════════════════════════════════════════
-# GENERATE EXCEL for Rosa session
+# CONDGES — Controllo di Gestione vertical
 # ═══════════════════════════════════════════════════════════
 
-python -m actions.genera_piano_finanziario                          # → Piano_Finanziario_2026_YYYY-MM-DD.xlsx
-python -m actions.genera_piano_finanziario --output ~/Desktop/PF.xlsx
+streamlit run condges/app.py                                        # Interactive PF app for Rosa
+python -m condges.genera_excel                                      # → Piano_Finanziario_2026_YYYY-MM-DD.xlsx
+python -m condges.genera_excel --output ~/Desktop/PF.xlsx
+python -m condges.update_previsione --voce utenze --societa ORTI --mesi 4-12 --importo 22000
+python -m condges.reconcile_banca --datahub /path/to/datahub --societa INTUR --conto SELLA --from 2025-01-01 --to 2025-01-31
 
 # ═══════════════════════════════════════════════════════════
-# ORCHESTRATOR — unified pipeline runner
+# INGEST — Reality Capture (pipelines)
 # ═══════════════════════════════════════════════════════════
 
-python -m pipelines.orchestrate                        # Run everything (sync + ingest all)
-python -m pipelines.orchestrate --dry-run              # Parse + CSV, no BQ writes
-python -m pipelines.orchestrate --no-sync              # Skip Drive sync
-python -m pipelines.orchestrate --only banca           # Only bank group
-python -m pipelines.orchestrate --only amministrativa  # Only accounting group
-python -m pipelines.orchestrate --only dimensioni      # Only dimension tables
-python -m pipelines.orchestrate --pipeline gasparotto  # Single pipeline
+python -m ingest.orchestrate                           # Run everything (sync + ingest all)
+python -m ingest.orchestrate --dry-run                 # Parse + CSV, no BQ writes
+python -m ingest.orchestrate --no-sync                 # Skip Drive sync
+python -m ingest.orchestrate --only banca              # Only bank group
+python -m ingest.orchestrate --only amministrativa     # Only accounting group
+python -m ingest.orchestrate --only dimensioni         # Only dimension tables
+python -m ingest.orchestrate --pipeline gasparotto     # Single pipeline
 
-# ═══════════════════════════════════════════════════════════
-# INDIVIDUAL PIPELINES — manual/debug
-# ═══════════════════════════════════════════════════════════
-
-python -m pipelines.banca.ingest --datahub /path/to/datahub --source ~/.cache/hotelops/tesoreria_staging
-python -m pipelines.banca.ingest_accodamenti --datahub /path/to/datahub --staging ~/.cache/hotelops/accodamenti_staging
-python -m pipelines.amministrativa.ingest_movimenti_contabili --datahub /path/to/datahub
-python -m pipelines.amministrativa.ingest_gasparotto --file "Master Completo....xlsx" --societa ORTI
-python -m pipelines.amministrativa.ingest_piano_finanziario_xlsx --dir ~/work/pianifinanziari --latest-only
-python -m pipelines.amministrativa.ingest_bilancino --file bilancino.xls --societa ORTI --mese 2026-01
-python -m pipelines.amministrativa.ingest_consumi_economato --source /path/to/economato_ingresso --datahub /path/to/datahub
-python -m pipelines.amministrativa.ingest_coperti --source /path/to/coperti_ingresso --datahub /path/to/datahub
-python -m pipelines.amministrativa.ingest_piano_conti_nuovo --file "Costi Ricavi 2025-2026 Budget.xlsx"
-python -m pipelines.amministrativa.ingest_categorie --file "Costi Ricavi 2025-2026 Budget.xlsx"
-python -m pipelines.amministrativa.ingest_budget_costi --mappatura MAPPATURA.xlsx --incidenza Incidenza.xlsx
-python -m pipelines.amministrativa.ingest_voci_piano_finanziario  # loads d_voci from CSV
-python -m pipelines.amministrativa.ingest_partite_aperte --file situazione_partite.xlsx  # SNAPSHOT: partite aperte fornitori (3rd dimension: IMPEGNO)
-python -m pipelines.amministrativa.ingest_partite_aperte --file situazione_partite.xlsx --societa INTUR --dry-run
-python -m actions.update_previsione --voce utenze --societa ORTI --mesi 4-12 --importo 22000
-python -m actions.reconcile_banca --datahub /path/to/datahub --societa INTUR --conto SELLA --from 2025-01-01 --to 2025-01-31
+# Individual pipelines (manual/debug)
+python -m ingest.banca.ingest --datahub /path/to/datahub --source ~/.cache/hotelops/tesoreria_staging
+python -m ingest.banca.ingest_accodamenti --datahub /path/to/datahub --staging ~/.cache/hotelops/accodamenti_staging
+python -m ingest.amministrativa.ingest_movimenti_contabili --datahub /path/to/datahub
+python -m ingest.amministrativa.ingest_gasparotto --file "Master Completo....xlsx" --societa ORTI
+python -m ingest.amministrativa.ingest_partite_aperte --file situazione_partite.xlsx
 
 # Test / lint
 pytest
@@ -105,41 +129,47 @@ ruff format .
 
 ### Fact tables
 
-| Table | Description | Idempotency |
-|-------|-------------|-------------|
-| `f_banche_movimenti` | Bank transactions — MPS, MPS_KROSS, SELLA, INTESA × ORTI/INTUR | MD5 dedup |
-| `f_movimenti_contabili` | Prima nota completa Esolver. ORTI 2025→, INTUR dic2024→. CodConto senza punti (570913). ~32K rows. | MD5 dedup |
-| `f_budget_mensile` | Budget mensile per codice conto. Fonti: GASPAROTTO (112 conti, €4.08M ORTI), MAPPATURA (per BU), INCIDENZA (personale). | DELETE-INSERT per anno+fonte |
-| `f_piano_finanziario_input` | Cash flow previsioni: 28 voci × 12 mesi. Fonti: PIANO_FINANZIARIO (from XLSX), CLI/NANOCLAW (manual updates). | MD5 dedup / DELETE-INSERT per fonte |
-| `f_accodamenti` | Vendite da HotelCube PMS → Esolver: corrispettivi, caparre, fatture attive. | MD5 dedup |
-| `f_bilancino` | Bilancio di verifica Esolver (export manuale). Solo leaf nodes. | MD5 dedup |
-| `f_consumi_economato` | Consumi materie prime per reparto/prodotto. | MD5 dedup |
-| `f_coperti_giornalieri` | Coperti pasto giornalieri per BU/tipo_ospite. | MD5 dedup |
-| `f_chiusura_mensile` | Snapshot chiusura mese: previsione vs consuntivo per voce + saldo banca. Scritto da `hotelops chiudi`. Serve per tracciare l'accuratezza delle previsioni nel tempo. | DELETE-INSERT per societa+anno+mese |
-| `f_saldi_banca_snapshot` | Saldo banca reale estratto dagli header degli Excel MPS (Saldo Finale). Usato da `_compute_saldo_banca()` come ancora per calcolare saldi a qualsiasi data. Auto-populated during bank pipeline. | DELETE-INSERT per societa+banca+data_snapshot |
-| `f_partite_aperte_fornitori` | Snapshot partite aperte fornitori da Esolver. TERZA DIMENSIONE (IMPEGNO): fatture registrate non ancora pagate, con data_scadenza. Flag intercompany per PANORAMA COMPANY. | DELETE-INSERT per societa+data_snapshot |
+Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup — file accumula nel tempo) vs **SNAPSHOT** (latest file replaces previous data in BQ via DELETE-INSERT — "situazione ad oggi").
+
+| Table | Description | Lifecycle | Idempotency |
+|-------|-------------|-----------|-------------|
+| `f_banche_movimenti` | Bank transactions — MPS, MPS_KROSS, SELLA, INTESA, BCP × ORTI/INTUR | APPEND | MD5 dedup |
+| `f_movimenti_contabili` | Prima nota completa Esolver. ORTI 2025→, INTUR dic2024→. CodConto senza punti (570913). | APPEND | MD5 dedup |
+| `f_budget_mensile` | Budget mensile per codice conto. Fonti: GASPAROTTO, MAPPATURA (per BU), INCIDENZA (personale). | SNAPSHOT | DELETE-INSERT per anno+fonte |
+| `f_piano_finanziario_input` | Cash flow previsioni: 28 voci × 12 mesi. Fonti: PIANO_FINANZIARIO (from XLSX), SCADENZIARIO (loan schedules), BVA_2026 (revenue budgets), CLI/NANOCLAW (manual updates), APP (Streamlit). | SNAPSHOT | MD5 dedup / DELETE-INSERT per fonte |
+| `f_accodamenti` | Vendite da HotelCube PMS → Esolver: corrispettivi, caparre, fatture attive. | APPEND | MD5 dedup |
+| `f_bilancino` | Bilancio di verifica Esolver (export manuale). Solo leaf nodes. | SNAPSHOT | MD5 dedup |
+| `f_consumi_economato` | Consumi materie prime per reparto/prodotto. | APPEND | MD5 dedup |
+| `f_coperti_giornalieri` | Coperti pasto giornalieri per BU/tipo_ospite. | APPEND | MD5 dedup |
+| `f_chiusura_mensile` | Snapshot chiusura mese: previsione vs consuntivo per voce + saldo banca. Scritto da `hotelops chiudi`. Serve per tracciare l'accuratezza delle previsioni nel tempo. | SNAPSHOT | DELETE-INSERT per societa+anno+mese |
+| `f_saldi_banca_snapshot` | Saldo banca reale. Fonti: SCHEDA_CONTABILE (Esolver scheda contabile, end-of-day running balance — primary), BANCA_EXCEL (header Excel MPS — legacy). Usato da v_previsione_cassa come ancora per cash forward. Pipeline: `ingest_scheda_contabile.py` (CSV+XLSX, auto DD/MM swap fix). | APPEND | DELETE-INSERT per societa+banca+data_snapshot+fonte |
+| `f_partite_aperte_fornitori` | Snapshot partite aperte fornitori da Esolver. TERZA DIMENSIONE (IMPEGNO): fatture registrate non ancora pagate, con data_scadenza. Flag intercompany per PANORAMA COMPANY. | SNAPSHOT | DELETE-INSERT per societa+data_snapshot |
+| `f_mastrino_consolidato` | Mastrino consolidato da "Costi Ricavi 2025-2026 Budget.xlsx". 901 righe. | APPEND | MD5 dedup |
+| `f_affidamenti` | Affidamenti bancari (linee di credito). Definito in config.py, schema TBD. | TBD | TBD |
 
 ### Dimension tables
 
-| Table | Description | Rows | Update |
-|-------|-------------|------|--------|
-| `d_voci_piano_finanziario` | 28 voci PF mappate a codici conto Esolver via LIKE patterns. Source: `bq/dimensioni/d_voci_piano_finanziario.csv`. | 28 | WRITE_TRUNCATE |
-| `d_piano_conti` | Piano dei conti 2026 — 160 conti CE con codice (dotted). | 160 | WRITE_TRUNCATE |
-| `d_categorie_conti` | 167 mapping canonici: codice_conto → (tipo_costo, categoria_ce). | 167 | WRITE_TRUNCATE |
-| `d_budget_costi_fissi` | Budget costi fissi INTUR+ORTI con split per BU. | 43 | Manual |
-| `d_personale_mensile` | Costi personale mensili 2026 per Divisione. | 78 | Manual |
+| Table | Description | Update |
+|-------|-------------|--------|
+| `d_voci_piano_finanziario` | 28 voci PF mappate a codici conto Esolver via LIKE patterns. Source: `core/bq/dimensioni/d_voci_piano_finanziario.csv`. | WRITE_TRUNCATE |
+| `d_piano_conti` | Piano dei conti 2026 — 2,103 conti con codice (dotted), tipo, sezione (CE/SP). | WRITE_TRUNCATE |
+| `d_categorie_conti` | Mapping canonici: codice_conto → (tipo_costo, categoria_ce). 167 righe da "Costi Ricavi" sheet CATEGORIE. | WRITE_TRUNCATE |
+| `d_fornitori` | Fornitori ORTI (65) con voce_id e flag intercompany. Source: `core/bq/dimensioni/d_fornitori.csv`. | WRITE_TRUNCATE |
+| `d_budget_costi_fissi` | Costi fissi annuali per BU (43 righe). Source: MAPPATURA DEI COSTI_v_2.xlsx. | WRITE_TRUNCATE |
+| `d_personale_mensile` | Costi personale mensili per divisione (78 righe). Source: Incidenza_costi_personale.xlsx. | WRITE_TRUNCATE |
+| `d_periodi_apertura` | Calendario stagionale apertura/chiusura per BU (3 righe). | WRITE_TRUNCATE |
 
 ### Views
 
 | View | Description | Source SQL |
 |------|-------------|-----------|
-| `v_piano_finanziario_mensile` | **THE view for Rosa**: Budget vs consuntivo per voce PF, rolling 18 mesi. Columns: importo_consuntivo, importo_budget, scostamento. | `bq/views/v_piano_finanziario_mensile.sql` |
-| `v_piano_finanziario_consuntivo` | Actuals per voce PF (from f_movimenti_contabili + f_banche_movimenti via d_voci LIKE patterns). | `bq/views/v_piano_finanziario_consuntivo.sql` |
-| `v_budget_vs_consuntivo` | **THE view for Gasparotto**: Budget vs actuals per cod_conto×mese. Status flags. | `bq/v_budget_vs_consuntivo.sql` |
-| `v_pl_movimenti` | P&L: ricavi - costi per categoria CE. | `bq/views/v_pl_movimenti.sql` |
-| `v_cashflow_mensile` | Cashflow mensile aggregato da banca. | `bq/views/v_cashflow_mensile.sql` |
-| `v_incassi_per_canale` | Entrate bancarie per canale (POS, bonifico, contante). | `bq/views/v_incassi_per_canale.sql` |
-| `v_previsione_cassa` | **Cash forward rolling 12 mesi**: ancora da f_saldi_banca_snapshot + PF stime + scadenzario info. Usata da `hotelops saldo`. | `bq/views/v_previsione_cassa.sql` |
+| `v_piano_finanziario_mensile` | **THE view for Rosa**: Budget vs consuntivo per voce PF, rolling 18 mesi. Columns: importo_consuntivo, importo_budget, scostamento, tipo_periodo (CONSUNTIVO/BUDGET). | `core/bq/views/v_piano_finanziario_mensile.sql` |
+| `v_piano_finanziario_consuntivo` | Actuals per voce PF (from f_movimenti_contabili + f_banche_movimenti via d_voci LIKE patterns). | `core/bq/views/v_piano_finanziario_consuntivo.sql` |
+| `v_budget_vs_consuntivo` | **THE view for Gasparotto**: Budget vs actuals per cod_conto×mese. Status flags. **Note: SQL file NOT in core/bq/views/ — view defined directly in BigQuery.** | BQ-only (no local SQL) |
+| `v_pl_movimenti` | P&L: ricavi - costi per categoria CE. Categorie: RICAVO, COSTO_FISSO, COSTO_VAR, PERSONALE, EXTRA_EBITDA, ALTRO. | `core/bq/views/v_pl_movimenti.sql` |
+| `v_cashflow_mensile` | Cashflow mensile aggregato da banca. Columns: entrate, uscite, netto, netto_cumulativo. | `core/bq/views/v_cashflow_mensile.sql` |
+| `v_incassi_per_canale` | Entrate bancarie per canale (BONIFICO, CARTE, CONTANTI, ALTRO). | `core/bq/views/v_incassi_per_canale.sql` |
+| `v_previsione_cassa` | **Cash forward rolling 12 mesi**: ancora da f_saldi_banca_snapshot + PF stime + scadenzario. stato_liquidita: OK/ATTENZIONE/PERICOLO. Usata da `hotelops saldo`. | `core/bq/views/v_previsione_cassa.sql` |
 
 ### How the views connect
 
@@ -152,8 +182,12 @@ f_budget_mensile ────── JOIN d_voci_piano_finanziario (LIKE patterns
                                                                                     │
 f_piano_finanziario_input ── direct voce_id FK ────────────────────────────────────┘
 
-f_movimenti_contabili ── JOIN d_categorie_conti ──→ v_budget_vs_consuntivo
+f_movimenti_contabili ── JOIN d_categorie_conti ──→ v_budget_vs_consuntivo (BQ-only)
 f_budget_mensile ─────── FULL OUTER JOIN ──────────┘
+
+f_saldi_banca_snapshot ──┐
+v_piano_finanziario_mensile ──┤──→ v_previsione_cassa (cash forward 12m)
+f_partite_aperte_fornitori ──┘
 
 v_piano_finanziario_mensile ──→ `hotelops chiudi` ──→ f_chiusura_mensile (snapshot delta)
 f_banche_movimenti ───────────┘                        (traccia accuratezza previsioni)
@@ -163,24 +197,63 @@ f_banche_movimenti ───────────┘                        (
 
 ### Code structure
 
-- `cli.py` — **CLI entry point** (`hotelops` command). Subcommands: pf, bva, chiudi, saldo, health, previsione, voci.
-- `pipelines/orchestrate.py` — Unified pipeline runner. Sync → classify → ingest → manifest.
-- `pipelines/banca/` — Bank and PMS pipelines (fetch_drive, ingest, ingest_accodamenti)
-- `pipelines/amministrativa/` — Accounting, budget, consumption (18 pipeline scripts)
-  - `ingest_gasparotto.py` — Gasparotto Master Budget. MANUAL_COD_MAP aligned to PDC 2026 (20 codes remapped from old 61.xx → new 63.05.xx/65.90.xx).
-  - `ingest_piano_finanziario_xlsx.py` — PF XLSX parser. Voce mapping aligned to d_voci_piano_finanziario.
+**core/** — The world model (nothing here imports from verticals)
+- `core/schemas.py` — Pydantic models + `validate_batch()`. Every BQ write goes through here.
+- `core/config.py` — Table IDs e costanti BQ (PROJECT, DATASET). All table refs as `F_*`, `D_*`, `V_*`.
+- `core/contracts.py` — `SchemaViolationError`, `validate_columns()`.
+- `core/datahub.py` — Minimal CSV reader for local fact tables.
+- `core/bq/views/` — BigQuery view SQL definitions (source of truth). 6 SQL files (v_budget_vs_consuntivo is BQ-only).
+- `core/bq/dimensioni/` — Dimension CSV sources (d_voci_piano_finanziario.csv, d_fornitori.csv).
+- `core/bq/SCHEMA_CONTEXT.md` — Comprehensive BQ schema documentation (483 lines).
+- `core/bq/hotelops-data-analyst/` — NanoClaw data analyst skill with reference docs per table family.
+
+**ingest/** — Reality Capture (Drive/Excel/CSV → BigQuery)
+- `ingest/classify.py` — **File classifier + router**: content-based detection of 10 file types (banca, scheda_contabile, movimenti_contabili, partite_fornitori, bilancino, gasparotto, piano_finanziario, accodamenti, coperti, economato). Infers societa+banca from content and filename. Renames to canonical convention, routes to correct datahub folder, triggers ingest pipeline. Used by `hotelops classifica` CLI and NanoClaw agent.
+- `ingest/orchestrate.py` — Unified pipeline runner. Sync → classify → ingest → manifest. Groups: banca, amministrativa, dimensioni. All paths point to datahub root (no more `ingresso/` prefix).
+- `ingest/banca/` — Bank and PMS pipelines:
+  - `fetch_drive.py` — Sync `banche/` from Drive via rclone.
+  - `ingest.py` — Parse XLS/XLSX (MPS, Sella, Intesa) → f_banche_movimenti.
+  - `ingest_accodamenti.py` — HotelCube PMS → f_accodamenti.
+  - `ingest_mastrino.py` — Bank mastrino parsing.
+- `ingest/amministrativa/` — Accounting, budget, consumption pipelines:
+  - `ingest_scheda_contabile.py` — **NEW**: Esolver scheda contabile (CSV semicolon + XLSX) → f_saldi_banca_snapshot. Auto DD/MM swap fix for XLSX. Infers societa+banca from filename (Cc# or bank name). Supports all 7 bank accounts: MPS, MPS_KROSS, INTESA × ORTI + MPS, SELLA, INTESA, BCP × INTUR.
+  - `ingest_movimenti_contabili.py` — Esolver prima nota → f_movimenti_contabili.
+  - `ingest_gasparotto.py` — Gasparotto Master Budget → f_budget_mensile. MANUAL_COD_MAP for PDC 2026 (20 remapped codes).
+  - `ingest_piano_finanziario_xlsx.py` — PF XLSX → f_piano_finanziario_input.
+  - `ingest_partite_aperte.py` — Situazione Partite Fornitori (3rd dimension: IMPEGNO).
+  - `ingest_bilancino.py` — Bilancio di verifica → f_bilancino.
   - `ingest_voci_piano_finanziario.py` — Loads d_voci dimension from CSV.
-  - `ingest_partite_aperte.py` — Situazione Partite Fornitori (snapshot). 3rd dimension IMPEGNO. DELETE-INSERT per societa+data_snapshot.
-- `actions/update_previsione.py` — Write budget forecasts to f_piano_finanziario_input (DELETE-INSERT per voce×mese×fonte). Has natural language voce aliases.
-- `actions/genera_piano_finanziario.py` — Generate PF Excel from BQ for Rosa session. Color-coded: nero=consuntivo, blu=previsione, verde=formula.
-- `actions/reconcile_banca.py` — Bank vs ledger reconciliation.
-- `tools/budget_wizard.py` — Interactive budget input with BQ historical data.
-- `lib/schemas.py` — Pydantic models: BudgetMensileRow, PianoFinanziarioInputRow, etc.
-- `bq/views/` — BigQuery view SQL definitions (7 views, inclusa v_previsione_cassa).
-- `bq/dimensioni/` — Dimension CSV sources (d_voci_piano_finanziario.csv).
-- `bq/SCHEMA_CONTEXT.md` — Comprehensive BQ schema documentation.
-- `nanoclaw_hotelops_prompt.md` — System prompt for NanoClaw WhatsApp agent.
-- `meta/reference/` — PDC 2025 vs 2026 reference files.
+  - `ingest_piano_conti_nuovo.py` — Piano dei conti 2026 → d_piano_conti.
+  - `ingest_categorie.py` — Categorie conti → d_categorie_conti.
+  - `ingest_fornitori.py` — Fornitori → d_fornitori.
+  - `ingest_consumi_economato.py`, `ingest_consumi_economato_consolidato.py`, `ingest_consumi_merce.py` — Consumption tracking pipelines.
+  - `ingest_coperti.py` — Coperti giornalieri → f_coperti_giornalieri.
+  - `ingest_mastrino.py` — Mastrino contabile.
+  - `ingest_budget_costi.py` — Budget costi fissi.
+
+**condges/** — Vertical #1: Controllo di Gestione (containerizable)
+- `condges/app.py` — Streamlit interactive Piano Finanziario for Rosa. Saldo anchor, editable grid, cash flow semaphore, scadenzario drill-down, Excel export. **Known bug: line 19 imports `from lib import config` — should be `from core import config`.**
+- `condges/genera_excel.py` — Generate PF Excel from BQ. Color-coded: nero=consuntivo, blu=previsione, verde=formula.
+- `condges/update_previsione.py` — Write forecasts to f_piano_finanziario_input (DELETE-INSERT). Natural language voce aliases + Italian month names.
+- `condges/reconcile_banca.py` — Bank vs ledger reconciliation (partial — depends on `bank-reconcile` optional dep).
+- `condges/materialize_reconciliation.py` — Materialized reconciliation view (partial/stub).
+- `condges/Dockerfile` — Containerization for Streamlit app.
+
+**Root**
+- `cli.py` — **CLI entry point** (`hotelops` command). Imports from core + condges + ingest. 8 subcommands: pf, bva, chiudi, saldo, health, previsione, voci, classifica.
+- `nanoclaw_hotelops_CLAUDE_v2.md` — System prompt for NanoClaw WhatsApp agent (current version).
+- `BRIEF_APP_PIANO_FINANZIARIO.md` — Streamlit app specification document (31KB).
+- `CHANGELOG.md` — Recent changes log.
+- `meta/reference/` — PDC 2025 vs 2026 reference files + INTUR/ORTI relationship docs.
+- `meta/skills/hotelops-data-analyst/` — NanoClaw data analyst skill (duplicate of core/bq/ version).
+
+**Deprecated** (backward compat shims — still present, will be removed)
+- `lib/` → use `core/`
+- `pipelines/` → use `ingest/`
+- `actions/` → use `condges/`
+- `dashboard/` → use `condges/`
+- `bq/` → duplicate of `core/bq/`, use `core/bq/`
+- `_archive/` — old Notion sync, ontology, services, tools (archived, not active)
 
 ### Data model
 
@@ -197,22 +270,25 @@ Every fact row carries **5 dimensions**: `societa_id`, `business_unit_id`, `funz
 
 28 voci that map the Piano Finanziario structure to Esolver account codes:
 - 11 ENTRATE (Hotel, Residence, CVM, Supermercato, Spiaggia, Affitti, Caparre, etc.)
-- 17 USCITE (Salari, Utenze, Materie Prime, Tasse, Mutui, Commissioni, Consulenze, Marketing, Servizi Produzione, etc.)
+- 17 USCITE (Salari, Utenze, Materie Prime, Tasse, Mutui, Commissioni, Consulenze, Marketing, Servizi Produzione, Canone Passivo, etc.)
 - fonte=ESOLVER: joins via cod_conto_pattern LIKE
 - fonte=BANCHE: joins via banca_tipo_pat LIKE on tipo_movimento
 - fonte=MANUALE: only via f_piano_finanziario_input.voce_id FK
 
-Source CSV: `bq/dimensioni/d_voci_piano_finanziario.csv`. Loaded by: `ingest_voci_piano_finanziario.py`.
+Source CSV: `core/bq/dimensioni/d_voci_piano_finanziario.csv`. Loaded by: `ingest_voci_piano_finanziario.py`.
 
 ### Budget sources
 
 | Fonte | Scope | Granularity | Where |
 |-------|-------|-------------|-------|
-| GASPAROTTO | Full CE (112 conti, €4.08M ORTI) | Company-level, 1/12 monthly | f_budget_mensile |
+| GASPAROTTO | Full CE | Company-level, 1/12 monthly | f_budget_mensile |
 | MAPPATURA | Fixed/variable costs | Per BU (HOTEL, RESIDENCE, CVM, LIDO) | f_budget_mensile |
 | INCIDENZA | Payroll costs | Per divisione | f_budget_mensile |
-| PIANO_FINANZIARIO | Cash flow (28 voci, €5.7M entrate) | ORTI+INTUR monthly | f_piano_finanziario_input |
+| PIANO_FINANZIARIO | Cash flow (28 voci) | ORTI+INTUR monthly | f_piano_finanziario_input |
+| SCADENZIARIO | Loan schedules | Per voce × mese | f_piano_finanziario_input |
+| BVA_2026 | Revenue budgets | Per voce × mese | f_piano_finanziario_input |
 | CLI/NANOCLAW | Manual forecast updates | Per voce × mese | f_piano_finanziario_input |
+| APP | Streamlit app saves | Per voce × mese | f_piano_finanziario_input |
 
 ### PDC 2026 restructuring
 
@@ -238,7 +314,7 @@ The 2026 chart of accounts restructured significantly from 2025:
 ## Stakeholders and their needs (from meeting 17.03.2026)
 
 ### Rosa (Amministrazione — Tesoreria)
-- Uses: `hotelops pf`, `genera_piano_finanziario.py`
+- Uses: `hotelops pf`, `condges/genera_excel.py`, `condges/app.py` (Streamlit)
 - Needs: monthly cash flow forecast (entrate/uscite di cassa)
 - Her process: checks open payables in Esolver, estimates revenues from prior year, asks commercialista for taxes
 - Goal: prevent liquidity crises in critical months
@@ -259,8 +335,8 @@ The 2026 chart of accounts restructured significantly from 2025:
 
 ### Giorno 1-5: Aggiorna i dati
 ```bash
-python -m pipelines.orchestrate           # Sync Drive + ingest banche, movimenti, tutto
-hotelops health                           # Verifica freshness: banche aggiornate? movimenti recenti?
+python -m ingest.orchestrate                 # Sync Drive + ingest banche, movimenti, tutto
+hotelops health                              # Verifica freshness: banche aggiornate? movimenti recenti?
 ```
 
 ### Giorno 5: Chiudi il mese precedente
@@ -273,7 +349,9 @@ Cosa guardi: ogni voce dove il delta è grande → indaghi. Perché le utenze so
 
 ### Sessione con Rosa (tesoreria, ~mensile)
 ```bash
-python -m actions.genera_piano_finanziario --output ~/Desktop/PF_2026.xlsx  # Excel con saldo banca reale
+python -m condges.genera_excel --output ~/Desktop/PF_2026.xlsx  # Excel con saldo banca reale
+# oppure:
+streamlit run condges/app.py                                     # Interactive version
 ```
 Voce per voce: lei guarda partite aperte in Esolver, tu aggiorni:
 ```bash
@@ -291,69 +369,26 @@ hotelops bva --mese 3                     # Singolo mese
 ### Ciclo continuo
 Ogni mese il modello si affina: le previsioni si aggiustano, gli snapshot tracciano se migliori. Il saldo banca reale + proiezione ti dice sempre se e quando rischi di andare in negativo.
 
-## Current status (as of 2026-03-20)
-
-### Deployed to BQ
-- All 7 views deployed and working (inclusa v_previsione_cassa — nuova)
-- f_budget_mensile: 1380 rows (GASPAROTTO) + 837 rows (MAPPATURA+INCIDENZA)
-- f_piano_finanziario_input: 206 rows PIANO_FINANZIARIO (ricaricati con file marzo 2026: 116 ORTI + 90 INTUR)
-- f_partite_aperte_fornitori: 176 rows — snapshot ORTI 2026-03-20 (scadenzario fornitori)
-- f_saldi_banca_snapshot: 2 rows — ancora ORTI: MPS €67,724 + INTESA €66,922 al 28/02/2026
-- d_fornitori: 64 fornitori ORTI con voce_id e flag intercompany
-- d_voci_piano_finanziario: 28 voci
-- d_piano_conti: 160 CE accounts (needs reload if reset — source: Costi Ricavi file)
-- d_categorie_conti: 167 mappings (needs reload if reset — source: Costi Ricavi file)
-
-### Known data issues
-
-**🟡 RISOLTO:**
-- ~~Saldo banca ORTI: −€3.26M~~ → **RISOLTO**: f_saldi_banca_snapshot creata con ancora reale Feb 28 (€134,647). `hotelops saldo` usa v_previsione_cassa con saldo corretto.
-
-**🔴 DA DECIDERE:**
-- **USCITE_MUTUI doppia fonte** — f_piano_finanziario_input ha sia SCADENZIARIO (€129K/anno) che PIANO_FINANZIARIO (€496K/anno) per USCITE_MUTUI ORTI. La view li somma entrambi → budget mutui gonfiato di €129K. Decidere: SCADENZIARIO sostituisce o si aggiunge al PF?
-
-**🟠 SERIO:**
-- USCITE_SALARI gen/feb: consuntivo €5.5K vs budget €170K — salari possibly not yet booked in Esolver for those months (conti 67.01.01.xx assenti, solo 670313/670351/670391)
-- USCITE_VARIE_EXT: budget negative (−€28,926/mese) — mapping issue in Gasparotto, da investigare quale conto genera il segno invertito
-- USCITE_SERVIZI_PRODUZIONE: consuntivo €18K YTD but zero budget — conti 570150/570190 non nel Gasparotto Master. Rischio pattern overlap con USCITE_COMMISSIONI (570101, 570151)
-- Gasparotto budget uses flat 1/12 monthly split — needs seasonality adjustment
-
-### Pending work — Third Dimension (IMPEGNO)
-Stato: **parzialmente implementato** (ORTI fornitori live, resto pending).
-
-**✅ Live:**
-- **f_partite_aperte_fornitori** — snapshot ORTI caricato 2026-03-20 (176 fatture, €573K totale di cui €446K intercompany). Pipeline: `ingest_partite_aperte.py`. Aggiornare ogni mese con nuovo export Esolver.
-- **v_previsione_cassa** — rolling 12 mesi con ancora reale + scadenzario come colonna informativa.
-
-**❌ Ancora mancante:**
-- **f_affidamenti** ✅ LIVE — INTUR SELLA €50,000 fido di cassa (snapshot 2026-03-20). ORTI: nessun fido.
-- **f_partite_aperte_clienti** — partite aperte clienti (crediti). Abiliterebbe proiezione cash-in da TUI, OTA, etc. (pagamenti a 30-60 gg).
-- Snapshot INTUR per partite aperte e saldi banca.
-
-### Pending work — Other
-- Fix data anomalies (salari, varie_ext budget negativo)
-- Seasonality: load 2023-2025 revenue data when Antonio provides it
-- Operational KPIs (cost per room, per cover) — needs occupancy data
-- NanoClaw deployment: mount BQ credentials in container
-
 ## NanoClaw Agent Integration
 
 NanoClaw (WhatsApp agent) is the query + alerting runtime. Read-only + pipeline control (no writes).
-System prompt: `nanoclaw_hotelops_prompt.md`.
+System prompt: `nanoclaw_hotelops_CLAUDE_v2.md`.
 
 ### Pipeline triggers
 
 | Trigger | Command |
 |---------|---------|
-| "Aggiorna banche" | `python -m pipelines.orchestrate --only banca` |
-| "Aggiorna tutto" | `python -m pipelines.orchestrate` |
-| "Caricato il Gasparotto" | `python -m pipelines.orchestrate --pipeline gasparotto` |
+| "Aggiorna banche" | `python -m ingest.orchestrate --only banca` |
+| "Aggiorna tutto" | `python -m ingest.orchestrate` |
+| "Caricato il Gasparotto" | `python -m ingest.orchestrate --pipeline gasparotto` |
 | "Piano finanziario?" | Query `v_piano_finanziario_mensile` |
 | "Budget vs consuntivo?" | Query `v_budget_vs_consuntivo` |
+| "Ho un file da caricare" / file attachment | `hotelops classifica <file> --route --ingest` |
+| "Classifica questo file" | `python -m ingest.classify <file>` |
 
 ## Governance Rules
 
-- Every pipeline reads from `ingresso/` and appends to `fatti/` (and BigQuery).
+- Every pipeline reads from its dedicated datahub folder (see Datahub Structure) and writes to BigQuery.
 - Every fact row must carry all 5 dimensions.
 - No speculative modules — pipelines are born from real data flows.
 - Never modify `fatti/` manually — pipelines only.
@@ -383,7 +418,40 @@ System prompt: `nanoclaw_hotelops_prompt.md`.
 - **MPS_KROSS** — MPS conto Kross (separato)
 - **SELLA** — Banca Sella
 - **INTESA** — Intesa Sanpaolo
+- **BCP** — Banca di Credito Popolare (INTUR only, Torre del Greco)
+
+#### Esolver bank account mapping (Cc# → banca_id)
+
+| Società | Cc# | banca_id | Banca |
+|---------|-----|----------|-------|
+| ORTI | Cc1 | INTESA | Intesa Sanpaolo |
+| ORTI | Cc2 | MPS_KROSS | MPS Kross |
+| ORTI | Cc3 | MPS | Monte dei Paschi |
+| INTUR | Cc1 | SELLA | Banca Sella |
+| INTUR | Cc2 | MPS | Monte dei Paschi |
+| INTUR | Cc3 | INTESA | Intesa Sanpaolo |
+| INTUR | Cc4 | BCP | Banca di Credito Popolare |
+
+## Known Issues / Tech Debt
+
+- **v_budget_vs_consuntivo**: SQL definition not in `core/bq/views/` — exists only in BigQuery. Should be versioned locally.
+- **Deprecated dirs** (lib/, pipelines/, actions/, dashboard/, bq/) still present. Safe to remove once all imports verified.
+- **f_affidamenti**: table ID defined in config.py but no Pydantic schema or ingest pipeline yet.
 
 ## Dependencies
 
-Python ≥3.11. Core: `pyyaml`, `openpyxl`, `bank-reconcile`, `pandas`, `google-cloud-bigquery`, `esolver-accodamenti`, `pydantic`. Dev: `pytest`, `ruff`.
+Python ≥3.11, version 0.3.0.
+
+Core: `pyyaml`, `openpyxl`, `pandas`, `google-cloud-bigquery`, `pydantic`.
+Optional: `bank-reconcile` (`.[reconcile]`), `streamlit + plotly + db-dtypes` (`.[dashboard]`).
+Dev: `pytest`, `ruff` (`.[dev]`).
+
+## Tests
+
+```
+tests/
+├── test_contracts.py       — Schema validation tests
+└── test_materialize.py     — Materialization tests
+```
+
+Run: `pytest`. Lint: `ruff check .` / `ruff format .`
