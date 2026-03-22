@@ -2,15 +2,15 @@
 """
 Bank transaction ingestion pipeline.
 
-Reads raw bank files from datahub ingresso/banca/estratti/,
+Reads raw bank files from datahub/banche/{ORTI,INTUR}/,
 transforms them to 5D fact rows, appends to fatti/f_banche_movimenti.csv.
 
 Supports: Sella CSV, MPS Excel, Intesa Excel.
 
 Usage:
-    python -m pipelines.banca.ingest --datahub /path/to/datahub --all
-    python -m pipelines.banca.ingest --datahub /path/to/datahub --file FILENAME
-    python -m pipelines.banca.ingest --datahub /path/to/datahub --dry-run --all
+    python -m ingest.banca.ingest --datahub /path/to/datahub --all
+    python -m ingest.banca.ingest --datahub /path/to/datahub --file FILENAME
+    python -m ingest.banca.ingest --datahub /path/to/datahub --dry-run --all
 """
 
 import argparse
@@ -26,8 +26,8 @@ from pathlib import Path
 import pandas as pd
 from google.cloud import bigquery
 
-from lib.contracts import SchemaViolationError, validate_columns
-from lib.schemas import BancaMovimentoRow, validate_batch
+from core.contracts import SchemaViolationError, validate_columns
+from core.schemas import BancaMovimentoRow, validate_batch
 
 try:
     import openpyxl  # noqa: F401 - presence check

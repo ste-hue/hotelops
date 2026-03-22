@@ -19,10 +19,10 @@ Output: f_budget_mensile rows with fonte=GASPAROTTO
 Strategy: DELETE-INSERT for anno=ANNO AND fonte='GASPAROTTO'
 
 Usage:
-    python -m pipelines.amministrativa.ingest_gasparotto --dry-run
-    python -m pipelines.amministrativa.ingest_gasparotto \\
+    python -m ingest.amministrativa.ingest_gasparotto --dry-run
+    python -m ingest.amministrativa.ingest_gasparotto \\
         --file "/path/to/Master Completo Indici 2025 ORTI SRL_Budget26.xlsx"
-    python -m pipelines.amministrativa.ingest_gasparotto \\
+    python -m ingest.amministrativa.ingest_gasparotto \\
         --file "/path/to/file.xlsx" --societa INTUR
 """
 
@@ -35,7 +35,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lib.schemas import BudgetMensileRow, validate_batch
+from core.schemas import BudgetMensileRow, validate_batch
 
 try:
     import openpyxl
@@ -418,7 +418,7 @@ def quality_summary(rows: list[dict], logger: logging.Logger) -> None:
 def validate_rows(rows: list[dict], logger: logging.Logger) -> list[dict]:
     """Validate all rows using BudgetMensileRow schema."""
     try:
-        from lib.schemas import BudgetMensileRow, validate_batch
+        from core.schemas import BudgetMensileRow, validate_batch
         validate_batch(rows, BudgetMensileRow, context=f"Gasparotto {FONTE}")
         logger.info(f"  Pydantic validation OK: {len(rows)} righe")
     except ImportError:

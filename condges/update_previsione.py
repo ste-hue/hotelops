@@ -16,7 +16,7 @@ Usage (CLI):
         --mesi 4-10 --importo 180000 --anno 2026 --note "stagione 2026"
 
 Usage (NanoClaw — programmatic):
-    from actions.update_previsione import update_previsione
+    from condges.update_previsione import update_previsione
     result = update_previsione(
         voce_id="USCITE_UTENZE", societa_id="ORTI",
         anno=2026, mese_start=4, mese_end=12,
@@ -36,7 +36,7 @@ import logging
 import sys
 from datetime import datetime, timezone
 
-from lib.schemas import PianoFinanziarioInputRow, validate_batch
+from core.schemas import PianoFinanziarioInputRow, validate_batch
 
 BQ_PROJECT = "hotelops-suite"
 BQ_TABLE = f"{BQ_PROJECT}.hotelops.f_piano_finanziario_input"

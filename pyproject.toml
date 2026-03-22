@@ -4,17 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hotelops"
-version = "0.1.0"
+version = "0.3.0"
+description = "Financial decision platform for Gruppo Panorama hotel operations (INTUR + ORTI)"
 requires-python = ">=3.11"
 dependencies = [
   "pyyaml>=6.0",
   "openpyxl>=3.1",
-  "bank-reconcile",
+  "pandas>=2.0",
+  "google-cloud-bigquery>=3.20",
+  "pydantic>=2.0",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.4"]
 dashboard = ["streamlit>=1.35", "plotly>=5.0", "db-dtypes>=1.0"]
+# Installa il pacchetto locale con: pip install -e /path/to/bank_reconcile
+reconcile = ["bank-reconcile"]
 # Installa il parser Esolver con: pip install -e /path/to/reconciliation_dino
 # esolver = ["esolver-accodamenti"]
 
@@ -23,7 +28,7 @@ hotelops = "cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["actions*", "pipelines*", "lib*", "services*"]
+include = ["core*", "ingest*", "condges*"]
 
 [tool.setuptools]
 py-modules = ["cli"]

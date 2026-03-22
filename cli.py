@@ -10,6 +10,7 @@ Subcomandi:
     hotelops health      Health check: freshness dati, gaps, alert
     hotelops previsione  Inserisci/aggiorna previsione budget
     hotelops voci        Lista voci piano finanziario disponibili
+    hotelops classifica  Classifica, smista e ingerisci file dati
 
 Installazione:
     pip install -e .    (poi: hotelops pf)
@@ -22,6 +23,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+
+from core.schemas import ChiusuraMensileRow, validate_batch
 
 BQ_PROJECT = "hotelops-suite"
 
@@ -222,12 +225,41 @@ def cmd_health(args):
         n = rows[0]["n"] if rows else 0
         print(f"\n  {label}: {n} righe")
 
+    # Schema drift check: BQ columns vs Pydantic models
+    from core.schemas import (
+        BancaMovimentoRow, BudgetMensileRow, ChiusuraMensileRow,
+        MovimentoContabileRow, PartitaApertaFornitoreRow, PianoFinanziarioInputRow,
+    )
+    from core import config as cfg
+    drift_checks = [
+        (cfg.F_BANCHE_MOVIMENTI,          BancaMovimentoRow),
+        (cfg.F_MOVIMENTI_CONTABILI,        MovimentoContabileRow),
+        (cfg.F_BUDGET_MENSILE,             BudgetMensileRow),
+        (cfg.F_PIANO_FINANZIARIO_INPUT,    PianoFinanziarioInputRow),
+        (cfg.F_CHIUSURA_MENSILE,           ChiusuraMensileRow),
+        (cfg.F_PARTITE_APERTE_FORNITORI,   PartitaApertaFornitoreRow),
+    ]
+    print("\n  SCHEMA DRIFT:")
+    for table_id, model in drift_checks:
+        try:
+            bq_cols = {f.name for f in bq().get_table(table_id).schema}
+            py_cols = set(model.model_fields.keys())
+            extra_bq = bq_cols - py_cols
+            extra_py = py_cols - bq_cols
+            name = table_id.split(".")[-1]
+            if extra_bq or extra_py:
+                print(f"    ⚠ {name}: BQ+{sorted(extra_bq)} / Pydantic+{sorted(extra_py)}")
+            else:
+                print(f"    ✓ {name}")
+        except Exception as e:
+            print(f"    ? {table_id.split('.')[-1]}: {e}")
+
 
 # ── Previsione ──────────────────────────────────────────────────────────────
 
 def cmd_previsione(args):
     """Inserisci/aggiorna previsione budget."""
-    from actions.update_previsione import update_previsione, resolve_voce
+    from condges.update_previsione import update_previsione, resolve_voce
 
     voce_id = resolve_voce(args.voce) or args.voce.upper()
     societa = args.societa or "ORTI"
@@ -235,11 +267,11 @@ def cmd_previsione(args):
 
     if "-" in args.mesi:
         parts = args.mesi.split("-")
-        from actions.update_previsione import resolve_mese
+        from condges.update_previsione import resolve_mese
         mese_start = resolve_mese(parts[0]) or int(parts[0])
         mese_end = resolve_mese(parts[1]) or int(parts[1])
     else:
-        from actions.update_previsione import resolve_mese
+        from condges.update_previsione import resolve_mese
         mese_start = resolve_mese(args.mesi) or int(args.mesi)
         mese_end = mese_start
 
@@ -535,6 +567,7 @@ def _save_chiusura_snapshot(societa: str, anno: int, mese: int, rows: list[dict]
     client.query(delete_sql).result()
 
     # INSERT new snapshot
+    validate_batch(rows, ChiusuraMensileRow, "f_chiusura_mensile")
     errors = client.insert_rows_json(table_id, rows)
     if errors:
         print(f"\n  ✗ Errori inserimento snapshot: {errors[:3]}")
@@ -585,6 +618,67 @@ def cmd_saldo(args):
 
     print("\n  📊=consuntivo  🔄=mese corrente  🔮=previsione")
     print("  Scad. = uscite certe da scadenzario fornitori (non entra nel saldo)")
+
+
+# ── Classifica: classify + route + ingest files ──────────────────────────────
+
+def cmd_classifica(args):
+    """Classifica file, smista nel datahub e (opzionalmente) ingerisci."""
+    from pathlib import Path
+    from ingest.classify import classify_batch, route_file, run_ingest, DEFAULT_DATAHUB
+
+    datahub = Path(args.datahub) if args.datahub else DEFAULT_DATAHUB
+    files = [Path(f) for f in args.files]
+
+    # Expand globs
+    expanded = []
+    for f in files:
+        if "*" in str(f) or "?" in str(f):
+            import glob
+            expanded.extend(Path(p) for p in glob.glob(str(f)))
+        else:
+            expanded.append(f)
+
+    if not expanded:
+        print("Nessun file trovato.")
+        return
+
+    results = classify_batch(expanded)
+
+    print(f"\n{'='*70}")
+    print(f"  CLASSIFICAZIONE FILE — {len(results)} file analizzati")
+    print(f"{'='*70}\n")
+
+    ok = 0
+    for r in results:
+        if r.category in ("unknown", "error"):
+            print(f"❓ {r.file_path.name}")
+            if r.details:
+                for k, v in r.details.items():
+                    print(f"     {k}: {v}")
+            print()
+            continue
+
+        ok += 1
+        emoji = "✅" if r.confidence >= 0.8 else "⚠️"
+        print(f"{emoji} {r.file_path.name}")
+        print(r.summary())
+
+        if args.route or args.ingest:
+            dest = route_file(r, datahub, dry_run=args.dry_run)
+            if dest:
+                prefix = "[DRY-RUN] " if args.dry_run else ""
+                print(f"  {prefix}→ {dest}")
+
+                if args.ingest and not args.dry_run:
+                    success = run_ingest(r, dest, datahub, dry_run=args.dry_run)
+                    print(f"  Pipeline: {'✅ OK' if success else '❌ ERRORE'}")
+
+        print()
+
+    print(f"{'─'*70}")
+    print(f"  Riconosciuti: {ok}/{len(results)}")
+    print(f"{'─'*70}\n")
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
@@ -638,6 +732,14 @@ def main():
     # voci
     sub.add_parser("voci", help="Lista voci piano finanziario")
 
+    # classifica
+    p_class = sub.add_parser("classifica", aliases=["cls"], help="Classifica, smista e ingerisci file")
+    p_class.add_argument("files", nargs="+", help="File da classificare")
+    p_class.add_argument("--route", action="store_true", help="Copia i file nella cartella datahub corretta")
+    p_class.add_argument("--ingest", action="store_true", help="Esegui il pipeline di ingestione dopo lo smistamento")
+    p_class.add_argument("--datahub", help="Root del datahub (default: Google Drive)")
+    p_class.add_argument("--dry-run", action="store_true", help="Mostra il piano senza eseguire")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -653,6 +755,8 @@ def main():
         "previsione": cmd_previsione,
         "prev": cmd_previsione,
         "voci": cmd_voci,
+        "classifica": cmd_classifica,
+        "cls": cmd_classifica,
     }
 
     handlers[args.command](args)
