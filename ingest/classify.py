@@ -45,6 +45,13 @@ DEFAULT_DATAHUB = Path(
     )
 )
 
+# rclone remote for Drive (mount locale non è sempre sincronizzato)
+RCLONE_REMOTE = "mywork"
+RCLONE_DATAHUB = "00_hotelops_datahub"
+
+# All datahub input files live under ingresso/
+INGRESSO_PREFIX = "ingresso"
+
 # ── Classification result ─────────────────────────────────────────────────────
 
 
@@ -124,6 +131,17 @@ ESOLVER_CC_MAP = {
     ("INTUR", "4"): "BCP",
 }
 
+# Reverse lookup: (cc_num, banca) → societa — for when societa is unknown
+# Built from ESOLVER_CC_MAP. If a (cc, banca) combo is unique to one societa, we can infer it.
+_CC_BANCA_TO_SOCIETA: dict[tuple[str, str], str] = {}
+for (soc, cc), bnk in ESOLVER_CC_MAP.items():
+    key = (cc, bnk)
+    if key in _CC_BANCA_TO_SOCIETA:
+        # Ambiguous — same cc+banca in multiple societa, can't infer
+        _CC_BANCA_TO_SOCIETA[key] = ""  # empty = ambiguous
+    else:
+        _CC_BANCA_TO_SOCIETA[key] = soc
+
 
 def infer_societa(filename: str, path: Optional[Path] = None) -> Optional[str]:
     """Infer ORTI/INTUR from filename or parent directory."""
@@ -139,6 +157,22 @@ def infer_societa(filename: str, path: Optional[Path] = None) -> Optional[str]:
                 return "ORTI"
             if part.upper() == "INTUR":
                 return "INTUR"
+    return None
+
+
+def _infer_societa_from_content(path: Path) -> Optional[str]:
+    """Infer ORTI/INTUR by reading first few cells of an Excel file."""
+    try:
+        rows, _ = _read_xlsx_sample(path, max_rows=5)
+        for row in rows[:5]:
+            for cell in row[:3]:
+                val = str(cell).upper() if cell else ""
+                if "ORTI" in val:
+                    return "ORTI"
+                if "INTUR" in val:
+                    return "INTUR"
+    except Exception:
+        pass
     return None
 
 
@@ -159,6 +193,31 @@ def infer_banca(filename: str, societa: Optional[str] = None) -> Optional[str]:
         for pat in patterns:
             if pat in upper:
                 return banca_id
+    return None
+
+
+def infer_societa_from_cc(filename: str, banca: Optional[str] = None) -> Optional[str]:
+    """Reverse-infer societa from Cc# + banca when filename doesn't contain ORTI/INTUR."""
+    upper = filename.upper().replace(" ", "_").replace("-", "_")
+    cc_match = re.search(r"_CC(\d+)_", upper)
+    if not cc_match:
+        return None
+    cc_num = cc_match.group(1)
+
+    # If we know the banca, try (cc, banca) → societa
+    if banca:
+        soc = _CC_BANCA_TO_SOCIETA.get((cc_num, banca), "")
+        if soc:
+            return soc
+
+    # Try all societa for this cc — if only one match, it's unambiguous
+    candidates = set()
+    for (s, cc), b in ESOLVER_CC_MAP.items():
+        if cc == cc_num:
+            candidates.add(s)
+    if len(candidates) == 1:
+        return candidates.pop()
+
     return None
 
 
@@ -257,11 +316,15 @@ def detect_scheda_contabile(path: Path) -> Optional[ClassificationResult]:
             and any("SALDO" in h for h in header_upper)
         ):
             banca = infer_banca(path.name, societa)
+            if not societa:
+                societa = infer_societa_from_cc(path.name, banca)
             return _build_scheda_result(path, societa, banca, confidence=0.95)
 
         # Esolver CSV auto-naming: *_Conto_*_Cc*_Saldo*
         if re.search(r"_Conto_.*_Cc\d+_Saldo", path.name):
             banca = infer_banca(path.name, societa)
+            if not societa:
+                societa = infer_societa_from_cc(path.name, banca)
             return _build_scheda_result(path, societa, banca, confidence=0.90)
 
     elif ext == ".xlsx":
@@ -275,11 +338,15 @@ def detect_scheda_contabile(path: Path) -> Optional[ClassificationResult]:
                 and any("REGISTR" in c for c in row_upper)
             ):
                 banca = infer_banca(path.name, societa)
+                if not societa:
+                    societa = infer_societa_from_cc(path.name, banca)
                 return _build_scheda_result(path, societa, banca, confidence=0.90)
 
         # Filename fallback
         if "scheda" in path.name.lower() and "contabil" in path.name.lower():
             banca = infer_banca(path.name, societa)
+            if not societa:
+                societa = infer_societa_from_cc(path.name, banca)
             return _build_scheda_result(path, societa, banca, confidence=0.70)
 
     return None
@@ -369,6 +436,8 @@ def detect_partite_fornitori(path: Path) -> Optional[ClassificationResult]:
     name_upper = path.name.upper()
     if "PARTIT" in name_upper and ("FORNI" in name_upper or "APERTE" in name_upper):
         societa = infer_societa(path.name, path)
+        if not societa:
+            societa = _infer_societa_from_content(path)
         return _build_partite_result(path, societa, confidence=0.90)
 
     # Content check: look for fornitore columns
@@ -380,6 +449,8 @@ def detect_partite_fornitori(path: Path) -> Optional[ClassificationResult]:
             "SCADENZA" in joined or "RESIDUO" in joined or "PAGAMENTO" in joined
         ):
             societa = infer_societa(path.name, path)
+            if not societa:
+                societa = _infer_societa_from_content(path)
             return _build_partite_result(path, societa, confidence=0.85)
 
     return None
@@ -799,7 +870,7 @@ def classify(path: Path) -> ClassificationResult:
     Classify a single file. Returns the best-matching ClassificationResult.
     If no detector matches, returns an UNKNOWN result.
     """
-    path = path.resolve()
+    path = path.expanduser().resolve()
     if not path.exists():
         return ClassificationResult(
             file_path=path,
@@ -848,39 +919,84 @@ def route_file(
     result: ClassificationResult,
     datahub: Path,
     dry_run: bool = False,
+    use_rclone: bool = True,
 ) -> Optional[Path]:
     """
-    Copy file to its canonical datahub location.
-    Returns the destination path, or None if routing not possible.
+    Copy file to its canonical datahub location via rclone (Drive) or local copy.
+
+    Destination path: {RCLONE_DATAHUB}/{INGRESSO_PREFIX}/{dest_folder}/{canonical_name}
+    e.g. 00_hotelops_datahub/ingresso/banche/ORTI/ORTI_MPS_20260323.xls
+
+    Returns the destination path (local staging copy), or None if routing not possible.
     """
     if result.category == "unknown" or not result.dest_folder or not result.canonical_name:
         log.warning(f"Cannot route {result.file_path.name}: unclassified or missing destination")
         return None
 
-    dest_dir = datahub / result.dest_folder
-    dest_file = dest_dir / result.canonical_name
+    # Full remote path: ingresso/{category}/{societa}/filename
+    remote_dest = f"{INGRESSO_PREFIX}/{result.dest_folder}"
+    remote_full = f"{RCLONE_REMOTE}:{RCLONE_DATAHUB}/{remote_dest}/"
 
     if dry_run:
-        log.info(f"[DRY-RUN] Would copy {result.file_path.name} → {dest_file}")
-        return dest_file
+        log.info(
+            f"[DRY-RUN] Would rclone copy {result.file_path.name} "
+            f"→ {RCLONE_DATAHUB}/{remote_dest}/{result.canonical_name}"
+        )
+        # Return a synthetic local path for downstream compatibility
+        return datahub / INGRESSO_PREFIX / result.dest_folder / result.canonical_name
 
-    dest_dir.mkdir(parents=True, exist_ok=True)
+    if use_rclone:
+        # Copy to a temp location with canonical name, then rclone to Drive
+        import tempfile
 
-    # Avoid overwriting — add suffix if exists
-    if dest_file.exists():
-        stem = dest_file.stem
-        ext = dest_file.suffix
-        i = 1
-        while dest_file.exists():
-            dest_file = dest_dir / f"{stem}_{i}{ext}"
-            i += 1
+        with tempfile.TemporaryDirectory() as tmp:
+            staged = Path(tmp) / result.canonical_name
+            shutil.copy2(result.file_path, staged)
+            cmd = ["rclone", "copy", str(staged), remote_full]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            if proc.returncode != 0:
+                log.error(f"rclone failed: {proc.stderr.strip()}")
+                return None
+        log.info(
+            f"Routed (rclone): {result.file_path.name} "
+            f"→ {RCLONE_DATAHUB}/{remote_dest}/{result.canonical_name}"
+        )
+    else:
+        # Fallback: local copy (mount locale)
+        dest_dir = datahub / INGRESSO_PREFIX / result.dest_folder
+        dest_file = dest_dir / result.canonical_name
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        if dest_file.exists():
+            stem = dest_file.stem
+            ext = dest_file.suffix
+            i = 1
+            while dest_file.exists():
+                dest_file = dest_dir / f"{stem}_{i}{ext}"
+                i += 1
+        shutil.copy2(result.file_path, dest_file)
+        log.info(f"Routed (local): {result.file_path.name} → {dest_file}")
 
-    shutil.copy2(result.file_path, dest_file)
-    log.info(f"Routed: {result.file_path.name} → {dest_file.relative_to(datahub)}")
-    return dest_file
+    return datahub / INGRESSO_PREFIX / result.dest_folder / result.canonical_name
 
 
 # ── Ingest (trigger pipeline) ────────────────────────────────────────────────
+
+
+def _rclone_sync_to_local(remote_dest: str, canonical_name: str) -> Optional[Path]:
+    """Sync a single file from Drive to local staging via rclone."""
+    staging_dir = Path.home() / ".cache" / "hotelops" / "ingest_staging"
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    local_file = staging_dir / canonical_name
+
+    remote_path = f"{RCLONE_REMOTE}:{RCLONE_DATAHUB}/{INGRESSO_PREFIX}/{remote_dest}/{canonical_name}"
+    proc = subprocess.run(
+        ["rclone", "copyto", remote_path, str(local_file)],
+        capture_output=True, text=True, timeout=60,
+    )
+    if proc.returncode != 0:
+        log.error(f"rclone sync failed: {proc.stderr.strip()}")
+        return None
+    return local_file
 
 
 def run_ingest(
@@ -891,16 +1007,33 @@ def run_ingest(
 ) -> bool:
     """
     Run the appropriate ingest pipeline for a classified + routed file.
+    Syncs file from Drive via rclone to local staging, then runs pipeline.
     Returns True on success, False on failure.
     """
     if not result.pipeline_cmd:
         log.warning(f"No pipeline defined for {result.file_type}")
         return False
 
+    import shlex
+
+    # Sync file from Drive to local staging via rclone
+    if not dry_run and result.dest_folder and result.canonical_name:
+        local_file = _rclone_sync_to_local(result.dest_folder, result.canonical_name)
+        if local_file and local_file.exists():
+            ingest_file = local_file
+        else:
+            log.warning(f"rclone sync failed, using dest_file path: {dest_file}")
+            ingest_file = dest_file
+    else:
+        ingest_file = dest_file
+
+    # For banca pipeline: staging dir is parent of the local file
+    staging_dir = ingest_file.parent if ingest_file else dest_file.parent
+
     cmd = result.pipeline_cmd.format(
-        dest_file=str(dest_file),
+        dest_file=str(ingest_file),
         datahub=str(datahub),
-        staging=str(datahub / "banche"),  # for banca pipeline
+        staging=str(staging_dir),
     )
 
     if dry_run:
@@ -910,7 +1043,7 @@ def run_ingest(
     log.info(f"Running pipeline: {cmd}")
     try:
         proc = subprocess.run(
-            cmd.split(),
+            shlex.split(cmd),
             capture_output=True,
             text=True,
             timeout=300,

@@ -432,6 +432,61 @@ System prompt: `nanoclaw_hotelops_CLAUDE_v2.md`.
 | INTUR | Cc3 | INTESA | Intesa Sanpaolo |
 | INTUR | Cc4 | BCP | Banca di Credito Popolare |
 
+## Deploy — NanoClaw Agent
+
+L'agente WhatsApp gira in un container NanoClaw. La configurazione è in `deploy/`.
+
+```
+deploy/
+├── nanoclaw_group_config.yaml   ← mounts, secrets, env, capabilities (reference)
+├── architecture.mermaid         ← diagramma architetturale (render su mermaid.live)
+└── DEPLOY.md                    ← procedura step-by-step
+```
+
+### Mounts del container
+
+| # | Host | Container | Mode | Cosa |
+|---|------|-----------|------|------|
+| 1 | `~/dev/Projects/hotelops` | `/workspace/extra/hotelops-repo` | ro | Codice pipeline + CLI |
+| 2 | `~/dev/projects/obsidian/Obsidian Vault/hotelops` | `/workspace/extra/obsidian-hotelops` | rw | Knowledge base (ontologia, procedure) |
+| 3 | `~/Library/CloudStorage/GoogleDrive-.../hotelops_datahub` | `/workspace/extra/datahub` | rw | Dati grezzi (Google Drive) |
+| 4 | *(Baileys-managed)* | `/workspace/group/uploads` | ro | File allegati WhatsApp |
+| 5 | `~/.config/hotelops/hotelops-nanoclaw-key.json` | `/workspace/extra/secrets/hotelops-nanoclaw-key.json` | ro | Service account BQ |
+
+### Configurazione NanoClaw
+
+NanoClaw non usa docker-compose. L'architettura è:
+- **macOS launchd** (`launchd/com.nanoclaw.plist`) → processo Node.js principale
+- **Container Docker** → spawned on-demand per ogni agente, gestito dal codice Node
+- **Config runtime** → SQLite DB (`registered_groups` table con `container_config`)
+- **Security** → `~/.config/nanoclaw/mount-allowlist.json` (lista path montabili)
+
+File del gruppo (`~/education/repos/AI_repos/nanoclaw/groups/hotelops/`):
+- `CLAUDE.md` — system prompt dell'agente (source of truth)
+- `group_config.yaml` — configurazione mounts/env (reference)
+- `.env` — environment variables
+- `python-requirements.txt` — pacchetti Python per il container
+- `hotelops.db` — SQLite locale del gruppo
+
+### Aggiornare il prompt dell'agente
+
+```bash
+# Edita direttamente nel repo NanoClaw (è il source of truth per il prompt)
+vim ~/education/repos/AI_repos/nanoclaw/groups/hotelops/CLAUDE.md
+
+# Rebuild container + restart (auto al prossimo messaggio WhatsApp)
+docker ps --filter name=nanoclaw-hotelops --format '{{.Names}}' | xargs -r docker kill
+cd ~/education/repos/AI_repos/nanoclaw && docker builder prune -f && ./container/build.sh
+```
+
+### Flusso file WhatsApp → BQ
+
+```
+WhatsApp allegato → Baileys → /workspace/group/uploads/{ts}-{file}
+  → python -m ingest.classify <file> --route --datahub /workspace/extra/datahub --ingest
+  → classify (10 detectors) → route (rename → Drive) → ingest (parse → BQ)
+```
+
 ## Known Issues / Tech Debt
 
 - **v_budget_vs_consuntivo**: SQL definition not in `core/bq/views/` — exists only in BigQuery. Should be versioned locally.
@@ -450,6 +505,7 @@ Dev: `pytest`, `ruff` (`.[dev]`).
 
 ```
 tests/
+├── test_classify.py        — File classifier: 65 tests, all 10 detectors + routing + lifecycle
 ├── test_contracts.py       — Schema validation tests
 └── test_materialize.py     — Materialization tests
 ```

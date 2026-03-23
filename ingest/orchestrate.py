@@ -229,6 +229,29 @@ def _dim_piano_conti_args(ctx: dict) -> list[str]:
     return _dim_categorie_args(ctx)
 
 
+def _partite_discover(ctx: dict) -> list[list[str]]:
+    """Discover partite fornitori files in partite_fornitori/{ORTI,INTUR}/."""
+    pt_dir = ctx["datahub"] / "partite_fornitori"
+    if not pt_dir.exists():
+        return []
+    runs = []
+    for societa_dir in ["ORTI", "INTUR"]:
+        sdir = pt_dir / societa_dir
+        if not sdir.exists():
+            continue
+        files = sorted(sdir.glob("*.xlsx")) + sorted(sdir.glob("*.xls"))
+        files = [f for f in files if not f.name.startswith("~$")]
+        if not files:
+            continue
+        # SNAPSHOT: only latest file matters
+        latest = files[-1]
+        args = ["--file", str(latest), "--societa", societa_dir]
+        if ctx["dry_run"]:
+            args.append("--dry-run")
+        runs.append(args)
+    return runs
+
+
 def _scheda_contabile_discover(ctx: dict) -> list[list[str]]:
     """Discover scheda contabile files in schede_contabili/{ORTI,INTUR}/."""
     sc_dir = ctx["datahub"] / "schede_contabili"
@@ -338,6 +361,10 @@ MULTI_PIPELINES = [
      "ingest.amministrativa.ingest_scheda_contabile",
      _scheda_contabile_discover,
      "Scheda contabile Esolver → f_saldi_banca_snapshot"),
+    ("partite_fornitori", "amministrativa",
+     "ingest.amministrativa.ingest_partite_aperte",
+     _partite_discover,
+     "Partite aperte fornitori → f_partite_aperte_fornitori"),
 ]
 
 

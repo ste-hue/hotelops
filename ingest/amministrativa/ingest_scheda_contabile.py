@@ -368,7 +368,7 @@ def write_saldi_to_bq(
             "banca_id": banca_id,
             "data_snapshot": d.isoformat(),
             "saldo_finale": saldo,
-            "fonte": "SCHEDA_CONTABILE",
+            "file_sorgente": "SCHEDA_CONTABILE",
         })
 
     if dry_run:
@@ -386,7 +386,7 @@ def write_saldi_to_bq(
     DELETE FROM `{BQ_TABLE}`
     WHERE societa_id = '{societa_id}'
       AND banca_id = '{banca_id}'
-      AND fonte = 'SCHEDA_CONTABILE'
+      AND file_sorgente = 'SCHEDA_CONTABILE'
       AND CAST(data_snapshot AS STRING) IN ({date_list})
     """
     client.query(delete_sql).result()

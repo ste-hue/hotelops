@@ -22,6 +22,7 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 from google.cloud import bigquery
@@ -44,7 +45,11 @@ BQ_SNAPSHOT_TABLE = "hotelops-suite.hotelops.f_saldi_banca_snapshot"
 
 SOCIETA_KEYWORDS = {"INTUR": "INTUR", "ORTI": "ORTI"}
 # Longer keys first so MPS_KROSS is matched before MPS
-BANCA_KEYWORDS = {"MPS_KROSS": "MPS_KROSS", "MPS KROSS": "MPS_KROSS", "INTESA": "INTESA", "SELLA": "SELLA", "MPS": "MPS"}
+# Longer keys first so MPS_KROSS is matched before MPS
+BANCA_KEYWORDS = {
+    "MPS_KROSS": "MPS_KROSS", "MPS KROSS": "MPS_KROSS", "KROSS": "MPS_KROSS",
+    "INTESA": "INTESA", "SELLA": "SELLA", "BCP": "BCP", "MPS": "MPS",
+}
 
 EXCEL_EXTENSIONS = {".xls", ".xlsx"}
 
@@ -88,8 +93,43 @@ def setup_logging(log_dir: Path, verbose: bool = False) -> logging.Logger:
     return logger
 
 
+def _detect_banca_from_content(filepath: Path) -> Optional[str]:
+    """Detect bank type by inspecting file content (headers/columns)."""
+    ext = filepath.suffix.lower()
+    try:
+        if ext in (".xls", ".xlsx"):
+            # Check if it's actually xlsx (PK header) or xls
+            with open(filepath, "rb") as f:
+                is_xlsx = f.read(2) == b"PK"
+            if is_xlsx:
+                df = pd.read_excel(filepath, nrows=5)
+            else:
+                df = pd.read_excel(filepath, nrows=5)
+            cols_upper = {str(c).upper() for c in df.columns}
+            # MPS classic: Data, Valuta, Dare, Avere, Descrizione operazioni
+            if {"DATA", "VALUTA", "DARE", "AVERE"}.issubset(cols_upper):
+                return "MPS"
+            # MPS 2026: DATA CONT., DATA VAL., DESCRIZIONE, IMPORTO(€)
+            if any("DATA CONT" in c for c in cols_upper):
+                return "MPS"
+            # Intesa: Data Contabile, Data Valuta
+            if any("DATA CONTABILE" in c for c in cols_upper):
+                return "INTESA"
+            # Sella: Codice identificativo, Data operazione
+            if any("CODICE IDENTIFICATIVO" in c for c in cols_upper):
+                return "SELLA"
+        elif ext == ".csv":
+            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                header = f.readline().upper()
+            if "CODICE IDENTIFICATIVO" in header:
+                return "SELLA"
+    except Exception:
+        pass
+    return None
+
+
 def infer_meta(filepath: Path) -> dict:
-    """Infer societa and banca from keywords in filename, falling back to folder path."""
+    """Infer societa and banca from keywords in filename, folder path, and file content."""
     name_upper = filepath.name.upper()
     path_upper = str(filepath).upper()
     date_match = re.search(r"\d{4}-\d{2}-\d{2}", filepath.name)
@@ -101,8 +141,11 @@ def infer_meta(filepath: Path) -> dict:
     )
     banca = (
         next((v for k, v in BANCA_KEYWORDS.items() if k in name_upper), None)
-        or next((v for k, v in BANCA_KEYWORDS.items() if k in path_upper), "UNKNOWN")
+        or next((v for k, v in BANCA_KEYWORDS.items() if k in path_upper), None)
     )
+    # Fallback: detect banca from file content (headers/columns)
+    if not banca:
+        banca = _detect_banca_from_content(filepath) or "UNKNOWN"
     return {
         "data_ingresso": data_ingresso,
         "funzione": DEFAULT_FUNZIONE,
@@ -209,8 +252,14 @@ def read_mps_excel(path: Path, logger: logging.Logger) -> list[dict]:
 
     rows = []
     for i, r in df.iterrows():
-        dare = r["Dare"] if pd.notna(r["Dare"]) else 0.0
-        avere = r["Avere"] if pd.notna(r["Avere"]) else 0.0
+        # Skip footer rows (RIEPILOGO, repeated headers, totals)
+        raw_dare = r["Dare"]
+        raw_avere = r["Avere"]
+        try:
+            dare = float(raw_dare) if pd.notna(raw_dare) else 0.0
+            avere = float(raw_avere) if pd.notna(raw_avere) else 0.0
+        except (ValueError, TypeError):
+            continue
         if dare == 0 and avere == 0:
             continue
         d_op = r["Data"].strftime("%d/%m/%y") if pd.notna(r["Data"]) and hasattr(r["Data"], "strftime") else str(r["Data"])
@@ -435,12 +484,20 @@ def upsert_saldo_snapshot(bq_client: bigquery.Client, snapshot: dict, dry_run: b
         ]
         bq_client.create_table(bq_lib.Table(table_id, schema=schema))
         logger.info(f"  Created {table_id}")
-    bq_client.query(f"""
-    DELETE FROM `{table_id}`
-    WHERE societa_id = '{snapshot["societa_id"]}'
-      AND banca_id = '{snapshot["banca_id"]}'
-      AND data_snapshot = DATE('{snapshot["data_snapshot"]}')
-    """).result()
+    try:
+        bq_client.query(f"""
+        DELETE FROM `{table_id}`
+        WHERE societa_id = '{snapshot["societa_id"]}'
+          AND banca_id = '{snapshot["banca_id"]}'
+          AND data_snapshot = DATE('{snapshot["data_snapshot"]}')
+        """).result()
+    except Exception as e:
+        # Streaming buffer conflict — rows just inserted can't be DELETEd yet.
+        # Safe to skip: we'll just INSERT (may produce a dupe for today, next run cleans up).
+        if "streaming buffer" in str(e).lower():
+            logger.warning(f"  Saldo skip DELETE (streaming buffer): {snapshot['societa_id']}/{snapshot['banca_id']} — inserting anyway")
+        else:
+            raise
     errors = bq_client.insert_rows_json(table_id, [snapshot])
     if errors:
         logger.error(f"  Snapshot errors: {errors[:2]}")

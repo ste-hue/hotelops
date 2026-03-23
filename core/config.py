@@ -17,6 +17,7 @@ F_COPERTI_GIORNALIERI       = _t("f_coperti_giornalieri")
 F_CHIUSURA_MENSILE          = _t("f_chiusura_mensile")
 F_PARTITE_APERTE_FORNITORI  = _t("f_partite_aperte_fornitori")
 F_AFFIDAMENTI               = _t("f_affidamenti")
+F_RICEVUTE_FISCALI          = _t("f_ricevute_fiscali")
 
 # Dimension tables
 D_VOCI_PIANO_FINANZIARIO    = _t("d_voci_piano_finanziario")

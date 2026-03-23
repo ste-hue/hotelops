@@ -2,7 +2,7 @@
 
 import pytest
 
-from lib.contracts import SchemaViolationError, validate_columns
+from core.contracts import SchemaViolationError, validate_columns
 
 
 def test_validate_columns_passes_when_all_present():
