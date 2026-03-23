@@ -2,7 +2,7 @@
 """
 Mastrino (ERP accounting ledger) ingestion pipeline.
 
-Reads raw mastrino Excel files from datahub/banche/ subfolders,
+Reads raw mastrino Excel files from datahub/homebanking/ subfolders,
 transforms them to 5D fact rows, appends to fatti/f_ledger_movimenti.csv.
 
 Usage:

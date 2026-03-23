@@ -16,9 +16,9 @@ Usage:
 
 Datahub structure (Google Drive):
     hotelops_datahub/
-    ├── banche/{ORTI,INTUR}/                → ingest.banca.ingest (f_banche_movimenti)
+    ├── homebanking/{ORTI,INTUR}/            → ingest.banca.ingest (f_banche_movimenti)
     ├── movimenti_contabili/{ORTI,INTUR}/   → ingest.amministrativa.ingest_movimenti_contabili
-    ├── schede_contabili/{ORTI,INTUR}/      → ingest.amministrativa.ingest_scheda_contabile (f_saldi_banca_snapshot)
+    ├── registro_banca_esolver/{ORTI,INTUR}/ → ingest.amministrativa.ingest_scheda_contabile (f_saldi_banca_snapshot)
     ├── partite_fornitori/{ORTI,INTUR}/     → ingest.amministrativa.ingest_partite_aperte
     ├── accodamenti/ORTI/                   → ingest.banca.ingest_accodamenti (f_accodamenti)
     ├── economato/                          → ingest.amministrativa.ingest_consumi_economato
@@ -253,8 +253,8 @@ def _partite_discover(ctx: dict) -> list[list[str]]:
 
 
 def _scheda_contabile_discover(ctx: dict) -> list[list[str]]:
-    """Discover scheda contabile files in schede_contabili/{ORTI,INTUR}/."""
-    sc_dir = ctx["datahub"] / "schede_contabili"
+    """Discover scheda contabile files in registro_banca_esolver/{ORTI,INTUR}/."""
+    sc_dir = ctx["datahub"] / "registro_banca_esolver"
     if not sc_dir.exists():
         return []
     runs = []

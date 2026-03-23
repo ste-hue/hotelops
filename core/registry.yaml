@@ -67,7 +67,7 @@ file_types:
 
   banca:
     lifecycle: APPEND
-    dest_folder: "banche/{societa}"
+    dest_folder: "homebanking/{societa}"
     bq_table: f_banche_movimenti
     pipeline: "ingest.banca.ingest"
     split_by_societa: true
@@ -88,7 +88,7 @@ file_types:
 
   scheda_contabile:
     lifecycle: APPEND
-    dest_folder: "schede_contabili/{societa}"
+    dest_folder: "registro_banca_esolver/{societa}"
     bq_table: f_saldi_banca_snapshot
     pipeline: "ingest.amministrativa.ingest_scheda_contabile"
     split_by_societa: true

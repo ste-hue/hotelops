@@ -2,7 +2,7 @@
 """
 Sync bank files from Google Drive to local staging using rclone.
 
-Syncs banche/{ORTI,INTUR}/ from hotelops_datahub.
+Syncs homebanking/{ORTI,INTUR}/ from hotelops_datahub.
 
 Usage:
     python -m ingest.banca.fetch_drive --staging ~/.cache/hotelops/banche_staging

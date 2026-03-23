@@ -11,8 +11,8 @@ Supports TWO export formats:
   2. CSV (semicolon-delimited) — from Esolver direct export (dates always correct)
 
 Source (Drive):
-    hotelops_datahub/schede_contabili/ORTI/
-    hotelops_datahub/schede_contabili/INTUR/
+    hotelops_datahub/registro_banca_esolver/ORTI/
+    hotelops_datahub/registro_banca_esolver/INTUR/
 
 Filename patterns (auto-infer societa + banca):
     XLSX: MPSORTI_schedacontabile.xlsx, ORTI_scheda_contabile_MPS_20260318.xlsx
@@ -30,7 +30,7 @@ Usage:
         --societa ORTI --banca MPS
 
     python -m ingest.amministrativa.ingest_scheda_contabile \\
-        --dir /path/to/schede_contabili/ORTI/ --societa ORTI
+        --dir /path/to/registro_banca_esolver/ORTI/ --societa ORTI
 
     python -m ingest.amministrativa.ingest_scheda_contabile \\
         --file export.xlsx --societa ORTI --banca MPS --dry-run
@@ -334,13 +334,35 @@ def infer_banca_from_filename(filename: str, societa: str | None = None) -> str 
     return None
 
 
-def infer_societa_from_filename(filename: str) -> str | None:
-    """Try to infer societa from filename."""
+def infer_societa_from_filename(filename: str, banca: str | None = None) -> str | None:
+    """
+    Infer societa from filename.
+
+    Tries in order:
+      1. Explicit ORTI/INTUR in filename
+      2. Reverse lookup: Cc# + banca → societa (when combo is unambiguous)
+      3. Reverse lookup: Cc# alone (if unique across both società)
+    """
     upper = filename.upper()
     if "INTUR" in upper:
         return "INTUR"
     if "ORTI" in upper:
         return "ORTI"
+
+    # Reverse inference from Cc# (same logic as classify.py)
+    cc_match = re.search(r"_CC(\d+)_", upper)
+    if cc_match:
+        cc_num = cc_match.group(1)
+        # If banca is known, check (societa, cc) → banca matches
+        if banca:
+            for (soc, cc), bnk in ESOLVER_CC_MAP.items():
+                if cc == cc_num and bnk == banca:
+                    return soc
+        # Otherwise, check if cc# is unique to one societa
+        candidates = {soc for (soc, cc) in ESOLVER_CC_MAP if cc == cc_num}
+        if len(candidates) == 1:
+            return candidates.pop()
+
     return None
 
 
@@ -440,7 +462,7 @@ def main():
         description="Scheda contabile Esolver → f_saldi_banca_snapshot"
     )
     parser.add_argument("--file", "-f", help="Single file to process")
-    parser.add_argument("--dir", "-d", help="Directory to scan (e.g. schede_contabili/ORTI/)")
+    parser.add_argument("--dir", "-d", help="Directory to scan (e.g. registro_banca_esolver/ORTI/)")
     parser.add_argument("--societa", default=None, choices=["ORTI", "INTUR"],
                         help="Società ID (auto-inferred from filename if omitted)")
     parser.add_argument("--banca", default=None,
@@ -460,11 +482,13 @@ def main():
         if not filepath.exists():
             log.error(f"File not found: {filepath}")
             sys.exit(1)
-        societa = args.societa or infer_societa_from_filename(filepath.name)
+        # Infer banca first (needed for reverse societa lookup from Cc#)
+        banca = args.banca or infer_banca_from_filename(filepath.name, args.societa)
+        societa = args.societa or infer_societa_from_filename(filepath.name, banca)
         if not societa:
             log.error(f"Cannot infer societa from {filepath.name}. Use --societa.")
             sys.exit(1)
-        total = process_file(filepath, societa, args.banca, args.dry_run)
+        total = process_file(filepath, societa, banca, args.dry_run)
 
     elif args.dir:
         dirpath = Path(args.dir)
@@ -495,14 +519,15 @@ def main():
 
         log.info(f"Found {len(files)} files in {dirpath}")
         for filepath in files:
-            societa = args.societa or infer_societa_from_filename(filepath.name)
+            banca = args.banca or infer_banca_from_filename(filepath.name, args.societa)
+            societa = args.societa or infer_societa_from_filename(filepath.name, banca)
             if not societa:
                 # Try inferring from parent directory name
                 societa = dirpath.name if dirpath.name in ("ORTI", "INTUR") else None
             if not societa:
                 log.warning(f"Skipping {filepath.name}: cannot infer societa")
                 continue
-            n = process_file(filepath, societa, args.banca, args.dry_run)
+            n = process_file(filepath, societa, banca, args.dry_run)
             total += n
 
     log.info(f"Total saldi written: {total}")

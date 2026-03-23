@@ -2,7 +2,7 @@
 """
 Bank transaction ingestion pipeline.
 
-Reads raw bank files from datahub/banche/{ORTI,INTUR}/,
+Reads raw bank files from datahub/homebanking/{ORTI,INTUR}/,
 transforms them to 5D fact rows, appends to fatti/f_banche_movimenti.csv.
 
 Supports: Sella CSV, MPS Excel, Intesa Excel.

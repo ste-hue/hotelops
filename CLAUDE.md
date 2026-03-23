@@ -26,9 +26,9 @@ Raw data lives in the Datahub (Google Drive: `hotelops_datahub/`). Analytics liv
 
 ```
 hotelops_datahub/
-├── banche/{ORTI,INTUR}/                ← Bank Excel files (MPS, Sella, Intesa) from home banking
+├── homebanking/{ORTI,INTUR}/           ← Estratti conto da portale banca (MPS, Sella, Intesa XLS/XLSX)
 ├── movimenti_contabili/{ORTI,INTUR}/   ← Esolver prima nota (LISTAMOVCONT.XLS)
-├── schede_contabili/{ORTI,INTUR}/      ← Esolver scheda contabile (bank account ledger) — CSV or XLSX
+├── registro_banca_esolver/{ORTI,INTUR}/ ← Esolver scheda contabile (registro del conto banca) — CSV or XLSX
 ├── partite_fornitori/{ORTI,INTUR}/     ← Esolver situazione partite fornitori (snapshot periodici)
 ├── piani_finanziari/{ORTI,INTUR}/      ← Piano Finanziario Excel (Rosa, mensili)
 ├── accodamenti/ORTI/                   ← HotelCube PMS TXT files (corrispettivi, fatture, movimenti)
@@ -211,7 +211,7 @@ f_banche_movimenti ───────────┘                        (
 - `ingest/classify.py` — **File classifier + router**: content-based detection of 10 file types (banca, scheda_contabile, movimenti_contabili, partite_fornitori, bilancino, gasparotto, piano_finanziario, accodamenti, coperti, economato). Infers societa+banca from content and filename. Renames to canonical convention, routes to correct datahub folder, triggers ingest pipeline. Used by `hotelops classifica` CLI and NanoClaw agent.
 - `ingest/orchestrate.py` — Unified pipeline runner. Sync → classify → ingest → manifest. Groups: banca, amministrativa, dimensioni. All paths point to datahub root (no more `ingresso/` prefix).
 - `ingest/banca/` — Bank and PMS pipelines:
-  - `fetch_drive.py` — Sync `banche/` from Drive via rclone.
+  - `fetch_drive.py` — Sync `homebanking/` from Drive via rclone.
   - `ingest.py` — Parse XLS/XLSX (MPS, Sella, Intesa) → f_banche_movimenti.
   - `ingest_accodamenti.py` — HotelCube PMS → f_accodamenti.
   - `ingest_mastrino.py` — Bank mastrino parsing.

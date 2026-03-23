@@ -360,7 +360,7 @@ def _build_scheda_result(
     bnk = banca or "UNKNOWN"
     ext = path.suffix.lower()
     canonical = f"{soc}_SCHEDA_{bnk}_{today}{ext}"
-    dest = f"schede_contabili/{soc}" if societa else "schede_contabili"
+    dest = f"registro_banca_esolver/{soc}" if societa else "registro_banca_esolver"
     pipeline = f"python -m ingest.amministrativa.ingest_scheda_contabile --file {{dest_file}}"
     if societa:
         pipeline += f" --societa {societa}"
@@ -690,7 +690,7 @@ def _build_banca_result(
     today = datetime.now().strftime("%Y%m%d")
     ext = path.suffix.lower()
     canonical = f"{soc}_{bnk}_{today}{ext}"
-    dest = f"banche/{soc}" if societa else "banche"
+    dest = f"homebanking/{soc}" if societa else "homebanking"
     # Bank ingest uses --source dir, not single file — just indicate pipeline
     pipeline = f"python -m ingest.banca.ingest --datahub {{datahub}} --source {{staging}}"
     return ClassificationResult(
@@ -925,7 +925,7 @@ def route_file(
     Copy file to its canonical datahub location via rclone (Drive) or local copy.
 
     Destination path: {RCLONE_DATAHUB}/{INGRESSO_PREFIX}/{dest_folder}/{canonical_name}
-    e.g. 00_hotelops_datahub/ingresso/banche/ORTI/ORTI_MPS_20260323.xls
+    e.g. 00_hotelops_datahub/ingresso/homebanking/ORTI/ORTI_MPS_20260323.xls
 
     Returns the destination path (local staging copy), or None if routing not possible.
     """
