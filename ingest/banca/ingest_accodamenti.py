@@ -39,7 +39,7 @@ from pathlib import Path
 
 import pandas as pd
 from google.cloud import bigquery
-from src.parser import parse_corrispettivi, parse_fatture, parse_movimenti
+from ingest.banca.parser_accodamenti import parse_corrispettivi, parse_fatture, parse_movimenti
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
