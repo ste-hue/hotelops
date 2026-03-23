@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last checkpoint:** 2026-03-22 | **Version:** 0.3.1
+**Last checkpoint:** 2026-03-23 | **Version:** 0.4.0
 
 ## Project Overview
 
@@ -142,7 +142,7 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup — file accumul
 | `f_consumi_economato` | Consumi materie prime per reparto/prodotto. | APPEND | MD5 dedup |
 | `f_coperti_giornalieri` | Coperti pasto giornalieri per BU/tipo_ospite. | APPEND | MD5 dedup |
 | `f_chiusura_mensile` | Snapshot chiusura mese: previsione vs consuntivo per voce + saldo banca. Scritto da `hotelops chiudi`. Serve per tracciare l'accuratezza delle previsioni nel tempo. | SNAPSHOT | DELETE-INSERT per societa+anno+mese |
-| `f_saldi_banca_snapshot` | Saldo banca reale. Fonti: SCHEDA_CONTABILE (Esolver scheda contabile, end-of-day running balance — primary), BANCA_EXCEL (header Excel MPS — legacy). Usato da v_previsione_cassa come ancora per cash forward. Pipeline: `ingest_scheda_contabile.py` (CSV+XLSX, auto DD/MM swap fix). | APPEND | DELETE-INSERT per societa+banca+data_snapshot+fonte |
+| `f_saldi_banca_snapshot` | Registro contabile banca da Esolver (end-of-day running balance). Fonte: SCHEDA_CONTABILE (file_sorgente column). Datahub: `registro_banca_esolver/`. Usato da v_previsione_cassa come ancora per cash forward. Pipeline: `ingest_scheda_contabile.py` (CSV+XLSX, auto DD/MM swap fix, reverse Cc#→societa inference). | APPEND | DELETE-INSERT per societa+banca+data_snapshot+file_sorgente |
 | `f_partite_aperte_fornitori` | Snapshot partite aperte fornitori da Esolver. TERZA DIMENSIONE (IMPEGNO): fatture registrate non ancora pagate, con data_scadenza. Flag intercompany per PANORAMA COMPANY. | SNAPSHOT | DELETE-INSERT per societa+data_snapshot |
 | `f_mastrino_consolidato` | Mastrino consolidato da "Costi Ricavi 2025-2026 Budget.xlsx". 901 righe. | APPEND | MD5 dedup |
 | `f_affidamenti` | Affidamenti bancari (linee di credito). Definito in config.py, schema TBD. | TBD | TBD |
@@ -152,7 +152,7 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup — file accumul
 | Table | Description | Update |
 |-------|-------------|--------|
 | `d_voci_piano_finanziario` | 28 voci PF mappate a codici conto Esolver via LIKE patterns. Source: `core/bq/dimensioni/d_voci_piano_finanziario.csv`. | WRITE_TRUNCATE |
-| `d_piano_conti` | Piano dei conti 2026 — 2,103 conti con codice (dotted), tipo, sezione (CE/SP). | WRITE_TRUNCATE |
+| `d_piano_conti` | Piano dei conti 2026 — 160 conti con codice (dotted), tipo, sezione (CE/SP). | WRITE_TRUNCATE |
 | `d_categorie_conti` | Mapping canonici: codice_conto → (tipo_costo, categoria_ce). 167 righe da "Costi Ricavi" sheet CATEGORIE. | WRITE_TRUNCATE |
 | `d_fornitori` | Fornitori ORTI (65) con voce_id e flag intercompany. Source: `core/bq/dimensioni/d_fornitori.csv`. | WRITE_TRUNCATE |
 | `d_budget_costi_fissi` | Costi fissi annuali per BU (43 righe). Source: MAPPATURA DEI COSTI_v_2.xlsx. | WRITE_TRUNCATE |
@@ -214,6 +214,7 @@ f_banche_movimenti ───────────┘                        (
   - `fetch_drive.py` — Sync `homebanking/` from Drive via rclone.
   - `ingest.py` — Parse XLS/XLSX (MPS, Sella, Intesa) → f_banche_movimenti.
   - `ingest_accodamenti.py` — HotelCube PMS → f_accodamenti.
+  - `parser_accodamenti.py` — Esolver TXT pipe-delimited parser (ported from reconciliation_dino, no external deps).
   - `ingest_mastrino.py` — Bank mastrino parsing.
 - `ingest/amministrativa/` — Accounting, budget, consumption pipelines:
   - `ingest_scheda_contabile.py` — **NEW**: Esolver scheda contabile (CSV semicolon + XLSX) → f_saldi_banca_snapshot. Auto DD/MM swap fix for XLSX. Infers societa+banca from filename (Cc# or bank name). Supports all 7 bank accounts: MPS, MPS_KROSS, INTESA × ORTI + MPS, SELLA, INTESA, BCP × INTUR.
@@ -241,19 +242,11 @@ f_banche_movimenti ───────────┘                        (
 
 **Root**
 - `cli.py` — **CLI entry point** (`hotelops` command). Imports from core + condges + ingest. 8 subcommands: pf, bva, chiudi, saldo, health, previsione, voci, classifica.
-- `nanoclaw_hotelops_CLAUDE_v2.md` — System prompt for NanoClaw WhatsApp agent (current version).
+- `core/registry.yaml` — **Pipeline registry**: single source of truth for file types, dest folders, BQ tables, signatures. classify.py and orchestrate.py reference this.
 - `BRIEF_APP_PIANO_FINANZIARIO.md` — Streamlit app specification document (31KB).
 - `CHANGELOG.md` — Recent changes log.
 - `meta/reference/` — PDC 2025 vs 2026 reference files + INTUR/ORTI relationship docs.
 - `meta/skills/hotelops-data-analyst/` — NanoClaw data analyst skill (duplicate of core/bq/ version).
-
-**Deprecated** (backward compat shims — still present, will be removed)
-- `lib/` → use `core/`
-- `pipelines/` → use `ingest/`
-- `actions/` → use `condges/`
-- `dashboard/` → use `condges/`
-- `bq/` → duplicate of `core/bq/`, use `core/bq/`
-- `_archive/` — old Notion sync, ontology, services, tools (archived, not active)
 
 ### Data model
 
@@ -372,7 +365,7 @@ Ogni mese il modello si affina: le previsioni si aggiustano, gli snapshot tracci
 ## NanoClaw Agent Integration
 
 NanoClaw (WhatsApp agent) is the query + alerting runtime. Read-only + pipeline control (no writes).
-System prompt: `nanoclaw_hotelops_CLAUDE_v2.md`.
+System prompt lives in the NanoClaw repo: `~/education/repos/AI_repos/nanoclaw/groups/hotelops/CLAUDE.md`.
 
 ### Pipeline triggers
 
@@ -490,8 +483,9 @@ WhatsApp allegato → Baileys → /workspace/group/uploads/{ts}-{file}
 ## Known Issues / Tech Debt
 
 - **v_budget_vs_consuntivo**: SQL definition not in `core/bq/views/` — exists only in BigQuery. Should be versioned locally.
-- **Deprecated dirs** (lib/, pipelines/, actions/, dashboard/, bq/) still present. Safe to remove once all imports verified.
 - **f_affidamenti**: table ID defined in config.py but no Pydantic schema or ingest pipeline yet.
+- **f_chiusura_mensile**: referenced in CLAUDE.md but table doesn't exist in BQ yet. Created by `hotelops chiudi` (not yet run).
+- **Registry not wired**: `core/registry.yaml` defines file types/dest_folders but classify.py and orchestrate.py still hardcode paths. Next refactor: read from registry.
 
 ## Dependencies
 
