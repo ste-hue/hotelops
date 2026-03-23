@@ -1,0 +1,213 @@
+# ══════════════════════════════════════════════════════════════════════
+# HOTELOPS FILE REGISTRY — Single Source of Truth
+# ══════════════════════════════════════════════════════════════════════
+# Ogni tipo di file, la sua destinazione, il suo lifecycle, il suo
+# pipeline. classify.py e orchestrate.py leggono da qui.
+# Aggiungi un tipo? Modifica SOLO questo file.
+# ══════════════════════════════════════════════════════════════════════
+
+# ── Società ──────────────────────────────────────────────────────────
+societa:
+  ORTI:
+    nome: "ORTI S.r.l."
+    tipo: "operativa"
+    business_units: [HOTEL, RESIDENCE, CVM, HQ]
+  INTUR:
+    nome: "INTUR S.r.l."
+    tipo: "holding"
+    business_units: [LIDO, HQ]
+
+# ── Banche ───────────────────────────────────────────────────────────
+banche:
+  MPS:
+    nome: "Monte dei Paschi di Siena"
+    aliases: [MPS, MONTEPASCHI, MONTE_PASCHI, BANCAMPS]
+    societa: [ORTI, INTUR]
+  MPS_KROSS:
+    nome: "MPS Kross"
+    aliases: [KROSS, MPS_KROSS, MPSKROSS]
+    societa: [ORTI]
+  SELLA:
+    nome: "Banca Sella"
+    aliases: [SELLA, BANCASELLA]
+    societa: [INTUR]
+  INTESA:
+    nome: "Intesa Sanpaolo"
+    aliases: [INTESA, SANPAOLO, INTESASANPAOLO]
+    societa: [ORTI, INTUR]
+  BCP:
+    nome: "Banca di Credito Popolare"
+    aliases: [BCP, CREDITO_POPOLARE, CREDITOPOPOLARE]
+    societa: [INTUR]
+
+# ── Esolver Cc# mapping ─────────────────────────────────────────────
+esolver_cc_map:
+  ORTI:
+    "1": INTESA
+    "2": MPS_KROSS
+    "3": MPS
+  INTUR:
+    "1": SELLA
+    "2": MPS
+    "3": INTESA
+    "4": BCP
+
+# ── File types ───────────────────────────────────────────────────────
+# Ogni entry definisce:
+#   category:    nome logico (usato come chiave)
+#   lifecycle:   APPEND (accumula, MD5 dedup) | SNAPSHOT (ultimo sostituisce)
+#   dest_folder: path relativo nel datahub ({societa} viene espanso)
+#   bq_table:    tabella BigQuery di destinazione
+#   pipeline:    modulo python per l'ingestione
+#   split_by_societa: true se la cartella ha sottocartelle ORTI/INTUR
+#   formats:     estensioni accettate
+#   signatures:  come riconoscere il file dal contenuto
+
+file_types:
+
+  banca:
+    lifecycle: APPEND
+    dest_folder: "banche/{societa}"
+    bq_table: f_banche_movimenti
+    pipeline: "ingest.banca.ingest"
+    split_by_societa: true
+    formats: [.xls, .xlsx, .csv]
+    signatures:
+      - type: columns
+        required: ["DATA", "VALUTA", "DARE", "AVERE"]
+        bank: MPS
+      - type: columns
+        required: ["DATA CONT", "DATA VAL", "IMPORTO"]
+        bank: MPS
+      - type: columns
+        required: ["DATA CONTABILE", "DATA VALUTA", "DARE", "AVERE"]
+        bank: INTESA
+      - type: columns
+        required: ["CODICE IDENTIFICATIVO", "DATA OPERAZIONE", "DEBITO"]
+        bank: SELLA
+
+  scheda_contabile:
+    lifecycle: APPEND
+    dest_folder: "schede_contabili/{societa}"
+    bq_table: f_saldi_banca_snapshot
+    pipeline: "ingest.amministrativa.ingest_scheda_contabile"
+    split_by_societa: true
+    formats: [.csv, .xlsx]
+    signatures:
+      - type: columns
+        required: ["SALDO", "UDC"]
+      - type: columns
+        required: ["DARE", "AVERE", "SALDO", "REGISTR"]
+      - type: filename
+        pattern: "_Conto_.*_Cc\\d+_Saldo"
+
+  movimenti_contabili:
+    lifecycle: APPEND
+    dest_folder: "movimenti_contabili/{societa}"
+    bq_table: f_movimenti_contabili
+    pipeline: "ingest.amministrativa.ingest_movimenti_contabili"
+    split_by_societa: true
+    formats: [.xls]
+    signatures:
+      - type: filename
+        pattern: "LISTAMOVCONT"
+      - type: structure
+        min_columns: 20
+        col12_pattern: "^\\d{5,7}$"
+
+  partite_fornitori:
+    lifecycle: SNAPSHOT
+    dest_folder: "partite_fornitori/{societa}"
+    bq_table: f_partite_aperte_fornitori
+    pipeline: "ingest.amministrativa.ingest_partite_aperte"
+    split_by_societa: true
+    formats: [.xlsx]
+    signatures:
+      - type: columns
+        required: ["FORNITORE", "SCADENZA"]
+      - type: columns
+        required: ["RAG.SOCIALE", "RESIDUO"]
+      - type: filename
+        pattern: "PARTIT.*(?:FORNI|APERTE)"
+
+  bilancino:
+    lifecycle: SNAPSHOT
+    dest_folder: "bilancino/{societa}"
+    bq_table: f_bilancino
+    pipeline: "ingest.amministrativa.ingest_bilancino"
+    split_by_societa: true
+    formats: [.xls]
+    signatures:
+      - type: filename
+        pattern: "ESOLVER"
+      - type: structure
+        col0_pattern: "^\\d{2}\\.\\d{2}\\.\\d{2}$"
+        col10_value: "si"
+
+  gasparotto:
+    lifecycle: SNAPSHOT
+    dest_folder: "gasparotto"
+    bq_table: f_budget_mensile
+    pipeline: "ingest.amministrativa.ingest_gasparotto"
+    split_by_societa: false
+    formats: [.xlsx]
+    signatures:
+      - type: filename
+        pattern: "MASTER.*(?:COMPLETO|INDICI)"
+      - type: sheets
+        required: ["BUDGET"]
+
+  piano_finanziario:
+    lifecycle: SNAPSHOT
+    dest_folder: "piani_finanziari/{societa}"
+    bq_table: f_piano_finanziario_input
+    pipeline: "ingest.amministrativa.ingest_piano_finanziario_xlsx"
+    split_by_societa: true
+    formats: [.xlsx]
+    signatures:
+      - type: filename
+        pattern: "PIANO.*FINANZIARIO"
+      - type: sheets
+        required: ["PIANO FINANZIARIO"]
+
+  accodamenti:
+    lifecycle: APPEND
+    dest_folder: "accodamenti/ORTI"
+    bq_table: f_accodamenti
+    pipeline: "ingest.banca.ingest_accodamenti"
+    split_by_societa: false
+    formats: [.txt]
+    signatures:
+      - type: filename
+        pattern: "^[HRC]_.*_(Corrispettivi|Fatture|Movimenti|Clienti)\\.txt$"
+      - type: content
+        delimiter: "|"
+        min_fields: 3
+
+  coperti:
+    lifecycle: APPEND
+    dest_folder: "coperti"
+    bq_table: f_coperti_giornalieri
+    pipeline: "ingest.amministrativa.ingest_coperti"
+    split_by_societa: false
+    formats: [.csv, .xlsx]
+    signatures:
+      - type: columns
+        required_any: ["BREAKFAST", "LUNCH", "DINNER", "COLAZIONE", "PRANZO", "CENA"]
+      - type: sheets
+        required_any: ["SCARICO_BRK", "SCARICO_LUNCH", "SCARICO_DINNER"]
+      - type: filename
+        pattern: "(?i)COPERT|SCARICO"
+
+  economato:
+    lifecycle: APPEND
+    dest_folder: "economato"
+    bq_table: f_consumi_economato
+    pipeline: "ingest.amministrativa.ingest_consumi_economato"
+    split_by_societa: false
+    formats: [.xlsx]
+    signatures:
+      - type: columns
+        required: ["CODICE", "DESCRIZIONE", "QUANTITA"]
+      - type: filename
+        pattern: "(?i)CONSUMI|ECONOMATO|SITUAZIONECONSUMI"

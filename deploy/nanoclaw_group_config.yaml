@@ -1,0 +1,115 @@
+# ═══════════════════════════════════════════════════════════════════════
+# NanoClaw Group Configuration — HotelOps
+# ═══════════════════════════════════════════════════════════════════════
+#
+# REFERENCE FILE — questo è il template di configurazione per il gruppo
+# NanoClaw "hotelops". Il formato reale dipende da come NanoClaw
+# legge group_config.yaml — verifica con `cat groups/hotelops/group_config.yaml`
+# nel repo NanoClaw per il formato nativo.
+#
+# Deploy targets:
+#   1. groups/hotelops/CLAUDE.md           ← copia nanoclaw_hotelops_CLAUDE_v2.md
+#   2. groups/hotelops/group_config.yaml   ← adatta questo file al formato NanoClaw
+#   3. ~/.config/nanoclaw/mount-allowlist.json ← aggiungi i path sotto
+#
+# Ultimo aggiornamento: 2026-03-23
+# ═══════════════════════════════════════════════════════════════════════
+
+group:
+  name: hotelops
+  description: "Cruscotto finanziario Gruppo Panorama"
+
+# ── System prompt ─────────────────────────────────────────────────────
+# Il file .md viene letto all'avvio e iniettato come system prompt.
+# Source of truth: hotelops repo → nanoclaw_hotelops_CLAUDE_v2.md
+prompt:
+  file: nanoclaw_hotelops_CLAUDE_v2.md
+  # Alternativa: path assoluto se non copiato nella cartella gruppo
+  # file: /workspace/extra/hotelops-repo/nanoclaw_hotelops_CLAUDE_v2.md
+
+# ── Mounts ────────────────────────────────────────────────────────────
+# Ogni mount mappa un path host → un path nel container NanoClaw.
+# L'agente vede solo i path container (/workspace/...).
+mounts:
+
+  # 1. REPO HOTELOPS — codice pipeline, CLI, views SQL
+  #    L'agente può leggere il codice ma NON modificarlo.
+  - host: ~/dev/Projects/hotelops
+    container: /workspace/extra/hotelops-repo
+    mode: ro  # read-only
+
+  # 2. OBSIDIAN VAULT — knowledge base strutturata
+  #    Ontologia (società, banche, fornitori), procedure, decisioni.
+  #    L'agente può scrivere nuove entità e aggiornare procedure.
+  - host: ~/dev/projects/obsidian/Obsidian Vault/hotelops
+    container: /workspace/extra/obsidian-hotelops
+    mode: rw  # read-write
+
+  # 3. GOOGLE DRIVE DATAHUB — dati grezzi in ingresso
+  #    File Excel/CSV da banche, Esolver, HotelCube.
+  #    L'agente scrive file classificati+rinominati qui (via classify --route).
+  - host: ~/Library/CloudStorage/GoogleDrive-stefano@panoramagroup.it/My Drive/hotelops_datahub
+    container: /workspace/extra/datahub
+    mode: rw  # read-write (per --route)
+
+  # 4. WHATSAPP UPLOADS — file ricevuti in chat
+  #    Baileys scarica allegati qui. L'agente li classifica e li smista.
+  #    Path pattern: /workspace/group/uploads/{timestamp}-{filename}
+  - host: <nanoclaw-managed>  # gestito internamente da NanoClaw/Baileys
+    container: /workspace/group/uploads
+    mode: ro  # read-only
+
+# ── Secrets ───────────────────────────────────────────────────────────
+# Service account per BigQuery. Non committare mai la chiave nel repo.
+secrets:
+  - host: ~/.config/hotelops/hotelops-nanoclaw-key.json
+    container: /workspace/extra/secrets/hotelops-nanoclaw-key.json
+
+# ── Environment ───────────────────────────────────────────────────────
+env:
+  GOOGLE_APPLICATION_CREDENTIALS: /workspace/extra/secrets/hotelops-nanoclaw-key.json
+  GOOGLE_CLOUD_PROJECT: hotelops-suite
+  PYTHONPATH: /workspace/extra/hotelops-repo
+
+# ── Capabilities ──────────────────────────────────────────────────────
+capabilities:
+  # L'agente può eseguire comandi Python/bash nel container
+  execute: true
+  # L'agente NON può accedere a Internet
+  internet: false
+  # L'agente NON può installare pacchetti (env pre-configurato)
+  install_packages: false
+
+# ── Pre-installed packages ────────────────────────────────────────────
+# Questi devono essere nel Dockerfile del container NanoClaw.
+# Se mancano, l'agente non può ingerire file.
+packages:
+  - google-cloud-bigquery
+  - pandas
+  - openpyxl
+  - xlrd
+  - pyyaml
+  - pydantic
+
+# ── Confirmation rules ────────────────────────────────────────────────
+# Azioni che richiedono conferma esplicita dall'utente prima di eseguire.
+confirm_before:
+  - pattern: "ingest.classify.*--route"
+    message: "Ho ricevuto {filename}. Lo classifico come {tipo} ({società}). Lo carico nel datahub e ingerisci in BQ?"
+  - pattern: "ingest.orchestrate"
+    message: "Aggiorno i dati {group}?"
+  - pattern: "cli chiudi"
+    message: "Chiudo il mese {mese}? (scrive snapshot in BQ)"
+  - pattern: "condges.update_previsione"
+    message: "Aggiorno previsione {voce} a €{importo}?"
+
+# ── Health check ──────────────────────────────────────────────────────
+# L'agente esegue un health check al primo messaggio del giorno.
+health_check:
+  on_first_message: true
+  command: "cd /workspace/extra/hotelops-repo && python -m cli health"
+  stale_thresholds:
+    f_banche_movimenti: 7        # giorni
+    f_movimenti_contabili: 15
+    f_partite_aperte_fornitori: 30
+    f_saldi_banca_snapshot: 30
