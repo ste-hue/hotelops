@@ -173,6 +173,56 @@ class PartitaApertaFornitoreRow(BaseModel):
     file_sorgente: str
 
 
+# ── f_ricavi_storici ─────────────────────────────────────────────────────────
+
+class RicaviStoriciRow(BaseModel):
+    """Schema for f_ricavi_storici — historical revenue by BU and month.
+
+    Source: Riepilogo Entrate XLSX from Antonio (2023-2025).
+    Pattern: APPEND + hash_riga dedup.
+    """
+    societa_id: SocietaId
+    business_unit_id: BusinessUnitId
+    anno: int
+    mese: int
+    importo_entrate: float
+    fonte: str
+    hash_riga: str
+    data_caricamento: str  # ISO timestamp
+
+    @field_validator("mese")
+    @classmethod
+    def mese_range(cls, v: int) -> int:
+        if not 1 <= v <= 12:
+            raise ValueError(f"mese fuori range: {v}")
+        return v
+
+
+# ── d_coefficienti_stagionalita ──────────────────────────────────────────────
+
+class CoefficienteStagionalitaRow(BaseModel):
+    """Schema for d_coefficienti_stagionalita — monthly seasonality weights.
+
+    coefficiente = 1.0 means average month. >1 = above-average, <1 = below.
+    Sum of 12 months' coefficients per BU = 12.0.
+    Source: computed from f_ricavi_storici (2023-2025 weighted average).
+    """
+    societa_id: SocietaId
+    business_unit_id: BusinessUnitId
+    mese: int
+    coefficiente: float
+    fonte: str
+    hash_riga: str
+    data_caricamento: str
+
+    @field_validator("mese")
+    @classmethod
+    def mese_range(cls, v: int) -> int:
+        if not 1 <= v <= 12:
+            raise ValueError(f"mese fuori range: {v}")
+        return v
+
+
 # ── Validation helper ────────────────────────────────────────────────────────
 
 class SchemaViolationError(Exception):
