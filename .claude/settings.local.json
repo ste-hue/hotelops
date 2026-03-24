@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(ruff check:*)",
-      "Bash(rclone copy:*)"
+      "Bash(rclone copy:*)",
+      "Bash(python:*)"
     ]
   }
 }

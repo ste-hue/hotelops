@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-REMOTE = "mywork:hotelops_datahub/banche"
+REMOTE = "mywork:00_hotelops_datahub/ingresso/homebanking"
 
 
 def main():

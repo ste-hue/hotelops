@@ -14,11 +14,11 @@ Usage:
     python -m ingest.orchestrate --only dimensioni
     python -m ingest.orchestrate --pipeline gasparotto  # Single pipeline
 
-Datahub structure (Google Drive):
-    hotelops_datahub/
+Drive source (rclone):
+    mywork:00_hotelops_datahub/ingresso/
     ├── homebanking/{ORTI,INTUR}/            → ingest.banca.ingest (f_banche_movimenti)
     ├── movimenti_contabili/{ORTI,INTUR}/   → ingest.amministrativa.ingest_movimenti_contabili
-    ├── registro_banca_esolver/{ORTI,INTUR}/ → ingest.amministrativa.ingest_scheda_contabile (f_saldi_banca_snapshot)
+    ├── registro_banca_esolver/{ORTI,INTUR}/ → ingest.amministrativa.ingest_scheda_contabile
     ├── partite_fornitori/{ORTI,INTUR}/     → ingest.amministrativa.ingest_partite_aperte
     ├── accodamenti/ORTI/                   → ingest.banca.ingest_accodamenti (f_accodamenti)
     ├── economato/                          → ingest.amministrativa.ingest_consumi_economato
@@ -26,6 +26,8 @@ Datahub structure (Google Drive):
     ├── bilancino/{ORTI,INTUR}/             → ingest.amministrativa.ingest_bilancino
     ├── gasparotto/                         → ingest.amministrativa.ingest_gasparotto
     └── piani_finanziari/{ORTI,INTUR}/      → ingest.amministrativa.ingest_piano_finanziario_xlsx
+
+All folders are synced to ~/.cache/hotelops/datahub/ before pipelines run.
 """
 
 from __future__ import annotations
@@ -45,24 +47,35 @@ from pathlib import Path
 
 HOTELOPS_ROOT = Path(__file__).resolve().parent.parent
 
-# Google Drive datahub (macOS default — override with --datahub)
-DEFAULT_DATAHUB = Path(
-    os.path.expanduser(
-        "~/Library/CloudStorage/GoogleDrive-stefano@panoramagroup.it"
-        "/My Drive/hotelops_datahub"
-    )
-)
+# rclone remote — single source of truth for Drive data
+RCLONE_REMOTE = "mywork:00_hotelops_datahub/ingresso"
 
-# Local staging dirs
-STAGING_BASE = Path(os.path.expanduser("~/.cache/hotelops"))
+# Local staging root — rclone syncs here, all pipelines read from here
+STAGING_ROOT = Path(os.path.expanduser("~/.cache/hotelops/datahub"))
+
+# Drive subfolders to sync (folder_name → local staging subdir)
+SYNC_FOLDERS = [
+    "homebanking",
+    "accodamenti",
+    "movimenti_contabili",
+    "economato",
+    "coperti",
+    "bilancino",
+    "gasparotto",
+    "piani_finanziari",
+    "registro_banca_esolver",
+    "partite_fornitori",
+]
+
+# Legacy staging aliases (used by pipeline args)
 STAGING = {
-    "banche":       STAGING_BASE / "banche_staging",
-    "accodamenti":  STAGING_BASE / "accodamenti_staging",
-    "movimenti":    STAGING_BASE / "movimenti_staging",
+    "banche":       STAGING_ROOT / "homebanking",
+    "accodamenti":  STAGING_ROOT / "accodamenti",
+    "movimenti":    STAGING_ROOT / "movimenti_contabili",
 }
 
-# Manifest — tracks every file we've ever processed
-MANIFEST_DIR = DEFAULT_DATAHUB / "meta" / "pipeline"
+# Manifest — stored locally in staging
+MANIFEST_DIR = STAGING_ROOT / ".meta" / "pipeline"
 
 
 # ── Pipeline registry ────────────────────────────────────────────────────────
@@ -90,7 +103,7 @@ class Pipeline:
 
 
 def _banca_args(ctx: dict) -> list[str]:
-    args = ["--datahub", str(ctx["datahub"]), "--source", str(STAGING["banche"])]
+    args = ["--datahub", str(ctx["staging_root"]), "--source", str(STAGING["banche"])]
     if ctx["dry_run"]:
         args.append("--dry-run")
     if ctx["verbose"]:
@@ -100,11 +113,10 @@ def _banca_args(ctx: dict) -> list[str]:
 
 def _accodamenti_args(ctx: dict) -> list[str]:
     args = [
-        "--datahub", str(ctx["datahub"]),
+        "--datahub", str(ctx["staging_root"]),
         "--staging", str(STAGING["accodamenti"]),
+        "--no-sync",  # orchestrator already synced
     ]
-    if ctx["no_sync"]:
-        args.append("--no-sync")
     if ctx["dry_run"]:
         args.append("--dry-run")
     if ctx["verbose"]:
@@ -114,21 +126,20 @@ def _accodamenti_args(ctx: dict) -> list[str]:
 
 def _movimenti_args(ctx: dict) -> list[str]:
     args = [
-        "--datahub", str(ctx["datahub"]),
+        "--datahub", str(ctx["staging_root"]),
         "--staging", str(STAGING["movimenti"]),
+        "--no-sync",  # orchestrator already synced
     ]
-    if ctx["no_sync"]:
-        args.append("--no-sync")
     if ctx["dry_run"]:
         args.append("--dry-run")
     return args
 
 
 def _economato_args(ctx: dict) -> list[str]:
-    source = ctx["datahub"] / "economato"
+    source = ctx["staging_root"] / "economato"
     args = [
         "--source", str(source),
-        "--datahub", str(ctx["datahub"]),
+        "--datahub", str(ctx["staging_root"]),
     ]
     if ctx["dry_run"]:
         args += ["--dry-run", "--output-dir", str(ctx["output_dir"])]
@@ -136,10 +147,10 @@ def _economato_args(ctx: dict) -> list[str]:
 
 
 def _coperti_args(ctx: dict) -> list[str]:
-    source = ctx["datahub"] / "coperti"
+    source = ctx["staging_root"] / "coperti"
     args = [
         "--source", str(source),
-        "--datahub", str(ctx["datahub"]),
+        "--datahub", str(ctx["staging_root"]),
     ]
     if ctx["dry_run"]:
         args.append("--dry-run")
@@ -149,7 +160,7 @@ def _coperti_args(ctx: dict) -> list[str]:
 def _bilancino_discover(ctx: dict) -> list[list[str]]:
     """Discover bilancino files in bilancino/{ORTI,INTUR}/."""
     import re
-    bil_dir = ctx["datahub"] / "bilancino"
+    bil_dir = ctx["staging_root"] / "bilancino"
     if not bil_dir.exists():
         return []
     runs = []
@@ -176,7 +187,7 @@ def _bilancino_discover(ctx: dict) -> list[list[str]]:
 
 def _gasparotto_discover(ctx: dict) -> list[list[str]]:
     """Discover Gasparotto master files."""
-    ingresso = ctx["datahub"] / "gasparotto"
+    ingresso = ctx["staging_root"] / "gasparotto"
     if not ingresso.exists():
         return []
     runs = []
@@ -194,7 +205,7 @@ def _gasparotto_discover(ctx: dict) -> list[list[str]]:
 
 def _piano_fin_discover(ctx: dict) -> list[list[str]]:
     """Discover Piano Finanziario XLSX files."""
-    pf_dir = ctx["datahub"] / "piani_finanziari"
+    pf_dir = ctx["staging_root"] / "piani_finanziari"
     if not pf_dir.exists():
         return []
     args = ["--dir", str(pf_dir), "--latest-only"]
@@ -212,8 +223,8 @@ def _piano_fin_discover(ctx: dict) -> list[list[str]]:
 def _dim_categorie_args(ctx: dict) -> list[str]:
     # Look for the canonical file
     candidates = [
-        ctx["datahub"] / "gasparotto" / "Costi Ricavi 2025-2026 Budget.xlsx",
-        ctx["datahub"] / "dimensioni" / "Costi Ricavi 2025-2026 Budget.xlsx",
+        ctx["staging_root"] / "gasparotto" / "Costi Ricavi 2025-2026 Budget.xlsx",
+        ctx["staging_root"] / "dimensioni" / "Costi Ricavi 2025-2026 Budget.xlsx",
     ]
     for c in candidates:
         if c.exists():
@@ -231,7 +242,7 @@ def _dim_piano_conti_args(ctx: dict) -> list[str]:
 
 def _partite_discover(ctx: dict) -> list[list[str]]:
     """Discover partite fornitori files in partite_fornitori/{ORTI,INTUR}/."""
-    pt_dir = ctx["datahub"] / "partite_fornitori"
+    pt_dir = ctx["staging_root"] / "partite_fornitori"
     if not pt_dir.exists():
         return []
     runs = []
@@ -254,7 +265,7 @@ def _partite_discover(ctx: dict) -> list[list[str]]:
 
 def _scheda_contabile_discover(ctx: dict) -> list[list[str]]:
     """Discover scheda contabile files in registro_banca_esolver/{ORTI,INTUR}/."""
-    sc_dir = ctx["datahub"] / "registro_banca_esolver"
+    sc_dir = ctx["staging_root"] / "registro_banca_esolver"
     if not sc_dir.exists():
         return []
     runs = []
@@ -272,27 +283,40 @@ def _scheda_contabile_discover(ctx: dict) -> list[list[str]]:
     return runs
 
 
-def _sync_banca(ctx: dict) -> None:
-    """Sync bank files from Drive."""
-    subprocess.run(
-        [sys.executable, "-m", "ingest.banca.fetch_drive",
-         "--staging", str(STAGING["banche"])],
-        cwd=str(HOTELOPS_ROOT),
-        check=True,
-    )
+def sync_all_from_drive(logger: logging.Logger, only_folders: list[str] | None = None) -> dict[str, bool]:
+    """Sync all ingresso/ subfolders from Drive via rclone.
+
+    Returns dict of folder → success.
+    """
+    results = {}
+    folders = only_folders or SYNC_FOLDERS
+    for folder in folders:
+        remote = f"{RCLONE_REMOTE}/{folder}"
+        local = STAGING_ROOT / folder
+        local.mkdir(parents=True, exist_ok=True)
+        logger.info(f"  {folder}: {remote} → {local}")
+        result = subprocess.run(
+            ["rclone", "sync", remote, str(local)],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            logger.error(f"    ✗ {folder} sync failed: {result.stderr.strip()[:200]}")
+            results[folder] = False
+        else:
+            logger.info(f"    ✓ {folder} OK")
+            results[folder] = True
+    return results
 
 
 # ── Pipeline definitions ─────────────────────────────────────────────────────
 
 PIPELINES = [
-    # Banca group — auto-discovering
+    # Banca group
     Pipeline(
         name="banca",
         group="banca",
         module="ingest.banca.ingest",
         args_fn=_banca_args,
-        needs_sync=True,
-        sync_fn=_sync_banca,
         description="Bank transactions → f_banche_movimenti",
     ),
     Pipeline(
@@ -487,8 +511,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Unified hotelops pipeline orchestrator"
     )
-    parser.add_argument("--datahub", default=str(DEFAULT_DATAHUB),
-                        help="Path to hotelops_datahub root")
+    parser.add_argument("--datahub", default=str(STAGING_ROOT),
+                        help="Path to local datahub staging root (default: ~/.cache/hotelops/datahub)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Parse + CSV, no BigQuery writes")
     parser.add_argument("--no-sync", action="store_true",
@@ -503,12 +527,13 @@ def main() -> None:
     args = parser.parse_args()
 
     logger = setup_logger(args.verbose)
-    datahub = Path(args.datahub)
+    staging_root = Path(args.datahub)
 
     logger.info("=" * 60)
     logger.info("  HOTELOPS ORCHESTRATOR")
     logger.info("=" * 60)
-    logger.info(f"  Datahub:  {datahub}")
+    logger.info(f"  Remote:   {RCLONE_REMOTE}")
+    logger.info(f"  Staging:  {staging_root}")
     logger.info(f"  Dry-run:  {args.dry_run}")
     logger.info(f"  Sync:     {not args.no_sync}")
     if args.only:
@@ -518,18 +543,17 @@ def main() -> None:
     logger.info("=" * 60)
 
     ctx = {
-        "datahub": datahub,
+        "staging_root": staging_root,
         "dry_run": args.dry_run,
         "no_sync": args.no_sync,
         "verbose": args.verbose,
         "output_dir": args.output_dir,
     }
 
-    manifest = Manifest(datahub / "meta" / "pipeline")
+    manifest = Manifest(staging_root / ".meta" / "pipeline")
 
-    # Ensure staging dirs exist
-    for s in STAGING.values():
-        s.mkdir(parents=True, exist_ok=True)
+    # Ensure staging root exists
+    staging_root.mkdir(parents=True, exist_ok=True)
 
     results: dict[str, str] = {}  # pipeline → OK/FAILED/SKIPPED
 
@@ -537,18 +561,10 @@ def main() -> None:
     if not args.no_sync and not args.dry_run:
         logger.info("")
         logger.info("── SYNC ─────────────────────────────────────────")
-        for p in PIPELINES:
-            if p.needs_sync and p.sync_fn:
-                if args.only and p.group != args.only:
-                    continue
-                if args.pipeline and p.name != args.pipeline:
-                    continue
-                logger.info(f"  Syncing for {p.name}...")
-                try:
-                    p.sync_fn(ctx)
-                    logger.info("  ✓ Sync OK")
-                except Exception as e:
-                    logger.error(f"  ✗ Sync failed: {e}")
+        sync_results = sync_all_from_drive(logger)
+        ok = sum(1 for v in sync_results.values() if v)
+        fail = sum(1 for v in sync_results.values() if not v)
+        logger.info(f"  Sync totals: {ok} OK, {fail} failed")
 
     # ── Step 2: Run single-invocation pipelines ──────────────────────────
     logger.info("")
