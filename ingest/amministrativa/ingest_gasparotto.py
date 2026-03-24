@@ -12,7 +12,7 @@ Account codes (codice_conto) come from:
   2. Cross-reference against Conto Economico sheet by exact description match
   3. Manual mapping table for remaining ~24 rows
 
-Monthly distribution: uniform 1/12 (no seasonal curve — Gasparotto is annual CE).
+Monthly distribution: seasonality-weighted from d_coefficienti_stagionalita (falls back to 1/12 if unavailable).
 No BU split (Gasparotto is company-level — use MAPPATURA for BU detail).
 
 Output: f_budget_mensile rows with fonte=GASPAROTTO
@@ -200,6 +200,30 @@ MANUAL_COD_MAP: dict[str, str] = {
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
+def fetch_seasonality_coefficients(societa_id: str, business_unit_id: str = "HQ") -> dict[int, float]:
+    """Fetch monthly coefficients from d_coefficienti_stagionalita.
+    Returns {mese: coefficiente}. Falls back to flat 1.0 if table missing.
+    """
+    try:
+        from google.cloud import bigquery
+        client = bigquery.Client(project="hotelops-suite")
+        q = """
+        SELECT mese, coefficiente
+        FROM `hotelops-suite.hotelops.d_coefficienti_stagionalita`
+        WHERE societa_id = @societa AND business_unit_id = @bu
+        """
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("societa", "STRING", societa_id),
+                bigquery.ScalarQueryParameter("bu", "STRING", business_unit_id),
+            ]
+        )
+        return {row.mese: row.coefficiente for row in client.query(q, job_config=job_config).result()}
+    except Exception:
+        return {m: 1.0 for m in range(1, 13)}
+
+
 def _v(x) -> float:
     """Coerce cell value to float, 0.0 for None/NaN/datetime."""
     if x is None:
@@ -279,6 +303,9 @@ def parse_gasparotto_budget(
     # Step 2: Parse Budget sheet
     ws = wb["Budget"]
     rows_raw = list(ws.iter_rows(min_row=11, values_only=True))
+
+    # Fetch seasonality coefficients (company-level weighted average)
+    seasonality = fetch_seasonality_coefficients(societa_id, "HQ")
 
     section = "RICAVI"
     records: list[dict] = []
@@ -369,7 +396,7 @@ def parse_gasparotto_budget(
                 "tipo_costo":       tipo_costo,
                 "categoria_ce":     cat_ce,
                 "business_unit_id": None,  # Gasparotto is company-level
-                "importo":          round(annual / 12, 4),
+                "importo":          round(annual / 12 * seasonality.get(mese, 1.0), 4),
                 "fonte":            FONTE,
                 "data_caricamento": now.isoformat(),
             })
