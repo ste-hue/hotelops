@@ -24,6 +24,7 @@ D_VOCI_PIANO_FINANZIARIO    = _t("d_voci_piano_finanziario")
 D_PIANO_CONTI               = _t("d_piano_conti")
 D_CATEGORIE_CONTI           = _t("d_categorie_conti")
 D_FORNITORI                 = _t("d_fornitori")
+D_COEFFICIENTI_STAGIONALITA = _t("d_coefficienti_stagionalita")
 
 # Views
 V_PIANO_FINANZIARIO_MENSILE = _t("v_piano_finanziario_mensile")

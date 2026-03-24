@@ -150,6 +150,35 @@ class ChiusuraMensileRow(BaseModel):
 
 # ── f_partite_aperte_fornitori ────────────────────────────────────────────────
 
+class CoefficienteStagionalitaRow(BaseModel):
+    """Schema for d_coefficienti_stagionalita — seasonality coefficients per BU.
+
+    coefficiente = 1.0 for average month, >1 peak, <1 off-season.
+    Sum of 12 months per BU = 12.0 (guaranteed by math).
+    """
+    societa_id: SocietaId
+    business_unit_id: BusinessUnitId
+    mese: int
+    coefficiente: float
+    fonte: str
+    hash_riga: str
+    data_caricamento: str  # ISO timestamp
+
+    @field_validator("mese")
+    @classmethod
+    def mese_range(cls, v: int) -> int:
+        if not 1 <= v <= 12:
+            raise ValueError(f"mese fuori range: {v}")
+        return v
+
+    @field_validator("coefficiente")
+    @classmethod
+    def coeff_non_negative(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError(f"coefficiente negativo: {v}")
+        return v
+
+
 class PartitaApertaFornitoreRow(BaseModel):
     """Schema for f_partite_aperte_fornitori — snapshot of open payables.
 
