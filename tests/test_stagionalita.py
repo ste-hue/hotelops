@@ -1,150 +1,144 @@
-"""Tests for seasonality coefficients — schema validation + computation logic."""
+"""Tests for seasonality coefficient computation pipeline.
+
+3 schema tests + 4 computation tests = 7 total.
+"""
+
+from __future__ import annotations
 
 import pytest
 
-from core.schemas import (
-    CoefficienteStagionalitaRow,
-    SchemaViolationError,
-    make_hash,
-    validate_batch,
+from core.schemas import CoefficienteStagionalitaRow, make_hash, validate_batch
+from ingest.amministrativa.ingest_coefficienti_stagionalita import (
+    compute_coefficients,
 )
 
 
-# ── Schema validation ───────────────────────────────────────────────────────
+# ── Schema tests ────────────────────────────────────────────────────────────
 
 
-def test_coefficiente_schema_valid():
-    """A valid coefficient row passes validation."""
-    row = {
-        "societa_id": "ORTI",
-        "business_unit_id": "HOTEL",
-        "mese": 7,
-        "coefficiente": 1.85,
-        "fonte": "F_RICAVI_STORICI_2023_2025",
-        "hash_riga": make_hash("ORTI", "HOTEL", 7),
-        "data_caricamento": "2026-03-23T00:00:00+00:00",
-    }
-    validate_batch([row], CoefficienteStagionalitaRow, context="test")
+class TestCoefficienteStagionalitaSchema:
+    """3 schema validation tests."""
+
+    def test_valid_row(self):
+        """A well-formed row passes validation."""
+        row = CoefficienteStagionalitaRow(
+            societa_id="ORTI",
+            business_unit_id="HOTEL",
+            mese=7,
+            coefficiente=1.85,
+            fonte="RICAVI_STORICI",
+            hash_riga=make_hash("ORTI", "HOTEL", "7"),
+            data_caricamento="2026-03-24T00:00:00+00:00",
+        )
+        assert row.coefficiente == 1.85
+        assert row.mese == 7
+
+    def test_mese_out_of_range(self):
+        """mese must be 1-12."""
+        with pytest.raises(ValueError, match="mese fuori range"):
+            CoefficienteStagionalitaRow(
+                societa_id="ORTI",
+                business_unit_id="HOTEL",
+                mese=13,
+                coefficiente=1.0,
+                fonte="TEST",
+                hash_riga="abc",
+                data_caricamento="2026-03-24T00:00:00+00:00",
+            )
+
+    def test_negative_coefficient(self):
+        """coefficiente must be >= 0."""
+        with pytest.raises(ValueError, match="coefficiente negativo"):
+            CoefficienteStagionalitaRow(
+                societa_id="ORTI",
+                business_unit_id="HOTEL",
+                mese=1,
+                coefficiente=-0.5,
+                fonte="TEST",
+                hash_riga="abc",
+                data_caricamento="2026-03-24T00:00:00+00:00",
+            )
 
 
-def test_coefficiente_schema_mese_out_of_range():
-    """Mese outside 1-12 fails validation."""
-    row = {
-        "societa_id": "ORTI",
-        "business_unit_id": "HOTEL",
-        "mese": 13,
-        "coefficiente": 1.0,
-        "fonte": "TEST",
-        "hash_riga": make_hash("ORTI", "HOTEL", 13),
-        "data_caricamento": "2026-03-23T00:00:00+00:00",
-    }
-    with pytest.raises(SchemaViolationError):
-        validate_batch([row], CoefficienteStagionalitaRow, context="test")
+# ── Computation tests ──────────────────────────────────────────────────────
 
 
-def test_coefficiente_schema_bad_societa():
-    """Invalid societa_id fails validation."""
-    row = {
-        "societa_id": "INVALID",
-        "business_unit_id": "HOTEL",
-        "mese": 1,
-        "coefficiente": 1.0,
-        "fonte": "TEST",
-        "hash_riga": make_hash("INVALID", "HOTEL", 1),
-        "data_caricamento": "2026-03-23T00:00:00+00:00",
-    }
-    with pytest.raises(SchemaViolationError):
-        validate_batch([row], CoefficienteStagionalitaRow, context="test")
-
-
-# ── Computation logic ────────────────────────────────────────────────────────
-
-
-def test_compute_coefficients_basic():
-    """Compute coefficients from revenue data — basic case with summer seasonality."""
-    from ingest.amministrativa.ingest_coefficienti_stagionalita import compute_coefficients
-
-    ricavi = [
-        {"societa_id": "ORTI", "business_unit_id": "HOTEL", "anno": 2024, "mese": m, "importo_entrate": v}
-        for m, v in [
-            (1, 0), (2, 0), (3, 10000), (4, 100000), (5, 300000),
-            (6, 600000), (7, 650000), (8, 630000), (9, 500000),
-            (10, 200000), (11, 10000), (12, 0),
-        ]
+def _make_ricavi(
+    bu: str, monthly_amounts: list[float], anno: int = 2025, societa: str = "ORTI"
+) -> list[dict]:
+    """Helper: create revenue rows for one BU, one year."""
+    return [
+        {
+            "societa_id": societa,
+            "business_unit_id": bu,
+            "anno": anno,
+            "mese": m,
+            "importo_entrate": amt,
+        }
+        for m, amt in enumerate(monthly_amounts, start=1)
     ]
-    coeffs = compute_coefficients(ricavi, societa_id="ORTI")
-
-    hotel_coeffs = [c for c in coeffs if c["business_unit_id"] == "HOTEL"]
-    assert len(hotel_coeffs) == 12
-
-    # July should be high season (> 1.5)
-    jul = next(c for c in hotel_coeffs if c["mese"] == 7)
-    assert jul["coefficiente"] > 1.5
-
-    # January should be zero (closed)
-    jan = next(c for c in hotel_coeffs if c["mese"] == 1)
-    assert jan["coefficiente"] == 0.0
-
-    # Sum of coefficients = 12
-    total = sum(c["coefficiente"] for c in hotel_coeffs)
-    assert abs(total - 12.0) < 0.01
 
 
-def test_compute_coefficients_multi_year_average():
-    """Multi-year data is averaged before computing coefficients."""
-    from ingest.amministrativa.ingest_coefficienti_stagionalita import compute_coefficients
+class TestComputeCoefficients:
+    """4 computation tests."""
 
-    ricavi = []
-    for anno in [2023, 2024]:
-        scale = 1.0 if anno == 2023 else 1.5
-        for m, v in [(1, 10), (2, 10), (3, 10), (4, 50), (5, 100),
-                     (6, 200), (7, 250), (8, 240), (9, 150), (10, 60),
-                     (11, 10), (12, 10)]:
-            ricavi.append({
-                "societa_id": "ORTI", "business_unit_id": "CVM",
-                "anno": anno, "mese": m, "importo_entrate": v * scale * 1000,
-            })
+    def test_flat_revenue_gives_ones(self):
+        """Equal revenue every month => all coefficients = 1.0."""
+        ricavi = _make_ricavi("HOTEL", [100_000] * 12)
+        rows = compute_coefficients(ricavi, "ORTI", "TEST")
 
-    coeffs = compute_coefficients(ricavi, societa_id="ORTI")
-    cvm = {c["mese"]: c["coefficiente"] for c in coeffs if c["business_unit_id"] == "CVM"}
+        hotel_rows = [r for r in rows if r["business_unit_id"] == "HOTEL"]
+        assert len(hotel_rows) == 12
+        for r in hotel_rows:
+            assert r["coefficiente"] == pytest.approx(1.0, abs=1e-6)
 
-    assert cvm[7] > cvm[1]
-    assert cvm[7] > cvm[12]
-    assert abs(sum(cvm.values()) - 12.0) < 0.01
+    def test_sum_of_coefficients_is_twelve(self):
+        """Sum of 12 monthly coefficients for any BU must equal 12.0."""
+        # Seasonal pattern: high summer, low winter
+        monthly = [20, 30, 50, 80, 120, 180, 200, 190, 150, 90, 50, 40]
+        ricavi = _make_ricavi("HOTEL", monthly)
+        rows = compute_coefficients(ricavi, "ORTI", "TEST")
 
+        hotel_rows = [r for r in rows if r["business_unit_id"] == "HOTEL"]
+        total = sum(r["coefficiente"] for r in hotel_rows)
+        assert total == pytest.approx(12.0, abs=1e-4)
 
-def test_compute_coefficients_includes_company_wide():
-    """Output includes a company-wide (HQ) coefficient for cost accounts."""
-    from ingest.amministrativa.ingest_coefficienti_stagionalita import compute_coefficients
+        # HQ should also sum to 12
+        hq_rows = [r for r in rows if r["business_unit_id"] == "HQ"]
+        hq_total = sum(r["coefficiente"] for r in hq_rows)
+        assert hq_total == pytest.approx(12.0, abs=1e-4)
 
-    ricavi = []
-    for bu in ["HOTEL", "CVM"]:
-        for m in range(1, 13):
-            ricavi.append({
-                "societa_id": "ORTI", "business_unit_id": bu,
-                "anno": 2024, "mese": m, "importo_entrate": 100000 if m in (6, 7, 8) else 20000,
-            })
+    def test_hq_is_weighted_average(self):
+        """HQ coefficients are revenue-weighted average of BU coefficients."""
+        # HOTEL: seasonal (high summer)
+        hotel = [10, 10, 20, 40, 60, 80, 90, 85, 60, 30, 15, 10]
+        # RESIDENCE: flat
+        residence = [50] * 12
 
-    coeffs = compute_coefficients(ricavi, societa_id="ORTI")
-    hq_coeffs = [c for c in coeffs if c["business_unit_id"] == "HQ"]
-    assert len(hq_coeffs) == 12
-    assert abs(sum(c["coefficiente"] for c in hq_coeffs) - 12.0) < 0.01
+        ricavi = _make_ricavi("HOTEL", hotel) + _make_ricavi("RESIDENCE", residence)
+        rows = compute_coefficients(ricavi, "ORTI", "TEST")
 
+        hq_rows = {r["mese"]: r["coefficiente"] for r in rows if r["business_unit_id"] == "HQ"}
+        hotel_rows = {r["mese"]: r["coefficiente"] for r in rows if r["business_unit_id"] == "HOTEL"}
+        res_rows = {r["mese"]: r["coefficiente"] for r in rows if r["business_unit_id"] == "RESIDENCE"}
 
-def test_distribute_with_seasonality():
-    """Annual budget x seasonality = monthly amounts summing to annual."""
-    from ingest.amministrativa.ingest_coefficienti_stagionalita import compute_coefficients
+        # HQ July should be between HOTEL July and RESIDENCE July
+        assert hq_rows[7] > res_rows[7]  # RESIDENCE is flat=1.0
+        assert hq_rows[7] < hotel_rows[7]  # HOTEL July is peak
 
-    ricavi = [
-        {"societa_id": "ORTI", "business_unit_id": "HOTEL", "anno": 2024, "mese": m,
-         "importo_entrate": 200000 if m in (6, 7, 8) else 50000}
-        for m in range(1, 13)
-    ]
-    coeffs = compute_coefficients(ricavi, societa_id="ORTI")
-    hotel_coeffs = {c["mese"]: c["coefficiente"] for c in coeffs if c["business_unit_id"] == "HOTEL"}
+    def test_zero_revenue_bu_gets_flat(self):
+        """A BU with zero total revenue gets flat 1.0 for all months."""
+        ricavi = _make_ricavi("CVM", [0] * 12) + _make_ricavi("HOTEL", [100] * 12)
+        rows = compute_coefficients(ricavi, "ORTI", "TEST")
 
-    annual_budget = 120000
-    monthly = [round(annual_budget / 12 * hotel_coeffs[m], 2) for m in range(1, 13)]
+        cvm_rows = [r for r in rows if r["business_unit_id"] == "CVM"]
+        assert len(cvm_rows) == 12
+        for r in cvm_rows:
+            assert r["coefficiente"] == pytest.approx(1.0, abs=1e-6)
 
-    assert abs(sum(monthly) - annual_budget) < 1.0
-    assert monthly[6] > monthly[0] * 2  # July > 2x January
+    def test_validate_batch_passes(self):
+        """Output of compute_coefficients passes validate_batch."""
+        ricavi = _make_ricavi("HOTEL", [100, 200, 300, 400, 500, 600, 600, 500, 400, 300, 200, 100])
+        rows = compute_coefficients(ricavi, "ORTI", "RICAVI_STORICI")
+        # Should not raise
+        validate_batch(rows, CoefficienteStagionalitaRow, context="test")

@@ -229,6 +229,15 @@ def _dim_piano_conti_args(ctx: dict) -> list[str]:
     return _dim_categorie_args(ctx)
 
 
+def _stagionalita_args(ctx: dict) -> list[str]:
+    # Reads from BQ (not datahub files), sync irrelevant.
+    # ORTI only — INTUR deferred until revenue data loaded.
+    args = ["--societa", "ORTI"]
+    if ctx["dry_run"]:
+        args.append("--dry-run")
+    return args
+
+
 def _partite_discover(ctx: dict) -> list[list[str]]:
     """Discover partite fornitori files in partite_fornitori/{ORTI,INTUR}/."""
     pt_dir = ctx["datahub"] / "partite_fornitori"
@@ -340,6 +349,13 @@ PIPELINES = [
         module="ingest.amministrativa.ingest_piano_conti_nuovo",
         args_fn=_dim_piano_conti_args,
         description="Chart of accounts 2026 → d_piano_conti",
+    ),
+    Pipeline(
+        name="stagionalita",
+        group="dimensioni",
+        module="ingest.amministrativa.ingest_coefficienti_stagionalita",
+        args_fn=_stagionalita_args,
+        description="Seasonality coefficients → d_coefficienti_stagionalita",
     ),
 ]
 
