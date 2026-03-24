@@ -93,6 +93,32 @@ DIVISION_TO_BU: dict[str, str] = {
 CONTO_PERSONALE = "67.01.01"
 
 
+# ── Seasonality ───────────────────────────────────────────────────────────────
+
+
+def fetch_seasonality_coefficients(societa_id: str, business_unit_id: str = "HQ") -> dict[int, float]:
+    """Fetch monthly coefficients from d_coefficienti_stagionalita.
+    Returns {mese: coefficiente}. Falls back to flat 1.0 if table missing.
+    """
+    try:
+        from google.cloud import bigquery as _bq
+        client = _bq.Client(project="hotelops-suite")
+        q = """
+        SELECT mese, coefficiente
+        FROM `hotelops-suite.hotelops.d_coefficienti_stagionalita`
+        WHERE societa_id = @societa AND business_unit_id = @bu
+        """
+        job_config = _bq.QueryJobConfig(
+            query_parameters=[
+                _bq.ScalarQueryParameter("societa", "STRING", societa_id),
+                _bq.ScalarQueryParameter("bu", "STRING", business_unit_id),
+            ]
+        )
+        return {row.mese: row.coefficiente for row in client.query(q, job_config=job_config).result()}
+    except Exception:
+        return {m: 1.0 for m in range(1, 13)}
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _v(x) -> float:
@@ -197,6 +223,7 @@ def parse_budget_fissi(filepath: Path, logger: logging.Logger) -> list[dict]:
             for bu_id, annual in bu_amounts.items():
                 if annual == 0:
                     continue
+                seasonality = fetch_seasonality_coefficients(societa, bu_id if bu_id else "HQ")
                 for mese in range(1, 13):
                     records.append({
                         "societa_id":       societa,
@@ -207,7 +234,7 @@ def parse_budget_fissi(filepath: Path, logger: logging.Logger) -> list[dict]:
                         "tipo_costo":       tipo_costo,
                         "categoria_ce":     categoria_ce,
                         "business_unit_id": bu_id,
-                        "importo":          round(annual / 12, 4),
+                        "importo":          round(annual / 12 * seasonality.get(mese, 1.0), 4),
                         "fonte":            "MAPPATURA",
                         "data_caricamento": now.isoformat(),
                     })
