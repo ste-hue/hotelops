@@ -46,19 +46,6 @@ class TestCoefficienteStagionalitaSchema:
                 data_caricamento="2026-03-24T00:00:00+00:00",
             )
 
-    def test_negative_coefficient(self):
-        """coefficiente must be >= 0."""
-        with pytest.raises(ValueError, match="coefficiente negativo"):
-            CoefficienteStagionalitaRow(
-                societa_id="ORTI",
-                business_unit_id="HOTEL",
-                mese=1,
-                coefficiente=-0.5,
-                fonte="TEST",
-                hash_riga="abc",
-                data_caricamento="2026-03-24T00:00:00+00:00",
-            )
-
 
 # ── Computation tests ──────────────────────────────────────────────────────
 

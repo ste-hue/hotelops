@@ -2,12 +2,12 @@ voce_id,voce_label,sezione,categoria,societa_id,fonte,cod_conto_pattern,cod_cont
 ENTRATE_AFFITTI_INTUR,Canone Affitto Ramo Azienda (ORTI→INTUR),ENTRATE,Affitti,INTUR,ESOLVER,53,,,,10,,Ricavi,IP
 ENTRATE_SPIAGGIA,Entrate Spiaggia (clienti esterni),ENTRATE,Ricavi,INTUR,ESOLVER,4794,,,,20,LIDO,Ricavi,IP
 ENTRATE_SPIAGGIA_ORTI,Spiaggia Alloggiati (Hotel+Res+CVM),ENTRATE,Ricavi,ORTI,ESOLVER,479401,479402,479403,,25,,Ricavi,IP
-ENTRATE_AFFITTI_MINORI,Affitti Minori (Farmacia e altri),ENTRATE,Affitti,INTUR,ESOLVER,4795,,,,30,,Ricavi,IP
+ENTRATE_AFFITTI_MINORI,Affitti Minori (Farmacia e altri),ENTRATE,Affitti,INTUR,ESOLVER,479501,479503,,,30,,Ricavi,IP
 ENTRATE_CAPARRE_INTUR,Caparre (da girare),ENTRATE,Caparre,INTUR,ESOLVER,390521,,,,40,,Ricavi,IP
 ENTRATE_HOTEL,Entrate Hotel,ENTRATE,Ricavi,ORTI,ESOLVER,4791,,,,60,HOTEL,Ricavi,IP
 ENTRATE_RESIDENCE,Entrate Residence,ENTRATE,Ricavi,ORTI,ESOLVER,4792,,,,70,RESIDENCE,Ricavi,IP
 ENTRATE_CVM,Entrate CVM,ENTRATE,Ricavi,ORTI,ESOLVER,4793,,,,80,CVM,Ricavi,IP
-ENTRATE_SUPERMERCATO,Entrate Supermercato,ENTRATE,Ricavi,ORTI,ESOLVER,4795,,,,90,,Ricavi,IP
+ENTRATE_SUPERMERCATO,Entrate Supermercato,ENTRATE,Ricavi,ORTI,ESOLVER,479502,,,,90,,Ricavi,IP
 ENTRATE_RIENTRO_SOSPESI,Rientro Sospesi,ENTRATE,Banca,ORTI,BANCHE,,,,SOSPESI,100,,Ricavi,IP
 ENTRATE_CAPARRE,Caparre da Intur,ENTRATE,Caparre,ORTI,ESOLVER,390521,,,,110,,Ricavi,IP
 USCITE_SALARI,Salari e Stipendi,USCITE,Personale,,ESOLVER,67,,,,200,,Costi del Personale,P
