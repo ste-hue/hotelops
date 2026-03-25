@@ -6,10 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-hotelops is the financial data platform for Gruppo Panorama hotel operations. It ingests data from banks, ERP (Esolver), PMS (HotelCube), and manual budgets into BigQuery, then provides views for two audiences:
+hotelops is the financial data platform for Gruppo Panorama hotel operations. It ingests data from banks, ERP (Esolver), PMS (HotelCube), and manual budgets into BigQuery, then serves the **condges** (Controllo di Gestione) vertical through two complementary lenses:
 
-1. **Rosa (Tesoreria)** — Piano Finanziario: flussi di cassa mensili previsionali (entrate/uscite di cassa)
-2. **Gasparotto (Controllo di Gestione)** — Budget vs Consuntivo: CE per codice conto, break-even, KPI operativi
+1. **Rosa (lente CASSA)** — Piano Finanziario: flussi di cassa mensili previsionali (entrate/uscite di cassa). Domanda: "quando il soldo entra/esce?"
+2. **Gasparotto (lente COMPETENZA)** — Budget vs Consuntivo: CE per codice conto, break-even, KPI operativi. Domanda: "quanto consumo/genero?"
+
+Rosa e Gasparotto sono due facce della stessa medaglia — stesso verticale `condges/`, stesso dataset, stesse fact tables. Cambia la vista e la domanda.
 
 **Architecture:** Three layers — `core/` (world model), `ingest/` (reality capture), `condges/` (decision verticals). BigQuery is the source of truth.
 
@@ -306,17 +308,19 @@ The 2026 chart of accounts restructured significantly from 2025:
 
 ## Stakeholders and their needs (from meeting 17.03.2026)
 
-### Rosa (Amministrazione — Tesoreria)
-- Uses: `hotelops pf`, `condges/genera_excel.py`, `condges/app.py` (Streamlit)
+Rosa e Gasparotto sono le due facce del verticale `condges/` — stesso dataset, stesse fact tables, lenti diverse.
+
+### Rosa (lente CASSA — Tesoreria)
+- Uses: `hotelops pf`, `hotelops saldo`, `condges/genera_excel.py`, `condges/app.py` (Streamlit)
 - Needs: monthly cash flow forecast (entrate/uscite di cassa)
 - Her process: checks open payables in Esolver, estimates revenues from prior year, asks commercialista for taxes
 - Goal: prevent liquidity crises in critical months
 
-### Gasparotto/Roberto (Consulente — Controllo di Gestione)
+### Gasparotto/Roberto (lente COMPETENZA — Consulente Controllo di Gestione)
 - Uses: `hotelops bva`
 - Needs: CE budget vs consuntivo per codice conto, break-even analysis
 - Goal: shift from backward-looking budget (copy 2025) to strategic zero-based budgeting
-- Wants: seasonality-adjusted budget (not flat 1/12), operational KPIs (cost per room, per cover)
+- Wants: seasonality-adjusted budget (not flat 1/12 — ✅ implemented), operational KPIs (cost per room, per cover)
 
 ### Key decisions from 17.03.2026 meeting
 - Operational year is Nov-Oct (not calendar year) due to hotel seasonality
