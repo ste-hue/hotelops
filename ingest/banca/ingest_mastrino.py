@@ -22,6 +22,7 @@ from pathlib import Path
 import openpyxl
 
 from core.contracts import SchemaViolationError, validate_columns
+from ingest.banca._logging import setup_logging as _setup_logging
 
 
 # -- Config -------------------------------------------------------------------
@@ -51,18 +52,7 @@ FACT_HEADER = [
 # -- Helpers ------------------------------------------------------------------
 
 def setup_logging(log_dir: Path, verbose: bool = False) -> logging.Logger:
-    log_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    logger = logging.getLogger("ingest_mastrino")
-    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
-    fh = logging.FileHandler(log_dir / f"ingest_mastrino_{ts}.log", encoding="utf-8")
-    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-    ch = logging.StreamHandler()
-    ch.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
-    ch.setLevel(logging.DEBUG if verbose else logging.INFO)
-    logger.addHandler(fh)
-    logger.addHandler(ch)
-    return logger
+    return _setup_logging("ingest_mastrino", log_dir, verbose)
 
 
 def parse_euro(val) -> float:

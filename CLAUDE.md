@@ -147,6 +147,7 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup — file accumul
 | `f_saldi_banca_snapshot` | Registro contabile banca da Esolver (end-of-day running balance). Fonte: SCHEDA_CONTABILE (file_sorgente column). Datahub: `registro_banca_esolver/`. Usato da v_previsione_cassa come ancora per cash forward. Pipeline: `ingest_scheda_contabile.py` (CSV+XLSX, auto DD/MM swap fix, reverse Cc#→societa inference). | APPEND | DELETE-INSERT per societa+banca+data_snapshot+file_sorgente |
 | `f_partite_aperte_fornitori` | Snapshot partite aperte fornitori da Esolver. TERZA DIMENSIONE (IMPEGNO): fatture registrate non ancora pagate, con data_scadenza. Flag intercompany per PANORAMA COMPANY. | SNAPSHOT | DELETE-INSERT per societa+data_snapshot |
 | `f_mastrino_consolidato` | Mastrino consolidato da "Costi Ricavi 2025-2026 Budget.xlsx". 901 righe. | APPEND | MD5 dedup |
+| `f_ricavi_storici` | Riepilogo Entrate mensili 2023-2025 per BU. Fonte: Antonio. | APPEND | MD5 dedup |
 | `f_affidamenti` | Affidamenti bancari (linee di credito). Definito in config.py, schema TBD. | TBD | TBD |
 
 ### Dimension tables
@@ -159,6 +160,7 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup — file accumul
 | `d_fornitori` | Fornitori ORTI (65) con voce_id e flag intercompany. Source: `core/bq/dimensioni/d_fornitori.csv`. | WRITE_TRUNCATE |
 | `d_budget_costi_fissi` | Costi fissi annuali per BU (43 righe). Source: MAPPATURA DEI COSTI_v_2.xlsx. | WRITE_TRUNCATE |
 | `d_personale_mensile` | Costi personale mensili per divisione (78 righe). Source: Incidenza_costi_personale.xlsx. | WRITE_TRUNCATE |
+| `d_coefficienti_stagionalita` | Monthly seasonality multipliers per BU, computed from f_ricavi_storici. Sum=12.0. | WRITE_TRUNCATE |
 | `d_periodi_apertura` | Calendario stagionale apertura/chiusura per BU (3 righe). | WRITE_TRUNCATE |
 
 ### Views
@@ -229,13 +231,17 @@ f_banche_movimenti ───────────┘                        (
   - `ingest_piano_conti_nuovo.py` — Piano dei conti 2026 → d_piano_conti.
   - `ingest_categorie.py` — Categorie conti → d_categorie_conti.
   - `ingest_fornitori.py` — Fornitori → d_fornitori.
+  - `ingest_coefficienti_stagionalita.py` — Computes monthly seasonality multipliers from f_ricavi_storici → d_coefficienti_stagionalita.
+  - `ingest_ricavi_storici.py` — Riepilogo Entrate XLSX (2023-2025 monthly revenue from Antonio) → f_ricavi_storici.
+  - `ingest_piano_finanziario_input.py` — PF input rows from various sources → f_piano_finanziario_input.
+  - `ingest_ricevute.py` — Ricevute fiscali processing.
   - `ingest_consumi_economato.py`, `ingest_consumi_economato_consolidato.py`, `ingest_consumi_merce.py` — Consumption tracking pipelines.
   - `ingest_coperti.py` — Coperti giornalieri → f_coperti_giornalieri.
   - `ingest_mastrino.py` — Mastrino contabile.
   - `ingest_budget_costi.py` — Budget costi fissi.
 
 **condges/** — Vertical #1: Controllo di Gestione (containerizable)
-- `condges/app.py` — Streamlit interactive Piano Finanziario for Rosa. Saldo anchor, editable grid, cash flow semaphore, scadenzario drill-down, Excel export. **Known bug: line 19 imports `from lib import config` — should be `from core import config`.**
+- `condges/app.py` — Streamlit interactive Piano Finanziario for Rosa. Saldo anchor, editable grid, cash flow semaphore, scadenzario drill-down, Excel export.
 - `condges/genera_excel.py` — Generate PF Excel from BQ. Color-coded: nero=consuntivo, blu=previsione, verde=formula.
 - `condges/update_previsione.py` — Write forecasts to f_piano_finanziario_input (DELETE-INSERT). Natural language voce aliases + Italian month names.
 - `condges/reconcile_banca.py` — Bank vs ledger reconciliation (partial — depends on `bank-reconcile` optional dep).
@@ -325,7 +331,7 @@ Rosa e Gasparotto sono le due facce del verticale `condges/` — stesso dataset,
 ### Key decisions from 17.03.2026 meeting
 - Operational year is Nov-Oct (not calendar year) due to hotel seasonality
 - 2026 is the transition year to real governance — "bussola decisionale"
-- Antonio sending 2023-2025 monthly revenue data for seasonality analysis
+- Antonio sending 2023-2025 monthly revenue data for seasonality analysis — ✅ received and integrated (d_coefficienti_stagionalita applied to Gasparotto + MAPPATURA budgets)
 - Next meeting: April 17, 2026
 
 ## Monthly Routine (la routine mensile)

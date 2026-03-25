@@ -28,6 +28,7 @@ import pandas as pd
 from google.cloud import bigquery
 
 from core.contracts import SchemaViolationError, validate_columns
+from ingest.banca._logging import setup_logging as _setup_logging
 from core.schemas import BancaMovimentoRow, validate_batch
 
 try:
@@ -79,18 +80,7 @@ FACT_HEADER = [
 # -- Helpers ------------------------------------------------------------------
 
 def setup_logging(log_dir: Path, verbose: bool = False) -> logging.Logger:
-    log_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    logger = logging.getLogger("ingest_banca")
-    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
-    fh = logging.FileHandler(log_dir / f"ingest_banca_{ts}.log", encoding="utf-8")
-    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-    ch = logging.StreamHandler()
-    ch.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
-    ch.setLevel(logging.DEBUG if verbose else logging.INFO)
-    logger.addHandler(fh)
-    logger.addHandler(ch)
-    return logger
+    return _setup_logging("ingest_banca", log_dir, verbose)
 
 
 def _detect_banca_from_content(filepath: Path) -> Optional[str]:
