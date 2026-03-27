@@ -48,7 +48,7 @@ BQ_PROJECT = "hotelops-suite"
 BQ_DATASET = "hotelops"
 BQ_TABLE = f"{BQ_PROJECT}.{BQ_DATASET}.f_accodamenti"
 
-REMOTE_ACCODAMENTI = "mywork:hotelops_datahub/accodamenti/ORTI"
+REMOTE_ACCODAMENTI = "mywork:00_hotelops_datahub/ingresso/accodamenti/ORTI"
 
 DEFAULT_FUNZIONE = "CONTABILITA"
 DEFAULT_LOCATION = "N_A"

@@ -90,7 +90,7 @@ file_types:
     lifecycle: APPEND
     dest_folder: "registro_banca_esolver/{societa}"
     bq_table: f_saldi_banca_snapshot
-    pipeline: "ingest.amministrativa.ingest_scheda_contabile"
+    pipeline: "ingest.flussi.ingest_scheda_contabile"
     split_by_societa: true
     formats: [.csv, .xlsx]
     signatures:
@@ -105,7 +105,7 @@ file_types:
     lifecycle: APPEND
     dest_folder: "movimenti_contabili/{societa}"
     bq_table: f_movimenti_contabili
-    pipeline: "ingest.amministrativa.ingest_movimenti_contabili"
+    pipeline: "ingest.flussi.ingest_movimenti_contabili"
     split_by_societa: true
     formats: [.xls]
     signatures:
@@ -119,7 +119,7 @@ file_types:
     lifecycle: SNAPSHOT
     dest_folder: "partite_fornitori/{societa}"
     bq_table: f_partite_aperte_fornitori
-    pipeline: "ingest.amministrativa.ingest_partite_aperte"
+    pipeline: "ingest.flussi.ingest_partite_aperte"
     split_by_societa: true
     formats: [.xlsx]
     signatures:
@@ -134,7 +134,7 @@ file_types:
     lifecycle: SNAPSHOT
     dest_folder: "bilancino/{societa}"
     bq_table: f_bilancino
-    pipeline: "ingest.amministrativa.ingest_bilancino"
+    pipeline: "ingest.flussi.ingest_bilancino"
     split_by_societa: true
     formats: [.xls]
     signatures:
@@ -148,7 +148,7 @@ file_types:
     lifecycle: SNAPSHOT
     dest_folder: "gasparotto"
     bq_table: f_budget_mensile
-    pipeline: "ingest.amministrativa.ingest_gasparotto"
+    pipeline: "ingest.flussi.ingest_gasparotto"
     split_by_societa: false
     formats: [.xlsx]
     signatures:
@@ -161,7 +161,7 @@ file_types:
     lifecycle: SNAPSHOT
     dest_folder: "piani_finanziari/{societa}"
     bq_table: f_piano_finanziario_input
-    pipeline: "ingest.amministrativa.ingest_piano_finanziario_xlsx"
+    pipeline: "ingest.flussi.ingest_piano_finanziario_xlsx"
     split_by_societa: true
     formats: [.xlsx]
     signatures:
@@ -188,7 +188,7 @@ file_types:
     lifecycle: APPEND
     dest_folder: "coperti"
     bq_table: f_coperti_giornalieri
-    pipeline: "ingest.amministrativa.ingest_coperti"
+    pipeline: "ingest.flussi.ingest_coperti"
     split_by_societa: false
     formats: [.csv, .xlsx]
     signatures:
@@ -203,7 +203,7 @@ file_types:
     lifecycle: APPEND
     dest_folder: "economato"
     bq_table: f_consumi_economato
-    pipeline: "ingest.amministrativa.ingest_consumi_economato"
+    pipeline: "ingest.flussi.ingest_consumi_economato"
     split_by_societa: false
     formats: [.xlsx]
     signatures:

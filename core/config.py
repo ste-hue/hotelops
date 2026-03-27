@@ -16,15 +16,17 @@ F_CONSUMI_ECONOMATO         = _t("f_consumi_economato")
 F_COPERTI_GIORNALIERI       = _t("f_coperti_giornalieri")
 F_CHIUSURA_MENSILE          = _t("f_chiusura_mensile")
 F_PARTITE_APERTE_FORNITORI  = _t("f_partite_aperte_fornitori")
-F_AFFIDAMENTI               = _t("f_affidamenti")
 F_RICAVI_STORICI            = _t("f_ricavi_storici")
-F_RICEVUTE_FISCALI          = _t("f_ricevute_fiscali")
+F_COEFFICIENTI_CONSUMO      = _t("f_coefficienti_consumo")
+F_PMS_STATISTICHE           = _t("f_pms_statistiche")
 
 # Dimension tables
 D_VOCI_PIANO_FINANZIARIO    = _t("d_voci_piano_finanziario")
 D_PIANO_CONTI               = _t("d_piano_conti")
 D_CATEGORIE_CONTI           = _t("d_categorie_conti")
 D_FORNITORI                 = _t("d_fornitori")
+D_ANAGRAFICA_FORNITORI      = _t("d_anagrafica_fornitori")
+D_MAPPING_PIANO_FINANZIARIO = _t("d_mapping_piano_finanziario")
 D_COEFFICIENTI_STAGIONALITA = _t("d_coefficienti_stagionalita")
 
 # Views

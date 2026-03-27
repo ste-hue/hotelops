@@ -2,7 +2,7 @@
 """
 Sync bank files from Google Drive to local staging using rclone.
 
-Syncs homebanking/{ORTI,INTUR}/ from hotelops_datahub.
+Syncs homebanking/{ORTI,INTUR}/ from 00_hotelops_datahub/ingresso/.
 
 Usage:
     python -m ingest.banca.fetch_drive --staging ~/.cache/hotelops/banche_staging
@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-REMOTE = "mywork:hotelops_datahub/banche"
+REMOTE = "mywork:00_hotelops_datahub/ingresso/homebanking"
 
 
 def main():

@@ -46,7 +46,7 @@ except ImportError:
 BQ_PROJECT = "hotelops-suite"
 BQ_TABLE = f"{BQ_PROJECT}.hotelops.f_movimenti_contabili"
 
-REMOTE_BASE = "mywork:hotelops_datahub/movimenti_contabili"
+REMOTE_BASE = "mywork:00_hotelops_datahub/ingresso/movimenti_contabili"
 STAGING_DEFAULT = Path.home() / ".cache/hotelops/movimenti_staging"
 
 FACT_HEADER = [
