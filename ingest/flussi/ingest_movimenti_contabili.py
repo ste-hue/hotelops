@@ -11,16 +11,16 @@ Sources (Drive):
 
 Usage:
     # Full run: sync from Drive + ingest
-    python -m ingest.amministrativa.ingest_movimenti_contabili --datahub /path/to/datahub
+    python -m ingest.flussi.ingest_movimenti_contabili --datahub /path/to/datahub
 
     # Ingest only (already synced)
-    python -m ingest.amministrativa.ingest_movimenti_contabili --datahub /path/to/datahub --no-sync
+    python -m ingest.flussi.ingest_movimenti_contabili --datahub /path/to/datahub --no-sync
 
     # Single file
-    python -m ingest.amministrativa.ingest_movimenti_contabili --file /path/to/ORTI_LISTAMOVCONT.XLS --societa ORTI
+    python -m ingest.flussi.ingest_movimenti_contabili --file /path/to/ORTI_LISTAMOVCONT.XLS --societa ORTI
 
     # Dry run
-    python -m ingest.amministrativa.ingest_movimenti_contabili --file /path/to/ORTI_LISTAMOVCONT.XLS --societa ORTI --dry-run
+    python -m ingest.flussi.ingest_movimenti_contabili --file /path/to/ORTI_LISTAMOVCONT.XLS --societa ORTI --dry-run
 """
 
 import argparse

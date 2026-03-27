@@ -10,22 +10,22 @@ Usage:
     python -m ingest.orchestrate --dry-run           # Parse + CSV, no BigQuery
     python -m ingest.orchestrate --no-sync           # Skip Drive sync
     python -m ingest.orchestrate --only banca        # Only bank group
-    python -m ingest.orchestrate --only amministrativa
+    python -m ingest.orchestrate --only flussi
     python -m ingest.orchestrate --only dimensioni
     python -m ingest.orchestrate --pipeline gasparotto  # Single pipeline
 
 Datahub structure (Google Drive):
     hotelops_datahub/
     ├── homebanking/{ORTI,INTUR}/            → ingest.banca.ingest (f_banche_movimenti)
-    ├── movimenti_contabili/{ORTI,INTUR}/   → ingest.amministrativa.ingest_movimenti_contabili
-    ├── registro_banca_esolver/{ORTI,INTUR}/ → ingest.amministrativa.ingest_scheda_contabile (f_saldi_banca_snapshot)
-    ├── partite_fornitori/{ORTI,INTUR}/     → ingest.amministrativa.ingest_partite_aperte
+    ├── movimenti_contabili/{ORTI,INTUR}/   → ingest.flussi.ingest_movimenti_contabili
+    ├── registro_banca_esolver/{ORTI,INTUR}/ → ingest.flussi.ingest_scheda_contabile (f_saldi_banca_snapshot)
+    ├── partite_fornitori/{ORTI,INTUR}/     → ingest.flussi.ingest_partite_aperte
     ├── accodamenti/ORTI/                   → ingest.banca.ingest_accodamenti (f_accodamenti)
-    ├── economato/                          → ingest.amministrativa.ingest_consumi_economato
-    ├── coperti/                            → ingest.amministrativa.ingest_coperti
-    ├── bilancino/{ORTI,INTUR}/             → ingest.amministrativa.ingest_bilancino
-    ├── gasparotto/                         → ingest.amministrativa.ingest_gasparotto
-    └── piani_finanziari/{ORTI,INTUR}/      → ingest.amministrativa.ingest_piano_finanziario_xlsx
+    ├── economato/                          → ingest.flussi.ingest_consumi_economato
+    ├── coperti/                            → ingest.flussi.ingest_coperti
+    ├── bilancino/{ORTI,INTUR}/             → ingest.flussi.ingest_bilancino
+    ├── gasparotto/                         → ingest.flussi.ingest_gasparotto
+    └── piani_finanziari/{ORTI,INTUR}/      → ingest.flussi.ingest_piano_finanziario_xlsx
 """
 
 from __future__ import annotations
@@ -313,24 +313,24 @@ PIPELINES = [
     ),
     Pipeline(
         name="movimenti_contabili",
-        group="amministrativa",
-        module="ingest.amministrativa.ingest_movimenti_contabili",
+        group="flussi",
+        module="ingest.flussi.ingest_movimenti_contabili",
         args_fn=_movimenti_args,
         description="Esolver journal entries → f_movimenti_contabili",
     ),
 
-    # Amministrativa group — auto-discovering
+    # Flussi group — auto-discovering
     Pipeline(
         name="consumi_economato",
-        group="amministrativa",
-        module="ingest.amministrativa.ingest_consumi_economato",
+        group="flussi",
+        module="ingest.flussi.ingest_consumi_economato",
         args_fn=_economato_args,
         description="Supply consumption → f_consumi_economato",
     ),
     Pipeline(
         name="coperti",
-        group="amministrativa",
-        module="ingest.amministrativa.ingest_coperti",
+        group="flussi",
+        module="ingest.flussi.ingest_coperti",
         args_fn=_coperti_args,
         description="Meal covers → f_coperti_giornalieri",
     ),
@@ -339,21 +339,21 @@ PIPELINES = [
     Pipeline(
         name="categorie",
         group="dimensioni",
-        module="ingest.amministrativa.ingest_categorie",
+        module="core.bq.load.load_categorie",
         args_fn=_dim_categorie_args,
         description="Cost categories → d_categorie_conti",
     ),
     Pipeline(
         name="piano_conti",
         group="dimensioni",
-        module="ingest.amministrativa.ingest_piano_conti_nuovo",
+        module="core.bq.load.load_piano_conti",
         args_fn=_dim_piano_conti_args,
         description="Chart of accounts 2026 → d_piano_conti",
     ),
     Pipeline(
         name="stagionalita",
         group="dimensioni",
-        module="ingest.amministrativa.ingest_coefficienti_stagionalita",
+        module="core.bq.load.load_coefficienti_stagionalita",
         args_fn=_stagionalita_args,
         description="Seasonality coefficients → d_coefficienti_stagionalita",
     ),
@@ -361,24 +361,24 @@ PIPELINES = [
 
 # Multi-file pipelines (discover N files, run N times)
 MULTI_PIPELINES = [
-    ("bilancino", "amministrativa",
-     "ingest.amministrativa.ingest_bilancino",
+    ("bilancino", "flussi",
+     "ingest.flussi.ingest_bilancino",
      _bilancino_discover,
      "Trial balance → f_bilancino"),
-    ("gasparotto", "amministrativa",
-     "ingest.amministrativa.ingest_gasparotto",
+    ("gasparotto", "flussi",
+     "ingest.flussi.ingest_gasparotto",
      _gasparotto_discover,
      "Gasparotto budget → f_budget_mensile"),
-    ("piano_finanziario", "amministrativa",
-     "ingest.amministrativa.ingest_piano_finanziario_xlsx",
+    ("piano_finanziario", "flussi",
+     "ingest.flussi.ingest_piano_finanziario_xlsx",
      _piano_fin_discover,
      "Piano finanziario → f_piano_finanziario_input"),
-    ("scheda_contabile", "amministrativa",
-     "ingest.amministrativa.ingest_scheda_contabile",
+    ("scheda_contabile", "flussi",
+     "ingest.flussi.ingest_scheda_contabile",
      _scheda_contabile_discover,
      "Scheda contabile Esolver → f_saldi_banca_snapshot"),
-    ("partite_fornitori", "amministrativa",
-     "ingest.amministrativa.ingest_partite_aperte",
+    ("partite_fornitori", "flussi",
+     "ingest.flussi.ingest_partite_aperte",
      _partite_discover,
      "Partite aperte fornitori → f_partite_aperte_fornitori"),
 ]
@@ -509,7 +509,7 @@ def main() -> None:
                         help="Parse + CSV, no BigQuery writes")
     parser.add_argument("--no-sync", action="store_true",
                         help="Skip Drive sync (use local staging)")
-    parser.add_argument("--only", choices=["banca", "amministrativa", "dimensioni"],
+    parser.add_argument("--only", choices=["banca", "flussi", "dimensioni"],
                         help="Run only this pipeline group")
     parser.add_argument("--pipeline", type=str,
                         help="Run only this specific pipeline by name")

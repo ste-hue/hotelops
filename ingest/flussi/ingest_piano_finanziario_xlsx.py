@@ -33,9 +33,9 @@ Voce mapping (row → voce_id):
 Output: f_piano_finanziario_input (WRITE_APPEND with hash dedup)
 
 Usage:
-    python -m ingest.amministrativa.ingest_piano_finanziario_xlsx \\
+    python -m ingest.flussi.ingest_piano_finanziario_xlsx \\
         --file "/path/to/ORTI - Piano Finanziario - 03_mar2026.xlsx" --dry-run
-    python -m ingest.amministrativa.ingest_piano_finanziario_xlsx \\
+    python -m ingest.flussi.ingest_piano_finanziario_xlsx \\
         --dir "/path/to/pianifinanziari/" --dry-run
 """
 

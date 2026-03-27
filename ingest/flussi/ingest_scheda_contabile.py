@@ -25,14 +25,14 @@ Columns (same in both CSV and XLSX):
     Val.; Dare in valuta; Avere in valuta; Riferimenti IVA; Centro imputazione
 
 Usage:
-    python -m ingest.amministrativa.ingest_scheda_contabile \\
+    python -m ingest.flussi.ingest_scheda_contabile \\
         --file /path/to/20260101_Conto_ORTI_BancaMPS_Cc2_Saldo35588-05_Esercizio2026.csv \\
         --societa ORTI --banca MPS
 
-    python -m ingest.amministrativa.ingest_scheda_contabile \\
+    python -m ingest.flussi.ingest_scheda_contabile \\
         --dir /path/to/registro_banca_esolver/ORTI/ --societa ORTI
 
-    python -m ingest.amministrativa.ingest_scheda_contabile \\
+    python -m ingest.flussi.ingest_scheda_contabile \\
         --file export.xlsx --societa ORTI --banca MPS --dry-run
 
 Output BQ: f_saldi_banca_snapshot (DELETE-INSERT per societa+banca+data_snapshot)

@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from core.schemas import CoefficienteStagionalitaRow, make_hash, validate_batch
-from ingest.amministrativa.ingest_coefficienti_stagionalita import (
+from core.bq.load.load_coefficienti_stagionalita import (
     compute_coefficients,
 )
 

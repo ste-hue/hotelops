@@ -13,9 +13,9 @@ This is the THIRD TEMPORAL DIMENSION (IMPEGNO): knowing what's already
 committed (invoices received, payment terms agreed) but not yet paid.
 
 Usage:
-    python -m ingest.amministrativa.ingest_partite_aperte --file export.xlsx
-    python -m ingest.amministrativa.ingest_partite_aperte --file export.xlsx --societa INTUR
-    python -m ingest.amministrativa.ingest_partite_aperte --file export.xlsx --dry-run
+    python -m ingest.flussi.ingest_partite_aperte --file export.xlsx
+    python -m ingest.flussi.ingest_partite_aperte --file export.xlsx --societa INTUR
+    python -m ingest.flussi.ingest_partite_aperte --file export.xlsx --dry-run
 """
 
 import argparse

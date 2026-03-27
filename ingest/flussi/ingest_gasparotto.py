@@ -19,10 +19,10 @@ Output: f_budget_mensile rows with fonte=GASPAROTTO
 Strategy: DELETE-INSERT for anno=ANNO AND fonte='GASPAROTTO'
 
 Usage:
-    python -m ingest.amministrativa.ingest_gasparotto --dry-run
-    python -m ingest.amministrativa.ingest_gasparotto \\
+    python -m ingest.flussi.ingest_gasparotto --dry-run
+    python -m ingest.flussi.ingest_gasparotto \\
         --file "/path/to/Master Completo Indici 2025 ORTI SRL_Budget26.xlsx"
-    python -m ingest.amministrativa.ingest_gasparotto \\
+    python -m ingest.flussi.ingest_gasparotto \\
         --file "/path/to/file.xlsx" --societa INTUR
 """
 

@@ -6,11 +6,11 @@ Reads XLS exports from Esolver (Bilancio di verifica) into BigQuery f_bilancino.
 Only ingests leaf-level accounts (Livello di imputazione = Si).
 
 Usage:
-    python -m ingest.amministrativa.ingest_bilancino \\
+    python -m ingest.flussi.ingest_bilancino \\
         --file /path/to/GENNAIO2026ESOLVER.xls \\
         --societa ORTI \\
         --mese 2026-01
-    python -m ingest.amministrativa.ingest_bilancino \\
+    python -m ingest.flussi.ingest_bilancino \\
         --file /path/to/GENNAIO2026ESOLVER.xls \\
         --societa ORTI \\
         --mese 2026-01 \\

@@ -12,9 +12,9 @@ Cartelle in mappature/economato_reparti.csv → reparto/funzione/BU noti.
 Cartelle sconosciute → EVENTO automatico (is_evento=true, evento_nome=nome cartella).
 
 Usage:
-    python -m ingest.amministrativa.ingest_consumi_economato --dry-run
-    python -m ingest.amministrativa.ingest_consumi_economato
-    python -m ingest.amministrativa.ingest_consumi_economato \\
+    python -m ingest.flussi.ingest_consumi_economato --dry-run
+    python -m ingest.flussi.ingest_consumi_economato
+    python -m ingest.flussi.ingest_consumi_economato \\
         --datahub "/path/to/hotelops_datahub"
 
 Output BQ: f_consumi_economato  (WRITE_APPEND + dedup via hash_riga)

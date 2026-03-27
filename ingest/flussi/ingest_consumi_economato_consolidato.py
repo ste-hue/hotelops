@@ -7,9 +7,9 @@ Formato: ECO_SituazioneConsumi_DettagliP — colonne:
   U.M.A., U.M.C., Coeff Conv, Quantita, Euro
 
 Usage:
-    python -m ingest.amministrativa.ingest_consumi_economato_consolidato \\
+    python -m ingest.flussi.ingest_consumi_economato_consolidato \\
         --file "Consumi Luglio-Novembre 2025.xlsx" --dry-run
-    python -m ingest.amministrativa.ingest_consumi_economato_consolidato \\
+    python -m ingest.flussi.ingest_consumi_economato_consolidato \\
         --file "Consumi Luglio-Novembre 2025.xlsx"
 """
 

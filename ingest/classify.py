@@ -361,7 +361,7 @@ def _build_scheda_result(
     ext = path.suffix.lower()
     canonical = f"{soc}_SCHEDA_{bnk}_{today}{ext}"
     dest = f"registro_banca_esolver/{soc}" if societa else "registro_banca_esolver"
-    pipeline = f"python -m ingest.amministrativa.ingest_scheda_contabile --file {{dest_file}}"
+    pipeline = f"python -m ingest.flussi.ingest_scheda_contabile --file {{dest_file}}"
     if societa:
         pipeline += f" --societa {societa}"
     if banca:
@@ -411,7 +411,7 @@ def _build_movimenti_result(
     soc = societa or "UNKNOWN"
     canonical = f"{soc}_LISTAMOVCONT.XLS"
     dest = f"movimenti_contabili/{soc}" if societa else "movimenti_contabili"
-    pipeline = f"python -m ingest.amministrativa.ingest_movimenti_contabili --file {{dest_file}}"
+    pipeline = f"python -m ingest.flussi.ingest_movimenti_contabili --file {{dest_file}}"
     if societa:
         pipeline += f" --societa {societa}"
     return ClassificationResult(
@@ -463,7 +463,7 @@ def _build_partite_result(
     today = datetime.now().strftime("%Y%m%d")
     canonical = f"{soc}_PARTITE_FORNITORI_{today}.xlsx"
     dest = f"partite_fornitori/{soc}" if societa else "partite_fornitori"
-    pipeline = f"python -m ingest.amministrativa.ingest_partite_aperte --file {{dest_file}}"
+    pipeline = f"python -m ingest.flussi.ingest_partite_aperte --file {{dest_file}}"
     if societa:
         pipeline += f" --societa {societa}"
     return ClassificationResult(
@@ -511,7 +511,7 @@ def _build_bilancino_result(
     # Keep original name — it usually has the month
     canonical = path.name
     dest = f"bilancino/{soc}" if societa else "bilancino"
-    pipeline = f"python -m ingest.amministrativa.ingest_bilancino --file {{dest_file}}"
+    pipeline = f"python -m ingest.flussi.ingest_bilancino --file {{dest_file}}"
     if societa:
         pipeline += f" --societa {societa}"
     return ClassificationResult(
@@ -562,7 +562,7 @@ def _build_gasparotto_result(
     # Keep descriptive name but standardize
     canonical = f"Master_Completo_{soc}_{today}.xlsx"
     dest = "gasparotto"
-    pipeline = f"python -m ingest.amministrativa.ingest_gasparotto --file {{dest_file}} --societa {soc}"
+    pipeline = f"python -m ingest.flussi.ingest_gasparotto --file {{dest_file}} --societa {soc}"
     return ClassificationResult(
         file_path=path,
         file_type="gasparotto_budget",
@@ -613,7 +613,7 @@ def _build_pf_result(
     month_tag = m.group(0) if m else today
     canonical = f"{soc}_Piano_Finanziario_{month_tag}.xlsx"
     dest = f"piani_finanziari/{soc}" if societa else "piani_finanziari"
-    pipeline = f"python -m ingest.amministrativa.ingest_piano_finanziario_xlsx --file {{dest_file}}"
+    pipeline = f"python -m ingest.flussi.ingest_piano_finanziario_xlsx --file {{dest_file}}"
     if societa:
         pipeline += f" --societa {societa}"
     return ClassificationResult(
@@ -797,7 +797,7 @@ def _build_coperti_result(path: Path, confidence: float) -> ClassificationResult
         societa="ORTI",
         canonical_name=canonical,
         dest_folder="coperti",
-        pipeline_cmd=f"python -m ingest.amministrativa.ingest_coperti --file {{dest_file}}",
+        pipeline_cmd=f"python -m ingest.flussi.ingest_coperti --file {{dest_file}}",
         confidence=confidence,
     )
 
@@ -832,10 +832,10 @@ def _build_economato_result(
     today = datetime.now().strftime("%Y%m%d")
     if is_consolidato:
         canonical = f"ECO_Consolidato_{today}.xlsx"
-        pipeline = f"python -m ingest.amministrativa.ingest_consumi_economato_consolidato --file {{dest_file}}"
+        pipeline = f"python -m ingest.flussi.ingest_consumi_economato_consolidato --file {{dest_file}}"
     else:
         canonical = f"ECO_{today}.xlsx"
-        pipeline = f"python -m ingest.amministrativa.ingest_consumi_economato --source {{dest_file}}"
+        pipeline = f"python -m ingest.flussi.ingest_consumi_economato --source {{dest_file}}"
     return ClassificationResult(
         file_path=path,
         file_type="economato_consolidato" if is_consolidato else "economato",

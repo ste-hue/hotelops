@@ -14,9 +14,9 @@ Formati supportati:
       stessa struttura del CSV (come consumi_BRK_CUCINA.xlsx)
 
 Usage:
-    python -m ingest.amministrativa.ingest_coperti --dry-run
-    python -m ingest.amministrativa.ingest_coperti
-    python -m ingest.amministrativa.ingest_coperti \\
+    python -m ingest.flussi.ingest_coperti --dry-run
+    python -m ingest.flussi.ingest_coperti
+    python -m ingest.flussi.ingest_coperti \\
         --datahub "/path/to/hotelops_datahub"
 
 Output BQ: f_coperti_giornalieri  (WRITE_APPEND + dedup via hash_riga)
