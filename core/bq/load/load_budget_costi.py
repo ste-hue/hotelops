@@ -11,8 +11,8 @@ Fonti:
 Output: f_budget_mensile (delete-insert per anno=2026, fonte IN (MAPPATURA, INCIDENZA))
 
 Usage:
-    python -m ingest.amministrativa.ingest_budget_costi --dry-run
-    python -m ingest.amministrativa.ingest_budget_costi \\
+    python -m core.bq.load.load_budget_costi --dry-run
+    python -m core.bq.load.load_budget_costi \\
         --mappatura "/path/to/MAPPATURA DEI COSTI_v_2.xlsx" \\
         --incidenza "/path/to/Incidenza_costi_personale.xlsx"
 """

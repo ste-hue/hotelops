@@ -12,8 +12,8 @@ This is the authoritative mapping for:
                    Oneri Finanziari)
 
 Usage:
-    python -m ingest.amministrativa.ingest_categorie --dry-run
-    python -m ingest.amministrativa.ingest_categorie \\
+    python -m core.bq.load.load_categorie --dry-run
+    python -m core.bq.load.load_categorie \\
         --file "/path/to/Costi Ricavi 2025-2026 Budget.xlsx"
 """
 

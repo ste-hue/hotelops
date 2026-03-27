@@ -6,9 +6,9 @@ Carica il CSV d_fornitori → BigQuery d_fornitori.
 Mappa codice_fornitore Esolver a voce_id Piano Finanziario.
 
 Usage:
-    python -m ingest.amministrativa.ingest_fornitori
-    python -m ingest.amministrativa.ingest_fornitori --file bq/dimensioni/d_fornitori.csv
-    python -m ingest.amministrativa.ingest_fornitori --dry-run
+    python -m core.bq.load.load_fornitori
+    python -m core.bq.load.load_fornitori --file bq/dimensioni/d_fornitori.csv
+    python -m core.bq.load.load_fornitori --dry-run
 """
 
 import argparse

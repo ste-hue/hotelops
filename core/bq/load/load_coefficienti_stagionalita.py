@@ -15,9 +15,9 @@ The sum of 12 coefficients per BU is always 12.0.
 Company-wide (HQ) coefficients are the revenue-weighted average across all BUs.
 
 Usage:
-    python -m ingest.amministrativa.ingest_coefficienti_stagionalita
-    python -m ingest.amministrativa.ingest_coefficienti_stagionalita --societa ORTI
-    python -m ingest.amministrativa.ingest_coefficienti_stagionalita --dry-run
+    python -m core.bq.load.load_coefficienti_stagionalita
+    python -m core.bq.load.load_coefficienti_stagionalita --societa ORTI
+    python -m core.bq.load.load_coefficienti_stagionalita --dry-run
 """
 
 from __future__ import annotations

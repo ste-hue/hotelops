@@ -22,8 +22,8 @@ Sheet structure (row 1 = header):
   Col J+: Importo / notes (not needed)
 
 Usage:
-    python -m ingest.amministrativa.ingest_piano_conti_nuovo --dry-run
-    python -m ingest.amministrativa.ingest_piano_conti_nuovo \\
+    python -m core.bq.load.load_piano_conti --dry-run
+    python -m core.bq.load.load_piano_conti \\
         --file "/path/to/Costi Ricavi 2025-2026 Budget.xlsx"
 """
 

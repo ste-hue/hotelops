@@ -6,10 +6,10 @@ Carica il CSV di mappatura voci → BigQuery d_voci_piano_finanziario.
 Sicuro da ri-eseguire: sovrascrive l'intera tabella.
 
 Usage:
-    python -m ingest.amministrativa.ingest_voci_piano_finanziario
-    python -m ingest.amministrativa.ingest_voci_piano_finanziario \\
+    python -m core.bq.load.load_voci_piano_finanziario
+    python -m core.bq.load.load_voci_piano_finanziario \\
         --file bq/dimensioni/d_voci_piano_finanziario.csv
-    python -m ingest.amministrativa.ingest_voci_piano_finanziario --dry-run
+    python -m core.bq.load.load_voci_piano_finanziario --dry-run
 """
 
 import argparse
