@@ -1,0 +1,303 @@
+societa_id,voce_id,sotto_voce,tipo,codice_fornitore,cod_conto_pattern,nome_esolver
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_MATERIE_PRIME — Fornitori F&B + materiali
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_MATERIE_PRIME,Le Croissant srl,FORNITORE,1,,LE CROISSANT SRL
+ORTI,USCITE_MATERIE_PRIME,Giacinto Di Palma,FORNITORE,4,,Giacinto Di Palma
+ORTI,USCITE_MATERIE_PRIME,Bianco Bufala,FORNITORE,6,,BIANCO BUFALA SRL
+ORTI,USCITE_MATERIE_PRIME,C&C S.p.A.,FORNITORE,14,,C&C S.p.A.
+ORTI,USCITE_MATERIE_PRIME,Amazon,FORNITORE,19,,AMAZON EU S.A R.L.
+ORTI,USCITE_MATERIE_PRIME,Ditta Apicella,FORNITORE,32,,DITTA APICELLA
+ORTI,USCITE_MATERIE_PRIME,Paravia Elevators,FORNITORE,64,,PARAVIA ELEVATORS SRL
+ORTI,USCITE_MATERIE_PRIME,Vicart,FORNITORE,71,,VICART S.R.L.
+ORTI,USCITE_MATERIE_PRIME,Bellagaia,FORNITORE,74,,BELLAGAIA S.R.L.
+ORTI,USCITE_MATERIE_PRIME,Pisacane Raffaele,FORNITORE,80,,PISACANE RAFFAELE
+ORTI,USCITE_MATERIE_PRIME,Santelia Antonio,FORNITORE,83,,SANTELIA ANTONIO
+ORTI,USCITE_MATERIE_PRIME,Amalfi sei esse,FORNITORE,92,,AMALFI SEI ESSE S.R.L.
+ORTI,USCITE_MATERIE_PRIME,Paolillo Aldo,FORNITORE,104,,PAOLILLO ALDO
+ORTI,USCITE_MATERIE_PRIME,Tecno Piscine,FORNITORE,128,,TECNO PISCINE S.R.L.
+ORTI,USCITE_MATERIE_PRIME,Fabbrocino Michele,FORNITORE,133,,FABBROCINO MICHELE S.R.L.
+ORTI,USCITE_MATERIE_PRIME,Hotel Service,FORNITORE,145,,HOTELSERVICE S.R.L.
+ORTI,USCITE_MATERIE_PRIME,Ninni,FORNITORE,146,,NINNI S.R.L.
+ORTI,USCITE_MATERIE_PRIME,Amato Prisco Pane,FORNITORE,147,,AMATO FILIPPO
+ORTI,USCITE_MATERIE_PRIME,Gallo Giovanni,FORNITORE,158,,GALLO GIOVANNI & C. SNC
+ORTI,USCITE_MATERIE_PRIME,Di Sarno Coffee,FORNITORE,161,,DI SARNO COFFEE SERVICE DI TERMINIELLO ROSA
+ORTI,USCITE_MATERIE_PRIME,L'Europea,FORNITORE,186,,L'EUROPEA - ORGANIZZAZIONE NAZIONALE SRL
+ORTI,USCITE_MATERIE_PRIME,Centro service Snc,FORNITORE,315,,CENTRO SERVICE SNC DI VOCCIA MASSIMO & ANTONIO
+ORTI,USCITE_MATERIE_PRIME,Alberto D'Urso,FORNITORE,412,,Alberto D Urso S.a.s. di Tecla Apicella
+ORTI,USCITE_MATERIE_PRIME,Cimmini Filomena,FORNITORE,417,,CIMINI FILOMENA
+ORTI,USCITE_MATERIE_PRIME,Cica,FORNITORE,423,,CICA SRL
+ORTI,USCITE_MATERIE_PRIME,AP Commerciale,FORNITORE,498,,AP COMMERCIALE S.R.L.
+ORTI,USCITE_MATERIE_PRIME,Attianese Frutta e Verdura,FORNITORE,667,,ATTIANESE ALFONSO S.A.S. DI ATTIANESE ALFONSO E C.
+ORTI,USCITE_MATERIE_PRIME,Affinito,FORNITORE,745,,AFFINITO SRL
+ORTI,USCITE_MATERIE_PRIME,Capuano Raffaele,FORNITORE,864,,CAPUANO RAFFAELE
+ORTI,USCITE_MATERIE_PRIME,Albergo Santa Chiara,FORNITORE,985,,ALBERGO SANTA CHIARA
+ORTI,USCITE_MATERIE_PRIME,Ditta Pansa,FORNITORE,1003,,DITTA PANSA DI G.PANSA E FIGLIO A. PANSA SAS
+ORTI,USCITE_MATERIE_PRIME,Miele Giuseppe,FORNITORE,1008,,MIELE GIUSEPPE E FIGLI SPA
+ORTI,USCITE_MATERIE_PRIME,Idro-Top,FORNITORE,1035,,IDRO-TOP S.R.L.
+ORTI,USCITE_MATERIE_PRIME,I.C.P srl,FORNITORE,1104,,I.C.P. INGROSSO CHIMICA PEPE S.R.L.
+ORTI,USCITE_MATERIE_PRIME,Gest. D.M.F.,FORNITORE,1168,,Gest. D.M.F. Srl
+ORTI,USCITE_MATERIE_PRIME,Salsano Tiziano,FORNITORE,1230,,Salsano Tiziano
+ORTI,USCITE_MATERIE_PRIME,Le Sette Sorelle,FORNITORE,1233,,LE SETTE SORELLE SOCIETA' A RESPONSABILITA' LIMITATA SEMPL
+ORTI,USCITE_MATERIE_PRIME,Romano Ciro,FORNITORE,1438,,ROMANO CIRO S.R.L.
+ORTI,USCITE_MATERIE_PRIME,Reidos srl,FORNITORE,1543,,REIDOS S.R.L.
+ORTI,USCITE_MATERIE_PRIME,Happy Casa,FORNITORE,1557,,HAPPY CASA STORE S.R.L.
+ORTI,USCITE_MATERIE_PRIME,Pepe Mastro dolciario,FORNITORE,1565,,PEPE MASTRO DOLCIERE S.R.L.
+ORTI,USCITE_MATERIE_PRIME,Alnumar,FORNITORE,1589,,ALNUMAR DI GAROFALO MASSIMILIANO
+ORTI,USCITE_MATERIE_PRIME,Dr. Vranjes,FORNITORE,1595,,Dr. Vranjes Firenze S.p.A.
+ORTI,USCITE_MATERIE_PRIME,Exorh,FORNITORE,1597,,EXORH DI CHIESA PAOLA
+ORTI,USCITE_MATERIE_PRIME,King Catering,FORNITORE,1598,,KING CATERING S.R.L.
+ORTI,USCITE_MATERIE_PRIME,SITE (elettrodomestici),FORNITORE,1602,,SOCIETA' INGROSSO TELEVISORI ELETTRODOMESTICI AFFINI S.R.L.
+ORTI,USCITE_MATERIE_PRIME,Risaliti,FORNITORE,1603,,RISALITI SRL
+ORTI,USCITE_MATERIE_PRIME,Hosteria,FORNITORE,1604,,HOSTERIA S.R.L.S.
+ORTI,USCITE_MATERIE_PRIME,Vergato Luciano,FORNITORE,1605,,VERGATO LUCIANO
+ORTI,USCITE_MATERIE_PRIME,Centro Distribuzione Maglio,FORNITORE,125,,TODO_NOME_ESOLVER
+ORTI,USCITE_MATERIE_PRIME,Farmacia Barela,FORNITORE,672,,TODO_NOME_ESOLVER
+ORTI,USCITE_MATERIE_PRIME,Finsal,FORNITORE,68,,TODO_NOME_ESOLVER
+ORTI,USCITE_MATERIE_PRIME,Santelia Luigi,FORNITORE,121,,TODO_NOME_ESOLVER
+ORTI,USCITE_MATERIE_PRIME,Mammato Anna,FORNITORE,1515,,TODO_NOME_ESOLVER
+ORTI,USCITE_MATERIE_PRIME,Vitagliano,FORNITORE,1306,,TODO_NOME_ESOLVER
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_UTENZE — Sotto-voci: energia, gas, acqua, telefono, connettivita
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_UTENZE,Energia elettrica,FORNITORE,30,,4G ENERGIA SRL
+ORTI,USCITE_UTENZE,Energia elettrica (Italy Green Power),FORNITORE,1184,,Italy Green Power S.p.A.
+ORTI,USCITE_UTENZE,Acqua - Ausino,FORNITORE,18,,AUSINO - S.P.A. SERVIZI IDRICI INTEGRATI
+ORTI,USCITE_UTENZE,Energia elettrica,CATEGORIA,,570913,
+ORTI,USCITE_UTENZE,Gas,CATEGORIA,,570919,
+ORTI,USCITE_UTENZE,Acqua potabile,CATEGORIA,,570917,
+ORTI,USCITE_UTENZE,Telefono,CATEGORIA,,570901,
+ORTI,USCITE_UTENZE,Connettivita,CATEGORIA,,570909,
+ORTI,USCITE_UTENZE,Sanificazione,CATEGORIA,,570990,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_SERVIZI_PRODUZIONE — Canoni e servizi
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_SERVIZI_PRODUZIONE,Sistemi (E_solver),FORNITORE,10,,SISTEMI SOLUZIONI INFORMATICHE E TELEMATICHE S.P
+ORTI,USCITE_SERVIZI_PRODUZIONE,Proxima Service,FORNITORE,12,,PROXIMA SERVICE S.R.L.
+ORTI,USCITE_SERVIZI_PRODUZIONE,Soft tecnology,FORNITORE,76,,SOFT TECNOLOGY SRL
+ORTI,USCITE_SERVIZI_PRODUZIONE,Plan Italia,FORNITORE,81,,PLAN ITALIA S.R.L.
+ORTI,USCITE_SERVIZI_PRODUZIONE,Hoxell,FORNITORE,948,,HOXELL SA
+ORTI,USCITE_SERVIZI_PRODUZIONE,Noleggio Tesla,FORNITORE,1076,,ALD Automotive Italia S.r.l.
+ORTI,USCITE_SERVIZI_PRODUZIONE,Bestrank,FORNITORE,1270,,BESTRANK SOCIETA' A RESPONSABILITA' LIMITATA
+ORTI,USCITE_SERVIZI_PRODUZIONE,Alba Leasing,FORNITORE,1276,,ALBA LEASING S.P.A.
+ORTI,USCITE_SERVIZI_PRODUZIONE,Noleggio biancheria,CATEGORIA,,57010191,
+ORTI,USCITE_SERVIZI_PRODUZIONE,Altri servizi produzione,CATEGORIA,,57010199,
+ORTI,USCITE_SERVIZI_PRODUZIONE,Trasporti su acquisti,CATEGORIA,,570501,
+ORTI,USCITE_SERVIZI_PRODUZIONE,Software gestione alberghiera,CATEGORIA,,659001,
+ORTI,USCITE_SERVIZI_PRODUZIONE,Software contabilita e magazzino,CATEGORIA,,659002,
+ORTI,USCITE_SERVIZI_PRODUZIONE,Domini e hosting,CATEGORIA,,659008,
+ORTI,USCITE_SERVIZI_PRODUZIONE,Canoni noleggio attrezzature,CATEGORIA,,650515,
+ORTI,USCITE_SERVIZI_PRODUZIONE,Noleggio attrezzature,CATEGORIA,,650590,
+ORTI,USCITE_SERVIZI_PRODUZIONE,Canoni leasing attrezzature,CATEGORIA,,650505,
+ORTI,USCITE_SERVIZI_PRODUZIONE,Canone noleggio fotocopiatrici,CATEGORIA,,630590,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_CONSULENZE
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_CONSULENZE,Consulenza legale,FORNITORE,41,,Giordano Associati S.r.l Socio Unico
+ORTI,USCITE_CONSULENZE,Team Work,FORNITORE,1549,,TEAMWORK S.R.L.
+ORTI,USCITE_CONSULENZE,Consulenze amministrative e fiscali,CATEGORIA,,610101,
+ORTI,USCITE_CONSULENZE,Consulenze del lavoro,CATEGORIA,,61010191,
+ORTI,USCITE_CONSULENZE,Consulenze tecniche,CATEGORIA,,610103,
+ORTI,USCITE_CONSULENZE,Consulenze legali,CATEGORIA,,610105,
+ORTI,USCITE_CONSULENZE,Consulenze notarili,CATEGORIA,,610107,
+ORTI,USCITE_CONSULENZE,Consulenze marketing,CATEGORIA,,610109,
+ORTI,USCITE_CONSULENZE,Spese legali,CATEGORIA,,610190,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_COMMISSIONI — Nexi + OTA
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_COMMISSIONI,Nexi,FORNITORE,414,,NEXI PAYMENTS S.p.A.
+ORTI,USCITE_COMMISSIONI,Commissioni OTA HOTEL,CATEGORIA,,57010192,
+ORTI,USCITE_COMMISSIONI,Commissioni OTA Residence,CATEGORIA,,57010193,
+ORTI,USCITE_COMMISSIONI,Commissioni OTA CVM,CATEGORIA,,57010194,
+ORTI,USCITE_COMMISSIONI,Commissioni Spiagge/Stripe,CATEGORIA,,57010195,
+ORTI,USCITE_COMMISSIONI,Commissioni OTA (nuovo conto),CATEGORIA,,630201,
+ORTI,USCITE_COMMISSIONI,Commissioni Nexi,CATEGORIA,,750190,
+ORTI,USCITE_COMMISSIONI,Commissioni su transato POS,CATEGORIA,,750195,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_CANONE_PASSIVO — Fitto ramo d'azienda
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_CANONE_PASSIVO,Fitto Ramo d'Azienda,FORNITORE,264,,PANORAMA COMPANY S.R.L.
+ORTI,USCITE_CANONE_PASSIVO,Canoni passivi affitto d'azienda,CATEGORIA,,651101,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_SALARI — Personale
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_SALARI,Retribuzioni lorde,CATEGORIA,,670101,
+ORTI,USCITE_SALARI,Contributi INPS,CATEGORIA,,670103,
+ORTI,USCITE_SALARI,Premi INAIL,CATEGORIA,,670111,
+ORTI,USCITE_SALARI,Lavoro occasionale,CATEGORIA,,670201,
+ORTI,USCITE_SALARI,Formazione e addestramento,CATEGORIA,,670313,
+ORTI,USCITE_SALARI,Altri costi personale,CATEGORIA,,670351,
+ORTI,USCITE_SALARI,Formazione sicurezza,CATEGORIA,,670390,
+ORTI,USCITE_SALARI,Software reclutamento,CATEGORIA,,670391,
+ORTI,USCITE_SALARI,Vestiario dipendenti,CATEGORIA,,670394,
+ORTI,USCITE_SALARI,F24 (ritenute dipendenti),CATEGORIA,,350301,
+ORTI,USCITE_SALARI,F24 (ritenute professionisti),CATEGORIA,,350305,
+ORTI,USCITE_SALARI,F24 (INPS),CATEGORIA,,370101,
+ORTI,USCITE_SALARI,F24 (INAIL),CATEGORIA,,370105,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_TASSE — IMU, IVA, TARI, imposte di soggiorno, IRES/IRAP
+# cod_conto_pattern: il d_voci mappa a 63051 (spese amm.) ma le vere tasse sono 71.xx
+# TODO: Stefano conferma quali cod_conto vanno sotto questa voce PF
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_TASSE,IMU,CATEGORIA,,710104,
+ORTI,USCITE_TASSE,Diritti camerali,CATEGORIA,,710105,
+ORTI,USCITE_TASSE,Imposta di registro,CATEGORIA,,710191,
+ORTI,USCITE_TASSE,Diritti SIAE,CATEGORIA,,710190,
+ORTI,USCITE_TASSE,TARI,CATEGORIA,,630519,
+ORTI,USCITE_TASSE,Assicurazioni obbligatorie,CATEGORIA,,630515,
+ORTI,USCITE_TASSE,Spese amministrative,CATEGORIA,,630511,
+ORTI,USCITE_TASSE,Spese generali varie,CATEGORIA,,630551,
+ORTI,USCITE_TASSE,IVA su acquisti,CATEGORIA,,350101,
+ORTI,USCITE_TASSE,IVA su vendite,CATEGORIA,,350103,
+ORTI,USCITE_TASSE,IVA su corrispettivi,CATEGORIA,,350105,
+ORTI,USCITE_TASSE,Imposta di soggiorno HOTEL,CATEGORIA,,390590,
+ORTI,USCITE_TASSE,Imposta di soggiorno CVM,CATEGORIA,,390593,
+ORTI,USCITE_TASSE,Ritenute professionisti (1040),CATEGORIA,,350305,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_MUTUI — Mutui e finanziamenti (fonte BANCHE, non ESOLVER)
+# I mutui non hanno cod_conto CE — sono movimenti bancari (tipo_movimento)
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_MUTUI,Mutuo MPS (ex Intesa),CATEGORIA,,310394,
+ORTI,USCITE_MUTUI,Finanziamenti medio/lungo,CATEGORIA,,310305,
+ORTI,USCITE_MUTUI,Interessi passivi su mutui,CATEGORIA,,750305,
+ORTI,USCITE_MUTUI,Interessi passivi bancari,CATEGORIA,,750101,
+ORTI,USCITE_MUTUI,Commissioni su finanziamenti,CATEGORIA,,750111,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_MARKETING
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_MARKETING,Digital Advertising,CATEGORIA,,630401,
+ORTI,USCITE_MARKETING,Contenuti Foto e Video,CATEGORIA,,630402,
+ORTI,USCITE_MARKETING,Consulenze di Marketing,CATEGORIA,,650604,
+ORTI,USCITE_MARKETING,Canoni portali,CATEGORIA,,630301,
+ORTI,USCITE_MARKETING,Omaggi,CATEGORIA,,630303,
+ORTI,USCITE_MARKETING,Pubblicita inserzioni,CATEGORIA,,630101,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_VARIE — Spese diverse, manutenzioni, veicoli
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_VARIE,Spese alberghi e ristoranti,CATEGORIA,,630109,
+ORTI,USCITE_VARIE,Pedaggi autostradali,CATEGORIA,,630115,
+ORTI,USCITE_VARIE,Spese di transfer,CATEGORIA,,630190,
+ORTI,USCITE_VARIE,Costi e spese diverse,CATEGORIA,,710351,
+ORTI,USCITE_VARIE,Sanzioni e multe,CATEGORIA,,710303,
+ORTI,USCITE_VARIE,Abbonamenti e pubblicazioni,CATEGORIA,,710311,
+ORTI,USCITE_VARIE,Erogazioni liberali,CATEGORIA,,710323,
+ORTI,USCITE_VARIE,Spese condominiali,CATEGORIA,,650107,
+ORTI,USCITE_VARIE,Canoni locazione immobili,CATEGORIA,,650105,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_VARIE_EXT — Manutenzioni
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_VARIE_EXT,Manutenzione macchinari e attrezzature,CATEGORIA,,571107,
+ORTI,USCITE_VARIE_EXT,Manutenzione impianti terzi,CATEGORIA,,571115,
+ORTI,USCITE_VARIE_EXT,Manutenzione attrezzature terzi,CATEGORIA,,571117,
+ORTI,USCITE_VARIE_EXT,Manutenzione fabbricati,CATEGORIA,,571301,
+ORTI,USCITE_VARIE_EXT,Gestione autoveicoli,CATEGORIA,,590317,
+ORTI,USCITE_VARIE_EXT,Noleggio veicoli,CATEGORIA,,650305,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_SPESE_BANCARIE
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_SPESE_BANCARIE,Commissioni e spese bancarie,CATEGORIA,,750107,
+ORTI,USCITE_SPESE_BANCARIE,Costo bonifici verso altre banche,CATEGORIA,,750191,
+ORTI,USCITE_SPESE_BANCARIE,Costi addebito SEPA,CATEGORIA,,750192,
+ORTI,USCITE_SPESE_BANCARIE,Canone Remote Banking,CATEGORIA,,750194,
+ORTI,USCITE_SPESE_BANCARIE,Imposta di bollo c/c,CATEGORIA,,750197,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_GODIMENTO_BENI — Canoni locazione (voce separata da CANONE_PASSIVO)
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_GODIMENTO_BENI,Fitto Ramo d'Azienda,FORNITORE,264,,PANORAMA COMPANY S.R.L.
+ORTI,USCITE_GODIMENTO_BENI,Fitto AR,CATEGORIA,,651101,
+ORTI,USCITE_GODIMENTO_BENI,Fitto CVM,CATEGORIA,,651101,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_CANONI — Canoni diversi
+# ══════════════════════════════════════════════════════════════════════════════
+ORTI,USCITE_CANONI,Canoni/spese noleggio veicoli,CATEGORIA,,650305,
+ORTI,USCITE_CANONI,Mail e Pec,CATEGORIA,,659009,
+# ══════════════════════════════════════════════════════════════════════════════
+# ██ INTUR ██ — sotto-voci da PF Excel INTUR
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_SALARI (INTUR)
+# ══════════════════════════════════════════════════════════════════════════════
+INTUR,USCITE_SALARI,Salari,CATEGORIA,,670101,
+INTUR,USCITE_SALARI,F24 (ritenute dipendenti),CATEGORIA,,350301,
+INTUR,USCITE_SALARI,F24 (ritenute professionisti),CATEGORIA,,350305,
+INTUR,USCITE_SALARI,F24 (INPS),CATEGORIA,,370101,
+INTUR,USCITE_SALARI,F24 (INAIL),CATEGORIA,,370105,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_UTENZE (INTUR)
+# ══════════════════════════════════════════════════════════════════════════════
+INTUR,USCITE_UTENZE,Energia elettrica,CATEGORIA,,570913,
+INTUR,USCITE_UTENZE,Gas,CATEGORIA,,570919,
+INTUR,USCITE_UTENZE,Ausino - rateizzo,FORNITORE,18,,AUSINO - S.P.A. SERVIZI IDRICI INTEGRATI
+INTUR,USCITE_UTENZE,Vodafone (da ribaltare),FORNITORE,44,,VODAFONE ITALIA S.p.A.
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_MATERIE_PRIME (INTUR)
+# ══════════════════════════════════════════════════════════════════════════════
+INTUR,USCITE_MATERIE_PRIME,Amalfi sei esse,FORNITORE,92,,AMALFI SEI ESSE S.R.L.
+INTUR,USCITE_MATERIE_PRIME,B&G Di Palo,FORNITORE,916,,ALLESTIMENTI DI PAOLO DI DI PAOLO P. & C. SAS
+INTUR,USCITE_MATERIE_PRIME,Casa Vinicola Sammarco,FORNITORE,208,,CASA VINICOLA ETTORE SAMMARCO - S.N.C.
+INTUR,USCITE_MATERIE_PRIME,CoIrEs SRL,FORNITORE,,TODO,TODO_NON_TROVATO_IN_ESOLVER
+INTUR,USCITE_MATERIE_PRIME,Creative Idea Snc,FORNITORE,369,,CREATIVE IDEA S.N.C. DI DE MARTINO DIODATO & C.
+INTUR,USCITE_MATERIE_PRIME,De Riso,FORNITORE,138,,SAL DE RISO COSTA D AMALFI S.R.L.
+INTUR,USCITE_MATERIE_PRIME,EURO GROUP NETWORK S.R.L.,FORNITORE,1033,,EURO GROUP NETWORK S.R.L.
+INTUR,USCITE_MATERIE_PRIME,Foraggio Srl,FORNITORE,499,,Foraggio S.r.l.
+INTUR,USCITE_MATERIE_PRIME,IDRO-TOP SRL,FORNITORE,1035,,IDRO-TOP S.R.L.
+INTUR,USCITE_MATERIE_PRIME,Locali d'autore,FORNITORE,497,,Locali d Autore SRL
+INTUR,USCITE_MATERIE_PRIME,Mediterraneo,FORNITORE,1048,,MEDITERRANEO SNC DI TRAMONTANO
+INTUR,USCITE_MATERIE_PRIME,Ninni,FORNITORE,146,,NINNI S.R.L.
+INTUR,USCITE_MATERIE_PRIME,Pasticceria Trieste,FORNITORE,79,,PASTICCERIA TRIESTE - S.A.S. DI DE RISO ANNA E C.
+INTUR,USCITE_MATERIE_PRIME,Rastrelli Antonia,FORNITORE,,TODO,TODO_CODICE_FORNITORE
+INTUR,USCITE_MATERIE_PRIME,Panorama Company Srl,FORNITORE,264,, PANORAMA COMPANY S.R.L.
+INTUR,USCITE_MATERIE_PRIME,Paravia,FORNITORE,64,,PARAVIA ELEVATORS SRL
+INTUR,USCITE_MATERIE_PRIME,Primavera Servizi Srl,FORNITORE,137,,PRIMAVERA SERVIZI S.R.L.
+INTUR,USCITE_MATERIE_PRIME,Giardiniello,FORNITORE,236,,RISTORANTE GIARDINIELLO SRL
+INTUR,USCITE_MATERIE_PRIME,Tecno Campania,FORNITORE,85,,TECNO CAMPANIA SRL
+INTUR,USCITE_MATERIE_PRIME,Vulaj (Ceramica),FORNITORE,211,,VULAJ PASQUALE
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_TASSE (INTUR)
+# ══════════════════════════════════════════════════════════════════════════════
+INTUR,USCITE_TASSE,IMU,CATEGORIA,,710104,
+INTUR,USCITE_TASSE,I ACCONTO IMPOSTE,CATEGORIA,,350301,
+INTUR,USCITE_TASSE,TARI,CATEGORIA,,630519,
+INTUR,USCITE_TASSE,IVA,CATEGORIA,,350101,
+INTUR,USCITE_TASSE,IRES,CATEGORIA,,350301,
+INTUR,USCITE_TASSE,IRAP,CATEGORIA,,350301,
+INTUR,USCITE_TASSE,AFFRANCAMENTO,CATEGORIA,,350301,
+INTUR,USCITE_TASSE,ARRETRATO IMPOSTE,CATEGORIA,,350301,
+INTUR,USCITE_TASSE,ARRETRATO IMU,CATEGORIA,,710104,
+INTUR,USCITE_TASSE,Ritenute professionisti (1040),CATEGORIA,,350305,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_MUTUI (INTUR)
+# ══════════════════════════════════════════════════════════════════════════════
+INTUR,USCITE_MUTUI,Mutuo Banca Intesa,CATEGORIA,,310392,
+INTUR,USCITE_MUTUI,Finanziamenti medio/lungo,CATEGORIA,,310305,
+INTUR,USCITE_MUTUI,Interessi passivi su mutui,CATEGORIA,,750305,
+INTUR,USCITE_MUTUI,Interessi passivi bancari,CATEGORIA,,750101,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_CONSULENZE (INTUR)
+# ══════════════════════════════════════════════════════════════════════════════
+INTUR,USCITE_CONSULENZE,Consulenza del lavoro,CATEGORIA,,61010191,
+INTUR,USCITE_CONSULENZE,Consulenza fiscale,CATEGORIA,,610101,
+INTUR,USCITE_CONSULENZE,Consulenza legale,CATEGORIA,,610105,
+INTUR,USCITE_CONSULENZE,Prev. Consulenze Legali,CATEGORIA,,610105,
+INTUR,USCITE_CONSULENZE,ALDEN,FORNITORE,993,,ALDEN SRL SOCIETA TRA PROFESSIONISTI
+INTUR,USCITE_CONSULENZE,Revisore - Punzi,FORNITORE,678,,PUNZI PIERLUIGI
+INTUR,USCITE_CONSULENZE,Cons. Marketing - Travaglini Armando,FORNITORE,1031,,Travaglini Armando
+INTUR,USCITE_CONSULENZE,DG NETWORK,FORNITORE,7,,DG NETWORK
+INTUR,USCITE_CONSULENZE,Geologo Antonio Apicella,FORNITORE,1546,,Geologo Antonio Apicella
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_GODIMENTO_BENI (INTUR) — vuoto nel PF
+# ══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_SERVIZI_PRODUZIONE / Canoni e servizi (INTUR)
+# ══════════════════════════════════════════════════════════════════════════════
+INTUR,USCITE_SERVIZI_PRODUZIONE,Pin App,FORNITORE,331,,PIN APP EVO SRL
+INTUR,USCITE_SERVIZI_PRODUZIONE,Concessione demaniale spiagge,CATEGORIA,,651190,
+INTUR,USCITE_SERVIZI_PRODUZIONE,Spese Bancarie,CATEGORIA,,750107,
+INTUR,USCITE_SERVIZI_PRODUZIONE,Banca Sella - canone e-commerce RID,CATEGORIA,,750194,
+INTUR,USCITE_SERVIZI_PRODUZIONE,Amalfi Web,FORNITORE,131,,Amalfiweb S.r.l.s.
+INTUR,USCITE_SERVIZI_PRODUZIONE,Commissioni Pos,CATEGORIA,,750195,
+# ══════════════════════════════════════════════════════════════════════════════
+# USCITE_VARIE (INTUR) — da completare
+# ══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
+# NOTA ORTI: Godimento Beni di Terzi = fitti (canoni locazione)
+# ══════════════════════════════════════════════════════════════════════════════

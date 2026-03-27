@@ -228,10 +228,10 @@ def save_changes(
     Salva le celle modificate in f_piano_finanziario_input.
 
     Logica:
-      - importo_budget (vista) = budget_costi (f_budget_mensile) + input_manuale (f_pf_input)
-      - APP = new_value - budget_costi  → così la vista mostra esattamente new_value
+      - importo_budget (vista) = COALESCE(input_manuale, budget_costi, 0)
+      - APP = new_value direttamente (fonte APP ha priorità, sostituisce budget)
       - DELETE tutti i f_piano_finanziario_input per (voce, mese) — tutte le fonti
-      - INSERT una riga con fonte='APP' e importo=APP
+      - INSERT una riga con fonte='APP' e importo=new_value
 
     Returns (n_salvate, errori).
     """
@@ -242,10 +242,8 @@ def save_changes(
     rows_to_insert = []
 
     for voce_id, mese, new_importo in changes:
-        bc = float(budget_costi.get((voce_id, mese), 0.0) or 0.0)
-        app_importo = round(new_importo - bc, 2)
-        if app_importo < 0:
-            app_importo = 0.0  # non possiamo scendere sotto il budget Gasparotto
+        # View uses COALESCE(im, bc, 0) — APP fonte replaces budget entirely
+        app_importo = round(new_importo, 2)
 
         rows_to_insert.append({
             "hash_riga":        make_hash(societa, voce_id, str(anno), str(mese), FONTE_APP),
@@ -419,7 +417,7 @@ def main():
         societa = st.selectbox("Società", ["ORTI", "INTUR"], key="societa")
         anno = st.selectbox("Anno", [2025, 2026, 2027], index=1, key="anno")
         st.divider()
-        if st.button("🔄 Ricarica da BigQuery", use_container_width=True):
+        if st.button("🔄 Ricarica da BigQuery", width="stretch"):
             st.cache_data.clear()
             # Reset session state for this società/anno
             for k in list(st.session_state.keys()):
@@ -478,7 +476,7 @@ def main():
     with col_excel:
         st.write("")
         try:
-            if st.button("📥 Genera Excel", use_container_width=True):
+            if st.button("📥 Genera Excel", width="stretch"):
                 with st.spinner("Generazione Excel..."):
                     xlsx = generate_excel(societa, anno)
                 st.download_button(
@@ -486,7 +484,7 @@ def main():
                     data=xlsx,
                     file_name=f"PF_{societa}_{anno}_{date.today().isoformat()}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
+                    width="stretch",
                 )
         except Exception as e:
             st.caption(f"Excel: {e}")
@@ -500,7 +498,7 @@ def main():
         ent_df,
         column_config=col_cfg,
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         key="editor_entrate",
         num_rows="fixed",
     )
@@ -508,7 +506,7 @@ def main():
     st.dataframe(
         totals_row_df("**TOTALE ENTRATE**", tot_e),
         column_config=make_col_config([]),
-        hide_index=True, use_container_width=True,
+        hide_index=True, width="stretch",
     )
 
     st.divider()
@@ -520,7 +518,7 @@ def main():
         usc_df,
         column_config=col_cfg,
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         key="editor_uscite",
         num_rows="fixed",
     )
@@ -528,7 +526,7 @@ def main():
     st.dataframe(
         totals_row_df("**TOTALE USCITE**", tot_u),
         column_config=make_col_config([]),
-        hide_index=True, use_container_width=True,
+        hide_index=True, width="stretch",
     )
 
     st.divider()
@@ -545,9 +543,9 @@ def main():
 
     summary_rows = [
         {"Voce": "Cash Flow Netto"}
-        | {nome: int(round(float(cash_flow[nome]))) for nome in MESI_NOMI},
+        | {nome: fmt_eur(cash_flow[nome]) for nome in MESI_NOMI},
         {"Voce": "Saldo Proiettato"}
-        | {nome: int(round(saldo_prog[i])) for i, nome in enumerate(MESI_NOMI)},
+        | {nome: fmt_eur(saldo_prog[i]) for i, nome in enumerate(MESI_NOMI)},
         {"Voce": "Stato"}
         | {nome: stato_liquidita(saldo_prog[i]) for i, nome in enumerate(MESI_NOMI)},
     ]
@@ -558,7 +556,7 @@ def main():
     st.dataframe(
         pd.DataFrame(summary_rows),
         column_config=sum_col_cfg,
-        hide_index=True, use_container_width=True,
+        hide_index=True, width="stretch",
     )
 
     # ── Scadenzario Drill-down ─────────────────────────────────────────────────
@@ -601,7 +599,7 @@ def main():
                             "Non coperto": fmt_eur(max(0.0, pf_v - sc_v)),
                         })
                 if comp:
-                    st.dataframe(pd.DataFrame(comp), hide_index=True, use_container_width=True)
+                    st.dataframe(pd.DataFrame(comp), hide_index=True, width="stretch")
 
                 # Dettaglio per fornitore (lazy, su richiesta)
                 det_key = f"det_{societa}_{anno}_{voce_id}"
@@ -624,7 +622,7 @@ def main():
                             "metodo_pagamento": "Pagamento",
                             "stato":            "Stato",
                         }),
-                        hide_index=True, use_container_width=True,
+                        hide_index=True, width="stretch",
                     )
 
     # ── Salva in BigQuery ─────────────────────────────────────────────────────
@@ -632,7 +630,7 @@ def main():
     col_btn, col_msg = st.columns([1, 3])
 
     with col_btn:
-        save_clicked = st.button("💾 Salva in BigQuery", type="primary", use_container_width=True)
+        save_clicked = st.button("💾 Salva in BigQuery", type="primary", width="stretch")
 
     if save_clicked:
         changes: list[tuple[str, int, float]] = []

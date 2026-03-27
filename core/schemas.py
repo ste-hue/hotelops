@@ -230,10 +230,124 @@ class CoefficienteStagionalitaRow(BaseModel):
         return v
 
 
+# ── d_anagrafica_fornitori ──────────────────────────────────────────────────
+
+class AnagraficaFornitoreRow(BaseModel):
+    """Schema for d_anagrafica_fornitori — Esolver supplier master data.
+
+    Source of truth for supplier identity. Loaded from Esolver anagrafica export.
+    Pattern: WRITE_TRUNCATE (full reload).
+    """
+    codice_fornitore: int
+    ragione_sociale: str
+    partita_iva: Optional[str] = None
+    codice_fiscale: Optional[str] = None
+    comune: Optional[str] = None
+    provincia: Optional[str] = None
+    tipo_soggetto: Optional[str] = None
+    stato_anagrafica: Optional[str] = None
+    data_caricamento: str  # ISO timestamp
+
+
+# ── d_mapping_piano_finanziario ────────────────────────────────────────────
+
+TipoMapping = Literal["FORNITORE", "CATEGORIA"]
+
+class MappingPianoFinanziarioRow(BaseModel):
+    """Schema for d_mapping_piano_finanziario — maps PF sub-items to Esolver codes.
+
+    Each row connects a sotto-voce in Rosa's PF Excel to either:
+    - FORNITORE: a specific supplier (codice_fornitore FK → d_anagrafica_fornitori)
+    - CATEGORIA: an Esolver account code pattern (cod_conto_pattern)
+
+    Per-società: ORTI and INTUR have different suppliers and sub-items.
+    Pattern: WRITE_TRUNCATE (full reload from CSV).
+    """
+    societa_id: SocietaId
+    voce_id: str
+    sotto_voce: str
+    tipo: TipoMapping
+    codice_fornitore: Optional[int] = None
+    cod_conto_pattern: Optional[str] = None
+    nome_esolver: Optional[str] = None
+
+    @field_validator("codice_fornitore")
+    @classmethod
+    def fornitore_required_if_type(cls, v, info):
+        if info.data.get("tipo") == "FORNITORE" and v is None:
+            raise ValueError("codice_fornitore required when tipo=FORNITORE")
+        return v
+
+
 # ── Validation helper ────────────────────────────────────────────────────────
 
 class SchemaViolationError(Exception):
     """Raised when batch validation fails."""
+
+
+class PmsStatisticheRow(BaseModel):
+    """Schema for f_pms_statistiche — PMS room/occupancy statistics.
+
+    Source: HotelCube PMS Range Report (2023-2025+).
+    Monthly granularity. The denominator for cost-per-room-night coefficients.
+    """
+    societa_id: SocietaId
+    anno: int
+    mese: int
+    camere_disponibili: int
+    camere_vendute: int
+    pax_in_casa: int
+    occupazione_pct: float  # 0-100
+    adr: float  # Average Daily Rate
+    revpar: float  # Revenue Per Available Room
+    ricavo_camere: float  # Total room revenue
+    fonte: str
+    hash_riga: str
+    data_caricamento: str
+
+    @field_validator("mese")
+    @classmethod
+    def _mese_range(cls, v: int) -> int:
+        if not 1 <= v <= 12:
+            raise ValueError(f"mese fuori range: {v}")
+        return v
+
+    @field_validator("occupazione_pct")
+    @classmethod
+    def _occ_range(cls, v: float) -> float:
+        if not 0 <= v <= 100:
+            raise ValueError(f"occupazione fuori range: {v}")
+        return v
+
+
+class CoefficienteConsumoRow(BaseModel):
+    """Schema for f_coefficienti_consumo — consumption coefficients per product/dept/month.
+
+    Source: Consumption Coefficients 2025.xlsx (from economato data + pernottamenti).
+    One row per product × department × month.
+    """
+    societa_id: SocietaId
+    anno: int
+    mese: int
+    reparto: str
+    descrizione_articolo: str
+    categoria: str
+    classe: str
+    quantita: float
+    unita_misura: str
+    pernottamenti: int
+    coeff_per_pax: float
+    costo_per_pax: float
+    importo: float
+    hash_riga: str
+    data_caricamento: str
+
+    @field_validator("mese")
+    @classmethod
+    def _mese_range(cls, v: int) -> int:
+        if not 1 <= v <= 12:
+            raise ValueError(f"mese fuori range: {v}")
+        return v
 
 
 def validate_batch(

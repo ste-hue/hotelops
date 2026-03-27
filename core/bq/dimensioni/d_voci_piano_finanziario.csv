@@ -19,11 +19,11 @@ USCITE_MUTUI_SEMESTRALE,Rimborso Finanziamenti (semestrale),USCITE,Finanziario,O
 USCITE_SPESE_BANCARIE,Commissioni e Spese Bancarie,USCITE,Finanziario,,ESOLVER,7501,,,,278,,Oneri Finanziari,X
 USCITE_CONSULENZE,Consulenze e Marketing,USCITE,Consulenze,,ESOLVER,6101,650604,,,280,,Costi Amministrativi,F
 USCITE_GODIMENTO_BENI,Godimento Beni di Terzi (Fitti Passivi),USCITE,Godimento Beni,,ESOLVER,650105,,,,290,,Costi Produttivi,F
-USCITE_COMMISSIONI,Commissioni OTA e Portali,USCITE,Commissioni,ORTI,ESOLVER,570101,570151,6302,,300,,Costi Commerciali,V
+USCITE_COMMISSIONI,Commissioni OTA e Portali,USCITE,Commissioni,ORTI,ESOLVER,570101,,6302,,300,,Costi Commerciali,V
 USCITE_CANONI,Canoni e Servizi,USCITE,Canoni,,ESOLVER,6503,6505,6590,,310,,Costi Produttivi,F
 USCITE_CANONE_PASSIVO,Canone Affitto Ramo Azienda (INTUR→ORTI),USCITE,Affitti,ORTI,ESOLVER,6511,,,,315,,Costi Produttivi,F
 USCITE_DEPOSITO_FITTO,Deposito Fitto (una tantum),USCITE,Affitti,,MANUALE,,,,,325,,,F
 USCITE_MARKETING,Marketing e Pubblicità,USCITE,Marketing,,ESOLVER,6304,,,,316,,Costi Commerciali,V
-USCITE_SERVIZI_PRODUZIONE,Servizi per la Produzione,USCITE,Servizi,,ESOLVER,570150,570190,,,317,,Costi Produttivi,V
+USCITE_SERVIZI_PRODUZIONE,Servizi per la Produzione,USCITE,Servizi,,ESOLVER,570151,570150,570190,,317,,Costi Produttivi,V
 USCITE_VARIE,Varie ed Eventuali,USCITE,Varie,,ESOLVER,6301,63059,640503,,320,,Costi Produttivi,V
 USCITE_VARIE_EXT,Varie ed Eventuali,USCITE,Varie,,ESOLVER,5711,5903,71019,,321,,Costi Produttivi,V

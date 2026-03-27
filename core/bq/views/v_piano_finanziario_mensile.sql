@@ -92,6 +92,30 @@ budget_costi AS (
 ),
 
 -- ── Input manuale (prospettivo) da f_piano_finanziario_input ──────────────────
+-- Priority: CLI > APP > PARTITE > SCADENZIARIO > BVA_2026 > PIANO_FINANZIARIO
+-- Per ogni (societa_id, voce_id, anno, mese) tieni solo la fonte a priorità più alta
+input_ranked AS (
+  SELECT
+    societa_id,
+    voce_id,
+    anno,
+    mese,
+    importo,
+    fonte,
+    ROW_NUMBER() OVER (
+      PARTITION BY societa_id, voce_id, anno, mese
+      ORDER BY CASE fonte
+        WHEN 'CLI' THEN 1
+        WHEN 'APP' THEN 2
+        WHEN 'PARTITE' THEN 3
+        WHEN 'SCADENZIARIO' THEN 4
+        WHEN 'BVA_2026' THEN 5
+        WHEN 'PIANO_FINANZIARIO' THEN 6
+        ELSE 7
+      END
+    ) AS rn
+  FROM `hotelops-suite.hotelops.f_piano_finanziario_input`
+),
 input_manuale AS (
   SELECT
     societa_id,
@@ -99,7 +123,8 @@ input_manuale AS (
     anno,
     mese,
     SUM(importo) AS importo_manuale
-  FROM `hotelops-suite.hotelops.f_piano_finanziario_input`
+  FROM input_ranked
+  WHERE rn = 1
   GROUP BY 1, 2, 3, 4
 )
 
@@ -116,18 +141,19 @@ SELECT
   sc.periodo,
   sc.tipo_periodo,
   ROUND(COALESCE(c.importo_consuntivo, 0), 2)                                    AS importo_consuntivo,
-  ROUND(COALESCE(bc.importo_budget, 0) + COALESCE(im.importo_manuale, 0), 2)    AS importo_budget,
+  -- input_manuale wins over budget_costi when present (more specific source)
+  ROUND(COALESCE(im.importo_manuale, bc.importo_budget, 0), 2)                  AS importo_budget,
   ROUND(
     COALESCE(c.importo_consuntivo, 0) -
-    (COALESCE(bc.importo_budget, 0) + COALESCE(im.importo_manuale, 0)),
+    COALESCE(im.importo_manuale, bc.importo_budget, 0),
     2
   )                                                                               AS scostamento,
   CASE
-    WHEN (COALESCE(bc.importo_budget, 0) + COALESCE(im.importo_manuale, 0)) = 0 THEN NULL
+    WHEN COALESCE(im.importo_manuale, bc.importo_budget, 0) = 0 THEN NULL
     ELSE ROUND(
       (COALESCE(c.importo_consuntivo, 0) -
-       (COALESCE(bc.importo_budget, 0) + COALESCE(im.importo_manuale, 0))) /
-      ABS(COALESCE(bc.importo_budget, 0) + COALESCE(im.importo_manuale, 0)) * 100,
+       COALESCE(im.importo_manuale, bc.importo_budget, 0)) /
+      ABS(COALESCE(im.importo_manuale, bc.importo_budget, 0)) * 100,
       1
     )
   END                                                                             AS scostamento_pct
