@@ -34,3 +34,13 @@ V_PIANO_FINANZIARIO_MENSILE = _t("v_piano_finanziario_mensile")
 V_BUDGET_VS_CONSUNTIVO      = _t("v_budget_vs_consuntivo")
 V_PIANO_FINANZIARIO_CONSUNTIVO = _t("v_piano_finanziario_consuntivo")
 V_PREVISIONE_CASSA          = _t("v_previsione_cassa")
+V_PL_MOVIMENTI               = _t("v_pl_movimenti")
+V_CASHFLOW_MENSILE           = _t("v_cashflow_mensile")
+V_INCASSI_PER_CANALE         = _t("v_incassi_per_canale")
+
+# Looker Studio views
+V_CONDGES_BUDGET_CONSUNTIVO  = _t("v_condges_budget_consuntivo")
+V_CONDGES_PF_MENSILE         = _t("v_condges_pf_mensile")
+V_CONDGES_CASHFLOW           = _t("v_condges_cashflow")
+V_ECONOMATO_CONSUMI          = _t("v_economato_consumi")
+V_ECONOMATO_PARETO           = _t("v_economato_pareto")
