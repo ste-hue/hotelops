@@ -9,7 +9,7 @@
 version: "1.0"
 project: hotelops-suite
 dataset: hotelops
-last_updated: "2026-03-27"
+last_updated: "2026-03-28"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -82,6 +82,66 @@ business:
     d_piano_conti: {format: "XX.XX.XX", example: "57.09.13", note: "Con punti"}
     f_movimenti_contabili: {format: "XXXXXX", example: "570913", note: "Senza punti"}
     join_strategy: "REPLACE(codice_conto, '.', '')"
+
+  # ── Three Naming Systems ─────────────────────────────────────────────────
+  # Ogni codice conto Esolver porta due etichette in base al contesto.
+  # Esolver e' il master, gli altri due sono lenti sullo stesso dato.
+  #
+  # Esempio per codice_conto 57.09.13.01:
+  #   Esolver:     57.09.13.01 "Enel Energia"
+  #   PF (Rosa):   voce_pf = "Utenze"
+  #   CE (Gaspar): categoria_ce = "Costi Produttivi"
+  #
+  naming_systems:
+
+    esolver:
+      ruolo: master
+      descrizione: "Piano dei conti Esolver — autorita' unica sui codici conto"
+      granularita: "~160 leaf accounts"
+      formato: "XX.XX.XX (punti = livelli dell'albero)"
+      gerarchia: "Il punto separa i livelli: 57 > 57.09 > 57.09.13 > 57.09.13.01"
+      tabella_bq: d_piano_conti
+      esempio: {codice: "57.09.13.01", descrizione: "Enel Energia"}
+
+    piano_finanziario:
+      ruolo: lente
+      alias: [PF, Rosa, Tesoreria]
+      descrizione: "28 voci aggregate per tipo di flusso di cassa"
+      asse: CASSA
+      audience: Rosa
+      domanda: "Quando il soldo entra/esce?"
+      granularita: "28 voci (11 ENTRATE + 17 USCITE)"
+      tabella_bq: d_voci_piano_finanziario
+      colonna_label: voce_label
+      join_strategy: "cod_conto_pattern LIKE — pattern matching, non FK"
+      esempio: {voce_id: USCITE_UTENZE, voce_label: "Utenze", codici_inclusi: ["5709%", "5711%"]}
+      views_looker: [v_condges_pf_mensile, v_condges_budget_consuntivo]
+
+    controllo_gestione:
+      ruolo: lente
+      alias: [CE, Gasparotto, CdG]
+      descrizione: "7 macro-categorie per natura del costo/ricavo"
+      asse: COMPETENZA
+      audience: Gasparotto
+      domanda: "Quanto consumo/genero? Dove sto sforando?"
+      granularita: "7 categorie"
+      categorie: [Ricavi, Costi Produttivi, Costi Commerciali, Costi Amministrativi,
+                  Costi del Personale, Oneri Tributari, Oneri Finanziari]
+      tabella_bq: d_categorie_conti
+      colonna_label: categoria_ce
+      colonna_tipo: tipo_costo  # F=Fisso, V=Variabile, P=Personale, IP=Ricavo, X=Extra-EBITDA
+      join_strategy: "FK diretto su codice_conto (REPLACE dots)"
+      esempio: {codice: "57.09.13.01", categoria_ce: "Costi Produttivi", tipo_costo: "F"}
+      views_looker: [v_condges_budget_consuntivo]
+
+    # ── Come si collegano ──────────────────────────────────────────────────
+    # Un singolo codice Esolver mappa a ENTRAMBE le lenti:
+    #
+    #   codice_conto ──JOIN──> d_voci_piano_finanziario ──> voce_pf (Rosa)
+    #                 ──JOIN──> d_categorie_conti        ──> categoria_ce (Gasparotto)
+    #
+    # Le Looker views v_condges_budget_consuntivo espongono entrambe le etichette.
+    # L'utente filtra per voce_pf OPPURE categoria_ce in base al contesto.
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -389,6 +449,57 @@ views:
     reads_from:
       facts: [f_banche_movimenti]
 
+  # ── Looker Studio views ─────────────────────────────────────────────────
+  v_condges_budget_consuntivo:
+    bq_view: v_condges_budget_consuntivo
+    asse: [COMPETENZA, CASSA]
+    audience: [Gasparotto, Rosa]
+    descrizione: "Looker: Budget vs consuntivo per codice conto — dual CE/PF labels"
+    sql: core/bq/views/v_condges_budget_consuntivo.sql
+    reads_from:
+      facts: [f_budget_mensile, f_movimenti_contabili]
+      dimensions: [d_categorie_conti, d_voci_piano_finanziario]
+    naming_systems: [piano_finanziario, controllo_gestione]
+    note: "Espone voce_pf + categoria_ce sullo stesso codice conto"
+
+  v_condges_pf_mensile:
+    bq_view: v_condges_pf_mensile
+    asse: CASSA
+    audience: Rosa
+    descrizione: "Looker: Piano Finanziario 28 voci con labels + DATE column"
+    sql: core/bq/views/v_condges_pf_mensile.sql
+    reads_from:
+      views: [v_piano_finanziario_mensile]
+      dimensions: [d_voci_piano_finanziario]
+    naming_systems: [piano_finanziario]
+
+  v_condges_cashflow:
+    bq_view: v_condges_cashflow
+    asse: CASSA
+    audience: [Rosa, Gasparotto]
+    descrizione: "Looker: Cashflow actuals + 12m proiezione + semaforo liquidita'"
+    sql: core/bq/views/v_condges_cashflow.sql
+    reads_from:
+      views: [v_cashflow_mensile, v_previsione_cassa]
+
+  v_economato_consumi:
+    bq_view: v_economato_consumi
+    asse: COMPETENZA
+    audience: Mario
+    descrizione: "Looker: Consumi per reparto/prodotto + YoY + costo per coperto"
+    sql: core/bq/views/v_economato_consumi.sql
+    reads_from:
+      facts: [f_consumi_economato, f_coperti_giornalieri]
+
+  v_economato_pareto:
+    bq_view: v_economato_pareto
+    asse: COMPETENZA
+    audience: Mario
+    descrizione: "Looker: ABC analysis — fascia A/B/C top referenze per reparto"
+    sql: core/bq/views/v_economato_pareto.sql
+    reads_from:
+      facts: [f_consumi_economato]
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DOMAINS (overlay — referenzia layer 0-3, non ridefinisce)
@@ -400,8 +511,10 @@ domains:
   tesoreria:
     asse: CASSA
     owner: Rosa
+    naming_system: piano_finanziario
     domanda: "Quanto cash ho, quanto ne arriva, quanto ne esce?"
     views: [v_piano_finanziario_mensile, v_previsione_cassa, v_cashflow_mensile, v_incassi_per_canale]
+    views_looker: [v_condges_pf_mensile, v_condges_cashflow, v_condges_budget_consuntivo]
     facts: [f_banche_movimenti, f_piano_finanziario_input, f_saldi_banca_snapshot]
     cli: [hotelops pf, hotelops saldo, hotelops chiudi, hotelops previsione]
     app: condges/app.py
@@ -409,10 +522,20 @@ domains:
   controllo_gestione:
     asse: COMPETENZA
     owner: Gasparotto
+    naming_system: controllo_gestione
     domanda: "Budget vs consuntivo — dove sto sforando?"
     views: [v_budget_vs_consuntivo, v_pl_movimenti]
+    views_looker: [v_condges_budget_consuntivo]
     facts: [f_movimenti_contabili, f_budget_mensile]
     cli: [hotelops bva]
+
+  economato:
+    asse: COMPETENZA
+    owner: Mario
+    domanda: "Quanto consumo per reparto? Cosa ordino? Quali prodotti pesano di piu'?"
+    views_looker: [v_economato_consumi, v_economato_pareto]
+    facts: [f_consumi_economato, f_coperti_giornalieri]
+    note: "Streamlit ordering app (magazzino + presenze + fabbisogno) e' progetto separato"
 
   impegni:
     asse: IMPEGNO
@@ -423,8 +546,8 @@ domains:
   operativo:
     descrizione: "Dati operativi caricati ma non ancora collegati a views"
     status: orphan
-    facts: [f_accodamenti, f_bilancino, f_consumi_economato, f_coperti_giornalieri]
-    note: "Phase 2: creare views per questi fact tables"
+    facts: [f_accodamenti, f_bilancino]
+    note: "f_consumi_economato e f_coperti_giornalieri ora serviti dal dominio economato"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
