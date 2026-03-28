@@ -58,8 +58,6 @@ consuntivo AS (
     m.anno,
     m.mese,
     c.codice_conto,
-    c.categoria_ce AS _cat_ce,
-    c.tipo_costo   AS _tipo,
     CASE
       WHEN c.tipo_costo = 'IP' THEN m.imp_avere - m.imp_dare
       ELSE m.imp_dare - m.imp_avere
