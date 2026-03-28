@@ -164,6 +164,11 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `v_cashflow_mensile` | Cashflow mensile aggregato da banca. `core/bq/views/` |
 | `v_incassi_per_canale` | Entrate bancarie per canale (BONIFICO, CARTE, CONTANTI, ALTRO). `core/bq/views/` |
 | `v_previsione_cassa` | Cash forward rolling 12 mesi, stato_liquidita semaphore. `core/bq/views/` |
+| `v_condges_budget_consuntivo` | Looker: Budget vs consuntivo per codice conto, dual CE/PF labels. `core/bq/views/` |
+| `v_condges_pf_mensile` | Looker: Piano Finanziario 28 voci with labels + DATE. `core/bq/views/` |
+| `v_condges_cashflow` | Looker: Cashflow actuals + 12m projection + semaphore. `core/bq/views/` |
+| `v_economato_consumi` | Looker: Consumi per reparto/prodotto + YoY + coefficients. `core/bq/views/` |
+| `v_economato_pareto` | Looker: ABC analysis top referenze per reparto. `core/bq/views/` |
 
 ### How the views connect
 
