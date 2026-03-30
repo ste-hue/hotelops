@@ -380,28 +380,71 @@ def _build_scheda_result(
 
 
 def detect_movimenti_contabili(path: Path) -> Optional[ClassificationResult]:
-    """Esolver LISTAMOVCONT — XLS binary format."""
+    """Esolver LISTAMOVCONT — XLS binary or XLSX report format."""
     ext = path.suffix.lower()
-    if ext != ".xls":
-        return None
 
-    # Filename is the strongest signal
-    if "LISTAMOVCONT" in path.name.upper():
-        societa = infer_societa(path.name, path)
-        return _build_movimenti_result(path, societa, confidence=0.95)
+    if ext == ".xls":
+        # Original XLS detection logic
+        if "LISTAMOVCONT" in path.name.upper():
+            societa = infer_societa(path.name, path)
+            return _build_movimenti_result(path, societa, confidence=0.95)
 
-    # Content check: xlrd, look for cod_conto-like columns
-    rows = _read_xls_sample(path)
-    if len(rows) >= 3:
-        # Movimenti contabili have 26+ columns, col 12 is cod_conto (6 digits no dots)
-        for row in rows[1:5]:
-            if len(row) >= 20:
-                # Check if col 12 looks like a conto (6-digit numeric string)
-                col12 = str(row[12]).strip() if len(row) > 12 else ""
-                if re.match(r"^\d{5,7}$", col12):
-                    societa = infer_societa(path.name, path)
-                    return _build_movimenti_result(path, societa, confidence=0.80)
+        rows = _read_xls_sample(path)
+        if len(rows) >= 3:
+            for row in rows[1:5]:
+                if len(row) >= 20:
+                    col12 = str(row[12]).strip() if len(row) > 12 else ""
+                    if re.match(r"^\d{5,7}$", col12):
+                        societa = infer_societa(path.name, path)
+                        return _build_movimenti_result(path, societa, confidence=0.80)
 
+    elif ext == ".xlsx":
+        # XLSX: check for Esolver report layout (col 0 = logo path, col 9 = cod_conto)
+        if "MOVIMENTI" in path.name.upper() and "CONTABIL" in path.name.upper():
+            societa = _infer_societa_from_xlsx(path)
+            return _build_movimenti_result(path, societa, confidence=0.90)
+
+        # Content sniff: col 0 contains ESOLVER path, col 9 is 6-digit code
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(str(path), read_only=True)
+            ws = wb.active
+            for i, row in enumerate(ws.iter_rows(max_row=3, values_only=True)):
+                col0 = str(row[0]) if row[0] else ""
+                col9 = str(row[9]).strip() if len(row) > 9 and row[9] else ""
+                if "ESOLVER" in col0.upper() and re.match(r"^\d{5,7}$", col9):
+                    societa = _infer_societa_from_xlsx(path)
+                    wb.close()
+                    return _build_movimenti_result(path, societa, confidence=0.85)
+            wb.close()
+        except Exception:
+            pass
+
+    return None
+
+
+def _infer_societa_from_xlsx(path: Path) -> Optional[str]:
+    """Read societa from XLSX col 1 (e.g. 'ORTI S.R.L.')."""
+    name_upper = path.name.upper()
+    if "ORTI" in name_upper:
+        return "ORTI"
+    if "INTUR" in name_upper:
+        return "INTUR"
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(str(path), read_only=True)
+        ws = wb.active
+        for row in ws.iter_rows(max_row=1, values_only=True):
+            col1 = str(row[1]).upper() if row[1] else ""
+            if "ORTI" in col1:
+                wb.close()
+                return "ORTI"
+            if "INTUR" in col1:
+                wb.close()
+                return "INTUR"
+        wb.close()
+    except Exception:
+        pass
     return None
 
 
@@ -409,7 +452,8 @@ def _build_movimenti_result(
     path: Path, societa: Optional[str], confidence: float
 ) -> ClassificationResult:
     soc = societa or "UNKNOWN"
-    canonical = f"{soc}_LISTAMOVCONT.XLS"
+    ext = path.suffix  # preserve original extension
+    canonical = f"{soc}_LISTAMOVCONT{ext.upper()}"
     dest = f"movimenti_contabili/{soc}" if societa else "movimenti_contabili"
     pipeline = f"python -m ingest.flussi.ingest_movimenti_contabili --file {{dest_file}}"
     if societa:
