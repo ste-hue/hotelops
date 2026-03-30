@@ -199,6 +199,110 @@ def parse_file(filepath: Path, societa_id: str, logger: logging.Logger) -> list[
     return rows
 
 
+def parse_file_xlsx(filepath: Path, societa_id: str, logger: logging.Logger) -> list[dict]:
+    """Parse Esolver 'report-style' XLSX movimenti contabili.
+
+    Column layout (26 cols):
+        0=logo, 1=societa, 2=timestamp, 3=unused, 4=operatore,
+        5=data_registrazione, 6=sigla_doc (e.g. "PNC 1"), 7=data_originale,
+        8=tipo_documento, 9=cod_conto, 10=cod_partitario, 11=rag_sociale,
+        12=causale_contabile, 13=imp_dare, 14=imp_avere, 15-25=running totals
+    """
+    import re
+    from datetime import date, datetime
+
+    import openpyxl
+
+    today = date.today().isoformat()
+    file_sorgente = filepath.name
+
+    wb = openpyxl.load_workbook(str(filepath), read_only=True)
+    ws = wb.active
+    logger.info(f"  {file_sorgente}: {ws.max_row} righe (xlsx)")
+
+    rows = []
+    # Track row index within each (date, pnc_num) group for num_progr_riga
+    group_counters: dict[tuple, int] = {}
+
+    for raw_row in ws.iter_rows(values_only=True):
+        # Extract date — col 5 can be datetime or string "YYYY-MM-DD"
+        raw_date = raw_row[5]
+        if isinstance(raw_date, datetime):
+            data_reg = raw_date.date()
+        elif isinstance(raw_date, date):
+            data_reg = raw_date
+        elif isinstance(raw_date, str):
+            try:
+                data_reg = datetime.strptime(raw_date, "%Y-%m-%d").date()
+            except ValueError:
+                continue  # skip non-data rows (headers, totals)
+        else:
+            continue
+
+        # Extract PNC number from col 6 (e.g. "PNC 1" -> sigla="PNC", num=1)
+        sigla_raw = str(raw_row[6]).strip() if raw_row[6] else ""
+        match = re.match(r"([A-Z]+)\s+(\d+)", sigla_raw)
+        if not match:
+            continue
+        sigla_doc = match.group(1)
+        pnc_num = int(match.group(2))
+
+        # num_progr_riga: sequential within (date, pnc_num)
+        group_key = (data_reg.isoformat(), pnc_num)
+        idx = group_counters.get(group_key, 0)
+        group_counters[group_key] = idx + 1
+
+        cod_conto = str(raw_row[9]).strip() if raw_row[9] else None
+        if not cod_conto:
+            continue
+
+        cod_part_raw = raw_row[10]
+        cod_partitario = str(int(cod_part_raw)) if isinstance(cod_part_raw, (int, float)) and cod_part_raw else None
+
+        imp_dare = float(raw_row[13]) if isinstance(raw_row[13], (int, float)) else 0.0
+        imp_avere = float(raw_row[14]) if isinstance(raw_row[14], (int, float)) else 0.0
+
+        # Parse data_originale from col 7 (often " DD/MM/YY" or None)
+        data_orig = None
+        if raw_row[7] and str(raw_row[7]).strip():
+            try:
+                data_orig = datetime.strptime(str(raw_row[7]).strip(), "%d/%m/%y").date().isoformat()
+            except ValueError:
+                pass
+
+        # Hash: use date + pnc_num + idx for stable dedup
+        hash_key = f"{societa_id}|{data_reg.isoformat()}|{pnc_num}|{idx}"
+        hash_riga = hashlib.md5(hash_key.encode()).hexdigest()
+
+        rows.append({
+            "hash_riga": hash_riga,
+            "societa_id": societa_id,
+            "id_documento": pnc_num,
+            "num_progr_riga": idx,
+            "gruppo_doc": sigla_raw,
+            "anno": data_reg.year,
+            "mese": data_reg.month,
+            "data_registrazione": data_reg.isoformat(),
+            "sigla_doc": sigla_doc,
+            "rif_registrazione": None,
+            "num_doc_originale": None,
+            "data_originale": data_orig,
+            "tipo_documento": str(raw_row[8]).strip() if raw_row[8] else None,
+            "cod_conto": cod_conto,
+            "cod_partitario": cod_partitario,
+            "rag_sociale": str(raw_row[11]).strip() if raw_row[11] else None,
+            "causale_contabile": str(raw_row[12]).strip() if raw_row[12] else None,
+            "imp_dare": imp_dare,
+            "imp_avere": imp_avere,
+            "cod_divisione": None,
+            "file_sorgente": file_sorgente,
+            "data_ingresso": today,
+        })
+
+    wb.close()
+    return rows
+
+
 def sync_from_drive(staging: Path, logger: logging.Logger):
     staging.mkdir(parents=True, exist_ok=True)
     for societa in ["INTUR", "ORTI"]:
@@ -269,7 +373,10 @@ def process_societa(societa_id: str, files: list[Path], datahub: Path | None,
                     bq_client, dry_run: bool, logger: logging.Logger):
     all_rows = []
     for f in files:
-        rows = parse_file(f, societa_id, logger)
+        if f.suffix.lower() == ".xlsx":
+            rows = parse_file_xlsx(f, societa_id, logger)
+        else:
+            rows = parse_file(f, societa_id, logger)
         all_rows.extend(rows)
 
     if not all_rows:
@@ -296,7 +403,7 @@ def main():
     parser = argparse.ArgumentParser(description="Ingest Lista movimenti contabili Esolver → f_movimenti_contabili")
     parser.add_argument("--datahub", help="Path to datahub root")
     parser.add_argument("--staging", help="Local staging dir (default: ~/.cache/hotelops/movimenti_staging)")
-    parser.add_argument("--file", help="Single XLS file to ingest")
+    parser.add_argument("--file", help="Single XLS or XLSX file to ingest")
     parser.add_argument("--societa", choices=["INTUR", "ORTI"], help="Società (required with --file)")
     parser.add_argument("--no-sync", action="store_true", help="Skip rclone sync")
     parser.add_argument("--dry-run", action="store_true", help="Parse only, no write")
@@ -326,7 +433,10 @@ def main():
         for societa in ["INTUR", "ORTI"]:
             societa_dir = staging / societa
             if societa_dir.exists():
-                xls_files = list(societa_dir.glob("*.XLS")) + list(societa_dir.glob("*.xls"))
+                xls_files = (
+                    list(societa_dir.glob("*.XLS")) + list(societa_dir.glob("*.xls"))
+                    + list(societa_dir.glob("*.XLSX")) + list(societa_dir.glob("*.xlsx"))
+                )
                 if xls_files:
                     files_by_societa[societa] = xls_files
 
