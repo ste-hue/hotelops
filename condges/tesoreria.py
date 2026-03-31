@@ -6,7 +6,12 @@ Run:
 
 from __future__ import annotations
 
+import sys
 from datetime import date, timedelta
+from pathlib import Path
+
+# Ensure project root is on sys.path when run via `streamlit run condges/tesoreria.py`
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pandas as pd
 import plotly.graph_objects as go
