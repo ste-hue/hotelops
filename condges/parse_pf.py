@@ -215,12 +215,19 @@ def _find_saldi_banca(ws: Worksheet) -> tuple[dict[str, float], float]:
                     break
             continue
 
-        # "Saldo XXX" rows
+        # "Saldo XXX" rows — skip non-banca labels
         if re.match(r"saldo\b", label_stripped, re.I):
+            lower = label_stripped.lower()
+            if any(skip in lower for skip in ("periodo", "proiettato", "mese", "cumulat")):
+                continue
+            # Extract banca name: "Saldo MPS" -> "MPS", "Saldo Banca Sella" -> "Banca Sella"
+            banca = re.sub(r"^saldo\s+", "", label_stripped, flags=re.I).strip()
+            if not banca:
+                continue
             for col in (2, 3):
                 val = ws.cell(row=row, column=col).value
                 if isinstance(val, (int, float)):
-                    saldi[label_stripped] = float(val)
+                    saldi[banca] = float(val)
                     break
 
     # If no explicit TOTALE row, sum what we found

@@ -232,8 +232,8 @@ class TestParseORTI:
     def test_parse_orti_reads_saldi_banca(self, orti_bytes):
         from condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
-        assert result.saldi_banca["Saldo MPS"] == pytest.approx(67724.67)
-        assert result.saldi_banca["Saldo Intesa"] == pytest.approx(66922.12)
+        assert result.saldi_banca["MPS"] == pytest.approx(67724.67)
+        assert result.saldi_banca["Intesa"] == pytest.approx(66922.12)
 
     def test_parse_orti_saldo_totale(self, orti_bytes):
         from condges.parse_pf import parse_pf
@@ -313,9 +313,9 @@ class TestParseINTUR:
         """INTUR saldi are in col C, not B."""
         from condges.parse_pf import parse_pf
         result = parse_pf(intur_bytes)
-        assert result.saldi_banca["Saldo Banca Sella"] == pytest.approx(17317.96)
-        assert result.saldi_banca["Saldo MPS"] == pytest.approx(37075.87)
-        assert result.saldi_banca["Saldo Intesa"] == pytest.approx(3000.0)
+        assert result.saldi_banca["Banca Sella"] == pytest.approx(17317.96)
+        assert result.saldi_banca["MPS"] == pytest.approx(37075.87)
+        assert result.saldi_banca["Intesa"] == pytest.approx(3000.0)
 
 
 class TestWarnings:
