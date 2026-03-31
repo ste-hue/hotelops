@@ -330,3 +330,111 @@ def parse_pf(source: BinaryIO | BytesIO | bytes) -> PFData:
         voci=voci,
         warnings=warnings,
     )
+
+
+# ---------------------------------------------------------------------------
+# Scadenzario Fornitori parser
+# ---------------------------------------------------------------------------
+
+# Italian month abbreviation → month number (first 3 chars, lowercase)
+_MESI_ABBR: dict[str, int] = {
+    "gen": 1, "feb": 2, "mar": 3, "apr": 4, "mag": 5, "giu": 6,
+    "lug": 7, "ago": 8, "set": 9, "ott": 10, "nov": 11, "dic": 12,
+}
+
+
+@dataclass
+class ScadenzarioData:
+    fornitori: list[dict]          # [{fornitore, totale, scaduto, mese_4: x, ...}]
+    totale_per_mese: dict[int, float]  # {mese: totale_uscite}
+    scaduto_totale: float
+
+
+def _parse_month_header(header: str) -> int | None:
+    """Return month number (1-12) from a header like 'apr-26', or None."""
+    s = header.strip().lower()
+    prefix = s[:3]
+    return _MESI_ABBR.get(prefix)
+
+
+def parse_scadenzario(source: BinaryIO | BytesIO | bytes) -> ScadenzarioData:
+    """Parse an interrogazionesituazionesinteticascadenze.XLSX scadenzario file.
+
+    Args:
+        source: file-like object (BytesIO), bytes, or any binary file handle.
+
+    Returns:
+        ScadenzarioData with fornitori list, totale_per_mese dict, and scaduto_totale.
+    """
+    if isinstance(source, bytes):
+        source = BytesIO(source)
+
+    wb = load_workbook(source, data_only=True)
+    ws: Worksheet = wb.active
+
+    # ---- Parse header row (row 1) -----------------------------------------
+    header_row = list(ws.iter_rows(min_row=1, max_row=1, values_only=True))[0]
+
+    fornitore_col: int | None = None
+    totale_col: int | None = None
+    scaduto_col: int | None = None
+    month_cols: dict[int, int] = {}  # {month_number: col_index (0-based)}
+
+    for col_idx, header_val in enumerate(header_row):
+        if header_val is None:
+            continue
+        h = str(header_val).strip().lower()
+        if fornitore_col is None and ("fornitore" in h or "ragione" in h):
+            fornitore_col = col_idx
+        elif totale_col is None and h == "totale":
+            totale_col = col_idx
+        elif scaduto_col is None and h == "scaduto":
+            scaduto_col = col_idx
+        else:
+            month_num = _parse_month_header(h)
+            if month_num is not None:
+                month_cols[month_num] = col_idx
+
+    if fornitore_col is None:
+        fornitore_col = 0
+
+    # ---- Read data rows ---------------------------------------------------
+    fornitori: list[dict] = []
+    totale_per_mese: dict[int, float] = {m: 0.0 for m in month_cols}
+    scaduto_totale: float = 0.0
+
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, values_only=True):
+        fornitore_val = row[fornitore_col] if fornitore_col < len(row) else None
+        if fornitore_val is None:
+            continue
+        if not isinstance(fornitore_val, str) or not fornitore_val.strip():
+            continue
+
+        entry: dict = {"fornitore": fornitore_val.strip()}
+
+        if totale_col is not None and totale_col < len(row):
+            v = row[totale_col]
+            entry["totale"] = float(v) if isinstance(v, (int, float)) else 0.0
+        else:
+            entry["totale"] = 0.0
+
+        scaduto_val = 0.0
+        if scaduto_col is not None and scaduto_col < len(row):
+            v = row[scaduto_col]
+            scaduto_val = float(v) if isinstance(v, (int, float)) else 0.0
+        entry["scaduto"] = scaduto_val
+        scaduto_totale += scaduto_val
+
+        for month_num, col_idx in month_cols.items():
+            v = row[col_idx] if col_idx < len(row) else None
+            amount = float(v) if isinstance(v, (int, float)) else 0.0
+            entry[f"mese_{month_num}"] = amount
+            totale_per_mese[month_num] = totale_per_mese.get(month_num, 0.0) + amount
+
+        fornitori.append(entry)
+
+    return ScadenzarioData(
+        fornitori=fornitori,
+        totale_per_mese=totale_per_mese,
+        scaduto_totale=scaduto_totale,
+    )

@@ -345,3 +345,85 @@ class TestWarnings:
         from condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
         assert result.warnings == []
+
+
+# ---------------------------------------------------------------------------
+# Scadenzario Fornitori tests
+# ---------------------------------------------------------------------------
+
+def _make_scadenzario_wb() -> Workbook:
+    """Build a minimal scadenzario workbook mirroring interrogazionesituazionesinteticascadenze.XLSX.
+
+    Layout:
+      Row 1 headers: Fornitore | Totale | Scaduto | apr-26 | mag-26 | giu-26 | Oltre
+      Row 2: Fornitore Alpha   | 5000   | 1000    | 2000   | 1500   | 500    | 0
+      Row 3: Fornitore Beta    | 3000   | 500     | 1000   | 1000   | 1000   | 0
+      Row 4: empty fornitore   (should be skipped)
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Scadenzario"
+
+    # Row 1: headers
+    ws.cell(row=1, column=1, value="Fornitore")
+    ws.cell(row=1, column=2, value="Totale")
+    ws.cell(row=1, column=3, value="Scaduto")
+    ws.cell(row=1, column=4, value="apr-26")
+    ws.cell(row=1, column=5, value="mag-26")
+    ws.cell(row=1, column=6, value="giu-26")
+    ws.cell(row=1, column=7, value="Oltre")
+
+    # Row 2: Fornitore Alpha
+    ws.cell(row=2, column=1, value="Fornitore Alpha")
+    ws.cell(row=2, column=2, value=5000.0)
+    ws.cell(row=2, column=3, value=1000.0)
+    ws.cell(row=2, column=4, value=2000.0)
+    ws.cell(row=2, column=5, value=1500.0)
+    ws.cell(row=2, column=6, value=500.0)
+    ws.cell(row=2, column=7, value=0.0)
+
+    # Row 3: Fornitore Beta
+    ws.cell(row=3, column=1, value="Fornitore Beta")
+    ws.cell(row=3, column=2, value=3000.0)
+    ws.cell(row=3, column=3, value=500.0)
+    ws.cell(row=3, column=4, value=1000.0)
+    ws.cell(row=3, column=5, value=1000.0)
+    ws.cell(row=3, column=6, value=1000.0)
+    ws.cell(row=3, column=7, value=0.0)
+
+    # Row 4: empty fornitore (should be skipped)
+    ws.cell(row=4, column=1, value=None)
+    ws.cell(row=4, column=2, value=9999.0)
+
+    return wb
+
+
+@pytest.fixture()
+def scadenzario_bytes() -> BytesIO:
+    return _wb_to_bytes(_make_scadenzario_wb())
+
+
+class TestParseScadenzario:
+    def test_parse_scadenzario_totals(self, scadenzario_bytes):
+        """totale_per_mese sums correctly across all fornitori."""
+        from condges.parse_pf import parse_scadenzario
+        result = parse_scadenzario(scadenzario_bytes)
+        # apr=4, mag=5, giu=6
+        assert result.totale_per_mese[4] == pytest.approx(3000.0)   # 2000+1000
+        assert result.totale_per_mese[5] == pytest.approx(2500.0)   # 1500+1000
+        assert result.totale_per_mese[6] == pytest.approx(1500.0)   # 500+1000
+
+    def test_parse_scadenzario_suppliers(self, scadenzario_bytes):
+        """Reads both fornitori; skips empty row."""
+        from condges.parse_pf import parse_scadenzario
+        result = parse_scadenzario(scadenzario_bytes)
+        assert len(result.fornitori) == 2
+        names = [f["fornitore"] for f in result.fornitori]
+        assert "Fornitore Alpha" in names
+        assert "Fornitore Beta" in names
+
+    def test_parse_scadenzario_scaduto(self, scadenzario_bytes):
+        """scaduto_totale is the sum of all Scaduto values."""
+        from condges.parse_pf import parse_scadenzario
+        result = parse_scadenzario(scadenzario_bytes)
+        assert result.scaduto_totale == pytest.approx(1500.0)   # 1000+500
