@@ -11,6 +11,7 @@ Subcomandi:
     hotelops previsione  Inserisci/aggiorna previsione budget
     hotelops voci        Lista voci piano finanziario disponibili
     hotelops classifica  Classifica, smista e ingerisci file dati
+    hotelops tesoreria   App Streamlit tesoreria (cashflow, PF, fornitori)
 
 Installazione:
     pip install -e .    (poi: hotelops pf)
@@ -683,6 +684,12 @@ def cmd_classifica(args):
 
 # ── Main ────────────────────────────────────────────────────────────────────
 
+def cmd_tesoreria(args):
+    """Launch Streamlit tesoreria app."""
+    import subprocess
+    subprocess.run(["streamlit", "run", "condges/tesoreria.py"])
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="hotelops",
@@ -732,6 +739,9 @@ def main():
     # voci
     sub.add_parser("voci", help="Lista voci piano finanziario")
 
+    # tesoreria
+    sub.add_parser("tesoreria", help="App Streamlit tesoreria (cashflow, PF, fornitori)")
+
     # classifica
     p_class = sub.add_parser("classifica", aliases=["cls"], help="Classifica, smista e ingerisci file")
     p_class.add_argument("files", nargs="+", help="File da classificare")
@@ -755,6 +765,7 @@ def main():
         "previsione": cmd_previsione,
         "prev": cmd_previsione,
         "voci": cmd_voci,
+        "tesoreria": cmd_tesoreria,
         "classifica": cmd_classifica,
         "cls": cmd_classifica,
     }
