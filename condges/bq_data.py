@@ -8,14 +8,14 @@ Queries use f-strings because societa and anno are trusted internal values
 
 import pandas as pd
 import streamlit as st
-from google.cloud import bigquery
 
 from core import config as cfg
 
 BQ_PROJECT = "hotelops-suite"
 
 
-def _client() -> bigquery.Client:
+def _client():
+    from google.cloud import bigquery
     return bigquery.Client(project=BQ_PROJECT)
 
 
