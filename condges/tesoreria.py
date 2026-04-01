@@ -6,6 +6,7 @@ Run:
 
 from __future__ import annotations
 
+import re
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -17,7 +18,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from condges.bq_data import load_budget, load_consuntivo, load_voci
+from condges.bq_data import load_bva, load_consuntivo, load_voci
 from condges.cashflow import project_cashflow
 from condges.export_excel import generate_tesoreria_excel
 from condges.parse_pf import PFData, ScadenzarioData, parse_pf, parse_scadenzario
@@ -61,15 +62,45 @@ def _semaphore_emoji(saldo: float) -> str:
     return "🟢"
 
 
+_EUR_FMT = "€{:,.0f}"
+
+
+def _eur_fmt(cols: list[str]) -> dict[str, str]:
+    """Build a Styler format dict for EUR columns."""
+    return {c: _EUR_FMT for c in cols}
+
+
+def _color_delta(val) -> str:
+    """Red for negative, green for positive. For Styler.map()."""
+    if not isinstance(val, (int, float)):
+        return ""
+    if val < 0:
+        return "color: #CC0000"
+    if val > 0:
+        return "color: #276221"
+    return ""
+
+
+def _color_scaduto(val) -> str:
+    if isinstance(val, (int, float)) and val > 0:
+        return "color: #CC0000; font-weight: bold"
+    return ""
+
+
 def _match_banca_saldo(pf_saldi: dict[str, float], bank_name: str) -> float:
     """Try to find a matching saldo from pf_saldi for a given bank_name.
 
     PF file stores saldi as 'Saldo MPS', 'Saldo Intesa', etc.
+    Matches bank_name against labels; requires the label to cover all words
+    in the bank name (or vice versa as exact match) to avoid 'MPS' bleeding
+    into 'MPS_KROSS'.
     """
-    bank_lower = bank_name.lower()
+    # Normalize: MPS_KROSS -> ["mps", "kross"], MPS -> ["mps"]
+    bank_words = set(bank_name.lower().replace("_", " ").split())
     for label, amount in pf_saldi.items():
-        label_lower = label.lower()
-        if bank_lower in label_lower or label_lower in bank_lower:
+        label_words = set(label.lower().split())
+        # All bank words must appear in the label (or all label words = bank words)
+        if bank_words <= label_words:
             return amount
     return 0.0
 
@@ -111,15 +142,13 @@ def _style_cashflow(df: pd.DataFrame) -> pd.io.formats.style.Styler:
 
     styler = df.style
 
-    # EUR formatting for numeric columns
-    fmt = {col: "€{:,.0f}" for col in eur_cols}
-    styler = styler.format(fmt)
+    styler = styler.format(_eur_fmt(eur_cols))
 
     # Color Stato column
-    styler = styler.applymap(color_stato, subset=["Stato"])
+    styler = styler.map(color_stato, subset=["Stato"])
 
     # Color negative saldo fine
-    styler = styler.applymap(color_saldo_fine, subset=["Saldo Fine"])
+    styler = styler.map(color_saldo_fine, subset=["Saldo Fine"])
 
     return styler
 
@@ -208,6 +237,12 @@ def render_sidebar() -> tuple[int, PFData | None, str, date, dict[str, float], S
                     with st.expander(f"⚠️ {len(pf_data.warnings)} avvisi"):
                         for w in pf_data.warnings:
                             st.warning(w)
+                # Push parsed saldi into session_state so number_inputs pick them up
+                if pf_data.saldi_banca:
+                    for bank in BANKS_BY_SOCIETA.get(pf_data.societa, []):
+                        matched = _match_banca_saldo(pf_data.saldi_banca, bank)
+                        if matched != 0.0:
+                            st.session_state[f"saldo_{bank}"] = matched
             except Exception as exc:
                 st.error(f"Errore parsing PF: {exc}")
 
@@ -223,13 +258,10 @@ def render_sidebar() -> tuple[int, PFData | None, str, date, dict[str, float], S
         banks = BANKS_BY_SOCIETA[societa]
         saldi_banca: dict[str, float] = {}
         for bank in banks:
-            default_val = 0.0
-            if pf_data and pf_data.saldi_banca:
-                default_val = _match_banca_saldo(pf_data.saldi_banca, bank)
             saldi_banca[bank] = float(
                 st.number_input(
                     f"Saldo {bank} (€)",
-                    value=default_val,
+                    value=0.0,
                     step=1000.0,
                     format="%.0f",
                     key=f"saldo_{bank}",
@@ -305,7 +337,7 @@ def render_cashflow_section(
 
     fornitori_per_mese: dict[int, float] = {}
     if scad_data:
-        fornitori_per_mese = {k: v for k, v in scad_data.totale_per_mese.items()}
+        fornitori_per_mese = scad_data.totale_per_mese
 
     saldo_iniziale = sum(saldi_banca.values())
     mese_corrente = date.today().month
@@ -361,7 +393,6 @@ def render_voci_section(
         # Check if voce has any non-zero data
         has_data = any(
             (voci_index.get((voce_id, m), {}).get("previsione", 0) or 0) != 0
-            or (voci_index.get((voce_id, m), {}).get("budget", 0) or 0) != 0
             or (voci_index.get((voce_id, m), {}).get("consuntivo", 0) or 0) != 0
             for m in range(1, 13)
         )
@@ -373,47 +404,27 @@ def render_voci_section(
             for m in range(1, 13):
                 data = voci_index.get((voce_id, m), {})
                 prev = data.get("previsione", 0) or 0
-                bud = data.get("budget", 0) or 0
                 cons = data.get("consuntivo", 0) or 0
 
                 row_dict: dict = {"Mese": MESI_NOMI[m - 1]}
+                row_dict["Previsione"] = prev
 
                 if m < mese_corrente:
-                    # Closed month: show all + deltas
-                    delta_prev = cons - prev
-                    delta_bud = cons - bud
-                    row_dict["Previsione"] = prev
-                    row_dict["Budget"] = bud
+                    # Closed month: previsione vs consuntivo
                     row_dict["Consuntivo"] = cons
-                    row_dict["Δ Prev"] = delta_prev
-                    row_dict["Δ Budget"] = delta_bud
-                else:
-                    # Future month: show previsione + budget + delta P-B
-                    delta_pb = prev - bud
-                    row_dict["Previsione"] = prev
-                    row_dict["Budget"] = bud
-                    row_dict["Δ Prev-Budget"] = delta_pb
+                    row_dict["Δ"] = cons - prev
 
                 rows_display.append(row_dict)
 
             df_voce = pd.DataFrame(rows_display)
 
             eur_cols = [c for c in df_voce.columns if c != "Mese"]
-            fmt = {col: "€{:,.0f}" for col in eur_cols}
-
-            def color_delta(val):
-                if not isinstance(val, (int, float)):
-                    return ""
-                if val < 0:
-                    return "color: #CC0000"
-                if val > 0:
-                    return "color: #276221"
-                return ""
+            fmt = _eur_fmt(eur_cols)
 
             delta_cols = [c for c in df_voce.columns if c.startswith("Δ")]
             styler = df_voce.style.format(fmt)
             if delta_cols:
-                styler = styler.applymap(color_delta, subset=delta_cols)
+                styler = styler.map(_color_delta, subset=delta_cols)
 
             st.dataframe(styler, hide_index=True, use_container_width=True)
 
@@ -426,47 +437,168 @@ def render_fornitori_section(scad_data: ScadenzarioData) -> None:
         st.info("Nessun fornitore trovato nel file.")
         return
 
-    # Top 10 by totale
+    # Detect which months have data
+    all_mesi = sorted(scad_data.totale_per_mese.keys())
+
+    # Summary: totale per mese
+    st.subheader("Uscite Fornitori per Mese")
+    if scad_data.totale_per_mese:
+        mesi_forn = sorted(scad_data.totale_per_mese.items())
+        summary_row = {"Voce": "TOTALE FORNITORI"}
+        for m, v in mesi_forn:
+            summary_row[MESI_NOMI[m - 1]] = v
+        summary_row["Totale"] = sum(v for _, v in mesi_forn)
+        summary_row["Scaduto"] = scad_data.scaduto_totale
+        df_summary = pd.DataFrame([summary_row])
+        eur_cols = [c for c in df_summary.columns if c != "Voce"]
+        fmt = _eur_fmt(eur_cols)
+        st.dataframe(df_summary.style.format(fmt), hide_index=True, use_container_width=True)
+
+    st.divider()
+
+    # Full table: all fornitori x mesi
     sorted_forn = sorted(scad_data.fornitori, key=lambda r: r.get("totale", 0) or 0, reverse=True)
-    top10 = sorted_forn[:10]
 
-    col_left, col_right = st.columns([3, 2])
+    rows_display = []
+    for f in sorted_forn:
+        totale = f.get("totale", 0) or 0
+        scaduto = f.get("scaduto", 0) or 0
+        if abs(totale) < 1 and abs(scaduto) < 1:
+            continue
+        row = {"Fornitore": f["fornitore"]}
+        for m in all_mesi:
+            row[MESI_NOMI[m - 1]] = f.get(f"mese_{m}", 0) or 0
+        row["Totale"] = totale
+        row["Scaduto"] = scaduto
+        rows_display.append(row)
 
-    with col_left:
-        st.subheader("Top 10 Fornitori")
-        df_top = pd.DataFrame(
-            [
-                {
-                    "Fornitore": f["fornitore"],
-                    "Totale": f.get("totale", 0) or 0,
-                    "Scaduto": f.get("scaduto", 0) or 0,
-                }
-                for f in top10
-            ]
-        )
+    if rows_display:
+        df_forn = pd.DataFrame(rows_display)
+        eur_cols = [c for c in df_forn.columns if c != "Fornitore"]
+        fmt = _eur_fmt(eur_cols)
 
-        def color_scaduto(val):
-            if isinstance(val, (int, float)) and val > 0:
-                return "color: #CC0000; font-weight: bold"
-            return ""
-
-        styler = df_top.style.format({"Totale": "€{:,.0f}", "Scaduto": "€{:,.0f}"})
-        styler = styler.applymap(color_scaduto, subset=["Scaduto"])
+        styler = df_forn.style.format(fmt)
+        if "Scaduto" in df_forn.columns:
+            styler = styler.map(_color_scaduto, subset=["Scaduto"])
         st.dataframe(styler, hide_index=True, use_container_width=True)
 
-    with col_right:
-        st.subheader("Uscite per Mese")
-        if scad_data.totale_per_mese:
-            mesi_forn = sorted(scad_data.totale_per_mese.items())
-            df_mesi = pd.DataFrame(
-                [{"Mese": MESI_NOMI[m - 1], "Totale": v} for m, v in mesi_forn if v > 0]
-            )
-            if not df_mesi.empty:
-                st.dataframe(
-                    df_mesi.style.format({"Totale": "€{:,.0f}"}),
-                    hide_index=True,
-                    use_container_width=True,
-                )
+
+def render_bva_section(societa: str, anno: int) -> None:
+    """Render Budget vs Consuntivo tab — monthly grid per codice conto."""
+    st.header("Budget vs Consuntivo")
+
+    mese_corrente = date.today().month
+
+    with st.spinner("Caricamento BvA da BigQuery..."):
+        try:
+            df_bva = load_bva(societa, anno)
+        except Exception as exc:
+            st.error(f"Errore caricamento BvA: {exc}")
+            return
+
+    if df_bva.empty:
+        st.info("Nessun dato BvA disponibile.")
+        return
+
+    # Filter to months with data (up to current month)
+    df_bva = df_bva[df_bva["mese"] <= mese_corrente]
+
+    # Pivot: one row per conto, columns = mesi
+    conti = (
+        df_bva.groupby(["codice_conto_display", "descrizione", "categoria_ce"])
+        .agg({"budget": "sum", "consuntivo": "sum", "delta": "sum"})
+        .reset_index()
+        .sort_values("delta", key=abs, ascending=False)
+    )
+
+    # Summary metrics
+    tot_budget = df_bva["budget"].sum()
+    tot_consuntivo = df_bva["consuntivo"].sum()
+    tot_delta = tot_consuntivo - tot_budget
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Budget YTD", _fmt_eur(tot_budget))
+    with col2:
+        st.metric("Consuntivo YTD", _fmt_eur(tot_consuntivo))
+    with col3:
+        st.metric("Delta", _fmt_eur(tot_delta), delta=f"{tot_delta/tot_budget*100:.1f}%" if tot_budget else None)
+
+    st.divider()
+
+    # Group by categoria_ce
+    categorie = df_bva["categoria_ce"].dropna().unique()
+    for cat in sorted(categorie):
+        cat_conti = conti[conti["categoria_ce"] == cat].copy()
+        if cat_conti.empty:
+            continue
+
+        cat_budget = cat_conti["budget"].sum()
+        cat_consuntivo = cat_conti["consuntivo"].sum()
+        cat_delta = cat_consuntivo - cat_budget
+
+        with st.expander(
+            f"{'📥' if 'Ricav' in str(cat) else '📤'} {cat} — "
+            f"Budget {_fmt_eur(cat_budget)} | Consuntivo {_fmt_eur(cat_consuntivo)} | "
+            f"Δ {_fmt_eur(cat_delta)}"
+        ):
+            # For each conto in this category, show monthly breakdown
+            cat_df = df_bva[df_bva["categoria_ce"] == cat]
+            conto_ids = cat_conti.sort_values("delta", key=abs, ascending=False)["codice_conto_display"].tolist()
+
+            for conto_id in conto_ids:
+                conto_rows = cat_df[cat_df["codice_conto_display"] == conto_id]
+                if conto_rows.empty:
+                    continue
+
+                desc = conto_rows["descrizione"].iloc[0] or conto_id
+                conto_budget = conto_rows["budget"].sum()
+                conto_cons = conto_rows["consuntivo"].sum()
+                conto_delta = conto_cons - conto_budget
+
+                # Skip if both are zero
+                if abs(conto_budget) < 1 and abs(conto_cons) < 1:
+                    continue
+
+                st.markdown(f"**{conto_id}** — {desc}")
+
+                rows_display = []
+                for m in range(1, mese_corrente + 1):
+                    m_data = conto_rows[conto_rows["mese"] == m]
+                    bud = float(m_data["budget"].sum()) if not m_data.empty else 0.0
+                    cons = float(m_data["consuntivo"].sum()) if not m_data.empty else 0.0
+                    rows_display.append({
+                        "Mese": MESI_NOMI[m - 1],
+                        "Budget": bud,
+                        "Consuntivo": cons,
+                        "Delta": cons - bud,
+                    })
+
+                # Add totale row
+                rows_display.append({
+                    "Mese": "TOTALE",
+                    "Budget": conto_budget,
+                    "Consuntivo": conto_cons,
+                    "Delta": conto_delta,
+                })
+
+                df_display = pd.DataFrame(rows_display)
+                eur_cols = ["Budget", "Consuntivo", "Delta"]
+                fmt = _eur_fmt(eur_cols)
+
+                styler = df_display.style.format(fmt)
+                styler = styler.map(_color_delta, subset=["Delta"])
+
+                st.dataframe(styler, hide_index=True, use_container_width=True)
+
+    # Show unmatched conti (no categoria_ce)
+    unmatched = conti[conti["categoria_ce"].isna()]
+    if not unmatched.empty and (unmatched["budget"].abs().sum() > 100 or unmatched["consuntivo"].abs().sum() > 100):
+        with st.expander(f"❓ Non categorizzati ({len(unmatched)} conti)"):
+            df_um = unmatched[["codice_conto_display", "descrizione", "budget", "consuntivo", "delta"]].copy()
+            df_um.columns = ["Codice", "Descrizione", "Budget", "Consuntivo", "Delta"]
+            fmt = _eur_fmt(["Budget", "Consuntivo", "Delta"])
+            st.dataframe(df_um.style.format(fmt), hide_index=True, use_container_width=True)
 
 
 def render_download_button(
@@ -510,25 +642,16 @@ def assemble_voci_data(
     anno: int,
     df_voci: pd.DataFrame,
 ) -> list[dict]:
-    """Build unified voci_data list merging PF previsioni, budget, and consuntivo."""
+    """Build unified voci_data list merging PF previsioni and consuntivo."""
     try:
         df_consuntivo = load_consuntivo(societa, anno)
     except Exception:
         df_consuntivo = pd.DataFrame(columns=["voce_id", "mese", "importo_consuntivo"])
 
-    try:
-        df_budget = load_budget(societa, anno)
-    except Exception:
-        df_budget = pd.DataFrame(columns=["voce_id", "mese", "importo_budget"])
-
-    # Index consuntivo and budget for O(1) lookups
+    # Index consuntivo for O(1) lookups
     cons_index: dict[tuple[str, int], float] = {}
     for _, row in df_consuntivo.iterrows():
         cons_index[(str(row["voce_id"]), int(row["mese"]))] = float(row["importo_consuntivo"])
-
-    bud_index: dict[tuple[str, int], float] = {}
-    for _, row in df_budget.iterrows():
-        bud_index[(str(row["voce_id"]), int(row["mese"]))] = float(row["importo_budget"])
 
     # Filter voci by societa (societa_id IS NULL or matches)
     df_filtered = df_voci[
@@ -552,7 +675,6 @@ def assemble_voci_data(
                 else 0.0
             )
             cons = cons_index.get((voce_id, mese), 0.0)
-            bud = bud_index.get((voce_id, mese), 0.0)
 
             voci_data.append(
                 {
@@ -563,7 +685,6 @@ def assemble_voci_data(
                     "ord": ord_val,
                     "mese": mese,
                     "previsione": prev,
-                    "budget": bud,
                     "consuntivo": cons,
                 }
             )
@@ -580,43 +701,41 @@ def main() -> None:
 
     st.title(f"Tesoreria {societa} — {anno}")
 
-    if pf_data is None:
-        st.info("⬅️ Carica il Piano Finanziario dal pannello laterale per iniziare.")
-        return
+    tab_cassa, tab_bva = st.tabs(["💰 Cassa (Rosa)", "📊 Budget vs Consuntivo"])
 
-    # Load dimension data from BQ
-    try:
-        df_voci = load_voci()
-    except Exception as exc:
-        st.error(f"Errore caricamento voci da BigQuery: {exc}")
-        df_voci = pd.DataFrame(
-            columns=["voce_id", "voce_label", "sezione", "categoria", "ord", "societa_id"]
-        )
+    # ── Tab 1: Cassa ────────────────────────────────────────────────────────
+    with tab_cassa:
+        if pf_data is None:
+            st.info("⬅️ Carica il Piano Finanziario dal pannello laterale per iniziare.")
+        else:
+            # Load dimension data from BQ
+            try:
+                df_voci = load_voci()
+            except Exception as exc:
+                st.error(f"Errore caricamento voci da BigQuery: {exc}")
+                df_voci = pd.DataFrame(
+                    columns=["voce_id", "voce_label", "sezione", "categoria", "ord", "societa_id"]
+                )
 
-    # Assemble unified voci_data
-    with st.spinner("Caricamento dati da BigQuery..."):
-        voci_data = assemble_voci_data(pf_data, societa, anno, df_voci)
+            # Assemble unified voci_data
+            with st.spinner("Caricamento dati da BigQuery..."):
+                voci_data = assemble_voci_data(pf_data, societa, anno, df_voci)
 
-    # ── Header metrics ──────────────────────────────────────────────────────
-    render_header_metrics(saldi_banca, pf_data, scad_data)
+            render_header_metrics(saldi_banca, pf_data, scad_data)
+            st.divider()
+            cashflow_rows = render_cashflow_section(pf_data, voci_data, saldi_banca, scad_data)
+            st.divider()
+            render_voci_section(voci_data, df_voci)
 
-    st.divider()
+            if scad_data:
+                st.divider()
+                render_fornitori_section(scad_data)
 
-    # ── Cashflow projection ─────────────────────────────────────────────────
-    cashflow_rows = render_cashflow_section(pf_data, voci_data, saldi_banca, scad_data)
+            render_download_button(societa, anno, cashflow_rows, voci_data, saldi_banca, scad_data)
 
-    st.divider()
-
-    # ── Voci detail ─────────────────────────────────────────────────────────
-    render_voci_section(voci_data, df_voci)
-
-    # ── Fornitori ───────────────────────────────────────────────────────────
-    if scad_data:
-        st.divider()
-        render_fornitori_section(scad_data)
-
-    # ── Download button ─────────────────────────────────────────────────────
-    render_download_button(societa, anno, cashflow_rows, voci_data, saldi_banca, scad_data)
+    # ── Tab 2: BvA ──────────────────────────────────────────────────────────
+    with tab_bva:
+        render_bva_section(societa, anno)
 
 
 if __name__ == "__main__":

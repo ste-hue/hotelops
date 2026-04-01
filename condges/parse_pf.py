@@ -300,7 +300,15 @@ def parse_pf(source: BinaryIO | BytesIO | bytes) -> PFData:
         # Resolve voce_id
         voce_id = _LABEL_MAP.get(_normalise(label))
         if voce_id is None:
-            warnings.append(f"Unknown voce label: '{label}'")
+            # Only warn if the row has material non-zero data (>1€)
+            nz = [
+                ws.cell(row=label_cell.row, column=c).value
+                for c in month_cols.values()
+                if isinstance(ws.cell(row=label_cell.row, column=c).value, (int, float))
+                and abs(ws.cell(row=label_cell.row, column=c).value) > 1
+            ]
+            if nz:
+                warnings.append(f"Unknown voce label: '{label}' (values: {nz[:3]}{'…' if len(nz) > 3 else ''})")
             continue
 
         # Read amounts for each month
@@ -393,12 +401,18 @@ def parse_scadenzario(source: BinaryIO | BytesIO | bytes) -> ScadenzarioData:
         h = str(header_val).strip().lower()
         if fornitore_col is None and ("fornitore" in h or "ragione" in h):
             fornitore_col = col_idx
-        elif totale_col is None and h == "totale":
+        elif totale_col is None and ("totale" in h):
             totale_col = col_idx
-        elif scaduto_col is None and h == "scaduto":
+        elif scaduto_col is None and "scaduto" in h:
             scaduto_col = col_idx
         else:
+            # Handle "Scadenze - In scadenza al DD/MM/YYYY" format
             month_num = _parse_month_header(h)
+            if month_num is None:
+                # Try extracting month from date pattern DD/MM/YYYY in header
+                m = re.search(r"in scadenza al\s+\d{1,2}/(\d{1,2})/\d{4}", h)
+                if m:
+                    month_num = int(m.group(1))
             if month_num is not None:
                 month_cols[month_num] = col_idx
 

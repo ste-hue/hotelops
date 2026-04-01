@@ -69,7 +69,7 @@ def load_consuntivo(societa: str, anno: int) -> pd.DataFrame:
             ) AS importo_consuntivo
         FROM `{cfg.F_MOVIMENTI_CONTABILI}` AS mov
         JOIN `{cfg.D_VOCI_PIANO_FINANZIARIO}` AS v
-          ON REPLACE(mov.codice_conto, '.', '') LIKE v.cod_conto_pattern
+          ON mov.cod_conto LIKE CONCAT(v.cod_conto_pattern, '%')
         WHERE v.fonte = 'ESOLVER'
           AND mov.societa_id = '{societa}'
           AND EXTRACT(YEAR FROM mov.data_registrazione) = {anno}
@@ -98,7 +98,7 @@ def load_budget(societa: str, anno: int) -> pd.DataFrame:
             SUM(b.importo) AS importo_budget
         FROM `{cfg.F_BUDGET_MENSILE}` AS b
         JOIN `{cfg.D_VOCI_PIANO_FINANZIARIO}` AS v
-          ON REPLACE(b.codice_conto, '.', '') LIKE v.cod_conto_pattern
+          ON REPLACE(b.codice_conto, '.', '') LIKE CONCAT(v.cod_conto_pattern, '%')
         WHERE v.fonte = 'ESOLVER'
           AND b.societa_id = '{societa}'
           AND b.anno = {anno}
@@ -149,15 +149,15 @@ def load_consuntivo_detail(societa: str, anno: int) -> pd.DataFrame:
     """
     sql = f"""
         SELECT
-            mov.codice_conto,
-            mov.descrizione_conto AS descrizione,
+            mov.cod_conto,
+            mov.rag_sociale AS descrizione,
             EXTRACT(MONTH FROM mov.data_registrazione) AS mese,
             SUM(mov.imp_dare - mov.imp_avere) AS importo
         FROM `{cfg.F_MOVIMENTI_CONTABILI}` AS mov
         WHERE mov.societa_id = '{societa}'
           AND EXTRACT(YEAR FROM mov.data_registrazione) = {anno}
-        GROUP BY mov.codice_conto, mov.descrizione_conto, mese
-        ORDER BY mov.codice_conto, mese
+        GROUP BY mov.cod_conto, mov.rag_sociale, mese
+        ORDER BY mov.cod_conto, mese
     """
     return _client().query(sql).to_dataframe()
 
@@ -180,5 +180,35 @@ def load_categorie() -> pd.DataFrame:
             categoria_ce
         FROM `{cfg.D_CATEGORIE_CONTI}`
         ORDER BY codice_conto
+    """
+    return _client().query(sql).to_dataframe()
+
+
+# ---------------------------------------------------------------------------
+# 7. Budget vs Consuntivo (BvA)
+# ---------------------------------------------------------------------------
+
+@st.cache_data(ttl=300)
+def load_bva(societa: str, anno: int) -> pd.DataFrame:
+    """
+    Load v_budget_vs_consuntivo for a given societa/anno.
+
+    Returns columns: codice_conto_display, descrizione, categoria_ce, mese,
+                     budget, consuntivo, delta, status
+    """
+    sql = f"""
+        SELECT
+            codice_conto_display,
+            descrizione,
+            categoria_ce,
+            mese,
+            ROUND(budget, 0) AS budget,
+            ROUND(consuntivo, 0) AS consuntivo,
+            ROUND(delta, 0) AS delta,
+            status
+        FROM `{cfg.V_BUDGET_VS_CONSUNTIVO}`
+        WHERE societa_id = '{societa}'
+          AND anno = {anno}
+        ORDER BY categoria_ce, codice_conto_display, mese
     """
     return _client().query(sql).to_dataframe()
