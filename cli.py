@@ -620,6 +620,26 @@ def cmd_saldo(args):
     print("  Scad. = uscite certe da scadenzario fornitori (non entra nel saldo)")
 
 
+# ── Manifest: catalogo tabelle BQ ──────────────────────────────────────────
+
+def cmd_manifest(args):
+    """Genera manifest.yaml — catalogo di tutte le tabelle BQ."""
+    from core.bq.manifest import generate_manifest, TABLES
+    from pathlib import Path
+    import json
+
+    output = args.output or "core/bq/manifest.yaml"
+    tables = [args.table] if args.table else None
+
+    print(f"\n  Generating manifest for {len(tables or TABLES)} tables → {output}")
+    manifest = generate_manifest(output_path=output, tables=tables)
+
+    n_tables = len(manifest["tables"])
+    total_rows = sum(t.get("rows", 0) for t in manifest["tables"].values())
+    print(f"  ✓ {n_tables} tables cataloged, {total_rows:,} total rows")
+    print(f"  ✓ Written to {output}")
+
+
 # ── Classifica: classify + route + ingest files ──────────────────────────────
 
 def cmd_classifica(args):
@@ -732,6 +752,11 @@ def main():
     # voci
     sub.add_parser("voci", help="Lista voci piano finanziario")
 
+    # manifest
+    p_manifest = sub.add_parser("manifest", help="Genera catalogo tabelle BQ")
+    p_manifest.add_argument("--table", help="Singola tabella (default: tutte)")
+    p_manifest.add_argument("--output", help="Output path (default: core/bq/manifest.yaml)")
+
     # classifica
     p_class = sub.add_parser("classifica", aliases=["cls"], help="Classifica, smista e ingerisci file")
     p_class.add_argument("files", nargs="+", help="File da classificare")
@@ -755,6 +780,7 @@ def main():
         "previsione": cmd_previsione,
         "prev": cmd_previsione,
         "voci": cmd_voci,
+        "manifest": cmd_manifest,
         "classifica": cmd_classifica,
         "cls": cmd_classifica,
     }
