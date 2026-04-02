@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from core.schemas import ChiusuraMensileRow, validate_batch
 
@@ -699,6 +700,34 @@ def cmd_classifica(args):
     print(f"{'─'*70}\n")
 
 
+# ── Scadenzario ────────────────────────────────────────────────────────────
+
+def cmd_scadenzario(args):
+    """Genera Excel ponte: scadenzario fornitori → voci PF."""
+    from condges.scadenzario_excel import run
+
+    print(f"\n{'═'*60}")
+    print(f"  SCADENZARIO → PIANO FINANZIARIO ({args.societa})")
+    print(f"{'═'*60}\n")
+
+    if args.file:
+        print(f"  Input: {args.file}")
+    else:
+        print("  Input: BigQuery (ultimo snapshot)")
+    if args.pf:
+        print(f"  PF Rosa: {args.pf}")
+
+    out = run(
+        file=args.file,
+        pf=args.pf,
+        societa=args.societa,
+        output=args.output,
+    )
+
+    print(f"\n  ✅ Excel generato: {out}")
+    print(f"{'═'*60}\n")
+
+
 # ── Help ───────────────────────────────────────────────────────────────────
 
 def cmd_help(args):
@@ -747,6 +776,11 @@ def cmd_help(args):
     (alias: cls)    hotelops classifica file1.xlsx file2.csv
                     hotelops cls *.xlsx --route --ingest
                     hotelops cls report.xlsx --dry-run
+
+  scadenzario     Excel ponte: scadenzario fornitori → voci PF
+    (alias: scad)   hotelops scad --file sintetica.xlsx
+                    hotelops scad --file sintetica.xlsx --pf PF_aprile.xlsx
+                    hotelops scad --output ~/Desktop/
 
   help            Questa guida
                     hotelops help
@@ -833,6 +867,14 @@ def main():
     p_class.add_argument("--datahub", help="Root del datahub (default: Google Drive)")
     p_class.add_argument("--dry-run", action="store_true", help="Mostra il piano senza eseguire")
 
+    # scadenzario
+    p_scad = sub.add_parser("scadenzario", aliases=["scad"],
+                            help="Genera Excel ponte fornitori → voci PF")
+    p_scad.add_argument("--file", type=Path, help="Sintetica scadenze Excel (default: BQ)")
+    p_scad.add_argument("--pf", type=Path, help="PF Excel di Rosa per gap analysis")
+    p_scad.add_argument("--societa", choices=["ORTI", "INTUR"], default="ORTI")
+    p_scad.add_argument("--output", type=Path, help="Directory output (default: corrente)")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -851,6 +893,8 @@ def main():
         "manifest": cmd_manifest,
         "classifica": cmd_classifica,
         "cls": cmd_classifica,
+        "scadenzario": cmd_scadenzario,
+        "scad": cmd_scadenzario,
         "help": cmd_help,
     }
 
