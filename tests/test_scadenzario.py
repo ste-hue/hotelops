@@ -1,9 +1,5 @@
 """Tests for scadenzario Excel bridge."""
-import pytest
 import openpyxl
-from unittest.mock import MagicMock, patch
-from pathlib import Path
-from datetime import date
 
 
 def _make_sintetica_workbook(rows, header_dates=None):
@@ -202,8 +198,9 @@ class TestLoadPfForecasts:
         ws = wb.active
         ws.title = "Piano Finanziario"
         ws.cell(row=2, column=1, value="ORTI")
+        # Row 2 has actual calendar month names (like the real PF Excel)
         for i, name in enumerate(["APRILE", "MAGGIO", "GIUGNO"], start=10):
-            ws.cell(row=3, column=i, value=name)
+            ws.cell(row=2, column=i, value=name)
         ws.cell(row=16, column=1, value="Materie Prime/Consumo")
         ws.cell(row=16, column=10, value=117460)
         ws.cell(row=16, column=11, value=40075)

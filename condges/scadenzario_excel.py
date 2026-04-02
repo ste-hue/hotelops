@@ -29,6 +29,8 @@ def parse_sintetica_scadenze(filepath: Path) -> list[dict]:
         header = ws.cell(row=1, column=col).value
         if not header or "scadenza" not in str(header).lower():
             continue
+        if "oltre" in str(header).lower():
+            continue  # skip catch-all "oltre" bucket
         m = re.search(r"(\d{2})/(\d{2})/(\d{4})", str(header))
         if m:
             bucket_months[col] = int(m.group(2))
@@ -291,9 +293,11 @@ def load_pf_forecasts(filepath: Path) -> dict[str, dict[int, float]]:
     wb = openpyxl.load_workbook(str(filepath), data_only=True)
     ws = wb["Piano Finanziario"]
 
+    # Row 2 has actual calendar month names (APRILE, MAGGIO, etc.)
+    # Row 3 has fiscal-year counter months — don't use it
     col_to_month: dict[int, int] = {}
     for col in range(3, ws.max_column + 1):
-        val = ws.cell(row=3, column=col).value
+        val = ws.cell(row=2, column=col).value
         if val:
             month = MONTH_NAMES.get(str(val).strip().lower())
             if month:
@@ -377,6 +381,8 @@ def run(
         for col in range(4, ws.max_column + 1):
             header = ws.cell(row=1, column=col).value
             if not header or "scadenza" not in str(header).lower():
+                continue
+            if "oltre" in str(header).lower():
                 continue
             m = re.search(r"(\d{2})/(\d{2})/(\d{4})", str(header))
             if m:
