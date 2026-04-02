@@ -78,3 +78,54 @@ class TestParseSinteticaScadenze:
         wb.save(f)
         result = parse_sintetica_scadenze(f)
         assert result[0]["totale"] == 2294.28
+
+
+class TestMapToVoci:
+    def test_maps_supplier_to_voce(self):
+        from condges.scadenzario_excel import map_to_voci
+        partite = [
+            {"codice_fornitore": 1, "nome": "LE CROISSANT", "totale": -1000,
+             "scaduto": -500, "buckets": {5: -500}},
+        ]
+        fornitori_map = {1: "USCITE_MATERIE_PRIME"}
+        mapped, unmapped = map_to_voci(partite, fornitori_map)
+        assert "USCITE_MATERIE_PRIME" in mapped
+        assert len(mapped["USCITE_MATERIE_PRIME"]) == 1
+        assert unmapped == []
+
+    def test_unmapped_supplier_goes_to_unmapped_list(self):
+        from condges.scadenzario_excel import map_to_voci
+        partite = [
+            {"codice_fornitore": 9999, "nome": "UNKNOWN", "totale": -100,
+             "scaduto": -100, "buckets": {}},
+        ]
+        fornitori_map = {1: "USCITE_MATERIE_PRIME"}
+        mapped, unmapped = map_to_voci(partite, fornitori_map)
+        assert len(unmapped) == 1
+        assert unmapped[0]["codice_fornitore"] == 9999
+
+    def test_multiple_suppliers_same_voce(self):
+        from condges.scadenzario_excel import map_to_voci
+        partite = [
+            {"codice_fornitore": 1, "nome": "A", "totale": -500,
+             "scaduto": -500, "buckets": {}},
+            {"codice_fornitore": 4, "nome": "B", "totale": -300,
+             "scaduto": -300, "buckets": {}},
+        ]
+        fornitori_map = {1: "USCITE_MATERIE_PRIME", 4: "USCITE_MATERIE_PRIME"}
+        mapped, unmapped = map_to_voci(partite, fornitori_map)
+        assert len(mapped["USCITE_MATERIE_PRIME"]) == 2
+
+
+class TestLoadFornitoriMap:
+    def test_loads_csv(self, tmp_path):
+        from condges.scadenzario_excel import load_fornitori_map
+        csv_path = tmp_path / "d_fornitori.csv"
+        csv_path.write_text(
+            "codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany\n"
+            "1,LE CROISSANT SRL,Le Croissant,USCITE_MATERIE_PRIME,False\n"
+            "264,PANORAMA COMPANY S.R.L.,Fitto,USCITE_CANONE_PASSIVO,True\n"
+        )
+        result = load_fornitori_map(csv_path=csv_path)
+        assert result[1] == "USCITE_MATERIE_PRIME"
+        assert result[264] == "USCITE_CANONE_PASSIVO"

@@ -59,3 +59,39 @@ def parse_sintetica_scadenze(filepath: Path) -> list[dict]:
             "buckets": buckets,
         })
     return results
+
+
+# ── Mapper ─────────────────────────────────────────────────────────────────
+
+FORNITORI_CSV = Path(__file__).parent.parent / "core" / "bq" / "dimensioni" / "d_fornitori.csv"
+
+
+def load_fornitori_map(csv_path: Path = FORNITORI_CSV) -> dict[int, str]:
+    """Load d_fornitori CSV, return {codice_fornitore: voce_id}."""
+    result = {}
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            result[int(row["codice_fornitore"])] = row["voce_id"]
+    return result
+
+
+def map_to_voci(
+    partite: list[dict], fornitori_map: dict[int, str]
+) -> tuple[dict[str, list[dict]], list[dict]]:
+    """Map suppliers to PF voci.
+
+    Returns:
+        (mapped, unmapped) where mapped = {voce_id: [supplier_dicts]},
+        unmapped = [supplier_dicts without voce match]
+    """
+    mapped: dict[str, list[dict]] = {}
+    unmapped: list[dict] = []
+
+    for p in partite:
+        voce = fornitori_map.get(p["codice_fornitore"])
+        if voce:
+            mapped.setdefault(voce, []).append(p)
+        else:
+            unmapped.append(p)
+
+    return mapped, unmapped
