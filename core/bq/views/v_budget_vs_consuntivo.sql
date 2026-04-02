@@ -30,7 +30,7 @@ WITH budget_ranked AS (
       END
     ) AS rn
   FROM `hotelops-suite.hotelops.f_budget_mensile`
-  WHERE anno = 2026
+  WHERE anno = EXTRACT(YEAR FROM CURRENT_DATE())
 ),
 
 budget AS (
@@ -65,7 +65,7 @@ actuals AS (
     SUM(imp_dare - imp_avere) AS consuntivo_netto,
     COUNT(*) AS n_movimenti
   FROM `hotelops-suite.hotelops.f_movimenti_contabili`
-  WHERE EXTRACT(YEAR FROM data_registrazione) = 2026
+  WHERE EXTRACT(YEAR FROM data_registrazione) = EXTRACT(YEAR FROM CURRENT_DATE())
   GROUP BY societa_id, EXTRACT(YEAR FROM data_registrazione),
            EXTRACT(MONTH FROM data_registrazione), cod_conto
 ),
