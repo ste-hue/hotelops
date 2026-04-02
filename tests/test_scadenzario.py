@@ -190,3 +190,28 @@ class TestGenerateExcel:
         generate_excel(self._sample_data(), None, [], out, bucket_months=[5])
         wb = openpyxl.load_workbook(out)
         assert "DA VERIFICARE" not in wb.sheetnames
+
+
+class TestLoadPfForecasts:
+    def test_parses_uscite_rows(self, tmp_path):
+        """Test parsing Rosa's PF Excel uscite rows."""
+        from condges.scadenzario_excel import load_pf_forecasts
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Piano Finanziario"
+        ws.cell(row=2, column=1, value="ORTI")
+        for i, name in enumerate(["APRILE", "MAGGIO", "GIUGNO"], start=10):
+            ws.cell(row=3, column=i, value=name)
+        ws.cell(row=16, column=1, value="Materie Prime/Consumo")
+        ws.cell(row=16, column=10, value=117460)
+        ws.cell(row=16, column=11, value=40075)
+        ws.cell(row=16, column=12, value=95000)
+
+        f = tmp_path / "pf.xlsx"
+        wb.save(f)
+
+        result = load_pf_forecasts(f)
+        assert "USCITE_MATERIE_PRIME" in result
+        assert result["USCITE_MATERIE_PRIME"][4] == 117460  # April

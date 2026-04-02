@@ -257,3 +257,64 @@ def generate_excel(
 
     wb.save(output_path)
     return output_path
+
+
+# ── PF Excel Forecast Parser ──────────────────────────────────────────────
+
+PF_LABEL_TO_VOCE = {
+    "salari e stipendi": "USCITE_SALARI",
+    "utenze": "USCITE_UTENZE",
+    "materie prime/consumo": "USCITE_MATERIE_PRIME",
+    "materie prime e consumo": "USCITE_MATERIE_PRIME",
+    "tasse e imposte": "USCITE_TASSE",
+    "commissioni portali": "USCITE_COMMISSIONI",
+    "mutui e finaziamenti": "USCITE_MUTUI",
+    "mutui e finanziamenti": "USCITE_MUTUI",
+    "consulenze": "USCITE_CONSULENZE",
+    "godimento beni di terzi": "USCITE_CANONE_PASSIVO",
+    "varie ed eventuali": "USCITE_VARIE_EXT",
+    "canoni e servizi": "USCITE_SERVIZI_PRODUZIONE",
+}
+
+MONTH_NAMES = {
+    "gennaio": 1, "febbraio": 2, "marzo": 3, "aprile": 4,
+    "maggio": 5, "giugno": 6, "luglio": 7, "agosto": 8,
+    "settembre": 9, "ottobre": 10, "novembre": 11, "dicembre": 12,
+}
+
+
+def load_pf_forecasts(filepath: Path) -> dict[str, dict[int, float]]:
+    """Parse Rosa's PF Excel, extract uscite forecasts per voce per month.
+
+    Returns: {voce_id: {month_int: amount}}
+    """
+    wb = openpyxl.load_workbook(str(filepath), data_only=True)
+    ws = wb["Piano Finanziario"]
+
+    col_to_month: dict[int, int] = {}
+    for col in range(3, ws.max_column + 1):
+        val = ws.cell(row=3, column=col).value
+        if val:
+            month = MONTH_NAMES.get(str(val).strip().lower())
+            if month:
+                col_to_month[col] = month
+
+    result: dict[str, dict[int, float]] = {}
+    for row_idx in range(14, 28):
+        label_raw = ws.cell(row=row_idx, column=1).value
+        if not label_raw:
+            continue
+        label = str(label_raw).strip().lower()
+        voce_id = PF_LABEL_TO_VOCE.get(label)
+        if not voce_id:
+            continue
+
+        months: dict[int, float] = {}
+        for col, month in col_to_month.items():
+            val = ws.cell(row=row_idx, column=col).value
+            if val and isinstance(val, (int, float)) and val != 0:
+                months[month] = float(val)
+        if months:
+            result[voce_id] = months
+
+    return result
