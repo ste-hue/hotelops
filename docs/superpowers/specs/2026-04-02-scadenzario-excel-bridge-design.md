@@ -11,35 +11,64 @@ Rosa maintains the Piano Finanziario Excel with ~80 supplier rows per voce (e.g.
 ## Data Flow
 
 ```
-f_partite_aperte_fornitori (BQ)  ──┐
-   or                              ├──> JOIN d_fornitori (codice_fornitore → voce_id)
-scadenzario.xlsx (fresh file)   ───┘           │
-                                               ├──> group by voce_id × mese_scadenza
+situazionesinteticascadenze.xlsx ──┐
+   (primary: pre-aggregated)       ├──> JOIN d_fornitori (codice_fornitore → voce_id)
+   or                              │
+f_partite_aperte_fornitori (BQ) ───┘           │
+   (fallback: detail-level)                    ├──> group by voce_id × bucket
                                                │
 Rosa's PF Excel (optional)      ───────────────┤
                                                │
                                                └──> Excel ponte (one sheet per voce)
 ```
 
+## Input: Esolver "Situazione Sintetica Scadenze"
+
+Primary input file: `situazionesinteticascadenze.xlsx` — Esolver export with one row per supplier, pre-aggregated into temporal buckets.
+
+### File format (74 rows, 15 cols as of 2026-04-02)
+
+| Column | Content |
+|--------|---------|
+| A | `"{codice} {nome_fornitore}"` — e.g., `"264 PANORAMA COMPANY S.R.L."` |
+| B | Totale |
+| C | Scaduto (fino a report date) |
+| D | In scadenza ~+1 mese |
+| E | In scadenza ~+2 mesi |
+| F | In scadenza ~+3 mesi |
+| G-J | Further monthly buckets |
+| K | Di cui insoluti |
+| L | Di cui anticipate |
+| M | Di cui bloccate |
+| N | Giorni medi di ritardo |
+| O | Giorni medi di pagamento |
+
+Row 1 is the header. Bucket date boundaries are in the header text (e.g., "Scadenze - In scadenza al 02/05/2026") — parser reads them dynamically.
+
+### Parsing codice_fornitore
+
+Extract integer prefix from column A: `int(cell.split()[0])`. Join to `d_fornitori` on `codice_fornitore`.
+
+As of 2026-04-02: 74 suppliers in file, 64 in d_fornitori = 100% of those with partite aperte match. Some suppliers in the file may be new — those go to "DA VERIFICARE".
+
+### Fallback: BQ
+
+If no file provided, read from `f_partite_aperte_fornitori` (latest snapshot) and aggregate to same structure.
+
 ## Data Sources
 
 | Source | What | Join key |
 |--------|------|----------|
-| `f_partite_aperte_fornitori` | Open payables with due dates | codice_fornitore |
+| `situazionesinteticascadenze.xlsx` | Pre-aggregated payables by supplier × time bucket | codice_fornitore (prefix) |
 | `d_fornitori` | 64 ORTI suppliers mapped to voce_id | codice_fornitore |
+| `f_partite_aperte_fornitori` (fallback) | Detail-level open payables | codice_fornitore |
 | Rosa's PF Excel (optional) | Current forecasts per voce per month | voce label match |
-
-### Matching: fornitori → voci PF
-
-Join on `codice_fornitore` (integer FK). As of 2026-04-02: 64/64 suppliers in partite aperte have a match in d_fornitori. 100% coverage, no fuzzy matching needed.
-
-If new suppliers appear without a d_fornitori entry, they go to a "DA VERIFICARE" sheet.
 
 ## CLI
 
 ```bash
-hotelops scadenzario                              # from BQ, latest snapshot
-hotelops scadenzario --file scadenze.xlsx         # from fresh Esolver export
+hotelops scadenzario --file sintetica.xlsx        # from fresh Esolver sintetica export (primary)
+hotelops scadenzario                              # from BQ fallback, latest snapshot
 hotelops scadenzario --pf ~/Downloads/04_APRILE_ORTI_2026.xlsx  # include Rosa's forecasts for gap analysis
 hotelops scadenzario --output ~/Desktop/          # output directory (default: current dir)
 hotelops scadenzario --societa INTUR              # INTUR (default: ORTI)
@@ -95,10 +124,12 @@ Formatting:
 
 Single module, ~150 lines. Functions:
 
-1. `load_partite(bq_client, societa, file=None)` — load from BQ or parse fresh file
-2. `map_to_voci(partite, fornitori_map)` — join codice_fornitore → voce_id, group by voce × month
-3. `load_pf_forecasts(pf_path)` — parse Rosa's PF Excel for comparison (optional)
-4. `generate_excel(voci_data, forecasts, output_path)` — write the Excel ponte
+1. `parse_sintetica_scadenze(filepath)` — parse Esolver sintetica: extract codice from col A prefix, read bucket amounts, return list of dicts `{codice_fornitore, nome, totale, scaduto, buckets: {month: amount}}`
+2. `load_from_bq(bq_client, societa)` — fallback: query f_partite_aperte_fornitori, aggregate to same structure
+3. `load_fornitori_map(bq_client)` — read d_fornitori, return `{codice_fornitore: voce_id}`
+4. `map_to_voci(partite, fornitori_map)` — join codice_fornitore → voce_id, group by voce × bucket
+5. `load_pf_forecasts(pf_path)` — parse Rosa's PF Excel for comparison (optional)
+6. `generate_excel(voci_data, forecasts, unmapped, output_path)` — write the Excel ponte
 
 CLI integration: new `cmd_scadenzario` in `cli.py`.
 
