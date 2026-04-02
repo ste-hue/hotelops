@@ -276,7 +276,7 @@ facts:
     registry_key: gasparotto
     source_drive: ingresso/gasparotto/
     fonti: [GASPAROTTO, MAPPATURA, INCIDENZA]
-    note: "Ogni riga porta tag fonte — mai mischiare fonti senza filtro esplicito"
+    note: "Fonti con priorita': STRUTTURALI > MAPPATURA > PERSONALE > INCIDENZA > CONS2025_* > GASPAROTTO. v_budget_vs_consuntivo usa ROW_NUMBER per dedup."
     consumed_by: [v_piano_finanziario_mensile, v_budget_vs_consuntivo]
 
   f_piano_finanziario_input:
@@ -409,7 +409,8 @@ views:
     asse: COMPETENZA
     audience: Gasparotto
     descrizione: "Budget vs actuals per cod_conto x mese — FULL OUTER JOIN"
-    bq_only: true  # no local SQL file — definito solo in BQ
+    sql: core/bq/views/v_budget_vs_consuntivo.sql
+    note: "ROW_NUMBER dedup per fonte priority — elimina double-counting budget"
     reads_from:
       facts: [f_movimenti_contabili, f_budget_mensile]
       dimensions: [d_categorie_conti]
@@ -697,3 +698,15 @@ datahub:
     meta:
       pipeline: {note: "Manifest runs CSV"}
     indice_documenti: {}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MANIFEST
+# ══════════════════════════════════════════════════════════════════════════════
+# Auto-generated catalog of what's inside each BQ table.
+# Regenerate: hotelops manifest
+# Location: core/bq/manifest.yaml
+
+manifest:
+  path: core/bq/manifest.yaml
+  generated_by: "hotelops manifest"
+  note: "L'ontologia dice cosa significa. Il manifest dice cosa c'e' dentro."

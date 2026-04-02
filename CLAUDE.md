@@ -76,6 +76,8 @@ hotelops health                            # Health check: freshness, gaps, aler
 hotelops voci                              # List PF voci
 hotelops previsione utenze 4-12 22000      # Update forecast: utenze ORTI Apr-Dec
 hotelops previsione "entrate hotel" aprile-ottobre 180000  # Natural language months
+hotelops manifest                              # Generate BQ table catalog (manifest.yaml)
+hotelops manifest --table f_consumi_economato  # Single table
 hotelops classifica file1.xlsx file2.csv       # Classify files (show type + destination)
 hotelops classifica *.xlsx --route --ingest    # Classify + route + ingest
 
@@ -159,7 +161,7 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 |------|-------------|
 | `v_piano_finanziario_mensile` | Rosa's view: Budget vs consuntivo per voce PF, rolling 18 mesi. `core/bq/views/` |
 | `v_piano_finanziario_consuntivo` | Actuals per voce PF via d_voci LIKE patterns. `core/bq/views/` |
-| `v_budget_vs_consuntivo` | Gasparotto's view: Budget vs actuals per cod_conto x mese. **BQ-only (no local SQL)** |
+| `v_budget_vs_consuntivo` | Gasparotto's view: Budget vs actuals per cod_conto x mese. ROW_NUMBER fonte priority dedup. `core/bq/views/` |
 | `v_pl_movimenti` | P&L: ricavi - costi per categoria CE. `core/bq/views/` |
 | `v_cashflow_mensile` | Cashflow mensile aggregato da banca. `core/bq/views/` |
 | `v_incassi_per_canale` | Entrate bancarie per canale (BONIFICO, CARTE, CONTANTI, ALTRO). `core/bq/views/` |
