@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import csv
 import re
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 import openpyxl
-from openpyxl.styles import Font, PatternFill, numbers
+from openpyxl.styles import Font, PatternFill
 
 
 def parse_sintetica_scadenze(filepath: Path) -> list[dict]:
@@ -318,3 +318,82 @@ def load_pf_forecasts(filepath: Path) -> dict[str, dict[int, float]]:
             result[voce_id] = months
 
     return result
+
+
+# ── BQ Fallback ───────────────────────────────────────────────────────────
+
+
+def load_from_bq(bq_client, societa: str) -> list[dict]:
+    """Fallback: load from f_partite_aperte_fornitori, aggregate like sintetica."""
+    sql = f"""
+    SELECT
+        codice_fornitore,
+        nome_fornitore AS nome,
+        ROUND(SUM(importo_residuo), 2) AS totale,
+        ROUND(SUM(CASE WHEN data_scadenza < CURRENT_DATE() THEN importo_residuo ELSE 0 END), 2) AS scaduto,
+        EXTRACT(MONTH FROM data_scadenza) AS mese,
+        ROUND(SUM(CASE WHEN data_scadenza >= CURRENT_DATE() THEN importo_residuo ELSE 0 END), 2) AS futuro
+    FROM `hotelops-suite.hotelops.f_partite_aperte_fornitori`
+    WHERE societa_id = '{societa}'
+    GROUP BY codice_fornitore, nome_fornitore, mese
+    ORDER BY codice_fornitore, mese
+    """
+    rows_raw = list(bq_client.query(sql))
+
+    by_supplier: dict[int, dict] = {}
+    for r in rows_raw:
+        code = r.codice_fornitore
+        if code not in by_supplier:
+            by_supplier[code] = {
+                "codice_fornitore": code,
+                "nome": r.nome,
+                "totale": 0,
+                "scaduto": 0,
+                "buckets": {},
+            }
+        by_supplier[code]["totale"] += float(r.totale)
+        by_supplier[code]["scaduto"] += float(r.scaduto)
+        if r.futuro and r.futuro != 0:
+            by_supplier[code]["buckets"][r.mese] = float(r.futuro)
+
+    return list(by_supplier.values())
+
+
+# ── Runner ─────────────────────────────────────────────────────────────────
+
+
+def run(
+    file: Path | None = None,
+    pf: Path | None = None,
+    societa: str = "ORTI",
+    output: Path | None = None,
+) -> Path:
+    """Run the full pipeline: parse → map → generate."""
+    if file:
+        partite = parse_sintetica_scadenze(file)
+        wb = openpyxl.load_workbook(str(file), data_only=True)
+        ws = wb.active
+        bucket_months = []
+        for col in range(4, ws.max_column + 1):
+            header = ws.cell(row=1, column=col).value
+            if not header or "scadenza" not in str(header).lower():
+                continue
+            m = re.search(r"(\d{2})/(\d{2})/(\d{4})", str(header))
+            if m:
+                bucket_months.append(int(m.group(2)))
+    else:
+        from google.cloud import bigquery
+        bq = bigquery.Client(project="hotelops-suite")
+        partite = load_from_bq(bq, societa)
+        bucket_months = None
+
+    fornitori_map = load_fornitori_map()
+    mapped, unmapped = map_to_voci(partite, fornitori_map)
+
+    forecasts = load_pf_forecasts(pf) if pf else None
+
+    out_dir = output or Path(".")
+    out_path = out_dir / f"Scadenzario_PF_{societa}_{date.today().isoformat()}.xlsx"
+
+    generate_excel(mapped, forecasts, unmapped, out_path, bucket_months)
+    return out_path
