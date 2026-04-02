@@ -103,3 +103,185 @@ def _column_stats(
         stats["sample"] = sample
 
     return stats
+
+
+def _get_client():
+    from google.cloud import bigquery
+    return bigquery.Client(project=PROJECT)
+
+
+def _introspect_table(client, table_name: str) -> dict:
+    """Query BQ for metadata about a single table."""
+    full_id = f"{PROJECT}.{DATASET}.{table_name}"
+
+    # 1. Get row count and schema
+    try:
+        table_ref = client.get_table(full_id)
+    except Exception as e:
+        log.warning("Table %s not found: %s", table_name, e)
+        return {"error": f"not found: {e}"}
+
+    row_count = table_ref.num_rows
+    schema = [(f.name, f.field_type) for f in table_ref.schema]
+
+    result: dict = {
+        "rows": row_count,
+        "columns": {},
+    }
+
+    if row_count == 0:
+        for col_name, col_type in schema:
+            result["columns"][col_name] = {"type": col_type}
+        return result
+
+    # 2. Find date column for freshness
+    col_names = [c[0] for c in schema]
+    date_col = None
+    for candidate in DATE_CANDIDATES:
+        if candidate in col_names:
+            date_col = candidate
+            break
+
+    if date_col:
+        q = f"SELECT MIN({date_col}) AS mn, MAX({date_col}) AS mx FROM `{full_id}`"
+        for row in client.query(q).result():
+            mn = row.mn
+            mx = row.mx
+            if mn is not None:
+                result["freshness"] = {
+                    "date_column": date_col,
+                    "min": str(mn.date() if isinstance(mn, datetime) else mn),
+                    "max": str(mx.date() if isinstance(mx, datetime) else mx),
+                }
+
+    # 3. Find sources
+    for src_col in SOURCE_CANDIDATES:
+        if src_col in col_names:
+            q = f"SELECT DISTINCT {src_col} AS val FROM `{full_id}` WHERE {src_col} IS NOT NULL ORDER BY val"
+            sources = [row.val for row in client.query(q).result()]
+            if sources:
+                result["sources"] = {src_col: sources}
+            break
+
+    # 4. Per-column stats
+    for col_name, col_type in schema:
+        if col_name in ("hash_riga",):
+            result["columns"][col_name] = {"type": col_type}
+            continue
+
+        if col_type in ("FLOAT", "INTEGER", "NUMERIC"):
+            q = f"""
+            SELECT
+              COUNT(DISTINCT {col_name}) AS dist,
+              MIN({col_name}) AS mn,
+              MAX({col_name}) AS mx
+            FROM `{full_id}`
+            """
+            for row in client.query(q).result():
+                result["columns"][col_name] = _column_stats(
+                    col_name, col_type,
+                    distinct=row.dist, values=None, sample=None,
+                    min_val=row.mn, max_val=row.mx,
+                )
+
+        elif col_type in ("DATE", "TIMESTAMP", "DATETIME"):
+            q = f"""
+            SELECT
+              COUNT(DISTINCT {col_name}) AS dist,
+              MIN({col_name}) AS mn,
+              MAX({col_name}) AS mx
+            FROM `{full_id}`
+            """
+            for row in client.query(q).result():
+                mn = row.mn
+                mx = row.mx
+                result["columns"][col_name] = _column_stats(
+                    col_name, col_type,
+                    distinct=row.dist, values=None, sample=None,
+                    min_val=str(mn.date() if isinstance(mn, datetime) else mn) if mn else None,
+                    max_val=str(mx.date() if isinstance(mx, datetime) else mx) if mx else None,
+                )
+
+        elif col_type == "STRING":
+            q = f"SELECT COUNT(DISTINCT {col_name}) AS dist FROM `{full_id}`"
+            dist = 0
+            for row in client.query(q).result():
+                dist = row.dist
+
+            values = None
+            sample = None
+            if dist <= VALUES_THRESHOLD:
+                q = f"SELECT DISTINCT {col_name} AS val FROM `{full_id}` WHERE {col_name} IS NOT NULL ORDER BY val"
+                values = [row.val for row in client.query(q).result()]
+            elif dist <= SAMPLE_THRESHOLD:
+                q = f"""
+                SELECT {col_name} AS val, COUNT(*) AS n
+                FROM `{full_id}` WHERE {col_name} IS NOT NULL
+                GROUP BY {col_name} ORDER BY n DESC LIMIT {SAMPLE_SIZE}
+                """
+                values = [row.val for row in client.query(q).result()]
+            else:
+                q = f"""
+                SELECT {col_name} AS val, COUNT(*) AS n
+                FROM `{full_id}` WHERE {col_name} IS NOT NULL
+                GROUP BY {col_name} ORDER BY n DESC LIMIT 5
+                """
+                sample = [row.val for row in client.query(q).result()]
+
+            result["columns"][col_name] = _column_stats(
+                col_name, col_type,
+                distinct=dist, values=values, sample=sample,
+                min_val=None, max_val=None,
+            )
+
+        elif col_type == "BOOLEAN":
+            result["columns"][col_name] = {"type": col_type}
+        else:
+            result["columns"][col_name] = {"type": col_type}
+
+    return result
+
+
+def _yaml_representer_date(dumper, data):
+    return dumper.represent_scalar("tag:yaml.org,2002:str", str(data))
+
+
+def generate_manifest(
+    output_path: str | Path | None = None,
+    tables: list[str] | None = None,
+) -> dict:
+    """Generate manifest dict and optionally write to YAML file.
+
+    Args:
+        output_path: If given, write YAML to this path.
+        tables: If given, only catalog these tables. Default: all TABLES.
+
+    Returns:
+        The manifest dict.
+    """
+    client = _get_client()
+    target_tables = tables or TABLES
+
+    manifest = {
+        "generated_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "project": PROJECT,
+        "dataset": DATASET,
+        "tables": {},
+    }
+
+    for table_name in target_tables:
+        log.info("Introspecting %s ...", table_name)
+        manifest["tables"][table_name] = _introspect_table(client, table_name)
+
+    if output_path:
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Custom representer for date objects
+        yaml.add_representer(date, _yaml_representer_date)
+
+        with open(path, "w") as f:
+            yaml.dump(manifest, f, default_flow_style=False, allow_unicode=True, sort_keys=False, width=120)
+        log.info("Manifest written to %s", path)
+
+    return manifest
