@@ -32,6 +32,12 @@ except ImportError:
     HAS_XLRD = False
 
 try:
+    import openpyxl
+    HAS_OPENPYXL = True
+except ImportError:
+    HAS_OPENPYXL = False
+
+try:
     from google.cloud import bigquery
     HAS_BQ = True
 except ImportError:
@@ -103,40 +109,141 @@ def make_hash(societa_id: str, mese: str, codice_conto: str) -> str:
     return hashlib.md5(key.encode()).hexdigest()
 
 
-def parse_bilancino(filepath: Path, societa_id: str, mese: str, logger: logging.Logger) -> list[dict]:
-    """Parse Esolver Bilancio di verifica XLS → list of fact dicts."""
+def _parse_tipo_sezione(raw: str) -> tuple[str, str]:
+    """Parse 'Tipo conto/Sezione' column → (tipo_conto, sezione).
+
+    Examples:
+        ' Stato Patrimoniale: attivo'  → ('SP', 'Attività')
+        ' Stato Patrimoniale: passivo' → ('SP', 'Passività')
+        ' Conto Economico: costi'      → ('CE', 'Costi')
+        ' Conto Economico: ricavi'     → ('CE', 'Ricavi')
+    """
+    s = raw.strip().lower()
+    if "patrimoniale" in s:
+        sezione = "Attività" if "attivo" in s else "Passività"
+        return "SP", sezione
+    if "economico" in s:
+        sezione = "Ricavi" if "ricavi" in s else "Costi"
+        return "CE", sezione
+    return "CE", "Costi"
+
+
+def _parse_xls(filepath: Path, logger: logging.Logger) -> list[dict]:
+    """Parse old-format XLS (13 columns, Livello di imputazione = Si)."""
     if not HAS_XLRD:
         logger.error("xlrd not installed. Run: pip install xlrd")
         sys.exit(1)
-
     wb = xlrd.open_workbook(str(filepath))
     ws = wb.sheets()[0]
     logger.info(f"Sheet: {ws.name}, rows: {ws.nrows}")
 
-    today = date.today().isoformat()
-    file_sorgente = filepath.name
     rows = []
-
     for r in range(1, ws.nrows):
         row = ws.row_values(r)
         livello = str(row[10]).strip()
         if livello != "Si":
             continue
-
         codice = str(row[0]).strip()
-        descrizione = str(row[1]).strip()
-        tipo_conto = str(row[11]).strip()
-        sezione = str(row[12]).strip()
         dare = float(row[4]) if row[4] else 0.0
         avere = float(row[5]) if row[5] else 0.0
         saldo = float(row[7]) if row[7] else 0.0
-
-        # Skip rows with all-zero values (no activity)
         if dare == 0.0 and avere == 0.0 and saldo == 0.0:
             continue
+        rows.append({
+            "codice_conto": codice,
+            "descrizione": str(row[1]).strip(),
+            "tipo_conto": str(row[11]).strip(),
+            "sezione": str(row[12]).strip(),
+            "dare": dare,
+            "avere": avere,
+            "saldo": saldo,
+        })
+    return rows
 
-        business_unit_id = infer_business_unit(codice, tipo_conto)
-        categoria = infer_categoria(codice, tipo_conto, sezione)
+
+def _parse_xlsx(filepath: Path, logger: logging.Logger) -> list[dict]:
+    """Parse new-format XLSX (5 columns: Tipo conto/Sezione, Conto, Partitari, Descrizione, Importo).
+
+    Leaf detection:
+    - SP accounts: Partitari = 'S'
+    - CE accounts: no 'S' marker, so a code is leaf if no other code starts with it + '.'
+    """
+    if not HAS_OPENPYXL:
+        logger.error("openpyxl not installed. Run: pip install openpyxl")
+        sys.exit(1)
+    wb = openpyxl.load_workbook(str(filepath), read_only=True, data_only=True)
+    ws = wb.active
+    logger.info(f"Sheet: {ws.title}, rows: {ws.max_row}")
+
+    # First pass: collect all entries
+    entries = []
+    for i, row in enumerate(ws.iter_rows(values_only=True)):
+        if i == 0:
+            continue
+        tipo_sez_raw = str(row[0] or "").strip()
+        codice_raw = str(row[1] or "").strip()
+        partitari = str(row[2] or "").strip()
+        descrizione = str(row[3] or "").strip()
+        importo = float(row[4]) if row[4] else 0.0
+
+        if not codice_raw:
+            continue
+
+        tipo_conto, sezione = _parse_tipo_sezione(tipo_sez_raw)
+        entries.append({
+            "codice_conto": codice_raw,
+            "descrizione": descrizione,
+            "tipo_conto": tipo_conto,
+            "sezione": sezione,
+            "importo": importo,
+            "partitari": partitari,
+        })
+    wb.close()
+
+    # Build set of all codes for leaf detection
+    all_codes = {e["codice_conto"] for e in entries}
+
+    def is_leaf(entry: dict) -> bool:
+        if entry["tipo_conto"] == "SP":
+            return entry["partitari"] == "S"
+        # CE: leaf if no other code starts with this code + "."
+        code = entry["codice_conto"]
+        return not any(c.startswith(code + ".") for c in all_codes if c != code)
+
+    rows = []
+    for e in entries:
+        if not is_leaf(e):
+            continue
+        if e["importo"] == 0.0:
+            continue
+        rows.append({
+            "codice_conto": e["codice_conto"],
+            "descrizione": e["descrizione"],
+            "tipo_conto": e["tipo_conto"],
+            "sezione": e["sezione"],
+            "dare": 0.0,
+            "avere": 0.0,
+            "saldo": e["importo"],
+        })
+    return rows
+
+
+def parse_bilancino(filepath: Path, societa_id: str, mese: str, logger: logging.Logger) -> list[dict]:
+    """Parse Esolver Bilancio di verifica (XLS or XLSX) → list of fact dicts."""
+    suffix = filepath.suffix.lower()
+    if suffix == ".xlsx":
+        parsed = _parse_xlsx(filepath, logger)
+    else:
+        parsed = _parse_xls(filepath, logger)
+
+    today = date.today().isoformat()
+    file_sorgente = filepath.name
+    rows = []
+
+    for entry in parsed:
+        codice = entry["codice_conto"]
+        business_unit_id = infer_business_unit(codice, entry["tipo_conto"])
+        categoria = infer_categoria(codice, entry["tipo_conto"], entry["sezione"])
         hash_riga = make_hash(societa_id, mese, codice)
 
         rows.append({
@@ -144,12 +251,12 @@ def parse_bilancino(filepath: Path, societa_id: str, mese: str, logger: logging.
             "societa_id": societa_id,
             "mese": mese,
             "codice_conto": codice,
-            "descrizione": descrizione,
-            "tipo_conto": tipo_conto,
-            "sezione": sezione,
-            "dare": dare,
-            "avere": avere,
-            "saldo": saldo,
+            "descrizione": entry["descrizione"],
+            "tipo_conto": entry["tipo_conto"],
+            "sezione": entry["sezione"],
+            "dare": entry["dare"],
+            "avere": entry["avere"],
+            "saldo": entry["saldo"],
             "business_unit_id": business_unit_id,
             "categoria": categoria,
             "file_sorgente": file_sorgente,
@@ -261,7 +368,7 @@ def main():
         logger.info("  === Ricavi ===")
         for r in sorted(ricavi, key=lambda x: x["codice_conto"]):
             bu = r["business_unit_id"] or "?"
-            logger.info(f"    {r['codice_conto']} [{bu}] {r['descrizione']}: avere={r['avere']:.2f}")
+            logger.info(f"    {r['codice_conto']} [{bu}] {r['descrizione']}: saldo={r['saldo']:,.2f}")
 
     if args.dry_run:
         logger.info("DRY RUN — nessuna scrittura")
