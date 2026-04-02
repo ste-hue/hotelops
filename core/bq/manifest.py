@@ -35,6 +35,8 @@ TABLES = [
     "f_saldi_banca_snapshot",
     "f_accodamenti",
     "f_ricavi_storici",
+    "f_chiusura_mensile",
+    "f_mastrino_consolidato",
     "d_voci_piano_finanziario",
     "d_piano_conti",
     "d_categorie_conti",
@@ -42,6 +44,9 @@ TABLES = [
     "d_anagrafica_fornitori",
     "d_mapping_piano_finanziario",
     "d_coefficienti_stagionalita",
+    "d_budget_costi_fissi",
+    "d_personale_mensile",
+    "d_periodi_apertura",
 ]
 
 # Columns likely to hold date/freshness info (checked in order)

@@ -625,8 +625,6 @@ def cmd_saldo(args):
 def cmd_manifest(args):
     """Genera manifest.yaml — catalogo di tutte le tabelle BQ."""
     from core.bq.manifest import generate_manifest, TABLES
-    from pathlib import Path
-    import json
 
     output = args.output or "core/bq/manifest.yaml"
     tables = [args.table] if args.table else None
