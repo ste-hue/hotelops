@@ -37,7 +37,7 @@ class TestParseSinteticaScadenze:
         ])
         f = tmp_path / "test.xlsx"
         wb.save(f)
-        result = parse_sintetica_scadenze(f)
+        result, months = parse_sintetica_scadenze(f)
         assert len(result) == 1
         assert result[0]["codice_fornitore"] == 264
         assert result[0]["nome"] == "PANORAMA COMPANY S.R.L."
@@ -49,11 +49,12 @@ class TestParseSinteticaScadenze:
         ])
         f = tmp_path / "test.xlsx"
         wb.save(f)
-        result = parse_sintetica_scadenze(f)
+        result, months = parse_sintetica_scadenze(f)
         r = result[0]
         assert r["totale"] == -1500
         assert r["scaduto"] == -500
         assert r["buckets"] == {5: -600, 6: -400}
+        assert months == [5, 6, 7]
 
     def test_skips_rows_without_numeric_prefix(self, tmp_path):
         from condges.scadenzario_excel import parse_sintetica_scadenze
@@ -63,7 +64,7 @@ class TestParseSinteticaScadenze:
         ])
         f = tmp_path / "test.xlsx"
         wb.save(f)
-        result = parse_sintetica_scadenze(f)
+        result, _ = parse_sintetica_scadenze(f)
         assert len(result) == 1
 
     def test_handles_positive_amounts(self, tmp_path):
@@ -73,7 +74,7 @@ class TestParseSinteticaScadenze:
         ])
         f = tmp_path / "test.xlsx"
         wb.save(f)
-        result = parse_sintetica_scadenze(f)
+        result, _ = parse_sintetica_scadenze(f)
         assert result[0]["totale"] == 2294.28
 
 

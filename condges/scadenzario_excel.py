@@ -15,11 +15,13 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill
 
 
-def parse_sintetica_scadenze(filepath: Path) -> list[dict]:
+def parse_sintetica_scadenze(filepath: Path) -> tuple[list[dict], list[int]]:
     """Parse Esolver 'Situazione sintetica scadenze' Excel.
 
-    Returns list of dicts:
+    Returns:
+        (suppliers, bucket_months) where suppliers is list of dicts
         {codice_fornitore, nome, totale, scaduto, buckets: {month_int: amount}}
+        and bucket_months is the ordered list of month ints from headers.
     """
     wb = openpyxl.load_workbook(str(filepath), data_only=True)
     ws = wb.active
@@ -60,7 +62,7 @@ def parse_sintetica_scadenze(filepath: Path) -> list[dict]:
             "scaduto": float(scaduto),
             "buckets": buckets,
         })
-    return results
+    return results, sorted(bucket_months.values())
 
 
 # ── Mapper ─────────────────────────────────────────────────────────────────
@@ -329,7 +331,9 @@ def load_pf_forecasts(filepath: Path) -> dict[str, dict[int, float]]:
 
 def load_from_bq(bq_client, societa: str) -> list[dict]:
     """Fallback: load from f_partite_aperte_fornitori, aggregate like sintetica."""
-    sql = f"""
+    from google.cloud import bigquery as bq_mod
+
+    sql = """
     SELECT
         codice_fornitore,
         nome_fornitore AS nome,
@@ -338,11 +342,14 @@ def load_from_bq(bq_client, societa: str) -> list[dict]:
         EXTRACT(MONTH FROM data_scadenza) AS mese,
         ROUND(SUM(CASE WHEN data_scadenza >= CURRENT_DATE() THEN importo_residuo ELSE 0 END), 2) AS futuro
     FROM `hotelops-suite.hotelops.f_partite_aperte_fornitori`
-    WHERE societa_id = '{societa}'
+    WHERE societa_id = @societa
     GROUP BY codice_fornitore, nome_fornitore, mese
     ORDER BY codice_fornitore, mese
     """
-    rows_raw = list(bq_client.query(sql))
+    job_config = bq_mod.QueryJobConfig(
+        query_parameters=[bq_mod.ScalarQueryParameter("societa", "STRING", societa)]
+    )
+    rows_raw = list(bq_client.query(sql, job_config=job_config))
 
     by_supplier: dict[int, dict] = {}
     for r in rows_raw:
@@ -374,19 +381,7 @@ def run(
 ) -> Path:
     """Run the full pipeline: parse → map → generate."""
     if file:
-        partite = parse_sintetica_scadenze(file)
-        wb = openpyxl.load_workbook(str(file), data_only=True)
-        ws = wb.active
-        bucket_months = []
-        for col in range(4, ws.max_column + 1):
-            header = ws.cell(row=1, column=col).value
-            if not header or "scadenza" not in str(header).lower():
-                continue
-            if "oltre" in str(header).lower():
-                continue
-            m = re.search(r"(\d{2})/(\d{2})/(\d{4})", str(header))
-            if m:
-                bucket_months.append(int(m.group(2)))
+        partite, bucket_months = parse_sintetica_scadenze(file)
     else:
         from google.cloud import bigquery
         bq = bigquery.Client(project="hotelops-suite")
