@@ -1,5 +1,6 @@
 """Tests for scadenzario Excel bridge."""
 import pytest
+import openpyxl
 from unittest.mock import MagicMock, patch
 from pathlib import Path
 from datetime import date
@@ -129,3 +130,63 @@ class TestLoadFornitoriMap:
         result = load_fornitori_map(csv_path=csv_path)
         assert result[1] == "USCITE_MATERIE_PRIME"
         assert result[264] == "USCITE_CANONE_PASSIVO"
+
+
+class TestGenerateExcel:
+    def _sample_data(self):
+        mapped = {
+            "USCITE_MATERIE_PRIME": [
+                {"codice_fornitore": 1, "nome": "LE CROISSANT",
+                 "totale": -1500, "scaduto": -1000, "buckets": {5: -500}},
+                {"codice_fornitore": 4, "nome": "GIACINTO",
+                 "totale": -400, "scaduto": -400, "buckets": {}},
+            ],
+            "USCITE_UTENZE": [
+                {"codice_fornitore": 18, "nome": "AUSINO",
+                 "totale": -600, "scaduto": 0, "buckets": {5: -600}},
+            ],
+        }
+        return mapped
+
+    def test_creates_riepilogo_sheet(self, tmp_path):
+        from condges.scadenzario_excel import generate_excel
+        out = tmp_path / "test.xlsx"
+        generate_excel(self._sample_data(), None, [], out, bucket_months=[5, 6, 7])
+        wb = openpyxl.load_workbook(out)
+        assert "Riepilogo" in wb.sheetnames
+
+    def test_creates_per_voce_sheets(self, tmp_path):
+        from condges.scadenzario_excel import generate_excel
+        out = tmp_path / "test.xlsx"
+        generate_excel(self._sample_data(), None, [], out, bucket_months=[5, 6, 7])
+        wb = openpyxl.load_workbook(out)
+        assert "Materie Prime" in wb.sheetnames
+        assert "Utenze" in wb.sheetnames
+
+    def test_riepilogo_has_totals(self, tmp_path):
+        from condges.scadenzario_excel import generate_excel
+        out = tmp_path / "test.xlsx"
+        generate_excel(self._sample_data(), None, [], out, bucket_months=[5, 6, 7])
+        wb = openpyxl.load_workbook(out, data_only=True)
+        ws = wb["Riepilogo"]
+        values = {}
+        for row in ws.iter_rows(min_row=2, values_only=False):
+            if row[0].value and "Totale" in str(row[0].value):
+                values["totale_col"] = row[1].value
+        assert values.get("totale_col") is not None
+
+    def test_unmapped_sheet_created_when_needed(self, tmp_path):
+        from condges.scadenzario_excel import generate_excel
+        out = tmp_path / "test.xlsx"
+        unmapped = [{"codice_fornitore": 999, "nome": "UNKNOWN",
+                     "totale": -100, "scaduto": -100, "buckets": {}}]
+        generate_excel({}, None, unmapped, out, bucket_months=[5])
+        wb = openpyxl.load_workbook(out)
+        assert "DA VERIFICARE" in wb.sheetnames
+
+    def test_no_unmapped_sheet_when_all_mapped(self, tmp_path):
+        from condges.scadenzario_excel import generate_excel
+        out = tmp_path / "test.xlsx"
+        generate_excel(self._sample_data(), None, [], out, bucket_months=[5])
+        wb = openpyxl.load_workbook(out)
+        assert "DA VERIFICARE" not in wb.sheetnames
