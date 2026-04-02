@@ -658,14 +658,15 @@ def process_file(filepath: Path, bq_client: bigquery.Client, mappings: dict, has
         with open(filepath, "rb") as f:
             meta["ext"] = "xlsx" if f.read(2) == b"PK" else "xls"
 
-    # Read
+    # Read — choose reader by societa_banca, with content-based fallback
+    content_format = _detect_banca_from_content(filepath)
     try:
         sb = meta["societa_banca"].upper()
         if meta["ext"] == "csv":
             raw_rows = read_sella_csv(filepath, logger)
-        elif "INTESA" in sb:
+        elif "INTESA" in sb and content_format != "SELLA":
             raw_rows = read_intesa_excel(filepath, logger)
-        elif "SELLA" in sb:
+        elif "SELLA" in sb or content_format == "SELLA":
             if meta["ext"] == "xls":
                 raw_rows = read_sella_xls(filepath, logger)
             else:

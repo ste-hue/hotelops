@@ -699,6 +699,73 @@ def cmd_classifica(args):
     print(f"{'─'*70}\n")
 
 
+# ── Help ───────────────────────────────────────────────────────────────────
+
+def cmd_help(args):
+    """Mostra tutti i comandi disponibili con esempi."""
+    text = """
+╔══════════════════════════════════════════════════════════════════════════╗
+║  hotelops — control plane per il financial model Gruppo Panorama       ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+ ANALISI
+ ───────
+  pf              Piano Finanziario mensile (budget vs consuntivo, 28 voci)
+                    hotelops pf                      tutti i mesi ORTI
+                    hotelops pf --mese 4             solo aprile
+                    hotelops pf --societa INTUR      INTUR
+
+  bva             Budget vs Consuntivo per codice conto (Gasparotto)
+                    hotelops bva                     YTD, top 30 delta
+                    hotelops bva --mese 3            solo marzo
+                    hotelops bva --limit 50          top 50
+
+  saldo           Saldo banca corrente + proiezione cash forward 12 mesi
+                    hotelops saldo                   ORTI
+                    hotelops saldo --societa INTUR   INTUR
+
+  health          Health check: freshness dati, gaps, alert
+                    hotelops health
+
+ AZIONI
+ ──────
+  chiudi          Chiusura mese: previsione vs consuntivo + saldo banca
+                    hotelops chiudi                  mese precedente
+                    hotelops chiudi --mese 2 --dry-run
+
+  previsione      Aggiorna previsione budget per una voce PF
+    (alias: prev)   hotelops previsione utenze 4-12 22000
+                    hotelops prev "entrate hotel" aprile-ottobre 180000
+                    hotelops prev mutui 1-12 45000 --societa INTUR
+
+ UTILITÀ
+ ───────
+  voci            Lista voci piano finanziario disponibili (28 voci)
+                    hotelops voci
+
+  classifica      Classifica, smista e ingerisci file dati
+    (alias: cls)    hotelops classifica file1.xlsx file2.csv
+                    hotelops cls *.xlsx --route --ingest
+                    hotelops cls report.xlsx --dry-run
+
+  help            Questa guida
+                    hotelops help
+
+ OPZIONI GLOBALI
+ ───────────────
+  --societa       ORTI (default) | INTUR
+  --anno          Anno di riferimento (default: 2026)
+  --mese          Mese specifico (default: tutti / YTD)
+  --dry-run       Mostra senza scrivere in BigQuery
+
+ SETUP
+ ─────
+  pip install -e .          installa il comando hotelops
+  gcloud auth login         autenticazione GCP (stefano@panoramagroup.it)
+"""
+    print(text)
+
+
 # ── Main ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -755,6 +822,9 @@ def main():
     p_manifest.add_argument("--table", help="Singola tabella (default: tutte)")
     p_manifest.add_argument("--output", help="Output path (default: core/bq/manifest.yaml)")
 
+    # help
+    sub.add_parser("help", help="Guida completa con esempi")
+
     # classifica
     p_class = sub.add_parser("classifica", aliases=["cls"], help="Classifica, smista e ingerisci file")
     p_class.add_argument("files", nargs="+", help="File da classificare")
@@ -766,7 +836,7 @@ def main():
     args = parser.parse_args()
 
     if not args.command:
-        parser.print_help()
+        cmd_help(args)
         sys.exit(0)
 
     handlers = {
@@ -781,6 +851,7 @@ def main():
         "manifest": cmd_manifest,
         "classifica": cmd_classifica,
         "cls": cmd_classifica,
+        "help": cmd_help,
     }
 
     handlers[args.command](args)
