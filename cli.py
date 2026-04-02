@@ -777,6 +777,11 @@ def cmd_help(args):
                     hotelops cls *.xlsx --route --ingest
                     hotelops cls report.xlsx --dry-run
 
+  scadenzario     Excel ponte: scadenzario fornitori → voci PF
+    (alias: scad)   hotelops scad --file sintetica.xlsx
+                    hotelops scad --file sintetica.xlsx --pf PF_aprile.xlsx
+                    hotelops scad --output ~/Desktop/
+
   help            Questa guida
                     hotelops help
 
