@@ -16,3 +16,4 @@ logs/
 # Artifacts
 *.docx
 *.html
+.worktrees/
