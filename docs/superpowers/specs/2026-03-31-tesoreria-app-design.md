@@ -6,9 +6,7 @@
 
 ## Purpose
 
-Predict cashflow. Project bank balances forward for the full season. See danger zones early.
-
-Rosa opens the app on the 1st of each month, enters the bank balance as of the last day of the previous month, loads her Piano Finanziario Excel, and immediately sees where cash goes negative. She downloads a clean Excel for the meeting and closes the app. The power lives in the app, not in the Excel.
+Aiutare il check mensile di tesoreria. Invece di controllare a mano Excel vs Esolver vs banche, l'app incrocia tutto automaticamente: Rosa carica il suo PF Excel, inserisce il saldo banca, e vede subito previsione vs consuntivo vs budget, dove il cash va in negativo, e quali fornitori pesano. Scarica un Excel pulito per la riunione e chiude. Il potere sta nell'app, non nell'Excel.
 
 ## Architecture
 

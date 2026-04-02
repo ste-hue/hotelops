@@ -83,6 +83,7 @@ SELECT
   c.mese,
   DATE(c.anno, c.mese, 1)                         AS data_mese,
   ml.mese_label,
+  CONCAT(CAST(c.anno AS STRING), ' ', LPAD(CAST(c.mese AS STRING), 2, '0'), ' ', LEFT(ml.mese_label, 3)) AS mese_sort_label,
   ROUND(c.entrate, 0)                             AS entrate,
   ROUND(c.uscite, 0)                              AS uscite,
   ROUND(c.netto, 0)                               AS netto,

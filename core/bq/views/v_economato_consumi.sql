@@ -87,6 +87,7 @@ SELECT
   co.mese,
   DATE(co.anno, co.mese, 1)                                AS data_mese,
   ml.mese_label,
+  CONCAT(LPAD(CAST(co.mese AS STRING), 2, '0'), ' ', LEFT(ml.mese_label, 3)) AS mese_sort_label,
   co.reparto_id,
   COALESCE(rl.label, co.reparto_id)                        AS reparto_label,
   co.business_unit_id,
