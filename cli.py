@@ -33,10 +33,12 @@ BQ_PROJECT = "hotelops-suite"
 
 _bq_client = None
 
+
 def bq():
     global _bq_client
     if _bq_client is None:
         from google.cloud import bigquery
+
         _bq_client = bigquery.Client(project=BQ_PROJECT)
     return _bq_client
 
@@ -53,6 +55,7 @@ def fmt_eur(v) -> str:
 
 
 # ── PF: Piano Finanziario mensile ───────────────────────────────────────────
+
 
 def cmd_pf(args):
     """Piano Finanziario budget vs consuntivo."""
@@ -86,15 +89,17 @@ def cmd_pf(args):
         mese = r["mese"]
         if mese != current_mese:
             if current_mese is not None:
-                _print_subtotals(tot_consuntivo_e, tot_budget_e, tot_consuntivo_u, tot_budget_u)
+                _print_subtotals(
+                    tot_consuntivo_e, tot_budget_e, tot_consuntivo_u, tot_budget_u
+                )
                 tot_consuntivo_e = tot_budget_e = tot_consuntivo_u = tot_budget_u = 0
             current_mese = mese
             tipo = r["tipo_periodo"]
-            print(f"\n{'─'*75}")
+            print(f"\n{'─' * 75}")
             print(f"  MESE {mese:02d}/{anno}  ({tipo})")
-            print(f"{'─'*75}")
+            print(f"{'─' * 75}")
             print(f"  {'Voce':<35s} {'Consuntivo':>12s} {'Budget':>12s} {'Delta':>12s}")
-            print(f"  {'─'*35} {'─'*12} {'─'*12} {'─'*12}")
+            print(f"  {'─' * 35} {'─' * 12} {'─' * 12} {'─' * 12}")
 
         consuntivo = r["consuntivo"] or 0
         budget = r["budget"] or 0
@@ -110,7 +115,9 @@ def cmd_pf(args):
             flag = " ⚠"
 
         voce = r["voce_label"][:35]
-        print(f"  {voce:<35s} {fmt_eur(consuntivo)} {fmt_eur(budget)} {fmt_eur(delta)} {pct_str}{flag}")
+        print(
+            f"  {voce:<35s} {fmt_eur(consuntivo)} {fmt_eur(budget)} {fmt_eur(delta)} {pct_str}{flag}"
+        )
 
         if r["sezione"] == "ENTRATE":
             tot_consuntivo_e += consuntivo
@@ -123,15 +130,18 @@ def cmd_pf(args):
 
 
 def _print_subtotals(ce, be, cu, bu):
-    print(f"  {'─'*35} {'─'*12} {'─'*12} {'─'*12}")
-    print(f"  {'ENTRATE TOTALI':<35s} {fmt_eur(ce)} {fmt_eur(be)} {fmt_eur(ce-be)}")
-    print(f"  {'USCITE TOTALI':<35s} {fmt_eur(cu)} {fmt_eur(bu)} {fmt_eur(cu-bu)}")
+    print(f"  {'─' * 35} {'─' * 12} {'─' * 12} {'─' * 12}")
+    print(f"  {'ENTRATE TOTALI':<35s} {fmt_eur(ce)} {fmt_eur(be)} {fmt_eur(ce - be)}")
+    print(f"  {'USCITE TOTALI':<35s} {fmt_eur(cu)} {fmt_eur(bu)} {fmt_eur(cu - bu)}")
     netto_c = ce - cu
     netto_b = be - bu
-    print(f"  {'CASH FLOW NETTO':<35s} {fmt_eur(netto_c)} {fmt_eur(netto_b)} {fmt_eur(netto_c-netto_b)}")
+    print(
+        f"  {'CASH FLOW NETTO':<35s} {fmt_eur(netto_c)} {fmt_eur(netto_b)} {fmt_eur(netto_c - netto_b)}"
+    )
 
 
 # ── BVA: Budget vs Consuntivo per conto ─────────────────────────────────────
+
 
 def cmd_bva(args):
     """Budget vs Consuntivo per codice conto."""
@@ -139,7 +149,11 @@ def cmd_bva(args):
     anno = args.anno or 2026
     mese = args.mese
 
-    mese_filter = f"AND mese = {mese}" if mese else "AND mese <= EXTRACT(MONTH FROM CURRENT_DATE('Europe/Rome'))"
+    mese_filter = (
+        f"AND mese = {mese}"
+        if mese
+        else "AND mese <= EXTRACT(MONTH FROM CURRENT_DATE('Europe/Rome'))"
+    )
 
     sql = f"""
     SELECT codice_conto_display, descrizione, categoria_ce, mese,
@@ -158,16 +172,21 @@ def cmd_bva(args):
 
     print(f"\n  Budget vs Consuntivo — {societa} {anno}")
     print(f"  Top {len(rows)} per |delta| (mese {'YTD' if not mese else mese})")
-    print(f"  {'Codice':<12s} {'Descrizione':<30s} {'Budget':>10s} {'Actual':>10s} {'Delta':>10s} {'Status'}")
-    print(f"  {'─'*12} {'─'*30} {'─'*10} {'─'*10} {'─'*10} {'─'*12}")
+    print(
+        f"  {'Codice':<12s} {'Descrizione':<30s} {'Budget':>10s} {'Actual':>10s} {'Delta':>10s} {'Status'}"
+    )
+    print(f"  {'─' * 12} {'─' * 30} {'─' * 10} {'─' * 10} {'─' * 10} {'─' * 12}")
 
     for r in rows:
         codice = (r["codice_conto_display"] or "???")[:12]
         desc = (r["descrizione"] or "")[:30]
-        print(f"  {codice:<12s} {desc:<30s} {fmt_eur(r['budget'])} {fmt_eur(r['consuntivo'])} {fmt_eur(r['delta'])} {r['status']}")
+        print(
+            f"  {codice:<12s} {desc:<30s} {fmt_eur(r['budget'])} {fmt_eur(r['consuntivo'])} {fmt_eur(r['delta'])} {r['status']}"
+        )
 
 
 # ── Health check ────────────────────────────────────────────────────────────
+
 
 def cmd_health(args):
     """Health check: freshness dati, gap, alert."""
@@ -183,7 +202,9 @@ def cmd_health(args):
     print("  BANCHE:")
     for r in rows:
         flag = "⚠" if r["giorni"] > 7 else "✓"
-        print(f"    {flag} {r['societa_id']}/{r['banca_id']}: ultima {r['ultima']} ({r['giorni']}gg fa)")
+        print(
+            f"    {flag} {r['societa_id']}/{r['banca_id']}: ultima {r['ultima']} ({r['giorni']}gg fa)"
+        )
 
     # Movimenti freshness
     rows = query("""
@@ -194,7 +215,9 @@ def cmd_health(args):
     print("\n  MOVIMENTI CONTABILI:")
     for r in rows:
         flag = "⚠" if r["giorni"] > 14 else "✓"
-        print(f"    {flag} {r['societa_id']}: ultima {r['ultima']} ({r['giorni']}gg fa)")
+        print(
+            f"    {flag} {r['societa_id']}: ultima {r['ultima']} ({r['giorni']}gg fa)"
+        )
 
     # Budget loaded
     rows = query("""
@@ -204,7 +227,9 @@ def cmd_health(args):
     """)
     print("\n  BUDGET 2026:")
     for r in rows:
-        print(f"    ✓ {r['fonte']}: {r['righe']} righe, {r['conti']} conti, {fmt_eur(r['totale'])}/anno")
+        print(
+            f"    ✓ {r['fonte']}: {r['righe']} righe, {r['conti']} conti, {fmt_eur(r['totale'])}/anno"
+        )
 
     # PF input
     rows = query("""
@@ -214,7 +239,9 @@ def cmd_health(args):
     """)
     print("\n  PIANO FINANZIARIO INPUT:")
     for r in rows:
-        print(f"    ✓ {r['fonte']} {r['societa_id']}: {r['righe']} righe, {r['voci']} voci")
+        print(
+            f"    ✓ {r['fonte']} {r['societa_id']}: {r['righe']} righe, {r['voci']} voci"
+        )
 
     # Dimension tables
     for table, label in [
@@ -228,17 +255,22 @@ def cmd_health(args):
 
     # Schema drift check: BQ columns vs Pydantic models
     from core.schemas import (
-        BancaMovimentoRow, BudgetMensileRow, ChiusuraMensileRow,
-        MovimentoContabileRow, PartitaApertaFornitoreRow, PianoFinanziarioInputRow,
+        BancaMovimentoRow,
+        BudgetMensileRow,
+        ChiusuraMensileRow,
+        MovimentoContabileRow,
+        PartitaApertaFornitoreRow,
+        PianoFinanziarioInputRow,
     )
     from core import config as cfg
+
     drift_checks = [
-        (cfg.F_BANCHE_MOVIMENTI,          BancaMovimentoRow),
-        (cfg.F_MOVIMENTI_CONTABILI,        MovimentoContabileRow),
-        (cfg.F_BUDGET_MENSILE,             BudgetMensileRow),
-        (cfg.F_PIANO_FINANZIARIO_INPUT,    PianoFinanziarioInputRow),
-        (cfg.F_CHIUSURA_MENSILE,           ChiusuraMensileRow),
-        (cfg.F_PARTITE_APERTE_FORNITORI,   PartitaApertaFornitoreRow),
+        (cfg.F_BANCHE_MOVIMENTI, BancaMovimentoRow),
+        (cfg.F_MOVIMENTI_CONTABILI, MovimentoContabileRow),
+        (cfg.F_BUDGET_MENSILE, BudgetMensileRow),
+        (cfg.F_PIANO_FINANZIARIO_INPUT, PianoFinanziarioInputRow),
+        (cfg.F_CHIUSURA_MENSILE, ChiusuraMensileRow),
+        (cfg.F_PARTITE_APERTE_FORNITORI, PartitaApertaFornitoreRow),
     ]
     print("\n  SCHEMA DRIFT:")
     for table_id, model in drift_checks:
@@ -249,7 +281,9 @@ def cmd_health(args):
             extra_py = py_cols - bq_cols
             name = table_id.split(".")[-1]
             if extra_bq or extra_py:
-                print(f"    ⚠ {name}: BQ+{sorted(extra_bq)} / Pydantic+{sorted(extra_py)}")
+                print(
+                    f"    ⚠ {name}: BQ+{sorted(extra_bq)} / Pydantic+{sorted(extra_py)}"
+                )
             else:
                 print(f"    ✓ {name}")
         except Exception as e:
@@ -257,6 +291,7 @@ def cmd_health(args):
 
 
 # ── Previsione ──────────────────────────────────────────────────────────────
+
 
 def cmd_previsione(args):
     """Inserisci/aggiorna previsione budget."""
@@ -269,10 +304,12 @@ def cmd_previsione(args):
     if "-" in args.mesi:
         parts = args.mesi.split("-")
         from condges.update_previsione import resolve_mese
+
         mese_start = resolve_mese(parts[0]) or int(parts[0])
         mese_end = resolve_mese(parts[1]) or int(parts[1])
     else:
         from condges.update_previsione import resolve_mese
+
         mese_start = resolve_mese(args.mesi) or int(args.mesi)
         mese_end = mese_start
 
@@ -300,15 +337,20 @@ def cmd_previsione(args):
     prefix = "DRY RUN" if args.dry_run else "✓"
 
     print(f"\n  {prefix}: {label} ({societa})")
-    print(f"  €{args.importo:,.0f}/mese × {n_mesi} mesi (mesi {mese_start}-{mese_end}) = €{totale:,.0f}")
+    print(
+        f"  €{args.importo:,.0f}/mese × {n_mesi} mesi (mesi {mese_start}-{mese_end}) = €{totale:,.0f}"
+    )
 
     if not args.dry_run:
         deleted = result.get("rows_deleted", 0)
         inserted = result.get("rows_inserted", 0)
-        print(f"  BQ: {deleted} righe sostituite, {inserted} inserite (fonte={result.get('fonte')})")
+        print(
+            f"  BQ: {deleted} righe sostituite, {inserted} inserite (fonte={result.get('fonte')})"
+        )
 
 
 # ── Voci ────────────────────────────────────────────────────────────────────
+
 
 def cmd_voci(args):
     """Lista voci piano finanziario."""
@@ -328,6 +370,7 @@ def cmd_voci(args):
 
 
 # ── Saldo banca helper ──────────────────────────────────────────────────────
+
 
 def _compute_saldo_banca(societa: str, as_of_date: str) -> tuple[float, list[dict]]:
     """Real bank balance at end of as_of_date via nearest snapshot + movement delta.
@@ -386,9 +429,11 @@ def _compute_saldo_banca(societa: str, as_of_date: str) -> tuple[float, list[dic
 
 # ── Chiudi: chiusura mensile ────────────────────────────────────────────────
 
+
 def cmd_chiudi(args):
     """Chiusura mese: confronta previsione vs consuntivo + saldo banca + salva snapshot."""
     from datetime import date
+
     today = date.today()
     mese_chiuso = args.mese or (today.month - 1 if today.month > 1 else 12)
     anno = args.anno or (today.year if today.month > 1 else today.year - 1)
@@ -419,8 +464,10 @@ def cmd_chiudi(args):
     tot_c_e = tot_b_e = tot_c_u = tot_b_u = 0
     snapshot_rows = []
 
-    print(f"  {'Voce':<32s} {'Consuntivo':>11s} {'Previsione':>11s} {'Delta':>11s}  {'%':>6s}")
-    print(f"  {'─'*32} {'─'*11} {'─'*11} {'─'*11}  {'─'*6}")
+    print(
+        f"  {'Voce':<32s} {'Consuntivo':>11s} {'Previsione':>11s} {'Delta':>11s}  {'%':>6s}"
+    )
+    print(f"  {'─' * 32} {'─' * 11} {'─' * 11} {'─' * 11}  {'─' * 6}")
 
     for r in rows:
         sez = r["sezione"]
@@ -442,7 +489,9 @@ def cmd_chiudi(args):
             flag = " ⚠ MANCATO"
 
         voce = r["voce_label"][:32]
-        print(f"  {voce:<32s} {fmt_eur(c)} {fmt_eur(b)} {fmt_eur(d)}  {pct_s:>6s}{flag}")
+        print(
+            f"  {voce:<32s} {fmt_eur(c)} {fmt_eur(b)} {fmt_eur(d)}  {pct_s:>6s}{flag}"
+        )
 
         if sez == "ENTRATE":
             tot_c_e += c
@@ -452,29 +501,38 @@ def cmd_chiudi(args):
             tot_b_u += b
 
         # Collect for snapshot
-        snapshot_rows.append({
-            "societa_id": societa,
-            "anno": anno,
-            "mese": mese_chiuso,
-            "voce_id": r["voce_id"],
-            "voce_label": r["voce_label"],
-            "sezione": sez,
-            "importo_consuntivo": float(c),
-            "importo_previsione": float(b),
-            "delta": float(d),
-            "delta_pct": float(pct) if pct is not None else None,
-            "data_chiusura": today.isoformat(),
-        })
+        snapshot_rows.append(
+            {
+                "societa_id": societa,
+                "anno": anno,
+                "mese": mese_chiuso,
+                "voce_id": r["voce_id"],
+                "voce_label": r["voce_label"],
+                "sezione": sez,
+                "importo_consuntivo": float(c),
+                "importo_previsione": float(b),
+                "delta": float(d),
+                "delta_pct": float(pct) if pct is not None else None,
+                "data_chiusura": today.isoformat(),
+            }
+        )
 
-    print(f"\n  {'─'*80}")
-    print(f"  {'ENTRATE TOTALI':<32s} {fmt_eur(tot_c_e)} {fmt_eur(tot_b_e)} {fmt_eur(tot_c_e - tot_b_e)}")
-    print(f"  {'USCITE TOTALI':<32s} {fmt_eur(tot_c_u)} {fmt_eur(tot_b_u)} {fmt_eur(tot_c_u - tot_b_u)}")
+    print(f"\n  {'─' * 80}")
+    print(
+        f"  {'ENTRATE TOTALI':<32s} {fmt_eur(tot_c_e)} {fmt_eur(tot_b_e)} {fmt_eur(tot_c_e - tot_b_e)}"
+    )
+    print(
+        f"  {'USCITE TOTALI':<32s} {fmt_eur(tot_c_u)} {fmt_eur(tot_b_u)} {fmt_eur(tot_c_u - tot_b_u)}"
+    )
     cf_c = tot_c_e - tot_c_u
     cf_b = tot_b_e - tot_b_u
-    print(f"  {'CASH FLOW NETTO':<32s} {fmt_eur(cf_c)} {fmt_eur(cf_b)} {fmt_eur(cf_c - cf_b)}")
+    print(
+        f"  {'CASH FLOW NETTO':<32s} {fmt_eur(cf_c)} {fmt_eur(cf_b)} {fmt_eur(cf_c - cf_b)}"
+    )
 
     # 2. Saldo banca (anchor-based)
     import calendar
+
     last_day = calendar.monthrange(anno, mese_chiuso)[1]
     as_of_date = f"{anno}-{mese_chiuso:02d}-{last_day:02d}"
     print(f"\n  ── SALDO BANCA al {last_day:02d}/{mese_chiuso:02d}/{anno} ──")
@@ -518,8 +576,14 @@ def cmd_chiudi(args):
         netto = (r["entrate_prev"] or 0) - (r["uscite_prev"] or 0)
         saldo_running += netto
         fwd_anno = r.get("fwd_anno", anno)
-        danger = " ⛔ PERICOLO" if saldo_running < 0 else (" ⚠ ATTENZIONE" if saldo_running < 50000 else "")
-        print(f"    Mese {r['mese']:02d}/{fwd_anno}: entrate {fmt_eur(r['entrate_prev'])} - uscite {fmt_eur(r['uscite_prev'])} = netto {fmt_eur(netto)} → saldo {fmt_eur(saldo_running)}{danger}")
+        danger = (
+            " ⛔ PERICOLO"
+            if saldo_running < 0
+            else (" ⚠ ATTENZIONE" if saldo_running < 50000 else "")
+        )
+        print(
+            f"    Mese {r['mese']:02d}/{fwd_anno}: entrate {fmt_eur(r['entrate_prev'])} - uscite {fmt_eur(r['uscite_prev'])} = netto {fmt_eur(netto)} → saldo {fmt_eur(saldo_running)}{danger}"
+        )
 
     if not fwd_rows:
         print("    (nessuna previsione disponibile per i prossimi mesi)")
@@ -573,11 +637,14 @@ def _save_chiusura_snapshot(societa: str, anno: int, mese: int, rows: list[dict]
     if errors:
         print(f"\n  ✗ Errori inserimento snapshot: {errors[:3]}")
     else:
-        print(f"\n  ✓ Snapshot salvato: {len(rows)} righe → f_chiusura_mensile ({societa} {mese:02d}/{anno})")
+        print(
+            f"\n  ✓ Snapshot salvato: {len(rows)} righe → f_chiusura_mensile ({societa} {mese:02d}/{anno})"
+        )
         print("    Nel tempo: hotelops chiudi mostra se le previsioni migliorano")
 
 
 # ── Saldo: posizione banca corrente + proiezione ──────────────────────────
+
 
 def cmd_saldo(args):
     """Saldo banca reale (da snapshot) + proiezione cash forward via v_previsione_cassa."""
@@ -593,19 +660,31 @@ def cmd_saldo(args):
     """)
 
     if not rows:
-        print(f"\n  ⚠ Nessun dato per {societa}. Inserisci prima il saldo banca in f_saldi_banca_snapshot.")
+        print(
+            f"\n  ⚠ Nessun dato per {societa}. Inserisci prima il saldo banca in f_saldi_banca_snapshot."
+        )
         return
 
     ancora = rows[0]
     print(f"\n  ═══ POSIZIONE DI CASSA — {societa} ═══")
     print(f"  Ancora: {fmt_eur(ancora['saldo_ancora'])} al {ancora['data_ancora']}\n")
 
-    print(f"  {'Mese':<8} {'Tipo':10} {'Entrate':>11} {'Uscite PF':>11} {'Scad.':>9} {'Netto':>10} {'Saldo':>12} {'Stato'}")
-    print(f"  {'─'*8} {'─'*10} {'─'*11} {'─'*11} {'─'*9} {'─'*10} {'─'*12} {'─'*9}")
+    print(
+        f"  {'Mese':<8} {'Tipo':10} {'Entrate':>11} {'Uscite PF':>11} {'Scad.':>9} {'Netto':>10} {'Saldo':>12} {'Stato'}"
+    )
+    print(
+        f"  {'─' * 8} {'─' * 10} {'─' * 11} {'─' * 11} {'─' * 9} {'─' * 10} {'─' * 12} {'─' * 9}"
+    )
 
     for r in rows:
-        tipo_tag = "📊" if r["tipo_periodo"] == "CONSUNTIVO" else ("🔄" if r["tipo_periodo"] == "CORRENTE" else "🔮")
-        stato = {"PERICOLO": "⛔ PERICOLO", "ATTENZIONE": "⚠ BASSO", "OK": ""}.get(r["stato_liquidita"], "")
+        tipo_tag = (
+            "📊"
+            if r["tipo_periodo"] == "CONSUNTIVO"
+            else ("🔄" if r["tipo_periodo"] == "CORRENTE" else "🔮")
+        )
+        stato = {"PERICOLO": "⛔ PERICOLO", "ATTENZIONE": "⚠ BASSO", "OK": ""}.get(
+            r["stato_liquidita"], ""
+        )
         scad = f"{r['uscite_scad']:>9,.0f}" if r["uscite_scad"] else "         -"
         print(
             f"  {tipo_tag} {r['periodo']:8} "
@@ -622,6 +701,7 @@ def cmd_saldo(args):
 
 
 # ── Manifest: catalogo tabelle BQ ──────────────────────────────────────────
+
 
 def cmd_manifest(args):
     """Genera manifest.yaml — catalogo di tutte le tabelle BQ."""
@@ -641,6 +721,7 @@ def cmd_manifest(args):
 
 # ── Classifica: classify + route + ingest files ──────────────────────────────
 
+
 def cmd_classifica(args):
     """Classifica file, smista nel datahub e (opzionalmente) ingerisci."""
     from pathlib import Path
@@ -654,6 +735,7 @@ def cmd_classifica(args):
     for f in files:
         if "*" in str(f) or "?" in str(f):
             import glob
+
             expanded.extend(Path(p) for p in glob.glob(str(f)))
         else:
             expanded.append(f)
@@ -664,9 +746,9 @@ def cmd_classifica(args):
 
     results = classify_batch(expanded)
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  CLASSIFICAZIONE FILE — {len(results)} file analizzati")
-    print(f"{'='*70}\n")
+    print(f"{'=' * 70}\n")
 
     ok = 0
     for r in results:
@@ -695,40 +777,104 @@ def cmd_classifica(args):
 
         print()
 
-    print(f"{'─'*70}")
+    print(f"{'─' * 70}")
     print(f"  Riconosciuti: {ok}/{len(results)}")
-    print(f"{'─'*70}\n")
+    print(f"{'─' * 70}\n")
 
 
 # ── Scadenzario ────────────────────────────────────────────────────────────
 
+
 def cmd_scadenzario(args):
     """Genera Excel ponte: scadenzario fornitori → voci PF."""
-    from condges.scadenzario_excel import run
-
-    print(f"\n{'═'*60}")
+    print(f"\n{'═' * 60}")
     print(f"  SCADENZARIO → PIANO FINANZIARIO ({args.societa})")
-    print(f"{'═'*60}\n")
+    print(f"{'═' * 60}\n")
 
-    if args.file:
-        print(f"  Input: {args.file}")
+    if args.write_back:
+        from condges.scadenzario_excel import (
+            cascade_scaduto,
+            load_fornitori_map,
+            load_fornitori_map_full,
+            map_to_voci,
+            parse_sintetica_scadenze,
+            write_back_to_pf,
+            MESI_NOMI,
+        )
+
+        if not args.pf:
+            print("  ❌ --write-back requires --pf <PF Excel path>")
+            return
+        if not args.file:
+            print("  ❌ --write-back requires --file <sintetica Excel path>")
+            return
+
+        print(f"  Sintetica: {args.file}")
+        print(f"  PF Excel:  {args.pf}")
+
+        partite, bucket_months = parse_sintetica_scadenze(args.file)
+        print(f"  Fornitori trovati: {len(partite)}")
+
+        cascade_scaduto(partite)
+        print("  ✓ Scaduto cascaded into current month")
+
+        fornitori_map = load_fornitori_map()
+        mapped, unmapped = map_to_voci(partite, fornitori_map)
+        print(
+            f"  Mappati: {sum(len(v) for v in mapped.values())} | Non mappati: {len(unmapped)}"
+        )
+
+        fornitori_full = load_fornitori_map_full()
+        out, summary = write_back_to_pf(args.pf, mapped, fornitori_full)
+
+        # Print results
+        print(f"\n  {'─' * 56}")
+        total_written = 0
+        for voce_label, entries in sorted(summary.items()):
+            voce_total = sum(sum(e["months"].values()) for e in entries)
+            total_written += voce_total
+            print(f"  {voce_label}: {len(entries)} fornitori, €{voce_total:,.0f}")
+            for e in entries:
+                month_detail = ", ".join(
+                    f"{MESI_NOMI[m - 1]}=€{v:,.0f}"
+                    for m, v in sorted(e["months"].items())
+                )
+                print(f"    {e['nome']}: {month_detail}")
+        print(f"  {'─' * 56}")
+        print(f"  Totale scritto: €{total_written:,.0f}")
+
+        print(f"\n  ✅ PF aggiornato: {out}")
+        if unmapped:
+            print(f"  ⚠️  {len(unmapped)} fornitori non mappati (non scritti):")
+            for u in unmapped[:5]:
+                print(
+                    f"     - {u['codice_fornitore']} {u['nome']}: €{u['totale']:,.0f}"
+                )
+            if len(unmapped) > 5:
+                print(f"     ... e altri {len(unmapped) - 5}")
     else:
-        print("  Input: BigQuery (ultimo snapshot)")
-    if args.pf:
-        print(f"  PF Rosa: {args.pf}")
+        from condges.scadenzario_excel import run
 
-    out = run(
-        file=args.file,
-        pf=args.pf,
-        societa=args.societa,
-        output=args.output,
-    )
+        if args.file:
+            print(f"  Input: {args.file}")
+        else:
+            print("  Input: BigQuery (ultimo snapshot)")
+        if args.pf:
+            print(f"  PF Rosa: {args.pf}")
 
-    print(f"\n  ✅ Excel generato: {out}")
-    print(f"{'═'*60}\n")
+        out = run(
+            file=args.file,
+            pf=args.pf,
+            societa=args.societa,
+            output=args.output,
+        )
+        print(f"\n  ✅ Excel generato: {out}")
+
+    print(f"{'═' * 60}\n")
 
 
 # ── Help ───────────────────────────────────────────────────────────────────
+
 
 def cmd_help(args):
     """Mostra tutti i comandi disponibili con esempi."""
@@ -802,6 +948,7 @@ def cmd_help(args):
 
 # ── Main ────────────────────────────────────────────────────────────────────
 
+
 def main():
     parser = argparse.ArgumentParser(
         prog="hotelops",
@@ -824,10 +971,14 @@ def main():
 
     # chiudi
     p_chiudi = sub.add_parser("chiudi", help="Chiusura mese: consuntivo vs previsione")
-    p_chiudi.add_argument("--mese", type=int, help="Mese da chiudere (default: mese precedente)")
+    p_chiudi.add_argument(
+        "--mese", type=int, help="Mese da chiudere (default: mese precedente)"
+    )
     p_chiudi.add_argument("--societa", choices=["ORTI", "INTUR"])
     p_chiudi.add_argument("--anno", type=int, default=2026)
-    p_chiudi.add_argument("--dry-run", action="store_true", help="Mostra senza salvare snapshot in BQ")
+    p_chiudi.add_argument(
+        "--dry-run", action="store_true", help="Mostra senza salvare snapshot in BQ"
+    )
 
     # saldo
     p_saldo = sub.add_parser("saldo", help="Saldo banca + proiezione cash forward")
@@ -838,9 +989,15 @@ def main():
     sub.add_parser("health", help="Health check dati")
 
     # previsione
-    p_prev = sub.add_parser("previsione", aliases=["prev"], help="Aggiorna previsione budget")
-    p_prev.add_argument("voce", help="Voce (alias o voce_id, es. 'utenze' o 'USCITE_UTENZE')")
-    p_prev.add_argument("mesi", help="Range mesi: '4-12' o 'aprile-dicembre' o '6' (singolo)")
+    p_prev = sub.add_parser(
+        "previsione", aliases=["prev"], help="Aggiorna previsione budget"
+    )
+    p_prev.add_argument(
+        "voce", help="Voce (alias o voce_id, es. 'utenze' o 'USCITE_UTENZE')"
+    )
+    p_prev.add_argument(
+        "mesi", help="Range mesi: '4-12' o 'aprile-dicembre' o '6' (singolo)"
+    )
     p_prev.add_argument("importo", type=float, help="Importo mensile in €")
     p_prev.add_argument("--societa", choices=["ORTI", "INTUR"], default="ORTI")
     p_prev.add_argument("--anno", type=int, default=2026)
@@ -854,26 +1011,50 @@ def main():
     # manifest
     p_manifest = sub.add_parser("manifest", help="Genera catalogo tabelle BQ")
     p_manifest.add_argument("--table", help="Singola tabella (default: tutte)")
-    p_manifest.add_argument("--output", help="Output path (default: core/bq/manifest.yaml)")
+    p_manifest.add_argument(
+        "--output", help="Output path (default: core/bq/manifest.yaml)"
+    )
 
     # help
     sub.add_parser("help", help="Guida completa con esempi")
 
     # classifica
-    p_class = sub.add_parser("classifica", aliases=["cls"], help="Classifica, smista e ingerisci file")
+    p_class = sub.add_parser(
+        "classifica", aliases=["cls"], help="Classifica, smista e ingerisci file"
+    )
     p_class.add_argument("files", nargs="+", help="File da classificare")
-    p_class.add_argument("--route", action="store_true", help="Copia i file nella cartella datahub corretta")
-    p_class.add_argument("--ingest", action="store_true", help="Esegui il pipeline di ingestione dopo lo smistamento")
+    p_class.add_argument(
+        "--route",
+        action="store_true",
+        help="Copia i file nella cartella datahub corretta",
+    )
+    p_class.add_argument(
+        "--ingest",
+        action="store_true",
+        help="Esegui il pipeline di ingestione dopo lo smistamento",
+    )
     p_class.add_argument("--datahub", help="Root del datahub (default: Google Drive)")
-    p_class.add_argument("--dry-run", action="store_true", help="Mostra il piano senza eseguire")
+    p_class.add_argument(
+        "--dry-run", action="store_true", help="Mostra il piano senza eseguire"
+    )
 
     # scadenzario
-    p_scad = sub.add_parser("scadenzario", aliases=["scad"],
-                            help="Genera Excel ponte fornitori → voci PF")
-    p_scad.add_argument("--file", type=Path, help="Sintetica scadenze Excel (default: BQ)")
+    p_scad = sub.add_parser(
+        "scadenzario", aliases=["scad"], help="Genera Excel ponte fornitori → voci PF"
+    )
+    p_scad.add_argument(
+        "--file", type=Path, help="Sintetica scadenze Excel (default: BQ)"
+    )
     p_scad.add_argument("--pf", type=Path, help="PF Excel di Rosa per gap analysis")
     p_scad.add_argument("--societa", choices=["ORTI", "INTUR"], default="ORTI")
-    p_scad.add_argument("--output", type=Path, help="Directory output (default: corrente)")
+    p_scad.add_argument(
+        "--output", type=Path, help="Directory output (default: corrente)"
+    )
+    p_scad.add_argument(
+        "--write-back",
+        action="store_true",
+        help="Write cascaded amounts back into --pf Excel (requires --pf and --file)",
+    )
 
     args = parser.parse_args()
 

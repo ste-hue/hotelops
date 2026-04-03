@@ -213,3 +213,237 @@ class TestLoadPfForecasts:
         result = load_pf_forecasts(f)
         assert "USCITE_MATERIE_PRIME" in result
         assert result["USCITE_MATERIE_PRIME"][4] == 117460  # April
+
+
+# ── Cascade tests ────────────────────────────────────────────────────────────
+
+
+class TestCascadeScaduto:
+    def test_moves_overdue_to_current_month(self):
+        from condges.scadenzario_excel import cascade_scaduto
+
+        suppliers = [
+            {
+                "codice_fornitore": 1,
+                "nome": "ACME",
+                "totale": 1500,
+                "scaduto": 500,
+                "buckets": {5: 600, 6: 400},
+            },
+            {
+                "codice_fornitore": 2,
+                "nome": "BETA",
+                "totale": 300,
+                "scaduto": 300,
+                "buckets": {},
+            },
+        ]
+        result = cascade_scaduto(suppliers, current_month=4)
+
+        assert result[0]["buckets"][4] == 500
+        assert result[0]["buckets"][5] == 600
+        assert result[0]["scaduto"] == 0
+
+        assert result[1]["buckets"][4] == 300
+        assert result[1]["scaduto"] == 0
+
+    def test_adds_to_existing_current_month(self):
+        from condges.scadenzario_excel import cascade_scaduto
+
+        suppliers = [
+            {
+                "codice_fornitore": 1,
+                "nome": "ACME",
+                "totale": 1000,
+                "scaduto": 200,
+                "buckets": {4: 300, 5: 500},
+            },
+        ]
+        result = cascade_scaduto(suppliers, current_month=4)
+        assert result[0]["buckets"][4] == 500
+
+    def test_zero_scaduto_unchanged(self):
+        from condges.scadenzario_excel import cascade_scaduto
+
+        suppliers = [
+            {
+                "codice_fornitore": 1,
+                "nome": "ACME",
+                "totale": 600,
+                "scaduto": 0,
+                "buckets": {5: 600},
+            },
+        ]
+        result = cascade_scaduto(suppliers, current_month=4)
+        assert 4 not in result[0]["buckets"]
+        assert result[0]["buckets"][5] == 600
+
+
+# ── Write-back tests ─────────────────────────────────────────────────────────
+
+
+def _make_pf_fixture(tmp_path):
+    """Create a minimal PF Excel mimicking Rosa's layout."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Piano Finanziario"
+    ws.cell(row=1, column=3, value=2025)
+    ws.cell(row=1, column=7, value=2026)
+    months_2025 = ["SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE"]
+    months_2026 = [
+        "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
+        "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
+        "NOVEMBRE", "DICEMBRE",
+    ]
+    for i, m in enumerate(months_2025):
+        ws.cell(row=2, column=3 + i, value=m)
+    for i, m in enumerate(months_2026):
+        ws.cell(row=2, column=7 + i, value=m)
+    ws.cell(row=16, column=1, value="Materie Prime/Consumo")
+
+    # Detail sheet "Materie Prime-Consumo " (trailing space)
+    ws_mp = wb.create_sheet("Materie Prime-Consumo ")
+    for i, m in enumerate(months_2025):
+        ws_mp.cell(row=2, column=4 + i, value=m)
+    for i, m in enumerate(months_2026):
+        ws_mp.cell(row=2, column=8 + i, value=m)
+    ws_mp.cell(row=4, column=2, value="Materie Prime e Consumo")
+    ws_mp.cell(row=5, column=2, value="Le Croissant srl")
+    ws_mp.cell(row=6, column=2, value="Giacinto Di Palma")
+    ws_mp.cell(row=7, column=2, value="PREVISIONALE")
+    ws_mp.cell(row=7, column=11, value=60000)
+
+    out = tmp_path / "PF_test.xlsx"
+    wb.save(out)
+    return out
+
+
+class TestWriteBackToPf:
+    def test_places_amounts_correctly(self, tmp_path):
+        from condges.scadenzario_excel import write_back_to_pf
+
+        pf_path = _make_pf_fixture(tmp_path)
+
+        mapped = {
+            "USCITE_MATERIE_PRIME": [
+                {
+                    "codice_fornitore": 1,
+                    "nome": "LE CROISSANT SRL",
+                    "totale": 14277,
+                    "scaduto": 0,
+                    "buckets": {4: 14277},
+                },
+                {
+                    "codice_fornitore": 4,
+                    "nome": "Giacinto Di Palma",
+                    "totale": 390,
+                    "scaduto": 0,
+                    "buckets": {4: 390},
+                },
+            ],
+        }
+        fornitori_map_full = {
+            1: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Le Croissant srl"},
+            4: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Giacinto Di Palma"},
+        }
+
+        out, summary = write_back_to_pf(pf_path, mapped, fornitori_map_full)
+
+        wb = openpyxl.load_workbook(out)
+        ws_mp = wb["Materie Prime-Consumo "]
+
+        # APRILE = col 11 on detail sheets (col 8=GEN + 3)
+        assert ws_mp.cell(row=5, column=11).value == 14277
+        assert ws_mp.cell(row=6, column=11).value == 390
+        # PREVISIONALE untouched
+        assert ws_mp.cell(row=7, column=11).value == 60000
+
+        assert "Materie Prime" in summary
+        assert len(summary["Materie Prime"]) == 2
+
+    def test_preserves_existing_data(self, tmp_path):
+        from condges.scadenzario_excel import write_back_to_pf
+
+        pf_path = _make_pf_fixture(tmp_path)
+
+        # Pre-write some data in May column
+        wb = openpyxl.load_workbook(pf_path)
+        ws_mp = wb["Materie Prime-Consumo "]
+        ws_mp.cell(row=5, column=12, value=9999)  # May, Le Croissant
+        wb.save(pf_path)
+
+        mapped = {
+            "USCITE_MATERIE_PRIME": [
+                {
+                    "codice_fornitore": 1,
+                    "nome": "LE CROISSANT SRL",
+                    "totale": 14277,
+                    "scaduto": 0,
+                    "buckets": {4: 14277},  # only April
+                },
+            ],
+        }
+        fornitori_map_full = {
+            1: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Le Croissant srl"},
+        }
+
+        out, _ = write_back_to_pf(pf_path, mapped, fornitori_map_full)
+        wb = openpyxl.load_workbook(out)
+        ws_mp = wb["Materie Prime-Consumo "]
+
+        assert ws_mp.cell(row=5, column=11).value == 14277
+        assert ws_mp.cell(row=5, column=12).value == 9999  # preserved
+
+    def test_skips_unmapped_nome_pf(self, tmp_path):
+        from condges.scadenzario_excel import write_back_to_pf
+
+        pf_path = _make_pf_fixture(tmp_path)
+
+        mapped = {
+            "USCITE_MATERIE_PRIME": [
+                {
+                    "codice_fornitore": 999,
+                    "nome": "UNKNOWN SUPPLIER",
+                    "totale": 5000,
+                    "scaduto": 0,
+                    "buckets": {4: 5000},
+                },
+            ],
+        }
+        # No nome_pf for this supplier
+        fornitori_map_full = {
+            999: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": ""},
+        }
+
+        out, summary = write_back_to_pf(pf_path, mapped, fornitori_map_full)
+        assert "Materie Prime" not in summary  # nothing written
+
+
+class TestBuildMonthColMap:
+    def test_takes_2026_columns_for_duplicate_months(self):
+        from condges.scadenzario_excel import _build_month_col_map
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        # 2025: C4-C7 = Sep-Dec
+        for i, m in enumerate(["SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE"]):
+            ws.cell(row=2, column=4 + i, value=m)
+        # 2026: C8-C19 = Jan-Dec
+        months_2026 = [
+            "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
+            "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
+            "NOVEMBRE", "DICEMBRE",
+        ]
+        for i, m in enumerate(months_2026):
+            ws.cell(row=2, column=8 + i, value=m)
+
+        col_map = _build_month_col_map(ws)
+
+        # Sep-Dec should use 2026 columns (rightmost)
+        assert col_map[9] == 16
+        assert col_map[10] == 17
+        assert col_map[11] == 18
+        assert col_map[12] == 19
+        # Forward months
+        assert col_map[4] == 11  # APRILE
+        assert col_map[5] == 12  # MAGGIO
