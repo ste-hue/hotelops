@@ -444,16 +444,57 @@ def main():
                     disp[c] = disp[c].apply(lambda v: f"{v:,.0f}" if pd.notna(v) and v != 0 else "")
                 st.dataframe(disp, use_container_width=True, hide_index=True)
 
-    # Unmapped
+    # Unmapped — let user assign voce from the UI
     if len(unmapped_df) > 0:
-        with st.expander(f"Fornitori non mappati ({len(unmapped_df)}) - non verranno scritti"):
-            st.dataframe(
-                unmapped_df[["codice_fornitore", "nome", "totale"]].rename(
-                    columns={"codice_fornitore": "Cod", "nome": "Fornitore", "totale": "Totale"}
-                ),
-                use_container_width=True,
-                hide_index=True,
-            )
+        voce_options = ["-- non assegnato --"] + sorted(VOCE_LABELS.keys())
+        voce_display = {k: VOCE_LABELS[k] for k in VOCE_LABELS}
+        voce_display["-- non assegnato --"] = "-- non assegnato --"
+
+        with st.expander(f"Fornitori non mappati ({len(unmapped_df)}) — assegna voce", expanded=True):
+            st.caption("Scegli la voce PF per ogni fornitore. Verranno inclusi nella scrittura e salvati in d_fornitori.csv.")
+            assignments: dict[int, str] = {}
+
+            for idx, row in unmapped_df.iterrows():
+                cols = st.columns([1, 4, 2, 4])
+                cols[0].text(str(int(row["codice_fornitore"])))
+                cols[1].text(row["nome"])
+                cols[2].text(f"{row['totale']:,.0f}" if pd.notna(row["totale"]) else "")
+                choice = cols[3].selectbox(
+                    "Voce",
+                    voce_options,
+                    format_func=lambda x: voce_display.get(x, x),
+                    key=f"voce_{int(row['codice_fornitore'])}",
+                    label_visibility="collapsed",
+                )
+                if choice != "-- non assegnato --":
+                    assignments[int(row["codice_fornitore"])] = choice
+
+            if assignments:
+                if st.button(f"Salva {len(assignments)} assegnazioni e ricarica", type="secondary"):
+                    # Append to d_fornitori.csv
+                    with open(FORNITORI_CSV, "a", newline="", encoding="utf-8") as f:
+                        writer = csv.writer(f)
+                        for codice, voce_id in assignments.items():
+                            nome = unmapped_df.loc[
+                                unmapped_df["codice_fornitore"] == codice, "nome"
+                            ].iloc[0]
+                            writer.writerow([codice, nome, "", voce_id, "False"])
+                    st.success(f"Salvati {len(assignments)} fornitori in d_fornitori.csv")
+                    st.rerun()
+
+            # Merge assigned unmapped into mapped_df for this run
+            if assignments:
+                newly_mapped = []
+                for _, row in unmapped_df.iterrows():
+                    codice = int(row["codice_fornitore"])
+                    if codice in assignments:
+                        newly_mapped.append({**row.to_dict(), "voce_id": assignments[codice], "nome_pf": ""})
+                if newly_mapped:
+                    mapped_df = pd.concat([mapped_df, pd.DataFrame(newly_mapped)], ignore_index=True)
+                    fornitori_map.update({
+                        codice: {"voce_id": voce_id, "nome_pf": ""}
+                        for codice, voce_id in assignments.items()
+                    })
 
     # Gap analysis
     if not mapped_df.empty:
