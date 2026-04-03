@@ -476,56 +476,55 @@ def main():
                 st.dataframe(disp, use_container_width=True, hide_index=True)
 
     # Unmapped — let user assign voce from the UI
+    # Persist assignments in session_state so they survive reruns
+    if "voce_assignments" not in st.session_state:
+        st.session_state.voce_assignments = {}
+
+    # Apply previous session assignments: move from unmapped to mapped
+    if st.session_state.voce_assignments and not unmapped_df.empty:
+        still_unmapped = []
+        for _, row in unmapped_df.iterrows():
+            codice = int(row["codice_fornitore"])
+            if codice in st.session_state.voce_assignments:
+                voce_id = st.session_state.voce_assignments[codice]
+                mapped_rows.append({**row.to_dict(), "voce_id": voce_id, "nome_pf": ""})
+                fornitori_map[codice] = {"voce_id": voce_id, "nome_pf": ""}
+            else:
+                still_unmapped.append(row.to_dict())
+        mapped_df = pd.DataFrame(mapped_rows)
+        unmapped_df = pd.DataFrame(still_unmapped)
+
     if len(unmapped_df) > 0:
         voce_options = ["-- non assegnato --"] + sorted(VOCE_LABELS.keys())
         voce_display = {k: VOCE_LABELS[k] for k in VOCE_LABELS}
         voce_display["-- non assegnato --"] = "-- non assegnato --"
 
         with st.expander(f"Fornitori non mappati ({len(unmapped_df)}) — assegna voce", expanded=True):
-            st.caption("Scegli la voce PF per ogni fornitore. Verranno inclusi nella scrittura e salvati in d_fornitori.csv.")
-            assignments: dict[int, str] = {}
+            st.caption("Scegli la voce PF per ogni fornitore. Clicca 'Conferma' per includerli nella scrittura.")
 
             for idx, row in unmapped_df.iterrows():
                 cols = st.columns([1, 4, 2, 4])
                 cols[0].text(str(int(row["codice_fornitore"])))
                 cols[1].text(row["nome"])
                 cols[2].text(f"{row['totale']:,.0f}" if pd.notna(row["totale"]) else "")
-                choice = cols[3].selectbox(
+                cols[3].selectbox(
                     "Voce",
                     voce_options,
                     format_func=lambda x: voce_display.get(x, x),
                     key=f"voce_{int(row['codice_fornitore'])}",
                     label_visibility="collapsed",
                 )
-                if choice != "-- non assegnato --":
-                    assignments[int(row["codice_fornitore"])] = choice
 
-            if assignments:
-                if st.button(f"Salva {len(assignments)} assegnazioni e ricarica", type="secondary"):
-                    # Append to d_fornitori.csv
-                    with open(FORNITORI_CSV, "a", newline="", encoding="utf-8") as f:
-                        writer = csv.writer(f)
-                        for codice, voce_id in assignments.items():
-                            nome = unmapped_df.loc[
-                                unmapped_df["codice_fornitore"] == codice, "nome"
-                            ].iloc[0]
-                            writer.writerow([codice, nome, "", voce_id, "False"])
-                    st.success(f"Salvati {len(assignments)} fornitori in d_fornitori.csv")
-                    st.rerun()
-
-            # Merge assigned unmapped into mapped_df for this run
-            if assignments:
-                newly_mapped = []
+            if st.button("Conferma assegnazioni", type="secondary"):
+                new_assignments = {}
                 for _, row in unmapped_df.iterrows():
                     codice = int(row["codice_fornitore"])
-                    if codice in assignments:
-                        newly_mapped.append({**row.to_dict(), "voce_id": assignments[codice], "nome_pf": ""})
-                if newly_mapped:
-                    mapped_df = pd.concat([mapped_df, pd.DataFrame(newly_mapped)], ignore_index=True)
-                    fornitori_map.update({
-                        codice: {"voce_id": voce_id, "nome_pf": ""}
-                        for codice, voce_id in assignments.items()
-                    })
+                    choice = st.session_state.get(f"voce_{codice}", "-- non assegnato --")
+                    if choice != "-- non assegnato --":
+                        new_assignments[codice] = choice
+                if new_assignments:
+                    st.session_state.voce_assignments.update(new_assignments)
+                    st.rerun()
 
     # Gap analysis
     if not mapped_df.empty:
