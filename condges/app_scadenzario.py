@@ -275,6 +275,7 @@ def write_pf(
     scad_df: pd.DataFrame,
     bucket_months: list[int],
     fornitori_map: dict[int, dict],
+    excluded: set[int] | None = None,
 ) -> tuple[bytes, dict[str, list]]:
     """Write scadenze into ALL PF detail sheets, return (bytes, summary).
 
@@ -290,9 +291,12 @@ def write_pf(
     summary: dict[str, list] = {}
 
     # Group scadenzario suppliers by voce_id
+    excluded = excluded or set()
     scad_by_voce: dict[str, list[dict]] = {}
     for _, row in scad_df.iterrows():
         codice = int(row["codice_fornitore"])
+        if codice in excluded:
+            continue
         info = fornitori_map.get(codice)
         if not info:
             continue
@@ -328,11 +332,29 @@ def write_pf(
         # Track total scadenzario written per month for PREVISIONALE adjustment
         scad_totals: dict[int, float] = {}
 
+        # Find the insertion point for new suppliers: just before PREVISIONALE or total
+        insert_before = prev_row or total_row
+
         for s in suppliers:
             # Find the supplier row: try codice first, then name
             pf_row = _find_supplier_row_by_codice(ws_vals, s["codice_fornitore"])
             if pf_row is None:
                 pf_row = _find_supplier_row_by_name(ws_vals, s["nome_pf"])
+            if pf_row is None and insert_before:
+                # Insert a new row for this supplier
+                ws.insert_rows(insert_before)
+                ws_vals.insert_rows(insert_before)
+                ws_form.insert_rows(insert_before)
+                pf_row = insert_before
+                ws.cell(row=pf_row, column=1, value=s["codice_fornitore"])
+                ws.cell(row=pf_row, column=2, value=s["nome_pf"] or s["nome"])
+                # Shift references: prev_row, total_row, sum range all move down
+                if prev_row and prev_row >= insert_before:
+                    prev_row += 1
+                if total_row and total_row >= insert_before:
+                    total_row += 1
+                    sum_end += 1
+                insert_before += 1  # next insertion goes below this one
             if pf_row is None:
                 continue
 
@@ -451,7 +473,10 @@ def main():
     col1.metric("Mappati (in d_fornitori)", len(mapped_df))
     col2.metric("Non mappati", len(unmapped_df), help="Fornitori non in d_fornitori.csv")
 
-    # Preview per voce
+    # Preview per voce — with exclude checkboxes
+    if "excluded_suppliers" not in st.session_state:
+        st.session_state.excluded_suppliers = set()
+
     if not mapped_df.empty:
         st.subheader("Preview per voce PF")
 
@@ -463,17 +488,32 @@ def main():
             voce_df = mapped_df[mapped_df["voce_id"] == voce_id]
 
             with st.expander(f"{voce_label} ({len(voce_df)} fornitori) -> foglio '{sheet_name}'"):
-                display_cols = ["codice_fornitore", "nome", "scaduto"] + month_cols_scad + ["totale"]
-                existing = [c for c in display_cols if c in voce_df.columns]
-                disp = voce_df[existing].copy()
-                disp.columns = [
-                    {"codice_fornitore": "Cod", "nome": "Fornitore", "scaduto": "Scaduto", "totale": "Totale"}.get(c, MESI_NOMI[int(c.split("_")[1]) - 1] if c.startswith("mese_") else c)
-                    for c in existing
-                ]
-                num_cols = [c for c in disp.columns if c not in ("Cod", "Fornitore")]
-                for c in num_cols:
-                    disp[c] = disp[c].apply(lambda v: f"{v:,.0f}" if pd.notna(v) and v != 0 else "")
-                st.dataframe(disp, use_container_width=True, hide_index=True)
+                for _, row in voce_df.iterrows():
+                    codice = int(row["codice_fornitore"])
+                    nome = row["nome"]
+                    totale = row.get("totale", 0)
+                    is_excluded = codice in st.session_state.excluded_suppliers
+                    cols = st.columns([0.5, 3, 2] + [2] * len(month_cols_scad) + [2])
+                    exclude = cols[0].checkbox(
+                        "x", value=is_excluded,
+                        key=f"excl_{codice}",
+                        label_visibility="collapsed",
+                    )
+                    if exclude:
+                        st.session_state.excluded_suppliers.add(codice)
+                    elif codice in st.session_state.excluded_suppliers:
+                        st.session_state.excluded_suppliers.discard(codice)
+                    label = f"~~{nome}~~" if exclude else nome
+                    cols[1].markdown(f"**{codice}** {label}")
+                    col_idx = 2
+                    scad_val = row.get("scaduto", 0)
+                    cols[col_idx].text(f"{scad_val:,.0f}" if scad_val else "")
+                    col_idx += 1
+                    for mc in month_cols_scad:
+                        v = row.get(mc, 0)
+                        cols[col_idx].text(f"{v:,.0f}" if v else "")
+                        col_idx += 1
+                    cols[col_idx].text(f"{totale:,.0f}" if totale else "")
 
     # Unmapped — let user assign voce from the UI
     # Persist assignments in session_state so they survive reruns
@@ -531,16 +571,18 @@ def main():
         st.subheader("Riepilogo per mese")
         current_month = date.today().month
         gap_rows = []
+        # Filter out excluded suppliers for the summary
+        active_df = mapped_df[~mapped_df["codice_fornitore"].isin(st.session_state.get("excluded_suppliers", set()))]
         # Scaduto total -> current month
-        scaduto_total = abs(mapped_df["scaduto"].sum())
+        scaduto_total = abs(active_df["scaduto"].sum())
         gap_rows.append({
             "Mese": MESI_NOMI[current_month - 1] + " (scaduto)",
             "Scadenzario": f"{scaduto_total:,.0f}",
         })
         for month in bucket_months:
             col = f"mese_{month}"
-            if col in mapped_df.columns:
-                total = abs(mapped_df[col].sum())
+            if col in active_df.columns:
+                total = abs(active_df[col].sum())
                 gap_rows.append({
                     "Mese": MESI_NOMI[month - 1],
                     "Scadenzario": f"{total:,.0f}",
@@ -555,7 +597,8 @@ def main():
     )
 
     if st.button("Aggiorna PF Excel", type="primary"):
-        updated_bytes, write_summary = write_pf(pf_bytes, scad_df, bucket_months, fornitori_map)
+        excluded = st.session_state.get("excluded_suppliers", set())
+        updated_bytes, write_summary = write_pf(pf_bytes, scad_df, bucket_months, fornitori_map, excluded)
 
         total_written = sum(len(v) for v in write_summary.values())
         st.success(f"Aggiornati {total_written} fornitori in {len(write_summary)} fogli")
