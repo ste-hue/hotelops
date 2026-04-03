@@ -350,8 +350,17 @@ def write_pf(
         # Track total scadenzario written per month for PREVISIONALE adjustment
         scad_totals: dict[int, float] = {}
 
-        # Find the insertion point for new suppliers: just before PREVISIONALE or total
-        insert_before = prev_row or total_row
+        # Find empty rows inside SUM range for new suppliers (avoid insert_rows
+        # which corrupts formulas and creates circular references)
+        empty_rows: list[int] = []
+        search_start = sum_start if sum_start else 4
+        search_end = (prev_row or total_row or ws.max_row) - 1
+        for r in range(search_start, search_end + 1):
+            a = ws_vals.cell(row=r, column=1).value
+            b = ws_vals.cell(row=r, column=2).value
+            if not a and not b:
+                empty_rows.append(r)
+        empty_row_idx = 0
 
         for s in suppliers:
             # Find the supplier row: try codice first, then name
@@ -360,21 +369,12 @@ def write_pf(
                 pf_row = _find_supplier_row_by_name(ws_vals, s["nome_pf"])
             if pf_row is None:
                 pf_row = _find_supplier_row_by_name(ws_vals, s["nome"])
-            if pf_row is None and insert_before:
-                # Insert a new row for this supplier
-                ws.insert_rows(insert_before)
-                ws_vals.insert_rows(insert_before)
-                ws_form.insert_rows(insert_before)
-                pf_row = insert_before
+            if pf_row is None and empty_row_idx < len(empty_rows):
+                # Use an existing empty row instead of inserting
+                pf_row = empty_rows[empty_row_idx]
+                empty_row_idx += 1
                 ws.cell(row=pf_row, column=1, value=s["codice_fornitore"])
                 ws.cell(row=pf_row, column=2, value=s["nome_pf"] or s["nome"])
-                # Shift references: prev_row, total_row, sum range all move down
-                if prev_row and prev_row >= insert_before:
-                    prev_row += 1
-                if total_row and total_row >= insert_before:
-                    total_row += 1
-                    sum_end += 1
-                insert_before += 1  # next insertion goes below this one
             if pf_row is None:
                 continue
 
