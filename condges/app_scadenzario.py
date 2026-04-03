@@ -207,12 +207,30 @@ def _find_total_row_and_range(
 
 
 def _find_supplier_row_by_name(ws, nome_pf: str, max_row: int = 200) -> int | None:
-    """Find row in detail sheet where column B matches nome_pf."""
+    """Find row in detail sheet where column B matches nome_pf.
+
+    Tries exact match first, then containment in either direction
+    (PF name contains search term, or search term contains PF name).
+    """
+    if not nome_pf or not nome_pf.strip():
+        return None
     target = nome_pf.strip().lower()
+    # Exact match first
     for r in range(3, min(ws.max_row + 1, max_row)):
         val = ws.cell(row=r, column=2).value
         if val and str(val).strip().lower() == target:
             return r
+    # Containment match: either direction, min 4 chars to avoid false positives
+    if len(target) >= 4:
+        for r in range(3, min(ws.max_row + 1, max_row)):
+            val = ws.cell(row=r, column=2).value
+            if not val:
+                continue
+            pf_name = str(val).strip().lower()
+            if len(pf_name) < 4:
+                continue
+            if target in pf_name or pf_name in target:
+                return r
     return None
 
 
