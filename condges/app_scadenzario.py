@@ -81,6 +81,8 @@ def parse_scadenze(file_bytes: BytesIO) -> tuple[pd.DataFrame, list[int]]:
         rows.append(row_data)
 
     df = pd.DataFrame(rows)
+    if df.empty:
+        df = pd.DataFrame(columns=["codice_fornitore", "nome", "totale", "scaduto"])
     bucket_months = sorted(bucket_cols.values())
     return df, bucket_months
 
@@ -129,7 +131,10 @@ def _parse_pf_materie(wb) -> tuple[pd.DataFrame, dict[int, int]]:
             row_data[f"pf_mese_{month}"] = float(val) if isinstance(val, (int, float)) else 0.0
         rows.append(row_data)
 
-    return pd.DataFrame(rows), month_col
+    df = pd.DataFrame(rows)
+    if df.empty:
+        df = pd.DataFrame(columns=["codice_fornitore", "nome_pf", "pf_row"])
+    return df, month_col
 
 
 # ── Write back to PF ─────────────────────────────────────────────────────────
