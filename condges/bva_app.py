@@ -169,23 +169,30 @@ def recalc_variabili(
     budget: pd.DataFrame,
     ricavi_orig_totals: pd.Series,
     ricavi_new_totals: pd.Series,
+    crescita_costi: dict[str, float] | None = None,
 ) -> pd.DataFrame:
     """
-    Scale variable costs proportionally to ricavi change per month.
+    Scale variable costs: first by ricavi ratio, then by manual growth per category.
 
-    costo_var_mese_new = costo_var_mese_orig × (ricavi_new_mese / ricavi_orig_mese)
+    costo_var_mese = costo_orig × (ricavi_new / ricavi_orig) × (1 + crescita_cat)
     """
     df = budget.copy()
     var_mask = df["tipo_costo"].isin(["V", "IP"]) & (df["categoria_ce"] != "Ricavi")
+    crescita_costi = crescita_costi or {}
 
     for nome in MESI:
         orig = ricavi_orig_totals.get(nome, 0.0)
         new = ricavi_new_totals.get(nome, 0.0)
-        if orig > 0:
-            ratio = new / orig
-        else:
-            ratio = 1.0
+        ratio = new / orig if orig > 0 else 1.0
         df.loc[var_mask, nome] = df.loc[var_mask, nome] * ratio
+
+    # Apply per-category growth on top
+    for cat, growth in crescita_costi.items():
+        if growth == 0.0:
+            continue
+        cat_var_mask = var_mask & (df["categoria_ce"] == cat)
+        for nome in MESI:
+            df.loc[cat_var_mask, nome] = df.loc[cat_var_mask, nome] * (1 + growth)
 
     # Recalc annual total
     df.loc[var_mask, "totale_annuo"] = df.loc[var_mask, MESI].sum(axis=1)
@@ -384,6 +391,18 @@ def main():
         }
 
         st.divider()
+        st.subheader("Costi Variabili")
+        cc_acquisti = st.slider("Acquisti/Materie Prime", -30, 50, 0, 1, format="%d%%", key="cc_acq")
+        cc_produttivi = st.slider("Costi Produttivi (var)", -30, 50, 0, 1, format="%d%%", key="cc_prod")
+        cc_commerciali = st.slider("Costi Commerciali (var)", -30, 50, 0, 1, format="%d%%", key="cc_comm")
+
+        crescita_costi = {
+            "Acquisti": cc_acquisti / 100,
+            "Costi Produttivi": cc_produttivi / 100,
+            "Costi Commerciali": cc_commerciali / 100,
+        }
+
+        st.divider()
         if st.button("🔄 Ricarica da BQ", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
@@ -404,7 +423,7 @@ def main():
     ricavi_orig_totals = budget_orig[budget_orig["categoria_ce"] == "Ricavi"][MESI].sum()
     budget = recalc_ricavi(budget_orig, stag, crescita)
     ricavi_new_totals = budget[budget["categoria_ce"] == "Ricavi"][MESI].sum()
-    budget = recalc_variabili(budget, ricavi_orig_totals, ricavi_new_totals)
+    budget = recalc_variabili(budget, ricavi_orig_totals, ricavi_new_totals, crescita_costi)
 
     mesi_chiusi = past_month_count(anno)
 
