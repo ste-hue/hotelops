@@ -92,22 +92,33 @@ def parse_scadenze(file_bytes: BytesIO) -> tuple[pd.DataFrame, list[int]]:
 
 def read_pf_materie(pf_path: Path) -> tuple[pd.DataFrame, dict[int, int]]:
     """Read the Materie Prime sheet from file path."""
-    wb = openpyxl.load_workbook(str(pf_path), data_only=True)
-    return _parse_pf_materie(wb)
+    wb_formulas = openpyxl.load_workbook(str(pf_path), data_only=False)
+    wb_values = openpyxl.load_workbook(str(pf_path), data_only=True)
+    return _parse_pf_materie(wb_values, wb_formulas)
 
 
 def read_pf_materie_from_bytes(pf_bytes: bytes) -> tuple[pd.DataFrame, dict[int, int]]:
-    """Read the Materie Prime sheet from bytes."""
-    wb = openpyxl.load_workbook(BytesIO(pf_bytes), data_only=True)
-    return _parse_pf_materie(wb)
+    """Read the Materie Prime sheet from bytes.
+
+    Opens twice: data_only=False to read formula-based codice_fornitore (col 1),
+    data_only=True for numeric month values.
+    """
+    wb_formulas = openpyxl.load_workbook(BytesIO(pf_bytes), data_only=False)
+    wb_values = openpyxl.load_workbook(BytesIO(pf_bytes), data_only=True)
+    return _parse_pf_materie(wb_values, wb_formulas)
 
 
-def _parse_pf_materie(wb) -> tuple[pd.DataFrame, dict[int, int]]:
+def _parse_pf_materie(wb, wb_formulas=None) -> tuple[pd.DataFrame, dict[int, int]]:
     """Read the Materie Prime sheet: codice, nome, month columns.
+
+    Uses wb (data_only=True) for numeric values and wb_formulas (data_only=False)
+    for codice_fornitore which may be a formula. Falls back to wb if wb_formulas
+    is not provided.
 
     Returns (df, month_col_map) where month_col_map = {calendar_month: excel_col}.
     """
     ws = wb[SHEET_MATERIE]
+    ws_cod = (wb_formulas or wb)[SHEET_MATERIE]
 
     # Build month -> column map from row 2
     month_col: dict[int, int] = {}
@@ -121,7 +132,8 @@ def _parse_pf_materie(wb) -> tuple[pd.DataFrame, dict[int, int]]:
 
     rows = []
     for r in range(5, ws.max_row + 1):
-        codice = ws.cell(row=r, column=1).value
+        # Read codice from formula workbook (survives formula cells)
+        codice = ws_cod.cell(row=r, column=1).value
         nome = ws.cell(row=r, column=2).value
         if not codice or not isinstance(codice, (int, float)):
             continue
