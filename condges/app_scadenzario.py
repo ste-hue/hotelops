@@ -338,8 +338,10 @@ def write_pf(
         for s in suppliers:
             # Find the supplier row: try codice first, then name
             pf_row = _find_supplier_row_by_codice(ws_vals, s["codice_fornitore"])
-            if pf_row is None:
+            if pf_row is None and s["nome_pf"]:
                 pf_row = _find_supplier_row_by_name(ws_vals, s["nome_pf"])
+            if pf_row is None:
+                pf_row = _find_supplier_row_by_name(ws_vals, s["nome"])
             if pf_row is None and insert_before:
                 # Insert a new row for this supplier
                 ws.insert_rows(insert_before)
@@ -527,8 +529,9 @@ def main():
             codice = int(row["codice_fornitore"])
             if codice in st.session_state.voce_assignments:
                 voce_id = st.session_state.voce_assignments[codice]
-                mapped_rows.append({**row.to_dict(), "voce_id": voce_id, "nome_pf": ""})
-                fornitori_map[codice] = {"voce_id": voce_id, "nome_pf": ""}
+                nome = str(row.get("nome", "")).strip()
+                mapped_rows.append({**row.to_dict(), "voce_id": voce_id, "nome_pf": nome})
+                fornitori_map[codice] = {"voce_id": voce_id, "nome_pf": nome}
             else:
                 still_unmapped.append(row.to_dict())
         mapped_df = pd.DataFrame(mapped_rows)
