@@ -2,7 +2,7 @@
 """
 Coperti giornalieri → BigQuery f_coperti_giornalieri.
 
-Legge file CSV/XLSX da datahub/coperti/.
+Legge file CSV/XLSX da datahub/coperti/ oppure direttamente da Google Sheet.
 Ogni riga sorgente = un giorno + tipo_pasto, con colonne per BU/tipo_ospite.
 Trasforma in formato lungo (una riga per data × pasto × tipo_ospite).
 Idempotente via hash_riga.
@@ -12,10 +12,13 @@ Formati supportati:
       "Informazioni cronologiche","Breakfast Ospiti Hotel",...
   - XLSX con fogli Scarico_BRK / Scarico_LUNCH / Scarico_DINNER:
       stessa struttura del CSV (come consumi_BRK_CUCINA.xlsx)
+  - Google Sheet (via rclone) con fogli Breakfast / Lunch / Dinner / Mensa Dipendenti
 
 Usage:
     python -m ingest.flussi.ingest_coperti --dry-run
     python -m ingest.flussi.ingest_coperti
+    python -m ingest.flussi.ingest_coperti \\
+        --gsheet 1AlbQl7pGhCEbjXJY9di539fa73B5t5gRktN4JJYZQJM --replace
     python -m ingest.flussi.ingest_coperti \\
         --datahub "/path/to/hotelops_datahub"
 
@@ -28,7 +31,9 @@ import argparse
 import csv
 import hashlib
 import logging
+import subprocess
 import sys
+import tempfile
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Iterator
@@ -84,6 +89,10 @@ PASTO_KEYWORDS = {
     "pranzo":    "LUNCH",
     "colazione": "BRK",
 }
+
+# Google Sheet ID for the canonical coperti source
+GSHEET_ID_DEFAULT = "1AlbQl7pGhCEbjXJY9di539fa73B5t5gRktN4JJYZQJM"
+RCLONE_REMOTE = "mywork"
 
 MONTH_IT = {
     "gennaio": 1, "febbraio": 2, "marzo": 3, "aprile": 4,
@@ -145,9 +154,36 @@ def ospite_info(suffix: str):
 
 
 def make_hash(societa_id: str, data_servizio: date, tipo_pasto: str,
-              tipo_ospite: str, n_coperti: int) -> str:
-    key = f"{societa_id}|{data_servizio}|{tipo_pasto}|{tipo_ospite}|{n_coperti}"
+              tipo_ospite: str, n_coperti: int, seq: int = 0) -> str:
+    key = f"{societa_id}|{data_servizio}|{tipo_pasto}|{tipo_ospite}|{n_coperti}|{seq}"
     return hashlib.md5(key.encode()).hexdigest()
+
+
+# ── Google Sheet download ─────────────────────────────────────────────────────
+
+def fetch_gsheet(sheet_id: str, remote: str = RCLONE_REMOTE) -> Path:
+    """Download a Google Sheet as XLSX via rclone backend copyid."""
+    tmp = Path(tempfile.mkdtemp(prefix="hotelops_coperti_")) / "coperti_gsheet.xlsx"
+    cmd = ["rclone", "backend", "copyid", f"{remote}:", sheet_id, str(tmp)]
+    log.info("rclone: scarico Google Sheet %s …", sheet_id)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"rclone download failed: {result.stderr.strip()}")
+    # rclone copyid drops the file without extension
+    actual = tmp if tmp.exists() else tmp.with_suffix("")
+    if not actual.exists():
+        # rclone may save without extension
+        candidates = list(tmp.parent.iterdir())
+        if candidates:
+            actual = candidates[0]
+        else:
+            raise RuntimeError("File non trovato dopo rclone download")
+    if actual.suffix != ".xlsx":
+        dest = actual.with_suffix(".xlsx")
+        actual.rename(dest)
+        actual = dest
+    log.info("Scaricato: %s (%d KB)", actual.name, actual.stat().st_size // 1024)
+    return actual
 
 
 # ── Parsing ────────────────────────────────────────────────────────────────────
@@ -208,14 +244,13 @@ def parse_rows_from_header_data(
                 "business_unit_id": bu_id,
                 "n_coperti": n,
                 "fonte": fonte,
-                "hash_riga": make_hash(societa_id, data_servizio, tipo_pasto, tipo_ospite, n),
+                "hash_riga": make_hash(societa_id, data_servizio, tipo_pasto, tipo_ospite, n, seq=i),
                 "data_caricamento": ts_now.isoformat(),
             }
 
 
 def parse_csv_file(path: Path, societa_id: str, ts_now: datetime) -> list[dict]:
     """Parse a single Google Form CSV export."""
-    rows = []
     try:
         with open(path, newline="", encoding="utf-8-sig") as f:
             reader = csv.reader(f)
@@ -247,8 +282,55 @@ def parse_csv_file(path: Path, societa_id: str, ts_now: datetime) -> list[dict]:
     return list(parse_rows_from_header_data(header, data_rows, tipo_pasto, fonte, societa_id, ts_now))
 
 
+def parse_mensa_dipendenti(
+    all_rows: list[tuple],
+    fonte: str,
+    societa_id: str,
+    ts_now: datetime,
+) -> list[dict]:
+    """Parse 'Mensa Dipendenti' sheet (long format: timestamp, tipo_pasto, pax)."""
+    header = [str(c).strip().lower() if c else "" for c in all_rows[0]]
+    records = []
+    for row_idx, row in enumerate(all_rows[1:]):
+        if not row or not row[0]:
+            continue
+        data_servizio = parse_timestamp(row[0])
+        if data_servizio is None:
+            continue
+        tipo_raw = str(row[1]).strip().upper() if row[1] else ""
+        pax = row[2] if len(row) > 2 else None
+        if pax is None:
+            continue
+        try:
+            n = int(float(pax))
+        except (TypeError, ValueError):
+            continue
+        if n == 0:
+            continue
+
+        tipo_pasto = PASTO_KEYWORDS.get(tipo_raw.lower())
+        if not tipo_pasto:
+            log.warning("  Mensa Dipendenti: tipo_pasto '%s' non riconosciuto", tipo_raw)
+            continue
+
+        records.append({
+            "societa_id": societa_id,
+            "anno": data_servizio.year,
+            "mese": data_servizio.month,
+            "data_servizio": data_servizio.isoformat(),
+            "tipo_pasto": tipo_pasto,
+            "tipo_ospite": "DIPENDENTI",
+            "business_unit_id": "HQ",
+            "n_coperti": n,
+            "fonte": fonte,
+            "hash_riga": make_hash(societa_id, data_servizio, tipo_pasto, "DIPENDENTI", n, seq=row_idx),
+            "data_caricamento": ts_now.isoformat(),
+        })
+    return records
+
+
 def parse_xlsx_file(path: Path, societa_id: str, ts_now: datetime) -> list[dict]:
-    """Parse an XLSX file — reads Scarico_BRK / Scarico_LUNCH / Scarico_DINNER sheets."""
+    """Parse an XLSX file — reads Scarico_*/Breakfast/Lunch/Dinner/Mensa Dipendenti sheets."""
     if not HAS_OPENPYXL:
         log.error("openpyxl non installato — skipping %s", path.name)
         return []
@@ -260,13 +342,22 @@ def parse_xlsx_file(path: Path, societa_id: str, ts_now: datetime) -> list[dict]
         log.error("  Errore apertura XLSX %s: %s", path.name, e)
         return []
 
-    scarico_sheets = [s for s in wb.sheetnames if s.lower().startswith("scarico")]
-    if not scarico_sheets:
-        log.info("  Nessun foglio Scarico_ in %s — skip", path.name)
+    # Find parseable sheets: Scarico_* or named Breakfast/Lunch/Dinner/Mensa Dipendenti
+    pasto_sheets = []
+    mensa_sheet = None
+    for s in wb.sheetnames:
+        sl = s.lower().strip()
+        if sl.startswith("scarico") or detect_tipo_pasto(sl):
+            pasto_sheets.append(s)
+        elif "mensa" in sl or "dipendenti" in sl:
+            mensa_sheet = s
+
+    if not pasto_sheets and not mensa_sheet:
+        log.info("  Nessun foglio coperti riconosciuto in %s — skip", path.name)
         wb.close()
         return []
 
-    for sheet_name in scarico_sheets:
+    for sheet_name in pasto_sheets:
         tipo_pasto = detect_tipo_pasto(sheet_name)
         if not tipo_pasto:
             log.warning("  Foglio '%s': tipo_pasto non riconosciuto", sheet_name)
@@ -286,6 +377,16 @@ def parse_xlsx_file(path: Path, societa_id: str, ts_now: datetime) -> list[dict]
         ))
         log.info("  Foglio %-20s  %3d righe non-zero", sheet_name, len(sheet_rows))
         rows.extend(sheet_rows)
+
+    # Parse Mensa Dipendenti if present
+    if mensa_sheet:
+        ws = wb[mensa_sheet]
+        all_rows_mensa = list(ws.iter_rows(values_only=True))
+        if all_rows_mensa:
+            fonte = f"{path.name}::{mensa_sheet}"
+            mensa_rows = parse_mensa_dipendenti(all_rows_mensa, fonte, societa_id, ts_now)
+            log.info("  Foglio %-20s  %3d righe non-zero", mensa_sheet, len(mensa_rows))
+            rows.extend(mensa_rows)
 
     wb.close()
     return rows
@@ -355,7 +456,7 @@ def ensure_table(client):
         log.info("Tabella %s creata.", BQ_TABLE_FULL)
 
 
-def load_to_bq(rows: list[dict], dry_run: bool) -> None:
+def load_to_bq(rows: list[dict], dry_run: bool, replace: bool = False) -> None:
     if not HAS_BQ:
         log.error("google-cloud-bigquery non installato")
         sys.exit(1)
@@ -363,19 +464,29 @@ def load_to_bq(rows: list[dict], dry_run: bool) -> None:
     client = bigquery.Client(project=BQ_PROJECT)
     ensure_table(client)
 
-    existing = get_existing_hashes(client)
-    new_rows = [r for r in rows if r["hash_riga"] not in existing]
+    if replace:
+        # DELETE-INSERT: wipe table and load all rows
+        if dry_run:
+            log.info("[DRY RUN] Avrei cancellato tutta la tabella e caricato %d righe.", len(rows))
+            return
+        delete_q = f"DELETE FROM `{BQ_TABLE_FULL}` WHERE TRUE"
+        log.info("DELETE-INSERT: cancello tutti i dati esistenti…")
+        client.query(delete_q).result()
+        new_rows = rows
+    else:
+        existing = get_existing_hashes(client)
+        new_rows = [r for r in rows if r["hash_riga"] not in existing]
 
-    log.info("Righe totali: %d | già presenti: %d | nuove: %d",
-             len(rows), len(existing & {r["hash_riga"] for r in rows}), len(new_rows))
+        log.info("Righe totali: %d | già presenti: %d | nuove: %d",
+                 len(rows), len(existing & {r["hash_riga"] for r in rows}), len(new_rows))
 
-    if not new_rows:
-        log.info("Niente da caricare.")
-        return
+        if not new_rows:
+            log.info("Niente da caricare.")
+            return
 
-    if dry_run:
-        log.info("[DRY RUN] Avrei caricato %d righe.", len(new_rows))
-        return
+        if dry_run:
+            log.info("[DRY RUN] Avrei caricato %d righe.", len(new_rows))
+            return
 
     job_config = bigquery.LoadJobConfig(
         schema=BQ_SCHEMA,
@@ -406,7 +517,7 @@ def quality_summary(rows: list[dict]) -> None:
     print(f"  Righe totali (non-zero): {len(rows)}")
     print(f"  Mesi coperti: {mesi_str}")
     print()
-    for pasto in ["BRK", "LUNCH", "DINNER"]:
+    for pasto in sorted(totali.keys()):
         n = totali.get(pasto, 0)
         c = by_pasto.get(pasto, 0)
         print(f"  {pasto:8s}  {c:4d} righe  {n:6d} coperti totali")
@@ -426,23 +537,45 @@ def main():
                         help="Path datahub root")
     parser.add_argument("--source", default=None,
                         help="Override cartella sorgente (default: datahub/coperti/)")
+    parser.add_argument("--file", default=None,
+                        help="Ingest a single XLSX file directly")
+    parser.add_argument("--gsheet", nargs="?", const=GSHEET_ID_DEFAULT, default=None,
+                        help=f"Scarica da Google Sheet via rclone (default ID: {GSHEET_ID_DEFAULT})")
+    parser.add_argument("--replace", action="store_true",
+                        help="DELETE-INSERT: cancella tutti i dati esistenti e ricarica")
     parser.add_argument("--societa", default=SOCIETA_ID,
                         help="societa_id (default: ORTI)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Non scrive su BQ, stampa solo il summary")
     args = parser.parse_args()
 
-    source_dir = Path(args.source) if args.source else Path(args.datahub) / "coperti"
+    ts_now = datetime.now(timezone.utc)
 
-    log.info("Sorgente: %s", source_dir)
-    rows = collect_all_rows(source_dir, args.societa)
+    if args.gsheet:
+        # Download from Google Sheet via rclone
+        try:
+            xlsx_path = fetch_gsheet(args.gsheet)
+        except RuntimeError as e:
+            log.error("%s", e)
+            sys.exit(1)
+        rows = parse_xlsx_file(xlsx_path, args.societa, ts_now)
+    elif args.file:
+        xlsx_path = Path(args.file)
+        if not xlsx_path.exists():
+            log.error("File non trovato: %s", xlsx_path)
+            sys.exit(1)
+        rows = parse_xlsx_file(xlsx_path, args.societa, ts_now)
+    else:
+        source_dir = Path(args.source) if args.source else Path(args.datahub) / "coperti"
+        log.info("Sorgente: %s", source_dir)
+        rows = collect_all_rows(source_dir, args.societa)
 
     if not rows:
         log.warning("Nessuna riga da caricare.")
         sys.exit(0)
 
+    load_to_bq(rows, dry_run=args.dry_run, replace=args.replace)
     quality_summary(rows)
-    load_to_bq(rows, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

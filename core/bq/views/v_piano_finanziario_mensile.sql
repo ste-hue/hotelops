@@ -71,14 +71,18 @@ consuntivo AS (
 ),
 
 -- ── Budget da f_budget_mensile (codice_conto puntato → normalizzato via REPLACE) ─
-budget_costi AS (
+budget_costi_raw AS (
   SELECT
     b.societa_id,
     v.voce_id,
     b.anno,
     b.mese,
-    -- Budget costi: dare - avere (positivo = uscita), coerente con v_piano_consuntivo
-    SUM(b.importo) AS importo_budget
+    b.importo,
+    -- Prefer longer (more specific) pattern match; ties broken by voce ord
+    ROW_NUMBER() OVER (
+      PARTITION BY b.societa_id, REPLACE(b.codice_conto, '.', ''), b.anno, b.mese
+      ORDER BY LENGTH(COALESCE(v.cod_conto_pattern, '')) DESC, v.ord
+    ) AS rn
   FROM `hotelops-suite.hotelops.f_budget_mensile` b
   JOIN `hotelops-suite.hotelops.d_voci_piano_finanziario` v
     ON v.fonte = 'ESOLVER'
@@ -88,6 +92,16 @@ budget_costi AS (
       OR (v.cod_conto_pat3 IS NOT NULL AND REPLACE(b.codice_conto, '.', '') LIKE CONCAT(v.cod_conto_pat3, '%'))
     )
     AND (v.societa_id IS NULL OR v.societa_id = b.societa_id)
+),
+budget_costi AS (
+  SELECT
+    societa_id,
+    voce_id,
+    anno,
+    mese,
+    SUM(importo) AS importo_budget
+  FROM budget_costi_raw
+  WHERE rn = 1
   GROUP BY 1, 2, 3, 4
 ),
 

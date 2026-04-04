@@ -133,17 +133,25 @@ def update_previsione(
             "fonte": fonte,
         }
 
-    # DELETE existing rows for this voce×mesi×fonte
-    mesi_csv = ", ".join(str(m) for m in mesi)
+    # DELETE existing rows for this voce×mesi×fonte (parameterized)
     delete_sql = f"""
     DELETE FROM `{BQ_TABLE}`
-    WHERE societa_id = '{societa_id}'
-      AND voce_id = '{voce_id}'
-      AND anno = {anno}
-      AND mese IN ({mesi_csv})
-      AND fonte = '{fonte}'
+    WHERE societa_id = @societa_id
+      AND voce_id = @voce_id
+      AND anno = @anno
+      AND mese IN UNNEST(@mesi)
+      AND fonte = @fonte
     """
-    delete_result = bq_client.query(delete_sql).result()
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("societa_id", "STRING", societa_id),
+            bigquery.ScalarQueryParameter("voce_id", "STRING", voce_id),
+            bigquery.ScalarQueryParameter("anno", "INT64", anno),
+            bigquery.ArrayQueryParameter("mesi", "INT64", mesi),
+            bigquery.ScalarQueryParameter("fonte", "STRING", fonte),
+        ]
+    )
+    delete_result = bq_client.query(delete_sql, job_config=job_config).result()
     rows_deleted = delete_result.num_dml_affected_rows or 0
 
     # INSERT new rows
