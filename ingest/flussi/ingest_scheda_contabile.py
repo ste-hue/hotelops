@@ -66,7 +66,6 @@ BQ_PROJECT = "hotelops-suite"
 BQ_TABLE = f"{BQ_PROJECT}.hotelops.f_saldi_banca_snapshot"
 
 log = logging.getLogger("ingest.scheda_contabile")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-5s  %(message)s")
 
 # Known bank name patterns in filenames
 BANCA_PATTERNS = {
@@ -471,6 +470,9 @@ def main():
     parser.add_argument("--dry-run", action="store_true",
                         help="Parse and show results, no BQ writes")
     args = parser.parse_args()
+
+    from ingest._logging import setup_logging
+    setup_logging("ingest.scheda_contabile", Path(__file__).parent / "logs")
 
     if not args.file and not args.dir:
         parser.error("Specify --file or --dir")

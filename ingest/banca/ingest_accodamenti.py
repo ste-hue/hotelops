@@ -39,7 +39,7 @@ from pathlib import Path
 
 import pandas as pd
 from google.cloud import bigquery
-from ingest.banca._logging import setup_logging as _setup_logging
+from ingest._logging import setup_logging as _setup_logging
 from ingest.banca.parser_accodamenti import parse_corrispettivi, parse_fatture, parse_movimenti
 
 # ── Config ─────────────────────────────────────────────────────────────────────

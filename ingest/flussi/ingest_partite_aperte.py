@@ -290,11 +290,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Parse only, no BQ write")
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    from ingest._logging import setup_logging
+    setup_logging("partite_aperte", Path(__file__).parent / "logs")
 
     filepath = Path(args.file)
     if not filepath.exists():

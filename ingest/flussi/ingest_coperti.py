@@ -100,11 +100,6 @@ MONTH_IT = {
     "settembre": 9, "ottobre": 10, "novembre": 11, "dicembre": 12,
 }
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    datefmt="%H:%M:%S",
-)
 log = logging.getLogger(__name__)
 
 
@@ -548,6 +543,9 @@ def main():
     parser.add_argument("--dry-run", action="store_true",
                         help="Non scrive su BQ, stampa solo il summary")
     args = parser.parse_args()
+
+    from ingest._logging import setup_logging
+    setup_logging("ingest_coperti", Path(__file__).parent / "logs")
 
     ts_now = datetime.now(timezone.utc)
 

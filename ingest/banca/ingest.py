@@ -28,7 +28,7 @@ import pandas as pd
 from google.cloud import bigquery
 
 from core.contracts import SchemaViolationError, validate_columns
-from ingest.banca._logging import setup_logging as _setup_logging
+from ingest._logging import setup_logging as _setup_logging
 from core.schemas import BancaMovimentoRow, validate_batch
 
 try:
