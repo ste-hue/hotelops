@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last checkpoint:** 2026-03-27 | **Version:** 0.5.0
+**Last checkpoint:** 2026-04-04 | **Version:** 0.5.0
 
 ## Project Overview
 
@@ -13,7 +13,7 @@ hotelops is the financial data platform for Gruppo Panorama hotel operations. It
 ```
 core/       <- schemas, config, BQ views, dimensions, ontology loaders
   bq/
-    views/       <- 6 SQL view definitions
+    views/       <- 14 SQL view definitions
     dimensioni/  <- CSV sources (d_voci, d_fornitori, d_mapping)
     load/        <- dimension loaders (9 scripts -- load rarely-changed tables)
 ingest/     <- continuous data flow pipelines
@@ -30,7 +30,7 @@ cli.py      <- CLI entry point (hotelops command)
 - `core/config.py` -- Table IDs and BQ constants (PROJECT, DATASET). All table refs as `F_*`, `D_*`, `V_*`.
 - `core/contracts.py` -- `SchemaViolationError`, `validate_columns()`.
 - `core/datahub.py` -- Minimal CSV reader for local fact tables.
-- `core/bq/views/` -- BigQuery view SQL definitions (source of truth). 6 SQL files.
+- `core/bq/views/` -- BigQuery view SQL definitions (source of truth). 14 SQL files.
 - `core/bq/dimensioni/` -- Dimension CSV sources (d_voci_piano_finanziario.csv, d_fornitori.csv, d_mapping_piano_finanziario.csv).
 - `core/bq/load/` -- Dimension loaders: load_voci_piano_finanziario, load_piano_conti, load_categorie, load_fornitori, load_anagrafica_fornitori, load_budget_costi, load_coefficienti_stagionalita, load_mapping_piano_finanziario, load_ricavi_storici.
 
@@ -42,12 +42,16 @@ cli.py      <- CLI entry point (hotelops command)
 
 **condges/** -- Vertical #1: Controllo di Gestione (containerizable)
 - `condges/app.py` -- Streamlit interactive Piano Finanziario for Rosa.
+- `condges/bva_app.py` -- Streamlit BvA dashboard with variable cost growth sliders + Excel export.
+- `condges/cli_commands.py` -- Extracted CLI handlers (cmd_pf, cmd_health, cmd_chiudi, cmd_saldo, cmd_scadenzario, cmd_help).
 - `condges/genera_excel.py` -- Generate PF Excel from BQ (color-coded: nero=consuntivo, blu=previsione, verde=formula).
-- `condges/update_previsione.py` -- Write forecasts to f_piano_finanziario_input (DELETE-INSERT).
+- `condges/update_previsione.py` -- Write forecasts to f_piano_finanziario_input (DELETE-INSERT, parameterized).
 - `condges/reconcile_banca.py` -- Bank vs ledger reconciliation.
+- `condges/scadenzario_excel.py` -- Excel bridge: scadenzario fornitori → voci PF.
+- `condges/app_scadenzario.py` -- Streamlit scadenzario app.
 
 **Root**
-- `cli.py` -- CLI entry point (`hotelops` command). 8 subcommands: pf, bva, chiudi, saldo, health, previsione, voci, classifica.
+- `cli.py` -- CLI entry point (`hotelops` command). 14 subcommands. Large handlers in `condges/cli_commands.py`.
 - `core/registry.yaml` -- Pipeline registry: file types, dest folders, BQ tables, signatures.
 
 ## GCP
@@ -138,6 +142,9 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `f_partite_aperte_fornitori` | Snapshot partite aperte fornitori (IMPEGNO dimension) (SNAPSHOT) |
 | `f_mastrino_consolidato` | Mastrino consolidato da "Costi Ricavi 2025-2026 Budget.xlsx" (APPEND) |
 | `f_ricavi_storici` | Riepilogo Entrate mensili 2023-2025 per BU (APPEND) |
+| `f_coefficienti_consumo` | Coefficienti consumo per reparto/prodotto (APPEND) |
+| `f_pms_statistiche` | Statistiche PMS HotelCube (APPEND) |
+| `f_mastrino_consolidato` | Mastrino consolidato da "Costi Ricavi 2025-2026 Budget.xlsx" (APPEND) |
 | `f_affidamenti` | Affidamenti bancari (linee di credito) -- schema TBD |
 
 ### Dimension tables
@@ -171,6 +178,8 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `v_condges_cashflow` | Looker: Cashflow actuals + 12m projection + semaphore. `core/bq/views/` |
 | `v_economato_consumi` | Looker: Consumi per reparto/prodotto + YoY + coefficients. `core/bq/views/` |
 | `v_economato_pareto` | Looker: ABC analysis top referenze per reparto. `core/bq/views/` |
+| `v_budget` | Budget consolidato per codice conto. `core/bq/views/` |
+| `v_condges_banca_dettaglio` | Looker: Dettaglio movimenti banca per analisi. `core/bq/views/` |
 
 ### How the views connect
 
@@ -293,9 +302,13 @@ Python >=3.11. Run: `pytest`. Lint: `ruff check .` / `ruff format .`
 
 ```
 tests/
-  test_classify.py        -- File classifier: 65 tests, all 10 detectors + routing + lifecycle
-  test_contracts.py       -- Schema validation tests
-  test_materialize.py     -- Materialization tests
+  test_classify.py               -- File classifier: 65 tests, all 10 detectors + routing + lifecycle
+  test_contracts.py              -- Schema validation tests
+  test_materialize.py            -- Materialization tests
+  test_manifest.py               -- BQ manifest generation tests
+  test_scadenzario.py            -- Scadenzario Excel bridge tests
+  test_stagionalita.py           -- Seasonality coefficient tests
+  test_ingest_movimenti_xlsx.py  -- Movimenti contabili XLSX ingestion tests
 ```
 
 Core: `pyyaml`, `openpyxl`, `pandas`, `google-cloud-bigquery`, `pydantic`.
