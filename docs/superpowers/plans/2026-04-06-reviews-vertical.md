@@ -271,7 +271,7 @@ git commit -m "feat(reviews): add ReviewRow schema + F_REVIEWS config"
 # Apify actor IDs
 APIFY_ACTORS = {
     "BOOKING": "voyager/booking-reviews-scraper",
-    "TRIPADVISOR": "automation-lab/tripadvisor-scraper",
+    "TRIPADVISOR": "maxcopell/tripadvisor-reviews",
     "GOOGLE": "compass/google-maps-reviews-scraper",
     "EXPEDIA": "memo23/expedia-scraper",
 }
@@ -361,7 +361,7 @@ def _build_input(piattaforma: str, bu: str, url: str) -> dict:
     elif piattaforma == "TRIPADVISOR":
         return {
             "startUrls": [{"url": url}],
-            "maxReviews": 100,
+            "maxItems": 100,
             "language": "ALL",
         }
     elif piattaforma == "GOOGLE":
@@ -502,12 +502,11 @@ def test_normalize_tripadvisor():
         "rating": 3,
         "title": "Nella media",
         "text": "Niente di speciale.",
-        "publishedDate": "2026-04-01",
-        "travelDate": "2026-03-20",
-        "username": "Luigi",
-        "userLocation": "Roma, Italia",
+        "publishedDate": "2026-04-01T10:00:00-04:00",
+        "travelDate": "2026-03",
+        "user": {"username": "Luigi", "userLocation": {"name": "Roma, Italia"}},
         "tripType": "Family",
-        "language": "it",
+        "lang": "it",
         "url": "https://tripadvisor.com/review/001",
     }
     row = normalize_tripadvisor(raw, societa="ORTI")
@@ -649,6 +648,12 @@ def normalize_booking(item: dict, societa: str = "ORTI") -> dict:
 def normalize_tripadvisor(item: dict, societa: str = "ORTI") -> dict:
     review_id = str(item.get("id", ""))
     score = float(item.get("rating", 0))
+    user = item.get("user") or {}
+    user_loc = (user.get("userLocation") or {}).get("name")
+    # publishedDate is ISO 8601 with timezone — extract date part
+    pub_date = (item.get("publishedDate") or "")[:10]
+    # travelDate is "YYYY-MM" — keep as-is (partial date)
+    travel_date = item.get("travelDate")
     return {
         "review_hash": make_hash("TRIPADVISOR", review_id),
         "piattaforma": "TRIPADVISOR",
@@ -661,11 +666,11 @@ def normalize_tripadvisor(item: dict, societa: str = "ORTI") -> dict:
         "testo_positivo": None,
         "testo_negativo": None,
         "titolo": item.get("title"),
-        "lingua": item.get("language", ""),
-        "data_review": item.get("publishedDate", ""),
-        "data_soggiorno": item.get("travelDate"),
-        "reviewer_nome": item.get("username"),
-        "reviewer_paese": item.get("userLocation"),
+        "lingua": item.get("lang", ""),
+        "data_review": pub_date,
+        "data_soggiorno": travel_date,
+        "reviewer_nome": user.get("username"),
+        "reviewer_paese": user_loc,
         "tipo_viaggio": _map_trip_type(item.get("tripType")),
         "camera_tipo": None,
         "url_review": item.get("url"),

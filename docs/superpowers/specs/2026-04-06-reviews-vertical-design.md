@@ -127,7 +127,7 @@ reviews/alert.py
 | Piattaforma | Actor | Costo ~1K reviews | Note |
 |---|---|---|---|
 | Booking | `voyager/booking-reviews-scraper` | $2.00 | 1.56M runs, 99.8% success |
-| TripAdvisor | `automation-lab/tripadvisor-scraper` | $3.00 | Nuovo ma funzionale |
+| TripAdvisor | `maxcopell/tripadvisor-reviews` | $5.00 | 6.2M runs, 7.5K users, standard de facto |
 | Google | `compass/google-maps-reviews-scraper` | $0.60 | 94M runs, dominante |
 | Expedia | `memo23/expedia-scraper` | $2.50 | 46 users, 5 stelle |
 
