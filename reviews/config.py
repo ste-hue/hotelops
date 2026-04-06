@@ -25,7 +25,13 @@ PROPERTIES: dict[str, dict[str, str]] = {
         "GOOGLE": "https://www.google.com/maps/search/?api=1&query=Angelina%20Residence&query_place_id=ChIJAQCQLUKVOxMROoGIbplDgGs",
         "EXPEDIA": "https://www.expedia.com/Maiori-Hotels-Angelina-Residence.h5205793.Hotel-Information",
     },
-    # CVM e LIDO: da verificare se hanno pagine sulle OTA
+    "CVM": {
+        "BOOKING": "https://www.booking.com/hotel/it/casa-vacanze-maiori.html",
+        "TRIPADVISOR": "https://www.tripadvisor.it/Hotel_Review-g194806-d14140532-Reviews-Casa_Vacanze_Maiori-Maiori_Amalfi_Coast_Province_of_Salerno_Campania.html",
+        "GOOGLE": "https://www.google.com/maps/search/?api=1&query=Holiday%20Maiori&query_place_id=ChIJScCVV0aVOxMR9WheVKthBUc",
+        "EXPEDIA": "",  # Non trovato su Expedia
+    },
+    # LIDO: probabilmente non presente sulle OTA
 }
 
 # Normalization: platform raw score -> 1-10 scale
