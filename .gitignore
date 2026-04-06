@@ -17,3 +17,4 @@ logs/
 *.docx
 *.html
 .worktrees/
+.env
