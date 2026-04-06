@@ -105,7 +105,7 @@ def normalize_tripadvisor(item: dict, societa: str = "ORTI") -> dict:
 
 def normalize_google(item: dict, societa: str = "ORTI") -> dict:
     review_id = str(item.get("reviewId", ""))
-    score = float(item.get("stars", 0))
+    score = float(item.get("stars") or 0)
     return {
         "review_hash": make_hash("GOOGLE", review_id),
         "piattaforma": "GOOGLE",
