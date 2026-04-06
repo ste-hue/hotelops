@@ -350,6 +350,70 @@ class CoefficienteConsumoRow(BaseModel):
         return v
 
 
+# ── f_reviews ───────────────────────────────────────────────────────────────
+
+PiattaformaReview = Literal["BOOKING", "TRIPADVISOR", "GOOGLE", "EXPEDIA"]
+CategoriaNlp = Literal[
+    "PULIZIA", "CIBO", "STAFF", "STRUTTURA", "POSIZIONE",
+    "RUMORE", "PREZZO", "WIFI", "ALTRO",
+]
+SentimentNlp = Literal["POSITIVO", "NEGATIVO", "MISTO"]
+TipoViaggio = Literal["COPPIA", "FAMIGLIA", "BUSINESS", "SOLO", "AMICI"]
+
+
+class ReviewRow(BaseModel):
+    """Schema for f_reviews — guest reviews from OTA platforms.
+
+    Source: Apify scrapers (Booking, TripAdvisor, Google, Expedia).
+    Pattern: APPEND + review_hash dedup.
+    """
+    review_hash: str
+    piattaforma: PiattaformaReview
+    review_id: str
+    societa_id: SocietaId
+    business_unit_id: BusinessUnitId
+    punteggio_raw: float
+    punteggio_norm: float
+    testo: str
+    testo_positivo: Optional[str] = None
+    testo_negativo: Optional[str] = None
+    titolo: Optional[str] = None
+    lingua: str
+    data_review: str  # ISO date
+    data_soggiorno: Optional[str] = None  # ISO date
+    reviewer_nome: Optional[str] = None
+    reviewer_paese: Optional[str] = None
+    tipo_viaggio: Optional[TipoViaggio] = None
+    camera_tipo: Optional[str] = None
+    url_review: Optional[str] = None
+    categoria_nlp: Optional[CategoriaNlp] = None
+    sentiment_nlp: Optional[SentimentNlp] = None
+    riassunto_nlp: Optional[str] = None
+    alert_inviato: bool = False
+    data_ingest: str  # ISO timestamp
+
+    @field_validator("review_hash")
+    @classmethod
+    def hash_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("review_hash vuoto")
+        return v.strip()
+
+    @field_validator("testo")
+    @classmethod
+    def testo_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("testo vuoto")
+        return v.strip()
+
+    @field_validator("punteggio_norm")
+    @classmethod
+    def norm_range(cls, v: float) -> float:
+        if not 1.0 <= v <= 10.0:
+            raise ValueError(f"punteggio_norm fuori range 1-10: {v}")
+        return v
+
+
 def validate_batch(
     rows: list[dict],
     model: type[BaseModel],
