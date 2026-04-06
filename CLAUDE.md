@@ -22,6 +22,7 @@ ingest/     <- continuous data flow pipelines
   banca/         <- bank + PMS pipelines
   flussi/        <- recurring accounting pipelines (movimenti, gasparotto, scheda_contabile, etc.)
 condges/    <- Controllo di Gestione vertical (Streamlit app, Excel gen, forecasts)
+reviews/    <- Vertical #2: Guest reviews (scrape, classify, alert, dashboard)
 cli.py      <- CLI entry point (hotelops command)
 ```
 
@@ -50,8 +51,19 @@ cli.py      <- CLI entry point (hotelops command)
 - `condges/scadenzario_excel.py` -- Excel bridge: scadenzario fornitori → voci PF.
 - `condges/app_scadenzario.py` -- Streamlit scadenzario app.
 
+**reviews/** -- Vertical #2: Guest Reviews (Apify scrape -> Claude NLP -> BQ -> alert + dashboard)
+- `reviews/config.py` -- Apify actor IDs, property URLs, thresholds, email recipients.
+- `reviews/scrape.py` -- Trigger Apify actors (Booking, TripAdvisor, Google, Expedia), collect JSON.
+- `reviews/ingest.py` -- Normalize per platform, dedup by review_hash, write to f_reviews.
+- `reviews/classify.py` -- Claude API (Haiku) batch classification: categoria + sentiment + riassunto.
+- `reviews/alert.py` -- Email alert for reviews with punteggio_norm <= 6.0.
+- `reviews/email.py` -- Weekly HTML report + Gmail API send.
+- `reviews/app.py` -- Streamlit dashboard: KPIs, trends, categories, review table.
+- `reviews/cli_commands.py` -- CLI handlers for `hotelops reviews`.
+- `reviews/PROPERTIES.md` -- Reference doc: actors, costs, property URLs, env vars.
+
 **Root**
-- `cli.py` -- CLI entry point (`hotelops` command). 14 subcommands. Large handlers in `condges/cli_commands.py`.
+- `cli.py` -- CLI entry point (`hotelops` command). 15 subcommands. Large handlers in `condges/cli_commands.py` and `reviews/cli_commands.py`.
 - `core/registry.yaml` -- Pipeline registry: file types, dest folders, BQ tables, signatures.
 
 ## GCP
@@ -84,6 +96,17 @@ hotelops manifest                              # Generate BQ table catalog (mani
 hotelops manifest --table f_consumi_economato  # Single table
 hotelops classifica file1.xlsx file2.csv       # Classify files (show type + destination)
 hotelops classifica *.xlsx --route --ingest    # Classify + route + ingest
+
+# Reviews vertical
+hotelops reviews                           # Ultime 30 reviews, media, negative
+hotelops reviews --scrape                  # Scrape tutte le piattaforme
+hotelops reviews --scrape --only booking   # Solo Booking
+hotelops reviews --scrape --dry-run        # Preview senza scraping
+hotelops reviews --stats                   # Stats mese corrente per piattaforma
+hotelops reviews --stats --mese 3          # Stats mese specifico
+hotelops reviews --alert                   # Mostra review che hanno generato alert
+hotelops reviews --report                  # Invia report settimanale manualmente
+streamlit run reviews/app.py               # Dashboard reviews
 
 # Condges vertical
 streamlit run condges/app.py
@@ -146,6 +169,7 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `f_pms_statistiche` | Statistiche PMS HotelCube (APPEND) |
 | `f_mastrino_consolidato` | Mastrino consolidato da "Costi Ricavi 2025-2026 Budget.xlsx" (APPEND) |
 | `f_affidamenti` | Affidamenti bancari (linee di credito) -- schema TBD |
+| `f_reviews` | Guest reviews da OTA (Booking, TripAdvisor, Google, Expedia). NLP classified. (APPEND) |
 
 ### Dimension tables
 
