@@ -33,6 +33,7 @@ from condges.cli_commands import (
     cmd_saldo,
     cmd_scadenzario,
 )
+from reviews.cli_commands import cmd_reviews
 
 BQ_PROJECT = "hotelops-suite"
 
@@ -327,6 +328,7 @@ def cmd_app(args):
     apps = {
         "pf": "condges/app.py",
         "scadenzario": "condges/app_scadenzario.py",
+        "reviews": "reviews/app.py",
     }
     app_key = args.app_name or "pf"
     app_path = apps.get(app_key)
@@ -504,6 +506,17 @@ def main():
     p_app.add_argument("app_name", nargs="?", default=None,
                        help="App da lanciare: pf (default), scadenzario")
 
+    # reviews
+    p_reviews = sub.add_parser("reviews", help="Reviews ospiti: scrape, alert, stats")
+    p_reviews.add_argument("--scrape", action="store_true", help="Trigger scrape manuale")
+    p_reviews.add_argument("--only", type=str, help="Solo questa piattaforma (booking, tripadvisor, google, expedia)")
+    p_reviews.add_argument("--alert", action="store_true", help="Mostra review con alert")
+    p_reviews.add_argument("--stats", action="store_true", help="Statistiche review")
+    p_reviews.add_argument("--mese", type=int, help="Mese per stats")
+    p_reviews.add_argument("--anno", type=int, default=2026)
+    p_reviews.add_argument("--report", action="store_true", help="Invia report settimanale")
+    p_reviews.add_argument("--dry-run", action="store_true", help="Preview senza azioni")
+
     # reconcile
     p_rec = sub.add_parser("reconcile", help="Riconciliazione banca vs libro")
     p_rec.add_argument("--societa", required=True, choices=["ORTI", "INTUR"])
@@ -543,6 +556,7 @@ def main():
         "ingest": cmd_ingest,
         "app": cmd_app,
         "reconcile": cmd_reconcile,
+        "reviews": cmd_reviews,
         "help": cmd_help,
     }
 
