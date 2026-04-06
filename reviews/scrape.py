@@ -28,7 +28,6 @@ def _build_input(piattaforma: str, bu: str, url: str) -> dict:
         return {
             "startUrls": [{"url": url}],
             "maxReviews": 100,
-            "sortBy": "f_recent_desc",
         }
     elif piattaforma == "TRIPADVISOR":
         return {
@@ -40,7 +39,7 @@ def _build_input(piattaforma: str, bu: str, url: str) -> dict:
         return {
             "startUrls": [{"url": url}],
             "maxReviews": 100,
-            "language": "it",
+            "reviewsSort": "newest",
         }
     elif piattaforma == "EXPEDIA":
         return {

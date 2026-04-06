@@ -11,10 +11,12 @@ log = logging.getLogger(__name__)
 
 _TRIP_TYPE_MAP = {
     "couple": "COPPIA",
+    "couples": "COPPIA",
     "family": "FAMIGLIA",
     "business": "BUSINESS",
     "solo": "SOLO",
     "friends": "AMICI",
+    "group": "AMICI",
     "coppia": "COPPIA",
     "famiglia": "FAMIGLIA",
     "affari": "BUSINESS",
@@ -33,8 +35,11 @@ def _ts_now() -> str:
 
 
 def normalize_booking(item: dict, societa: str = "ORTI") -> dict:
-    review_id = str(item.get("reviewId", ""))
-    score = float(item.get("reviewScore", 0))
+    review_id = str(item.get("id", ""))
+    score = float(item.get("rating", 0))
+    liked = item.get("likedText") or ""
+    disliked = item.get("dislikedText") or ""
+    testo = f"{liked} {disliked}".strip() or item.get("reviewTitle") or ""
     return {
         "review_hash": make_hash("BOOKING", review_id),
         "piattaforma": "BOOKING",
@@ -43,18 +48,18 @@ def normalize_booking(item: dict, societa: str = "ORTI") -> dict:
         "business_unit_id": item.get("_bu", "HOTEL"),
         "punteggio_raw": score,
         "punteggio_norm": score,
-        "testo": item.get("reviewText") or item.get("reviewTitle") or "",
-        "testo_positivo": item.get("reviewPositiveText"),
-        "testo_negativo": item.get("reviewNegativeText"),
+        "testo": testo,
+        "testo_positivo": liked or None,
+        "testo_negativo": disliked or None,
         "titolo": item.get("reviewTitle"),
         "lingua": item.get("reviewLanguage", ""),
-        "data_review": item.get("reviewDate", ""),
-        "data_soggiorno": item.get("stayDate"),
-        "reviewer_nome": item.get("reviewerName"),
-        "reviewer_paese": item.get("reviewerCountry"),
-        "tipo_viaggio": _map_trip_type(item.get("tripType")),
-        "camera_tipo": item.get("roomType"),
-        "url_review": item.get("reviewUrl"),
+        "data_review": (item.get("reviewDate") or "")[:10],
+        "data_soggiorno": item.get("checkInDate"),
+        "reviewer_nome": item.get("userName"),
+        "reviewer_paese": item.get("userLocation"),
+        "tipo_viaggio": _map_trip_type(item.get("travelerType")),
+        "camera_tipo": item.get("roomInfo"),
+        "url_review": None,
         "categoria_nlp": None,
         "sentiment_nlp": None,
         "riassunto_nlp": None,
@@ -131,7 +136,9 @@ def normalize_google(item: dict, societa: str = "ORTI") -> dict:
 
 def normalize_expedia(item: dict, societa: str = "ORTI") -> dict:
     review_id = str(item.get("reviewId", ""))
-    score = float(item.get("ratingOverall", 0))
+    score = float(item.get("reviewRating", 0))
+    locale = item.get("locale", "")
+    lingua = locale.split("_")[0] if locale else ""
     return {
         "review_hash": make_hash("EXPEDIA", review_id),
         "piattaforma": "EXPEDIA",
@@ -143,15 +150,15 @@ def normalize_expedia(item: dict, societa: str = "ORTI") -> dict:
         "testo": item.get("reviewText", ""),
         "testo_positivo": None,
         "testo_negativo": None,
-        "titolo": item.get("title"),
-        "lingua": item.get("language", ""),
-        "data_review": item.get("submissionDate", ""),
-        "data_soggiorno": None,
+        "titolo": item.get("reviewTitle") or None,
+        "lingua": lingua,
+        "data_review": (item.get("reviewDate") or "")[:10],
+        "data_soggiorno": (item.get("stayDate") or "")[:10] or None,
         "reviewer_nome": item.get("reviewerName"),
-        "reviewer_paese": item.get("reviewerCountry"),
-        "tipo_viaggio": _map_trip_type(item.get("tripType")),
+        "reviewer_paese": None,
+        "tipo_viaggio": None,
         "camera_tipo": None,
-        "url_review": item.get("reviewUrl"),
+        "url_review": item.get("hotelUrl"),
         "categoria_nlp": None,
         "sentiment_nlp": None,
         "riassunto_nlp": None,

@@ -14,19 +14,17 @@ def test_normalize_booking():
     raw = {
         "_bu": "HOTEL",
         "_piattaforma": "BOOKING",
-        "reviewId": "rev_001",
-        "reviewScore": 4.2,
+        "id": "2bf0bec7bcb96138",
+        "rating": 4.2,
         "reviewTitle": "Deludente",
-        "reviewText": "Camera sporca.",
-        "reviewPositiveText": "Posizione bella",
-        "reviewNegativeText": "Camera sporca",
-        "reviewDate": "2026-04-01",
-        "stayDate": "2026-03-28",
-        "reviewerName": "Mario",
-        "reviewerCountry": "Italy",
-        "tripType": "Couple",
-        "roomType": "Double Room",
-        "reviewUrl": "https://booking.com/review/001",
+        "likedText": "Posizione bella",
+        "dislikedText": "Camera sporca",
+        "reviewDate": "2026-04-01T10:00:00.000Z",
+        "checkInDate": "2026-03-28",
+        "userName": "Mario",
+        "userLocation": "Italy",
+        "travelerType": "Couple",
+        "roomInfo": "Double Room",
         "reviewLanguage": "it",
     }
     row = normalize_booking(raw, societa="ORTI")
@@ -34,8 +32,9 @@ def test_normalize_booking():
     assert row["punteggio_raw"] == 4.2
     assert row["punteggio_norm"] == 4.2  # Booking already 1-10
     assert row["business_unit_id"] == "HOTEL"
-    assert row["testo"] == "Camera sporca."
+    assert row["testo"] == "Posizione bella Camera sporca"
     assert row["testo_positivo"] == "Posizione bella"
+    assert row["data_review"] == "2026-04-01"
     ReviewRow(**row)
 
 
@@ -82,20 +81,22 @@ def test_normalize_expedia():
     raw = {
         "_bu": "HOTEL",
         "_piattaforma": "EXPEDIA",
-        "reviewId": "exp_001",
-        "ratingOverall": 7.5,
-        "title": "Buono",
+        "reviewId": "68ee4a4308d40f1bac48499a",
+        "reviewRating": 7.5,
+        "reviewTitle": "Buono",
         "reviewText": "Buon soggiorno.",
-        "submissionDate": "2026-04-01",
+        "reviewDate": "2026-04-01T00:00:00.000Z",
+        "stayDate": "2026-03-28T00:00:00.000Z",
         "reviewerName": "Paolo",
-        "reviewerCountry": "IT",
-        "tripType": "Business",
-        "language": "it",
-        "reviewUrl": "https://expedia.com/review/001",
+        "locale": "it_IT",
+        "hotelUrl": "https://www.expedia.com/h68690805",
     }
     row = normalize_expedia(raw, societa="ORTI")
     assert row["punteggio_raw"] == 7.5
     assert row["punteggio_norm"] == 7.5  # Expedia already 1-10
+    assert row["lingua"] == "it"
+    assert row["data_review"] == "2026-04-01"
+    assert row["data_soggiorno"] == "2026-03-28"
     ReviewRow(**row)
 
 

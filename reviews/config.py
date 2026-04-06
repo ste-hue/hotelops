@@ -16,13 +16,13 @@ PROPERTIES: dict[str, dict[str, str]] = {
     "HOTEL": {
         "BOOKING": "https://www.booking.com/hotel/it/panorama-maiori.html",
         "TRIPADVISOR": "https://www.tripadvisor.it/Hotel_Review-g194806-d23514860-Reviews-Hotel_Panorama-Maiori_Amalfi_Coast_Province_of_Salerno_Campania.html",
-        "GOOGLE": "",  # TODO: cercare place_id su Google Maps
+        "GOOGLE": "https://www.google.com/maps/search/?api=1&query=Hotel%20Panorama&query_place_id=ChIJoUcAhEGVOxMRe-U7t45iyGE",
         "EXPEDIA": "https://www.expedia.com/Maiori-Hotels-HOTEL-PANORAMA.h68690805.Hotel-Information",
     },
     "RESIDENCE": {
         "BOOKING": "https://www.booking.com/hotel/it/panorama-residence.html",
         "TRIPADVISOR": "https://www.tripadvisor.it/Hotel_Review-g194806-d14975421-Reviews-Angelina_Residence-Maiori_Amalfi_Coast_Province_of_Salerno_Campania.html",
-        "GOOGLE": "",  # TODO: cercare place_id su Google Maps
+        "GOOGLE": "https://www.google.com/maps/search/?api=1&query=Angelina%20Residence&query_place_id=ChIJAQCQLUKVOxMROoGIbplDgGs",
         "EXPEDIA": "https://www.expedia.com/Maiori-Hotels-Angelina-Residence.h5205793.Hotel-Information",
     },
     # CVM e LIDO: da verificare se hanno pagine sulle OTA
