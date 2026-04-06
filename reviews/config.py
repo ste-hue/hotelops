@@ -11,15 +11,21 @@ APIFY_ACTORS = {
 
 # Property URLs/IDs per platform per BU.
 # Keys: business_unit_id -> piattaforma -> URL or place_id.
-# Fill in actual URLs before first run.
+# See reviews/PROPERTIES.md for full reference.
 PROPERTIES: dict[str, dict[str, str]] = {
     "HOTEL": {
-        "BOOKING": "",      # e.g. https://www.booking.com/hotel/it/panorama-maiori.html
-        "TRIPADVISOR": "",   # e.g. https://www.tripadvisor.com/Hotel_Review-...
-        "GOOGLE": "",        # e.g. place_id:ChIJ...
-        "EXPEDIA": "",       # e.g. https://www.expedia.com/...
+        "BOOKING": "https://www.booking.com/hotel/it/panorama-maiori.html",
+        "TRIPADVISOR": "https://www.tripadvisor.it/Hotel_Review-g194806-d23514860-Reviews-Hotel_Panorama-Maiori_Amalfi_Coast_Province_of_Salerno_Campania.html",
+        "GOOGLE": "",        # TODO: cercare place_id su Google Maps
+        "EXPEDIA": "",       # TODO: cercare pagina su Expedia
     },
-    # Add RESIDENCE, CVM, LIDO as needed
+    "RESIDENCE": {
+        "BOOKING": "https://www.booking.com/hotel/it/panorama-residence.html",
+        "TRIPADVISOR": "https://www.tripadvisor.it/Hotel_Review-g194806-d14975421-Reviews-Angelina_Residence-Maiori_Amalfi_Coast_Province_of_Salerno_Campania.html",
+        "GOOGLE": "",        # TODO: cercare place_id su Google Maps
+        "EXPEDIA": "",       # TODO: cercare pagina su Expedia
+    },
+    # CVM e LIDO: da verificare se hanno pagine sulle OTA
 }
 
 # Normalization: platform raw score -> 1-10 scale
