@@ -30,8 +30,8 @@ Un **Actor** e' un programma che gira nel cloud di Apify. Tu gli dai un URL (es.
 |---|---|---|
 | Booking | https://www.booking.com/hotel/it/panorama-maiori.html | OK |
 | TripAdvisor | https://www.tripadvisor.it/Hotel_Review-g194806-d23514860-Reviews-Hotel_Panorama-Maiori_Amalfi_Coast_Province_of_Salerno_Campania.html | OK |
-| Google | TODO — cercare place_id su Google Maps | Da fare |
-| Expedia | TODO — cercare pagina hotel su Expedia | Da fare |
+| Google | TODO — mandare link Google Maps con place_id | Da fare |
+| Expedia | https://www.expedia.com/Maiori-Hotels-HOTEL-PANORAMA.h68690805.Hotel-Information | OK |
 
 ### RESIDENCE — Angelina Residence (Maiori)
 
@@ -39,8 +39,8 @@ Un **Actor** e' un programma che gira nel cloud di Apify. Tu gli dai un URL (es.
 |---|---|---|
 | Booking | https://www.booking.com/hotel/it/panorama-residence.html | OK |
 | TripAdvisor | https://www.tripadvisor.it/Hotel_Review-g194806-d14975421-Reviews-Angelina_Residence-Maiori_Amalfi_Coast_Province_of_Salerno_Campania.html | OK |
-| Google | TODO — cercare place_id su Google Maps | Da fare |
-| Expedia | TODO — cercare pagina su Expedia | Da fare |
+| Google | TODO — mandare link Google Maps con place_id | Da fare |
+| Expedia | https://www.expedia.com/Maiori-Hotels-Angelina-Residence.h5205793.Hotel-Information | OK |
 
 ### CVM — Casa Vacanze Maiori
 
