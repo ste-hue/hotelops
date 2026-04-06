@@ -1,8 +1,6 @@
 """Tests for reviews NLP classification."""
 
-import json
-import pytest
-from reviews.classify import parse_classification, build_prompt, VALID_CATEGORIE, VALID_SENTIMENTI
+from reviews.classify import parse_classification, build_prompt
 
 
 def test_parse_valid_json():
@@ -34,7 +32,9 @@ def test_parse_invalid_json_returns_none():
 
 
 def test_build_prompt_single():
-    reviews = [{"testo": "Camera sporca.", "piattaforma": "BOOKING", "punteggio_raw": 4.0}]
+    reviews = [
+        {"testo": "Camera sporca.", "piattaforma": "BOOKING", "punteggio_raw": 4.0}
+    ]
     prompt = build_prompt(reviews)
     assert "Camera sporca." in prompt
     assert "BOOKING" in prompt

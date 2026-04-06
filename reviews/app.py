@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
 
 import pandas as pd
 import plotly.express as px
@@ -16,6 +15,7 @@ PIATTAFORME = ["BOOKING", "TRIPADVISOR", "GOOGLE", "EXPEDIA"]
 @st.cache_resource
 def get_bq():
     from google.cloud import bigquery
+
     return bigquery.Client(project=cfg.PROJECT)
 
 
@@ -60,7 +60,9 @@ def main():
         st.header("⭐ Reviews Dashboard")
         anno = st.selectbox("Anno", [2025, 2026, 2027], index=1)
         piattaforme = st.multiselect("Piattaforme", PIATTAFORME, default=PIATTAFORME)
-        bu = st.selectbox("Business Unit", ["Tutte", "HOTEL", "RESIDENCE", "CVM", "LIDO"])
+        bu = st.selectbox(
+            "Business Unit", ["Tutte", "HOTEL", "RESIDENCE", "CVM", "LIDO"]
+        )
         sentiment_filter = st.selectbox(
             "Sentiment", ["Tutti", "POSITIVO", "NEGATIVO", "MISTO"]
         )
@@ -140,20 +142,27 @@ def main():
     st.subheader("Dettaglio review")
 
     display_cols = [
-        "data_review", "piattaforma", "business_unit_id",
-        "punteggio_norm", "categoria_nlp", "sentiment_nlp", "riassunto_nlp",
+        "data_review",
+        "piattaforma",
+        "business_unit_id",
+        "punteggio_norm",
+        "categoria_nlp",
+        "sentiment_nlp",
+        "riassunto_nlp",
     ]
     available_cols = [c for c in display_cols if c in df.columns]
     show_df = df[available_cols].copy()
-    show_df = show_df.rename(columns={
-        "data_review": "Data",
-        "piattaforma": "Piattaforma",
-        "business_unit_id": "BU",
-        "punteggio_norm": "Score",
-        "categoria_nlp": "Categoria",
-        "sentiment_nlp": "Sentiment",
-        "riassunto_nlp": "Riassunto",
-    })
+    show_df = show_df.rename(
+        columns={
+            "data_review": "Data",
+            "piattaforma": "Piattaforma",
+            "business_unit_id": "BU",
+            "punteggio_norm": "Score",
+            "categoria_nlp": "Categoria",
+            "sentiment_nlp": "Sentiment",
+            "riassunto_nlp": "Riassunto",
+        }
+    )
 
     st.dataframe(show_df, hide_index=True, use_container_width=True, height=400)
 

@@ -45,7 +45,9 @@ def _cmd_summary(args):
     neg = sum(1 for r in rows if r["punteggio_norm"] <= 6.0)
 
     print(f"\n  Ultime {len(rows)} reviews — Media: {avg:.1f}/10 — Negative: {neg}")
-    print(f"  {'Data':<12s} {'Piatt.':<14s} {'BU':<10s} {'Score':>6s} {'Categoria':<12s} {'Riassunto'}")
+    print(
+        f"  {'Data':<12s} {'Piatt.':<14s} {'BU':<10s} {'Score':>6s} {'Categoria':<12s} {'Riassunto'}"
+    )
     print(f"  {'─' * 12} {'─' * 14} {'─' * 10} {'─' * 6} {'─' * 12} {'─' * 30}")
 
     for r in rows:
@@ -131,7 +133,9 @@ def _cmd_stats(args):
 
     client = bigquery.Client(project=PROJECT)
     anno = args.anno or 2026
-    mese_filter = f"AND EXTRACT(MONTH FROM data_review) = {args.mese}" if args.mese else ""
+    mese_filter = (
+        f"AND EXTRACT(MONTH FROM data_review) = {args.mese}" if args.mese else ""
+    )
 
     sql = f"""
     SELECT
@@ -155,12 +159,16 @@ def _cmd_stats(args):
     total_neg = sum(r["negative"] for r in rows)
     overall_avg = sum(r["media"] * r["n"] for r in rows) / total_n
 
-    print(f"\n  Review Stats — {anno}" + (f" mese {args.mese}" if args.mese else " YTD"))
+    print(
+        f"\n  Review Stats — {anno}" + (f" mese {args.mese}" if args.mese else " YTD")
+    )
     print(f"  Totale: {total_n} | Media: {overall_avg:.1f}/10 | Negative: {total_neg}")
     print(f"  {'Piattaforma':<14s} {'#':>5s} {'Media':>7s} {'Neg':>5s}")
     print(f"  {'─' * 14} {'─' * 5} {'─' * 7} {'─' * 5}")
     for r in rows:
-        print(f"  {r['piattaforma']:<14s} {r['n']:>5d} {r['media']:>6.1f} {r['negative']:>5d}")
+        print(
+            f"  {r['piattaforma']:<14s} {r['n']:>5d} {r['media']:>6.1f} {r['negative']:>5d}"
+        )
 
 
 def _cmd_report(args):

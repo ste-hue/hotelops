@@ -1,7 +1,12 @@
 """Tests for reviews ingest: normalization and dedup."""
 
-import pytest
-from reviews.ingest import normalize_booking, normalize_tripadvisor, normalize_google, normalize_expedia, dedup_reviews
+from reviews.ingest import (
+    normalize_booking,
+    normalize_tripadvisor,
+    normalize_google,
+    normalize_expedia,
+    dedup_reviews,
+)
 from core.schemas import ReviewRow
 
 

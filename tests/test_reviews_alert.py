@@ -1,6 +1,5 @@
 """Tests for review alert logic and email rendering."""
 
-import pytest
 from reviews.alert import should_alert, render_alert_body
 from reviews.email import render_weekly_report
 

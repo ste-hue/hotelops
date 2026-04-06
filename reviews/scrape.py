@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from apify_client import ApifyClient
 
@@ -16,6 +15,7 @@ log = logging.getLogger(__name__)
 def _get_client() -> ApifyClient:
     """Get Apify client. Expects APIFY_API_TOKEN env var."""
     import os
+
     token = os.environ.get("APIFY_API_TOKEN")
     if not token:
         raise RuntimeError("APIFY_API_TOKEN env var not set")

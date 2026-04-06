@@ -79,7 +79,9 @@ def render_weekly_report(
     platform_rows = ""
     for p, rev_list in sorted(by_platform.items()):
         p_avg = sum(r.get("punteggio_norm", 0) for r in rev_list) / len(rev_list)
-        platform_rows += f"<tr><td>{p}</td><td>{len(rev_list)}</td><td>{p_avg:.1f}</td></tr>"
+        platform_rows += (
+            f"<tr><td>{p}</td><td>{len(rev_list)}</td><td>{p_avg:.1f}</td></tr>"
+        )
 
     cat_rows = ""
     for cat, count in top_cats:
