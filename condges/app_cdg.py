@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-Budget & Tesoreria 2026 — App Interattiva.
+Controllo di Gestione — App Unificata.
 
-Due pagine:
-  1. BUDGET: consuntivo vs budget mensile per fonte, con manopole crescita per BU
-  2. TESORERIA: saldo banca proiettato mese per mese (entrate - uscite)
+Quattro tab:
+  1. CONTO ECONOMICO: P&L consuntivo YTD
+  2. BUDGET: consuntivo vs budget mensile per fonte, con manopole crescita per BU
+  3. TESORERIA: saldo banca proiettato mese per mese (entrate - uscite)
+  4. INDICATORI: KPI operativi
 
 Usage:
-    streamlit run condges/budget_app.py
+    streamlit run condges/app_cdg.py
 """
 
 from __future__ import annotations
@@ -607,12 +609,29 @@ def page_tesoreria(adjusted: pd.DataFrame, consuntivo: pd.DataFrame,
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# PAGE 3: CONTO ECONOMICO (placeholder)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def page_ce(consuntivo: pd.DataFrame, last_actual_month: int):
+    st.info("Conto Economico — in costruzione")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE 4: INDICATORI (placeholder)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def page_indicatori(consuntivo: pd.DataFrame, adjusted: pd.DataFrame,
+                    last_actual_month: int):
+    st.info("Indicatori — in costruzione")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ══════════════════════════════════════════════════════════════════════════════
 
 def main():
-    st.set_page_config(page_title="Budget & Tesoreria 2026", layout="wide")
-    st.title("Budget & Tesoreria 2026 — ORTI")
+    st.set_page_config(page_title="Controllo di Gestione", layout="wide")
+    st.title("Controllo di Gestione")
 
     # ── Data ────────────────────────────────────────────────────────────────
     budget_base = load_budget_base()
@@ -622,26 +641,26 @@ def main():
         st.error("Nessun budget trovato in f_budget_mensile.")
         return
 
-    # Solo mesi completamente chiusi contano come consuntivo
-    # (oggi 27 marzo -> marzo non è chiuso -> last = febbraio)
     today = datetime.now()
     if today.year == ANNO:
-        max_closed_month = today.month - 1  # mese corrente non è chiuso
+        max_closed_month = today.month - 1
     else:
         max_closed_month = 12
     data_max = int(consuntivo["mese"].max()) if not consuntivo.empty else 0
     last_actual_month = min(data_max, max_closed_month)
 
     # ── Sidebar ─────────────────────────────────────────────────────────────
-    st.sidebar.header("Scenario")
-    st.sidebar.caption(
-        "Crescita % aggiuntiva rispetto al budget base.\n"
-        "Hotel base gia include +10% da maggio (10 camere extra)."
-    )
+    st.sidebar.header("Parametri")
+
+    _societa = st.sidebar.selectbox("Società", ["ORTI", "INTUR"])
+    anno = st.sidebar.number_input("Anno", min_value=2024, max_value=2030, value=ANNO)
+
+    st.sidebar.divider()
+    st.sidebar.subheader("Scenario Crescita")
+    st.sidebar.caption("Crescita % aggiuntiva rispetto al budget base.")
 
     growth = {}
-    growth["HOTEL"] = st.sidebar.slider("Hotel", -30, 50, 0, 1, format="%+d%%",
-                                        help="Base gia +10% da maggio")
+    growth["HOTEL"] = st.sidebar.slider("Hotel", -30, 50, 0, 1, format="%+d%%")
     growth["RESIDENCE"] = st.sidebar.slider("Residence", -30, 50, 0, 1, format="%+d%%")
     growth["CVM"] = st.sidebar.slider("CVM", -30, 50, 0, 1, format="%+d%%")
     growth["LIDO"] = st.sidebar.slider("Spiaggia", -30, 50, 0, 1, format="%+d%%")
@@ -652,21 +671,29 @@ def main():
     ricavi = adjusted[adjusted["tipo_costo"] == "IP"]["importo"].sum()
     costi = adjusted[adjusted["tipo_costo"] != "IP"]["importo"].sum()
     st.sidebar.divider()
-    st.sidebar.metric("Ricavi", f"{ricavi:,.0f} \u20ac")
-    st.sidebar.metric("Margine", f"{ricavi - costi:,.0f} \u20ac",
+    st.sidebar.metric("Ricavi", f"{ricavi:,.0f} €")
+    st.sidebar.metric("Margine", f"{ricavi - costi:,.0f} €",
                       delta=f"{(ricavi - costi) / ricavi * 100:.0f}%" if ricavi else None)
 
     if last_actual_month > 0:
-        st.sidebar.caption(f"Consuntivo fino a: {MESI_NOMI[last_actual_month - 1]} {ANNO}")
+        st.sidebar.caption(f"Consuntivo fino a: {MESI_NOMI[last_actual_month - 1]} {anno}")
 
     # ── Tabs ────────────────────────────────────────────────────────────────
-    tab_budget, tab_tesoreria = st.tabs(["Budget", "Tesoreria"])
+    tab_ce, tab_budget, tab_tesoreria, tab_indicatori = st.tabs(
+        ["Conto Economico", "Budget", "Tesoreria", "Indicatori"]
+    )
+
+    with tab_ce:
+        page_ce(consuntivo, last_actual_month)
 
     with tab_budget:
         page_budget(adjusted, consuntivo, last_actual_month, growth)
 
     with tab_tesoreria:
         page_tesoreria(adjusted, consuntivo, last_actual_month)
+
+    with tab_indicatori:
+        page_indicatori(consuntivo, adjusted, last_actual_month)
 
 
 if __name__ == "__main__":
