@@ -109,3 +109,25 @@ class TestIndicatori:
         result = compute_indicatori(cascade, tipo_df)
         # BEP giorno = (875k / 1M) * 365 = 319.4
         assert result["bep_giorno"] == 319
+
+
+from condges.cdg_engine import compute_proiezione_anno
+
+
+class TestProiezioneAnno:
+    def test_linear_for_fixed_costs(self):
+        result = compute_proiezione_anno(3000, "F", 3)
+        assert result == 12_000
+
+    def test_seasonal_projection(self):
+        stag = [0.5, 0.5, 0.8, 1.0, 1.2, 1.5, 2.0, 2.0, 1.5, 1.0, 0.3, 0.2]
+        result = compute_proiezione_anno(1800, "IP", 3, stag)
+        assert result == 12_000
+
+    def test_zero_ytd(self):
+        result = compute_proiezione_anno(0, "IP", 3, [1]*12)
+        assert result == 0
+
+    def test_no_stagionalita_falls_back_linear(self):
+        result = compute_proiezione_anno(3000, "IP", 3, None)
+        assert result == 12_000

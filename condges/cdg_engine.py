@@ -105,3 +105,28 @@ def compute_indicatori(
         "bep_giorno": bep_giorno,
         "margine_contribuzione": round(margine_contr, 1),
     }
+
+
+def compute_proiezione_anno(
+    consuntivo_ytd: float,
+    tipo_costo: str,
+    last_month: int,
+    stagionalita: list[float] | None = None,
+) -> float:
+    """Project year-end from YTD actuals using seasonality.
+
+    stagionalita: list of 12 coefficients (sum=12.0). If None, uses flat.
+    For F/X types: linear projection (consuntivo / months * 12).
+    For IP/V/P types: consuntivo / cumulative_seasonal_pct.
+    """
+    if last_month <= 0 or consuntivo_ytd == 0:
+        return 0
+
+    if tipo_costo in ("F", "X") or stagionalita is None:
+        return consuntivo_ytd / last_month * 12
+
+    cumul = sum(stagionalita[:last_month])
+    if cumul <= 0:
+        return consuntivo_ytd / last_month * 12  # fallback to linear
+
+    return consuntivo_ytd / (cumul / 12)

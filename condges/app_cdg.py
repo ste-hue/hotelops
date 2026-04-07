@@ -123,6 +123,18 @@ def load_consuntivo_ce(societa: str, anno: int) -> pd.DataFrame:
     return bq.query(sql).to_dataframe()
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def load_stagionalita() -> pd.DataFrame:
+    """Load seasonality coefficients per BU per month."""
+    bq = get_bq()
+    sql = f"""
+    SELECT business_unit_id, mese, coefficiente
+    FROM `{cfg.D_COEFFICIENTI_STAGIONALITA}`
+    ORDER BY business_unit_id, mese
+    """
+    return bq.query(sql).to_dataframe()
+
+
 @st.cache_data(ttl=300, show_spinner="Caricamento dettaglio CE...")
 def load_consuntivo_ce_detail(societa: str, anno: int) -> pd.DataFrame:
     """Consuntivo per codice conto (for CE drill-down)."""
@@ -444,9 +456,9 @@ def page_budget(adjusted: pd.DataFrame, consuntivo: pd.DataFrame,
         b_ytd = adjusted[adjusted["mese"] <= last_actual_month].groupby("categoria_ce")["importo"].sum()
         a_ytd = consuntivo[consuntivo["mese"] <= last_actual_month].groupby("categoria_ce")["importo"].sum()
 
-        bva = pd.DataFrame({"Budget": b_ytd, "Consuntivo": a_ytd}).fillna(0)
-        bva["Delta"] = bva["Consuntivo"] - bva["Budget"]
-        bva["Delta %"] = (bva["Delta"] / bva["Budget"].replace(0, float("nan")) * 100).round(1)
+        bva = pd.DataFrame({"Budget YTD": b_ytd, "Consuntivo": a_ytd}).fillna(0)
+        bva["Delta"] = bva["Consuntivo"] - bva["Budget YTD"]
+        bva["Delta %"] = (bva["Delta"] / bva["Budget YTD"].replace(0, float("nan")) * 100).round(1)
         bva = bva.sort_values("Delta", key=abs, ascending=False)
 
         def _color_delta(val):
@@ -455,11 +467,63 @@ def page_budget(adjusted: pd.DataFrame, consuntivo: pd.DataFrame,
             return ""
 
         st.dataframe(
-            bva.style.format({"Budget": "{:,.0f}", "Consuntivo": "{:,.0f}",
+            bva.style.format({"Budget YTD": "{:,.0f}", "Consuntivo": "{:,.0f}",
                               "Delta": "{:+,.0f}", "Delta %": "{:+.1f}%"})
             .map(_color_delta, subset=["Delta", "Delta %"]),
             use_container_width=True
         )
+
+        # ── Year-end projection per codice conto ───────────────────────────
+        st.subheader("Proiezione Fine Anno")
+
+        from condges.cdg_engine import compute_proiezione_anno
+
+        stag_df = load_stagionalita()
+        stag_by_bu = {}
+        for bu in stag_df["business_unit_id"].unique():
+            bu_df = stag_df[stag_df["business_unit_id"] == bu].sort_values("mese")
+            stag_by_bu[bu] = bu_df["coefficiente"].tolist()
+        flat_stag = [1.0] * 12
+
+        # Per-codice consuntivo YTD
+        cons_by_code = consuntivo.groupby(
+            ["codice_conto", "descrizione", "tipo_costo", "categoria_ce"]
+        )["importo"].sum().reset_index()
+
+        # Full-year budget per codice
+        budget_full = adjusted.groupby("codice_conto")["importo"].sum()
+
+        proiezioni = []
+        for _, row in cons_by_code.iterrows():
+            stag = flat_stag  # default; BU-level would need mapping
+            proj = compute_proiezione_anno(
+                row["importo"], row["tipo_costo"], last_actual_month, stag
+            )
+            budget_anno = budget_full.get(row["codice_conto"], 0)
+            proiezioni.append({
+                "Codice": row["codice_conto"],
+                "Descrizione": row["descrizione"],
+                "Tipo": row["tipo_costo"],
+                "Categoria": row["categoria_ce"],
+                "Consuntivo YTD": row["importo"],
+                "Proiezione Anno": proj,
+                "Budget Anno": budget_anno,
+                "Delta Proiez.": proj - budget_anno,
+            })
+
+        if proiezioni:
+            proj_df = pd.DataFrame(proiezioni)
+            proj_df = proj_df.sort_values("Delta Proiez.", key=abs, ascending=False)
+
+            st.dataframe(
+                proj_df.style.format({
+                    "Consuntivo YTD": "{:,.0f}",
+                    "Proiezione Anno": "{:,.0f}",
+                    "Budget Anno": "{:,.0f}",
+                    "Delta Proiez.": "{:+,.0f}",
+                }).map(_color_delta, subset=["Delta Proiez."]),
+                use_container_width=True, hide_index=True,
+            )
 
     # ── Dettaglio per tipo ──────────────────────────────────────────────────
     st.subheader("Dettaglio per Categoria")
