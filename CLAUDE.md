@@ -42,8 +42,8 @@ cli.py      <- CLI entry point (hotelops command)
 - `ingest/flussi/` -- Recurring accounting pipelines: ingest_movimenti_contabili, ingest_gasparotto, ingest_scheda_contabile, ingest_piano_finanziario_xlsx, ingest_partite_aperte, ingest_bilancino, ingest_consumi_economato, ingest_coperti.
 
 **condges/** -- Vertical #1: Controllo di Gestione (containerizable)
-- `condges/app.py` -- Streamlit interactive Piano Finanziario for Rosa.
-- `condges/bva_app.py` -- Streamlit BvA dashboard with variable cost growth sliders + Excel export.
+- `condges/app_cdg.py` -- Streamlit Controllo di Gestione: CE riclassificato, Budget vs Consuntivo, Tesoreria, Indicatori.
+- `condges/cdg_engine.py` -- Pure computation: CE cascade, indicatori (EBITDA, BEP), proiezione anno con stagionalità.
 - `condges/cli_commands.py` -- Extracted CLI handlers (cmd_pf, cmd_health, cmd_chiudi, cmd_saldo, cmd_scadenzario, cmd_help).
 - `condges/genera_excel.py` -- Generate PF Excel from BQ (color-coded: nero=consuntivo, blu=previsione, verde=formula).
 - `condges/update_previsione.py` -- Write forecasts to f_piano_finanziario_input (DELETE-INSERT, parameterized).
@@ -109,7 +109,7 @@ hotelops reviews --report                  # Invia report settimanale manualment
 streamlit run reviews/app.py               # Dashboard reviews
 
 # Condges vertical
-streamlit run condges/app.py
+streamlit run condges/app_cdg.py               # Controllo di Gestione (CE, Budget, Tesoreria, Indicatori)
 python -m condges.genera_excel --output ~/Desktop/PF.xlsx
 python -m condges.update_previsione --voce utenze --societa ORTI --mesi 4-12 --importo 22000
 
