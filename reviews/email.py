@@ -1,9 +1,10 @@
-"""Email sending (Gmail API) and weekly report rendering."""
+"""Email sending (Gmail SMTP) and weekly report rendering."""
 
 from __future__ import annotations
 
-import base64
 import logging
+import os
+import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -12,22 +13,18 @@ from reviews.config import REPORT_RECIPIENTS
 log = logging.getLogger(__name__)
 
 
-def _get_gmail_service():
-    """Get Gmail API service using gcloud application default credentials."""
-    from google.auth import default
-    from googleapiclient.discovery import build
-
-    creds, project = default(scopes=["https://www.googleapis.com/auth/gmail.send"])
-    return build("gmail", "v1", credentials=creds)
-
-
 def send_email(
     to: list[str],
     subject: str,
     body: str,
     html: str | None = None,
 ) -> None:
-    """Send email via Gmail API."""
+    """Send email via Gmail SMTP with app password."""
+    user = os.environ.get("GMAIL_USER")
+    password = os.environ.get("GMAIL_APP_PASSWORD")
+    if not user or not password:
+        raise RuntimeError("GMAIL_USER / GMAIL_APP_PASSWORD env vars not set")
+
     if html:
         msg = MIMEMultipart("alternative")
         msg.attach(MIMEText(body, "plain"))
@@ -35,16 +32,13 @@ def send_email(
     else:
         msg = MIMEText(body, "plain")
 
+    msg["From"] = user
     msg["To"] = ", ".join(to)
     msg["Subject"] = subject
 
-    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-
-    service = _get_gmail_service()
-    service.users().messages().send(
-        userId="me",
-        body={"raw": raw},
-    ).execute()
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(user, password)
+        smtp.send_message(msg)
 
     log.info("Email sent to %s: %s", to, subject)
 

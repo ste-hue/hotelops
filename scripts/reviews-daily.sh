@@ -14,6 +14,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+PYTHON="$HOME/.virtualenvs/hotelops_core/bin/python"
 LOCK_DIR="/tmp/hotelops-reviews"
 LOCKFILE="${LOCK_DIR}/$(date +%Y%m%d).lock"
 LOGFILE="${LOCK_DIR}/reviews-$(date +%Y%m%d).log"
@@ -37,7 +38,7 @@ cd "$PROJECT_DIR"
 echo "$(date '+%Y-%m-%d %H:%M:%S') Starting reviews scrape..." >> "$LOGFILE"
 
 # Run the full pipeline: scrape -> normalize -> classify -> BQ -> alert
-if hotelops reviews --scrape >> "$LOGFILE" 2>&1; then
+if "$PYTHON" -m cli reviews --scrape >> "$LOGFILE" 2>&1; then
     touch "$LOCKFILE"
     echo "$(date '+%Y-%m-%d %H:%M:%S') Scrape completed successfully." >> "$LOGFILE"
 else

@@ -8,6 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+PYTHON="$HOME/.virtualenvs/hotelops_core/bin/python"
 LOGFILE="/tmp/hotelops-reviews/report-$(date +%Y%m%d).log"
 
 mkdir -p /tmp/hotelops-reviews
@@ -21,5 +22,5 @@ fi
 cd "$PROJECT_DIR"
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') Sending weekly report..." >> "$LOGFILE"
-hotelops reviews --report >> "$LOGFILE" 2>&1
+"$PYTHON" -m cli reviews --report >> "$LOGFILE" 2>&1
 echo "$(date '+%Y-%m-%d %H:%M:%S') Report sent." >> "$LOGFILE"

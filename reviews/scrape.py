@@ -27,24 +27,25 @@ def _build_input(piattaforma: str, bu: str, url: str) -> dict:
     if piattaforma == "BOOKING":
         return {
             "startUrls": [{"url": url}],
-            "maxReviews": 100,
+            "maxReviews": 20,
+            "reviewsSort": "f_recent_desc",
         }
     elif piattaforma == "TRIPADVISOR":
         return {
             "startUrls": [{"url": url}],
-            "maxItems": 100,
+            "maxItems": 20,
             "language": "ALL",
         }
     elif piattaforma == "GOOGLE":
         return {
             "startUrls": [{"url": url}],
-            "maxReviews": 100,
+            "maxReviews": 20,
             "reviewsSort": "newest",
         }
     elif piattaforma == "EXPEDIA":
         return {
             "startUrls": [{"url": url}],
-            "maxReviews": 100,
+            "maxReviews": 20,
         }
     else:
         raise ValueError(f"Unknown piattaforma: {piattaforma}")
