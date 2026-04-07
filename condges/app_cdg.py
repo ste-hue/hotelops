@@ -282,6 +282,28 @@ def genera_excel(budget: pd.DataFrame, consuntivo: pd.DataFrame,
             comp = comp.sort_values("delta", key=abs, ascending=False)
             comp.to_excel(writer, sheet_name=f"BvA mesi 1-{last_actual_month}", index=False)
 
+        # ── CE Riclassificato
+        ce_data = load_consuntivo_ce(SOCIETA, ANNO)
+        if not ce_data.empty:
+            cascade = compute_ce_cascade(ce_data)
+            ce_rows = [{"Voce": r["label"], "Importo": r["importo"],
+                        "% Ricavi": r["pct_ricavi"]} for r in cascade]
+            pd.DataFrame(ce_rows).to_excel(writer, sheet_name="CE", index=False)
+
+        # ── Indicatori
+        if not consuntivo.empty:
+            tipo_df = consuntivo.groupby("tipo_costo")["importo"].sum().reset_index()
+            if not ce_data.empty:
+                kpi = compute_indicatori(cascade, tipo_df)
+                kpi_rows = [
+                    {"Indicatore": "EBITDA %", "Valore": f"{kpi['ebitda_pct']:.1f}%"},
+                    {"Indicatore": "ROS", "Valore": f"{kpi['ros']:.1f}%"},
+                    {"Indicatore": "BEP Fatturato", "Valore": f"{kpi['bep_fatturato']:,.0f}"},
+                    {"Indicatore": "BEP Giorno", "Valore": str(kpi['bep_giorno'])},
+                    {"Indicatore": "Margine Contribuzione", "Valore": f"{kpi['margine_contribuzione']:.1f}%"},
+                ]
+                pd.DataFrame(kpi_rows).to_excel(writer, sheet_name="Indicatori", index=False)
+
         # ── Parametri
         params = pd.DataFrame([
             {"Parametro": "Societa", "Valore": SOCIETA},
