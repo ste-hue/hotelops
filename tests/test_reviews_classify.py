@@ -20,7 +20,7 @@ def test_parse_extracts_json_from_text():
 def test_parse_invalid_categoria_falls_back():
     raw = '{"categoria": "METEO", "sentiment": "POSITIVO", "riassunto": "Bel tempo."}'
     result = parse_classification(raw)
-    assert result["categoria_nlp"] == "ALTRO"
+    assert result["categoria_nlp"] == "GENERICA"
 
 
 def test_parse_invalid_json_returns_none():
