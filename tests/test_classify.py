@@ -625,7 +625,7 @@ class TestRouteFile:
             confidence=0.9,
         )
         datahub = tmp_path / "datahub"
-        dest = route_file(result, datahub, dry_run=False)
+        dest = route_file(result, datahub, dry_run=False, use_rclone=False)
         assert dest is not None
         assert dest.exists()
         assert dest.read_text() == "test content"
@@ -634,7 +634,7 @@ class TestRouteFile:
         f = tmp_path / "source.csv"
         f.write_text("new content")
         datahub = tmp_path / "datahub"
-        dest_dir = datahub / "test_dir"
+        dest_dir = datahub / "ingresso" / "test_dir"
         dest_dir.mkdir(parents=True)
         (dest_dir / "canonical.csv").write_text("old content")
 
@@ -646,7 +646,7 @@ class TestRouteFile:
             dest_folder="test_dir",
             confidence=0.9,
         )
-        dest = route_file(result, datahub, dry_run=False)
+        dest = route_file(result, datahub, dry_run=False, use_rclone=False)
         assert dest is not None
         assert dest.name == "canonical_1.csv"
         assert (dest_dir / "canonical.csv").read_text() == "old content"

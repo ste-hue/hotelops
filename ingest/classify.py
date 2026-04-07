@@ -1019,6 +1019,7 @@ def route_file(
                 i += 1
         shutil.copy2(result.file_path, dest_file)
         log.info(f"Routed (local): {result.file_path.name} → {dest_file}")
+        return dest_file
 
     return datahub / INGRESSO_PREFIX / result.dest_folder / result.canonical_name
 
