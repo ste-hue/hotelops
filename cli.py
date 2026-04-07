@@ -31,7 +31,6 @@ from condges.cli_commands import (
     cmd_help,
     cmd_pf,
     cmd_saldo,
-    cmd_scadenzario,
 )
 from reviews.cli_commands import cmd_reviews
 
@@ -467,24 +466,6 @@ def main():
         "--dry-run", action="store_true", help="Mostra il piano senza eseguire"
     )
 
-    # scadenzario
-    p_scad = sub.add_parser(
-        "scadenzario", aliases=["scad"], help="Genera Excel ponte fornitori → voci PF"
-    )
-    p_scad.add_argument(
-        "--file", type=Path, help="Sintetica scadenze Excel (default: BQ)"
-    )
-    p_scad.add_argument("--pf", type=Path, help="PF Excel di Rosa per gap analysis")
-    p_scad.add_argument("--societa", choices=["ORTI", "INTUR"], default="ORTI")
-    p_scad.add_argument(
-        "--output", type=Path, help="Directory output (default: corrente)"
-    )
-    p_scad.add_argument(
-        "--write-back",
-        action="store_true",
-        help="Write cascaded amounts back into --pf Excel (requires --pf and --file)",
-    )
-
     # ingest
     p_ingest = sub.add_parser("ingest", help="Pipeline di ingestione dati")
     p_ingest.add_argument("--only", choices=["banca", "flussi", "dimensioni"],
@@ -551,8 +532,6 @@ def main():
         "manifest": cmd_manifest,
         "classifica": cmd_classifica,
         "cls": cmd_classifica,
-        "scadenzario": cmd_scadenzario,
-        "scad": cmd_scadenzario,
         "ingest": cmd_ingest,
         "app": cmd_app,
         "reconcile": cmd_reconcile,

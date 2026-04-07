@@ -25,18 +25,31 @@ import streamlit as st
 
 FORNITORI_CSV = Path(__file__).parent.parent / "core" / "bq" / "dimensioni" / "d_fornitori.csv"
 
-VOCE_TO_SHEET = {
-    "USCITE_MATERIE_PRIME": "Materie Prime-Consumo ",
-    "USCITE_UTENZE": "Utenze",
-    "USCITE_SALARI": "Salari e Stipendi",
-    "USCITE_TASSE": "Tasse e Imposte",
-    "USCITE_COMMISSIONI": "Commisisoni Portali",
-    "USCITE_MUTUI": "Mutui e Finaziamenti",
-    "USCITE_CONSULENZE": "Consulenze",
-    "USCITE_CANONE_PASSIVO": "Godimento Beni di Terzi",
-    "USCITE_VARIE_EXT": " Varie ed Eventuali",
-    "USCITE_SERVIZI_PRODUZIONE": "Canoni e servizi",
+VOCE_TO_SHEET_CANDIDATES = {
+    "USCITE_MATERIE_PRIME": ["Materie Prime-Consumo ", "Materie Prime-Conumo "],
+    "USCITE_UTENZE": ["Utenze"],
+    "USCITE_SALARI": ["Salari e Stipendi"],
+    "USCITE_TASSE": ["Tasse e Imposte"],
+    "USCITE_COMMISSIONI": ["Commisisoni Portali"],
+    "USCITE_MUTUI": ["Mutui e Finaziamenti"],
+    "USCITE_CONSULENZE": ["Consulenze"],
+    "USCITE_CANONE_PASSIVO": ["Godimento Beni di Terzi"],
+    "USCITE_VARIE_EXT": [" Varie ed Eventuali"],
+    "USCITE_SERVIZI_PRODUZIONE": ["Canoni e servizi"],
 }
+
+
+def resolve_sheet_name(voce_id: str, available_sheets: list[str]) -> str | None:
+    """Find the actual sheet name for a voce_id, handling typos across PF files."""
+    candidates = VOCE_TO_SHEET_CANDIDATES.get(voce_id, [])
+    for name in candidates:
+        if name in available_sheets:
+            return name
+    return None
+
+
+# Keep a flat mapping for display purposes (uses first candidate)
+VOCE_TO_SHEET = {k: v[0] for k, v in VOCE_TO_SHEET_CANDIDATES.items()}
 
 VOCE_LABELS = {
     "USCITE_MATERIE_PRIME": "Materie Prime",
@@ -142,7 +155,6 @@ def parse_scadenze(file_bytes: BytesIO) -> tuple[pd.DataFrame, list[int]]:
         return pd.DataFrame(columns=["codice_fornitore", "nome", "totale", "scaduto"]), []
 
     # Aggregate by supplier + month
-    from collections import defaultdict
     supplier_data: dict[int, dict] = {}  # codice -> {nome, scaduto, mese_X, totale}
     all_months: set[int] = set()
 
@@ -351,8 +363,8 @@ def write_pf(
         })
 
     for voce_id, suppliers in scad_by_voce.items():
-        sheet_name = VOCE_TO_SHEET.get(voce_id)
-        if not sheet_name or sheet_name not in wb.sheetnames:
+        sheet_name = resolve_sheet_name(voce_id, wb.sheetnames)
+        if not sheet_name:
             continue
 
         ws = wb[sheet_name]
@@ -376,8 +388,16 @@ def write_pf(
         # which corrupts formulas and creates circular references)
         empty_rows: list[int] = []
         search_start = sum_start if sum_start else 4
-        search_end = (prev_row or total_row or ws.max_row) - 1
+        search_end = sum_end if sum_end else (ws.max_row - 1)
+        # Skip previsionale and total rows
+        skip_rows = set()
+        if prev_row:
+            skip_rows.add(prev_row)
+        if total_row:
+            skip_rows.add(total_row)
         for r in range(search_start, search_end + 1):
+            if r in skip_rows:
+                continue
             a = ws_vals.cell(row=r, column=1).value
             b = ws_vals.cell(row=r, column=2).value
             if not a and not b:
@@ -490,11 +510,24 @@ def main():
 
     pf_bytes = uploaded_pf.getvalue()
 
+    # Detect società from PF (cell A1 of "Piano Finanziario" sheet)
+    pf_wb_peek = openpyxl.load_workbook(BytesIO(pf_bytes), data_only=True, read_only=True)
+    societa = ""
+    if "Piano Finanziario" in pf_wb_peek.sheetnames:
+        a1 = pf_wb_peek["Piano Finanziario"].cell(row=1, column=1).value
+        if a1:
+            societa = str(a1).strip().replace(" S.R.L.", "").replace(" s.r.l.", "").upper()
+    pf_wb_peek.close()
+
+    if societa:
+        st.subheader(f"Scadenzario {societa}")
+    else:
+        st.subheader("Scadenze caricate")
+
     # Parse scadenzario
     scad_df, bucket_months = parse_scadenze(BytesIO(uploaded_scad.getvalue()))
     fornitori_map = load_fornitori_map()
 
-    st.subheader("Scadenze caricate")
     st.metric("Fornitori nel file", len(scad_df))
 
     # Map scadenzario to voci
@@ -652,7 +685,7 @@ def main():
         st.download_button(
             label="Scarica PF aggiornato",
             data=updated_bytes,
-            file_name=f"PF Scadenzario {date.today().strftime('%b %-d %Y')}.xlsx",
+            file_name=f"{societa + ' ' if societa else ''}PF Scadenzario {date.today().strftime('%b %-d %Y')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 

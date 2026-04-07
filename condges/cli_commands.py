@@ -544,89 +544,81 @@ def cmd_saldo(args):
 
 
 def cmd_scadenzario(args):
-    """Genera Excel ponte: scadenzario fornitori → voci PF."""
+    """Scadenzario fornitori → aggiorna PF Excel."""
+    from datetime import date
+    from io import BytesIO
+    from condges.app_scadenzario import parse_scadenze, load_fornitori_map, write_pf, MESI_NOMI
+
+    if not args.pf:
+        print("  Uso: hotelops scad --pf <PF.xlsx> --file <scadenzario.xlsx>")
+        return
+    if not args.file:
+        print("  Uso: hotelops scad --pf <PF.xlsx> --file <scadenzario.xlsx>")
+        return
+
+    # Detect società from PF
+    import openpyxl
+    wb_peek = openpyxl.load_workbook(args.pf, data_only=True, read_only=True)
+    societa = ""
+    if "Piano Finanziario" in wb_peek.sheetnames:
+        a1 = wb_peek["Piano Finanziario"].cell(row=1, column=1).value
+        if a1:
+            societa = str(a1).strip().replace(" S.R.L.", "").replace(" s.r.l.", "").upper()
+    wb_peek.close()
+
     print(f"\n{'═' * 60}")
-    print(f"  SCADENZARIO → PIANO FINANZIARIO ({args.societa})")
+    print(f"  SCADENZARIO → PIANO FINANZIARIO {societa}")
     print(f"{'═' * 60}\n")
+    print(f"  PF:          {args.pf}")
+    print(f"  Scadenzario: {args.file}")
 
-    if args.write_back:
-        from condges.scadenzario_excel import (
-            cascade_scaduto,
-            load_fornitori_map,
-            load_fornitori_map_full,
-            map_to_voci,
-            parse_sintetica_scadenze,
-            write_back_to_pf,
-            MESI_NOMI,
-        )
+    # Parse
+    with open(args.file, "rb") as f:
+        scad_df, bucket_months = parse_scadenze(BytesIO(f.read()))
+    print(f"  Fornitori trovati: {len(scad_df)}")
 
-        if not args.pf:
-            print("  ❌ --write-back requires --pf <PF Excel path>")
-            return
-        if not args.file:
-            print("  ❌ --write-back requires --file <sintetica Excel path>")
-            return
+    fornitori_map = load_fornitori_map()
+    mapped = scad_df[scad_df["codice_fornitore"].isin(fornitori_map.keys())]
+    unmapped = scad_df[~scad_df["codice_fornitore"].isin(fornitori_map.keys())]
+    print(f"  Mappati: {len(mapped)} | Non mappati: {len(unmapped)}")
 
-        print(f"  Sintetica: {args.file}")
-        print(f"  PF Excel:  {args.pf}")
+    # Write
+    with open(args.pf, "rb") as f:
+        pf_bytes = f.read()
+    updated_bytes, summary = write_pf(pf_bytes, scad_df, bucket_months, fornitori_map)
 
-        partite, bucket_months = parse_sintetica_scadenze(args.file)
-        print(f"  Fornitori trovati: {len(partite)}")
-
-        cascade_scaduto(partite)
-        print("  ✓ Scaduto cascaded into current month")
-
-        fornitori_map = load_fornitori_map()
-        mapped, unmapped = map_to_voci(partite, fornitori_map)
-        print(
-            f"  Mappati: {sum(len(v) for v in mapped.values())} | Non mappati: {len(unmapped)}"
-        )
-
-        fornitori_full = load_fornitori_map_full()
-        out, summary = write_back_to_pf(args.pf, mapped, fornitori_full)
-
-        # Print results
-        print(f"\n  {'─' * 56}")
-        total_written = 0
-        for voce_label, entries in sorted(summary.items()):
-            voce_total = sum(sum(e["months"].values()) for e in entries)
-            total_written += voce_total
-            print(f"  {voce_label}: {len(entries)} fornitori, €{voce_total:,.0f}")
-            for e in entries:
-                month_detail = ", ".join(
-                    f"{MESI_NOMI[m - 1]}=€{v:,.0f}"
-                    for m, v in sorted(e["months"].items())
-                )
-                print(f"    {e['nome']}: {month_detail}")
-        print(f"  {'─' * 56}")
-        print(f"  Totale scritto: €{total_written:,.0f}")
-
-        print(f"\n  ✅ PF aggiornato: {out}")
-        if unmapped:
-            print(f"  ⚠️  {len(unmapped)} fornitori non mappati (non scritti):")
-            for u in unmapped[:5]:
-                print(
-                    f"     - {u['codice_fornitore']} {u['nome']}: €{u['totale']:,.0f}"
-                )
-            if len(unmapped) > 5:
-                print(f"     ... e altri {len(unmapped) - 5}")
+    # Output path
+    out_name = f"{societa + ' ' if societa else ''}PF Scadenzario {date.today().strftime('%b %-d %Y')}.xlsx"
+    if args.output:
+        out_path = args.output / out_name
     else:
-        from condges.scadenzario_excel import run
+        out_path = args.pf.parent / out_name
+    with open(out_path, "wb") as f:
+        f.write(updated_bytes)
 
-        if args.file:
-            print(f"  Input: {args.file}")
-        else:
-            print("  Input: BigQuery (ultimo snapshot)")
-        if args.pf:
-            print(f"  PF Rosa: {args.pf}")
+    # Print results
+    print(f"\n  {'─' * 56}")
+    total_written = 0
+    for voce_label, entries in sorted(summary.items()):
+        voce_total = sum(sum(e["months"].values()) for e in entries)
+        total_written += voce_total
+        print(f"  {voce_label}: {len(entries)} fornitori, €{voce_total:,.0f}")
+        for e in entries:
+            month_detail = ", ".join(
+                f"{MESI_NOMI[m - 1]}=€{v:,.0f}"
+                for m, v in sorted(e["months"].items())
+            )
+            print(f"    {e['nome']}: {month_detail}")
+    print(f"  {'─' * 56}")
+    print(f"  Totale scritto: €{total_written:,.0f}")
 
-        out = run(
-            file=args.file,
-            pf=args.pf,
-            societa=args.societa,
-            output=args.output,
-        )
-        print(f"\n  ✅ Excel generato: {out}")
+    print(f"\n  ✅ {out_path}")
+    if len(unmapped) > 0:
+        print(f"  ⚠️  {len(unmapped)} fornitori non mappati (non scritti):")
+        for _, u in unmapped.head(5).iterrows():
+            print(f"     - {int(u['codice_fornitore'])} {u['nome']}: €{u['totale']:,.0f}")
+        if len(unmapped) > 5:
+            print(f"     ... e altri {len(unmapped) - 5}")
 
     print(f"{'═' * 60}\n")
 
