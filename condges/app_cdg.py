@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-Budget & Tesoreria 2026 — App Interattiva.
+Controllo di Gestione — App Unificata.
 
-Due pagine:
-  1. BUDGET: consuntivo vs budget mensile per fonte, con manopole crescita per BU
-  2. TESORERIA: saldo banca proiettato mese per mese (entrate - uscite)
+Quattro tab:
+  1. CONTO ECONOMICO: P&L consuntivo YTD
+  2. BUDGET: consuntivo vs budget mensile per fonte, con manopole crescita per BU
+  3. TESORERIA: saldo banca proiettato mese per mese (entrate - uscite)
+  4. INDICATORI: KPI operativi
 
 Usage:
-    streamlit run condges/budget_app.py
+    streamlit run condges/app_cdg.py
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ import streamlit as st
 from io import BytesIO
 
 from core import config as cfg
+from condges.cdg_engine import compute_ce_cascade, compute_indicatori
 
 MESI_NOMI = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"]
 ANNO = 2026
@@ -38,14 +41,16 @@ def get_bq():
 # ── Data Loading ──────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=300, show_spinner="Caricamento budget...")
-def load_budget_base() -> pd.DataFrame:
+def load_budget_base(societa: str = None, anno: int = None) -> pd.DataFrame:
     """Budget mensile corrente da BQ (tutte le fonti nostre)."""
+    societa = societa or SOCIETA
+    anno = anno or ANNO
     bq = get_bq()
     sql = f"""
     SELECT codice_conto, descrizione, tipo_costo, categoria_ce,
            business_unit_id, mese, importo, fonte
     FROM `{cfg.F_BUDGET_MENSILE}`
-    WHERE societa_id = '{SOCIETA}' AND anno = {ANNO}
+    WHERE societa_id = '{societa}' AND anno = {anno}
       AND fonte IN ('CONS2025_IP', 'MAPPATURA', 'STRUTTURALI', 'CONS2025_F',
                     'PERSONALE', 'CONS2025_V', 'CONS2025_X', 'APP_BUDGET')
     ORDER BY codice_conto, mese
@@ -54,8 +59,10 @@ def load_budget_base() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=300, show_spinner="Caricamento consuntivo...")
-def load_consuntivo_ytd() -> pd.DataFrame:
-    """Consuntivo 2026 YTD da f_movimenti_contabili."""
+def load_consuntivo_ytd(societa: str = None, anno: int = None) -> pd.DataFrame:
+    """Consuntivo YTD da f_movimenti_contabili."""
+    societa = societa or SOCIETA
+    anno = anno or ANNO
     bq = get_bq()
     sql = f"""
     SELECT
@@ -73,22 +80,23 @@ def load_consuntivo_ytd() -> pd.DataFrame:
     FROM `{cfg.F_MOVIMENTI_CONTABILI}` c
     JOIN `{cfg.D_CATEGORIE_CONTI}` cat
       ON REPLACE(cat.codice_conto, '.', '') = c.cod_conto
-    WHERE c.anno = {ANNO} AND c.societa_id = '{SOCIETA}'
+    WHERE c.anno = {anno} AND c.societa_id = '{societa}'
     GROUP BY c.cod_conto, cat.codice_conto, cat.descrizione, cat.tipo_costo, cat.categoria_ce, c.mese
     """
     return bq.query(sql).to_dataframe()
 
 
 @st.cache_data(ttl=300, show_spinner="Caricamento saldi banca...")
-def load_saldi_banca() -> pd.DataFrame:
+def load_saldi_banca(societa: str = None) -> pd.DataFrame:
     """Ultimo saldo reale per banca."""
+    societa = societa or SOCIETA
     bq = get_bq()
     sql = f"""
     SELECT banca_id, saldo_finale, data_snapshot
     FROM (
       SELECT *, ROW_NUMBER() OVER (PARTITION BY banca_id ORDER BY data_snapshot DESC) AS rn
       FROM `{cfg.F_SALDI_BANCA_SNAPSHOT}`
-      WHERE societa_id = '{SOCIETA}'
+      WHERE societa_id = '{societa}'
     )
     WHERE rn = 1
     ORDER BY banca_id
@@ -97,6 +105,69 @@ def load_saldi_banca() -> pd.DataFrame:
         return bq.query(sql).to_dataframe()
     except Exception:
         return pd.DataFrame(columns=["banca_id", "saldo_finale", "data_snapshot"])
+
+
+@st.cache_data(ttl=300, show_spinner="Caricamento CE...")
+def load_consuntivo_ce(societa: str, anno: int) -> pd.DataFrame:
+    """Consuntivo aggregato per categoria_ce (for CE cascade)."""
+    bq = get_bq()
+    sql = f"""
+    SELECT categoria_ce, SUM(importo) as importo
+    FROM (
+      SELECT
+        cat.categoria_ce,
+        c.cod_conto,
+        CASE
+          WHEN c.cod_conto LIKE '47%' OR c.cod_conto LIKE '48%' OR c.cod_conto LIKE '53%'
+          THEN SUM(imp_avere) - SUM(imp_dare)
+          ELSE SUM(imp_dare) - SUM(imp_avere)
+        END as importo
+      FROM `{cfg.F_MOVIMENTI_CONTABILI}` c
+      JOIN `{cfg.D_CATEGORIE_CONTI}` cat
+        ON REPLACE(cat.codice_conto, '.', '') = c.cod_conto
+      WHERE c.anno = {anno} AND c.societa_id = '{societa}'
+      GROUP BY cat.categoria_ce, c.cod_conto
+    )
+    GROUP BY categoria_ce
+    """
+    return bq.query(sql).to_dataframe()
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def load_stagionalita() -> pd.DataFrame:
+    """Load seasonality coefficients per BU per month."""
+    bq = get_bq()
+    sql = f"""
+    SELECT business_unit_id, mese, coefficiente
+    FROM `{cfg.D_COEFFICIENTI_STAGIONALITA}`
+    ORDER BY business_unit_id, mese
+    """
+    return bq.query(sql).to_dataframe()
+
+
+@st.cache_data(ttl=300, show_spinner="Caricamento dettaglio CE...")
+def load_consuntivo_ce_detail(societa: str, anno: int) -> pd.DataFrame:
+    """Consuntivo per codice conto (for CE drill-down)."""
+    bq = get_bq()
+    sql = f"""
+    SELECT
+      cat.codice_conto,
+      cat.descrizione,
+      cat.categoria_ce,
+      cat.tipo_costo,
+      CASE
+        WHEN c.cod_conto LIKE '47%' OR c.cod_conto LIKE '48%' OR c.cod_conto LIKE '53%'
+        THEN SUM(imp_avere) - SUM(imp_dare)
+        ELSE SUM(imp_dare) - SUM(imp_avere)
+      END as importo
+    FROM `{cfg.F_MOVIMENTI_CONTABILI}` c
+    JOIN `{cfg.D_CATEGORIE_CONTI}` cat
+      ON REPLACE(cat.codice_conto, '.', '') = c.cod_conto
+    WHERE c.anno = {anno} AND c.societa_id = '{societa}'
+    GROUP BY c.cod_conto, cat.codice_conto, cat.descrizione, cat.categoria_ce, cat.tipo_costo
+    ORDER BY cat.categoria_ce, cat.codice_conto
+    """
+    return bq.query(sql).to_dataframe()
 
 
 # ── Budget Engine ─────────────────────────────────────────────────────────────
@@ -220,6 +291,34 @@ def genera_excel(budget: pd.DataFrame, consuntivo: pd.DataFrame,
             comp["delta_%"] = (comp["delta"] / comp["budget"].replace(0, float("nan")) * 100).round(1)
             comp = comp.sort_values("delta", key=abs, ascending=False)
             comp.to_excel(writer, sheet_name=f"BvA mesi 1-{last_actual_month}", index=False)
+
+        # ── CE Riclassificato
+        ce_data = load_consuntivo_ce(SOCIETA, ANNO)
+        ce_det = load_consuntivo_ce_detail(SOCIETA, ANNO)
+        _aff = 0
+        if not ce_det.empty:
+            _aff_rows = ce_det[ce_det["codice_conto"].str.startswith("65.11")]
+            if not _aff_rows.empty:
+                _aff = _aff_rows["importo"].sum()
+        if not ce_data.empty:
+            cascade = compute_ce_cascade(ce_data, affitto=_aff)
+            ce_rows = [{"Voce": r["label"], "Importo": r["importo"],
+                        "% Ricavi": r["pct_ricavi"]} for r in cascade]
+            pd.DataFrame(ce_rows).to_excel(writer, sheet_name="CE", index=False)
+
+        # ── Indicatori
+        if not consuntivo.empty:
+            tipo_df = consuntivo.groupby("tipo_costo")["importo"].sum().reset_index()
+            if not ce_data.empty:
+                kpi = compute_indicatori(cascade, tipo_df)
+                kpi_rows = [
+                    {"Indicatore": "EBITDA %", "Valore": f"{kpi['ebitda_pct']:.1f}%"},
+                    {"Indicatore": "ROS", "Valore": f"{kpi['ros']:.1f}%"},
+                    {"Indicatore": "BEP Fatturato", "Valore": f"{kpi['bep_fatturato']:,.0f}"},
+                    {"Indicatore": "BEP Giorno", "Valore": str(kpi['bep_giorno'])},
+                    {"Indicatore": "Margine Contribuzione", "Valore": f"{kpi['margine_contribuzione']:.1f}%"},
+                ]
+                pd.DataFrame(kpi_rows).to_excel(writer, sheet_name="Indicatori", index=False)
 
         # ── Parametri
         params = pd.DataFrame([
@@ -395,9 +494,9 @@ def page_budget(adjusted: pd.DataFrame, consuntivo: pd.DataFrame,
         b_ytd = adjusted[adjusted["mese"] <= last_actual_month].groupby("categoria_ce")["importo"].sum()
         a_ytd = consuntivo[consuntivo["mese"] <= last_actual_month].groupby("categoria_ce")["importo"].sum()
 
-        bva = pd.DataFrame({"Budget": b_ytd, "Consuntivo": a_ytd}).fillna(0)
-        bva["Delta"] = bva["Consuntivo"] - bva["Budget"]
-        bva["Delta %"] = (bva["Delta"] / bva["Budget"].replace(0, float("nan")) * 100).round(1)
+        bva = pd.DataFrame({"Budget YTD": b_ytd, "Consuntivo": a_ytd}).fillna(0)
+        bva["Delta"] = bva["Consuntivo"] - bva["Budget YTD"]
+        bva["Delta %"] = (bva["Delta"] / bva["Budget YTD"].replace(0, float("nan")) * 100).round(1)
         bva = bva.sort_values("Delta", key=abs, ascending=False)
 
         def _color_delta(val):
@@ -406,11 +505,63 @@ def page_budget(adjusted: pd.DataFrame, consuntivo: pd.DataFrame,
             return ""
 
         st.dataframe(
-            bva.style.format({"Budget": "{:,.0f}", "Consuntivo": "{:,.0f}",
+            bva.style.format({"Budget YTD": "{:,.0f}", "Consuntivo": "{:,.0f}",
                               "Delta": "{:+,.0f}", "Delta %": "{:+.1f}%"})
             .map(_color_delta, subset=["Delta", "Delta %"]),
             use_container_width=True
         )
+
+        # ── Year-end projection per codice conto ───────────────────────────
+        st.subheader("Proiezione Fine Anno")
+
+        from condges.cdg_engine import compute_proiezione_anno
+
+        stag_df = load_stagionalita()
+        stag_by_bu = {}
+        for bu in stag_df["business_unit_id"].unique():
+            bu_df = stag_df[stag_df["business_unit_id"] == bu].sort_values("mese")
+            stag_by_bu[bu] = bu_df["coefficiente"].tolist()
+        flat_stag = [1.0] * 12
+
+        # Per-codice consuntivo YTD
+        cons_by_code = consuntivo.groupby(
+            ["codice_conto", "descrizione", "tipo_costo", "categoria_ce"]
+        )["importo"].sum().reset_index()
+
+        # Full-year budget per codice
+        budget_full = adjusted.groupby("codice_conto")["importo"].sum()
+
+        proiezioni = []
+        for _, row in cons_by_code.iterrows():
+            stag = flat_stag  # default; BU-level would need mapping
+            proj = compute_proiezione_anno(
+                row["importo"], row["tipo_costo"], last_actual_month, stag
+            )
+            budget_anno = budget_full.get(row["codice_conto"], 0)
+            proiezioni.append({
+                "Codice": row["codice_conto"],
+                "Descrizione": row["descrizione"],
+                "Tipo": row["tipo_costo"],
+                "Categoria": row["categoria_ce"],
+                "Consuntivo YTD": row["importo"],
+                "Proiezione Anno": proj,
+                "Budget Anno": budget_anno,
+                "Delta Proiez.": proj - budget_anno,
+            })
+
+        if proiezioni:
+            proj_df = pd.DataFrame(proiezioni)
+            proj_df = proj_df.sort_values("Delta Proiez.", key=abs, ascending=False)
+
+            st.dataframe(
+                proj_df.style.format({
+                    "Consuntivo YTD": "{:,.0f}",
+                    "Proiezione Anno": "{:,.0f}",
+                    "Budget Anno": "{:,.0f}",
+                    "Delta Proiez.": "{:+,.0f}",
+                }).map(_color_delta, subset=["Delta Proiez."]),
+                use_container_width=True, hide_index=True,
+            )
 
     # ── Dettaglio per tipo ──────────────────────────────────────────────────
     st.subheader("Dettaglio per Categoria")
@@ -508,7 +659,7 @@ def page_tesoreria(adjusted: pd.DataFrame, consuntivo: pd.DataFrame,
     cashflow = pd.DataFrame(rows)
 
     # Running balance
-    cashflow["saldo"] = saldo_iniziale + cashflow["netto"].cumsum()
+    cashflow["saldo"] = float(saldo_iniziale) + cashflow["netto"].cumsum()
 
     # ── Table ───────────────────────────────────────────────────────────────
     display_cf = cashflow[["mese_nome", "tipo", "entrate", "uscite", "netto", "saldo"]].copy()
@@ -607,41 +758,193 @@ def page_tesoreria(adjusted: pd.DataFrame, consuntivo: pd.DataFrame,
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# PAGE 3: CONTO ECONOMICO (placeholder)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def page_ce(consuntivo: pd.DataFrame, last_actual_month: int):
+    """Conto Economico riclassificato."""
+    ce_data = load_consuntivo_ce(SOCIETA, ANNO)
+    ce_detail = load_consuntivo_ce_detail(SOCIETA, ANNO)
+
+    if ce_data.empty:
+        st.warning("Nessun dato consuntivo trovato.")
+        return
+
+    # Scorporo affitto intercompany (conto 65.11.01) dai Costi Produttivi
+    affitto = 0
+    if not ce_detail.empty:
+        aff = ce_detail[ce_detail["codice_conto"].str.startswith("65.11")]
+        if not aff.empty:
+            affitto = aff["importo"].sum()
+
+    cascade = compute_ce_cascade(ce_data, affitto=affitto)
+
+    st.subheader(f"CE Riclassificato — {SOCIETA} {ANNO}")
+    if last_actual_month > 0:
+        st.caption(f"Consuntivo mesi 1-{last_actual_month} ({MESI_NOMI[last_actual_month - 1]})")
+
+    rows_display = []
+    for r in cascade:
+        prefix = "  " * r["indent"]
+        label = f"**{r['label']}**" if r["is_subtotal"] else f"{prefix}{r['label']}"
+        rows_display.append({
+            "Voce": label,
+            "Importo": r["importo"],
+            "% Ricavi": r["pct_ricavi"],
+        })
+
+    ce_df = pd.DataFrame(rows_display)
+
+    def _color_subtotal(row):
+        if "**" in str(row["Voce"]):
+            return ["font-weight: bold; background-color: #f0f9ff"] * len(row)
+        return [""] * len(row)
+
+    st.dataframe(
+        ce_df.style
+        .format({"Importo": "{:,.0f}", "% Ricavi": "{:.1f}%"})
+        .apply(_color_subtotal, axis=1),
+        use_container_width=True, hide_index=True,
+        height=500,
+    )
+
+    st.subheader("Dettaglio per Categoria")
+
+    for cat in ["Ricavi", "Acquisti", "Costi Produttivi", "Costo del Personale",
+                "Costi Commerciali", "Costi Amministrativi", "Oneri Finanziari"]:
+        cat_df = ce_detail[ce_detail["categoria_ce"] == cat]
+        if cat_df.empty:
+            continue
+        total = cat_df["importo"].sum()
+        with st.expander(f"{cat} — {total:,.0f} €"):
+            display = cat_df[["codice_conto", "descrizione", "tipo_costo", "importo"]].copy()
+            display.columns = ["Codice", "Descrizione", "Tipo", "Importo"]
+            display = display.sort_values("Importo", ascending=False)
+            st.dataframe(
+                display.style.format({"Importo": "{:,.0f}"}),
+                use_container_width=True, hide_index=True,
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE 4: INDICATORI (placeholder)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def page_indicatori(consuntivo: pd.DataFrame, adjusted: pd.DataFrame,
+                    last_actual_month: int):
+    """KPI dashboard: EBITDA%, ROS, BEP."""
+    ce_data = load_consuntivo_ce(SOCIETA, ANNO)
+    ce_detail = load_consuntivo_ce_detail(SOCIETA, ANNO)
+
+    if ce_data.empty:
+        st.warning("Nessun dato consuntivo per calcolare gli indicatori.")
+        return
+
+    affitto = 0
+    if not ce_detail.empty:
+        aff = ce_detail[ce_detail["codice_conto"].str.startswith("65.11")]
+        if not aff.empty:
+            affitto = aff["importo"].sum()
+
+    cascade = compute_ce_cascade(ce_data, affitto=affitto)
+
+    # tipo_costo totals from consuntivo
+    tipo_df = consuntivo.groupby("tipo_costo")["importo"].sum().reset_index()
+
+    kpi = compute_indicatori(cascade, tipo_df)
+
+    # ── Big numbers ────────────────────────────────────────────────────────
+    st.subheader(f"Indicatori — {SOCIETA} {ANNO}")
+    if last_actual_month > 0:
+        st.caption(f"Calcolati su consuntivo mesi 1-{last_actual_month}")
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    col1.metric("EBITDA %", f"{kpi['ebitda_pct']:.1f}%")
+    col2.metric("ROS", f"{kpi['ros']:.1f}%")
+    col3.metric("BEP Fatturato", f"{kpi['bep_fatturato']:,.0f} €")
+    col4.metric("BEP Giorno", f"{kpi['bep_giorno']}")
+    col5.metric("Margine Contribuzione", f"{kpi['margine_contribuzione']:.1f}%")
+
+    # ── BEP explanation ────────────────────────────────────────────────────
+    st.divider()
+
+    vals = {r["label"]: r["importo"] for r in cascade}
+    ricavi = vals.get("Ricavi", 0)
+
+    if ricavi > 0 and kpi["bep_fatturato"] > 0:
+        pct_bep = kpi["bep_fatturato"] / ricavi * 100
+        if pct_bep > 100:
+            st.error(
+                f"Il fatturato attuale ({ricavi:,.0f} €) è **sotto** il break-even "
+                f"({kpi['bep_fatturato']:,.0f} €). Servono {kpi['bep_fatturato'] - ricavi:,.0f} € in più."
+            )
+        elif pct_bep > 90:
+            st.warning(
+                f"Margine di sicurezza ridotto: il fatturato è al **{pct_bep:.0f}%** del break-even. "
+                f"Giorno BEP = {kpi['bep_giorno']} su 365."
+            )
+        else:
+            st.success(
+                f"Fatturato al **{pct_bep:.0f}%** del break-even. "
+                f"Giorno BEP = {kpi['bep_giorno']} — margine confortevole."
+            )
+
+    # ── Detail table ───────────────────────────────────────────────────────
+    st.subheader("Dettaglio Calcolo")
+
+    tipo_sums = tipo_df.groupby("tipo_costo")["importo"].sum().to_dict() if not tipo_df.empty else {}
+    detail = pd.DataFrame([
+        {"Voce": "Ricavi (IP)", "Importo": tipo_sums.get("IP", 0)},
+        {"Voce": "Costi Fissi (F)", "Importo": tipo_sums.get("F", 0)},
+        {"Voce": "Costi Variabili (V)", "Importo": tipo_sums.get("V", 0)},
+        {"Voce": "Personale (P)", "Importo": tipo_sums.get("P", 0)},
+        {"Voce": "Finanziari (X)", "Importo": tipo_sums.get("X", 0)},
+    ])
+    st.dataframe(
+        detail.style.format({"Importo": "{:,.0f}"}),
+        use_container_width=True, hide_index=True,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ══════════════════════════════════════════════════════════════════════════════
 
 def main():
-    st.set_page_config(page_title="Budget & Tesoreria 2026", layout="wide")
-    st.title("Budget & Tesoreria 2026 — ORTI")
+    global SOCIETA, ANNO
+
+    st.set_page_config(page_title="Controllo di Gestione", layout="wide")
+    st.title("Controllo di Gestione")
+
+    # ── Sidebar (before data loading so selections drive queries) ───────────
+    st.sidebar.header("Parametri")
+
+    SOCIETA = st.sidebar.selectbox("Società", ["ORTI", "INTUR"])
+    ANNO = st.sidebar.number_input("Anno", min_value=2024, max_value=2030, value=2026)
 
     # ── Data ────────────────────────────────────────────────────────────────
-    budget_base = load_budget_base()
-    consuntivo = load_consuntivo_ytd()
+    budget_base = load_budget_base(SOCIETA, ANNO)
+    consuntivo = load_consuntivo_ytd(SOCIETA, ANNO)
 
     if budget_base.empty:
-        st.error("Nessun budget trovato in f_budget_mensile.")
+        st.error(f"Nessun budget trovato in f_budget_mensile per {SOCIETA} {ANNO}.")
         return
 
-    # Solo mesi completamente chiusi contano come consuntivo
-    # (oggi 27 marzo -> marzo non è chiuso -> last = febbraio)
     today = datetime.now()
     if today.year == ANNO:
-        max_closed_month = today.month - 1  # mese corrente non è chiuso
+        max_closed_month = today.month - 1
     else:
         max_closed_month = 12
     data_max = int(consuntivo["mese"].max()) if not consuntivo.empty else 0
     last_actual_month = min(data_max, max_closed_month)
 
-    # ── Sidebar ─────────────────────────────────────────────────────────────
-    st.sidebar.header("Scenario")
-    st.sidebar.caption(
-        "Crescita % aggiuntiva rispetto al budget base.\n"
-        "Hotel base gia include +10% da maggio (10 camere extra)."
-    )
+    st.sidebar.divider()
+    st.sidebar.subheader("Scenario Crescita")
+    st.sidebar.caption("Crescita % aggiuntiva rispetto al budget base.")
 
     growth = {}
-    growth["HOTEL"] = st.sidebar.slider("Hotel", -30, 50, 0, 1, format="%+d%%",
-                                        help="Base gia +10% da maggio")
+    growth["HOTEL"] = st.sidebar.slider("Hotel", -30, 50, 10, 1, format="%+d%%")
     growth["RESIDENCE"] = st.sidebar.slider("Residence", -30, 50, 0, 1, format="%+d%%")
     growth["CVM"] = st.sidebar.slider("CVM", -30, 50, 0, 1, format="%+d%%")
     growth["LIDO"] = st.sidebar.slider("Spiaggia", -30, 50, 0, 1, format="%+d%%")
@@ -652,21 +955,29 @@ def main():
     ricavi = adjusted[adjusted["tipo_costo"] == "IP"]["importo"].sum()
     costi = adjusted[adjusted["tipo_costo"] != "IP"]["importo"].sum()
     st.sidebar.divider()
-    st.sidebar.metric("Ricavi", f"{ricavi:,.0f} \u20ac")
-    st.sidebar.metric("Margine", f"{ricavi - costi:,.0f} \u20ac",
+    st.sidebar.metric("Ricavi", f"{ricavi:,.0f} €")
+    st.sidebar.metric("Margine", f"{ricavi - costi:,.0f} €",
                       delta=f"{(ricavi - costi) / ricavi * 100:.0f}%" if ricavi else None)
 
     if last_actual_month > 0:
         st.sidebar.caption(f"Consuntivo fino a: {MESI_NOMI[last_actual_month - 1]} {ANNO}")
 
     # ── Tabs ────────────────────────────────────────────────────────────────
-    tab_budget, tab_tesoreria = st.tabs(["Budget", "Tesoreria"])
+    tab_ce, tab_budget, tab_tesoreria, tab_indicatori = st.tabs(
+        ["Conto Economico", "Budget", "Tesoreria", "Indicatori"]
+    )
+
+    with tab_ce:
+        page_ce(consuntivo, last_actual_month)
 
     with tab_budget:
         page_budget(adjusted, consuntivo, last_actual_month, growth)
 
     with tab_tesoreria:
         page_tesoreria(adjusted, consuntivo, last_actual_month)
+
+    with tab_indicatori:
+        page_indicatori(consuntivo, adjusted, last_actual_month)
 
 
 if __name__ == "__main__":
