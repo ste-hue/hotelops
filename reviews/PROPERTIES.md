@@ -62,8 +62,19 @@ export APIFY_API_TOKEN="..."      # Da https://console.apify.com/account/integra
 export ANTHROPIC_API_KEY="..."    # Per Claude API (classificazione NLP)
 ```
 
-## Costi stimati
+## Scraping config
 
-- **Apify:** < $5/anno (poche centinaia di reviews per property)
-- **Claude API (Haiku):** < $1/anno per classificazione
-- **Totale:** < $6/anno
+`reviews/scrape.py` → `_build_input()` imposta `maxReviews` (o `maxItems` per TripAdvisor) per ogni call.
+
+- **maxReviews = 5** per piattaforma/BU — sufficiente per cron giornaliero
+- Dedup avviene in `ingest.py:load_to_bq()` contro BQ (review_hash)
+- Ogni run scrapa le ultime 5 review indipendentemente da cosa c'è già in BQ → la maggior parte saranno duplicati scartati
+- ⚠️ Alzare maxReviews aumenta costi Apify proporzionalmente (pay-per-event su Expedia)
+
+**Risultati per run:** ~55 (5 × 4 piattaforme × 3 BU, meno CVM/Expedia che non ha URL)
+
+## Costi stimati (cron giornaliero, maxReviews=5)
+
+- **Apify:** ~$30-35/mese (~55 risultati/giorno × ~$0.02/risultato)
+- **Claude API (Haiku):** trascurabile (solo review nuove, poche al giorno)
+- **Limite Apify impostato:** $100/mese (safety cap)
