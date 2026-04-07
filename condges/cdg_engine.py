@@ -19,10 +19,11 @@ CE_CATEGORIE_ORD = [
 ]
 
 
-def compute_ce_cascade(consuntivo_by_cat: pd.DataFrame) -> list[dict]:
+def compute_ce_cascade(consuntivo_by_cat: pd.DataFrame, affitto: float = 0) -> list[dict]:
     """Compute CE riclassificato cascade from consuntivo grouped by categoria_ce.
 
     Input: DataFrame with columns [categoria_ce, importo]
+           affitto: importo affitto d'azienda (intercompany) to show separately
     Output: list of dicts with keys [label, importo, pct_ricavi, is_subtotal, indent]
     """
     totals = {}
@@ -38,10 +39,13 @@ def compute_ce_cascade(consuntivo_by_cat: pd.DataFrame) -> list[dict]:
     amministrativi = totals.get("Costi Amministrativi", 0)
     oneri_fin = totals.get("Oneri Finanziari", 0)
 
+    # Scorporo affitto intercompany dai Costi Produttivi
+    costi_prod_netti = costi_prod - affitto
+
     costo_mp = acquisti
-    costo_venduto = costo_mp + costi_prod
+    costo_venduto = costo_mp + costi_prod_netti
     margine_1 = ricavi - costo_venduto
-    tot_costi_op = costo_venduto + personale + commerciali + amministrativi
+    tot_costi_op = costo_venduto + personale + commerciali + amministrativi + affitto
     ebit = ricavi - tot_costi_op
     ebitda = ebit  # v1: ammortamenti not separated
     risultato = ebit - oneri_fin
@@ -53,11 +57,12 @@ def compute_ce_cascade(consuntivo_by_cat: pd.DataFrame) -> list[dict]:
         {"label": "Ricavi", "importo": ricavi, "pct_ricavi": _pct(ricavi), "is_subtotal": True, "indent": 0},
         {"label": "Acquisti", "importo": -acquisti, "pct_ricavi": _pct(acquisti), "is_subtotal": False, "indent": 1},
         {"label": "Costo Materie Prime", "importo": costo_mp, "pct_ricavi": _pct(costo_mp), "is_subtotal": True, "indent": 0},
-        {"label": "Costi Produttivi", "importo": -costi_prod, "pct_ricavi": _pct(costi_prod), "is_subtotal": False, "indent": 1},
+        {"label": "Costi Produttivi", "importo": -costi_prod_netti, "pct_ricavi": _pct(costi_prod_netti), "is_subtotal": False, "indent": 1},
         {"label": "I Margine Operativo", "importo": margine_1, "pct_ricavi": _pct(margine_1), "is_subtotal": True, "indent": 0},
         {"label": "Costo del Personale", "importo": -personale, "pct_ricavi": _pct(personale), "is_subtotal": False, "indent": 1},
         {"label": "Costi Commerciali", "importo": -commerciali, "pct_ricavi": _pct(commerciali), "is_subtotal": False, "indent": 1},
         {"label": "Costi Amministrativi", "importo": -amministrativi, "pct_ricavi": _pct(amministrativi), "is_subtotal": False, "indent": 1},
+        {"label": "Affitto d'Azienda (intercompany)", "importo": -affitto, "pct_ricavi": _pct(affitto), "is_subtotal": False, "indent": 1},
         {"label": "EBIT", "importo": ebit, "pct_ricavi": _pct(ebit), "is_subtotal": True, "indent": 0},
         {"label": "EBITDA", "importo": ebitda, "pct_ricavi": _pct(ebitda), "is_subtotal": True, "indent": 0},
         {"label": "Oneri Finanziari", "importo": -oneri_fin, "pct_ricavi": _pct(oneri_fin), "is_subtotal": False, "indent": 1},
