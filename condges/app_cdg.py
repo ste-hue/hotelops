@@ -787,7 +787,72 @@ def page_ce(consuntivo: pd.DataFrame, last_actual_month: int):
 
 def page_indicatori(consuntivo: pd.DataFrame, adjusted: pd.DataFrame,
                     last_actual_month: int):
-    st.info("Indicatori — in costruzione")
+    """KPI dashboard: EBITDA%, ROS, BEP."""
+    ce_data = load_consuntivo_ce(SOCIETA, ANNO)
+
+    if ce_data.empty:
+        st.warning("Nessun dato consuntivo per calcolare gli indicatori.")
+        return
+
+    cascade = compute_ce_cascade(ce_data)
+
+    # tipo_costo totals from consuntivo
+    tipo_df = consuntivo.groupby("tipo_costo")["importo"].sum().reset_index()
+
+    kpi = compute_indicatori(cascade, tipo_df)
+
+    # ── Big numbers ────────────────────────────────────────────────────────
+    st.subheader(f"Indicatori — {SOCIETA} {ANNO}")
+    if last_actual_month > 0:
+        st.caption(f"Calcolati su consuntivo mesi 1-{last_actual_month}")
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    col1.metric("EBITDA %", f"{kpi['ebitda_pct']:.1f}%")
+    col2.metric("ROS", f"{kpi['ros']:.1f}%")
+    col3.metric("BEP Fatturato", f"{kpi['bep_fatturato']:,.0f} €")
+    col4.metric("BEP Giorno", f"{kpi['bep_giorno']}")
+    col5.metric("Margine Contribuzione", f"{kpi['margine_contribuzione']:.1f}%")
+
+    # ── BEP explanation ────────────────────────────────────────────────────
+    st.divider()
+
+    vals = {r["label"]: r["importo"] for r in cascade}
+    ricavi = vals.get("Ricavi", 0)
+
+    if ricavi > 0 and kpi["bep_fatturato"] > 0:
+        pct_bep = kpi["bep_fatturato"] / ricavi * 100
+        if pct_bep > 100:
+            st.error(
+                f"Il fatturato attuale ({ricavi:,.0f} €) è **sotto** il break-even "
+                f"({kpi['bep_fatturato']:,.0f} €). Servono {kpi['bep_fatturato'] - ricavi:,.0f} € in più."
+            )
+        elif pct_bep > 90:
+            st.warning(
+                f"Margine di sicurezza ridotto: il fatturato è al **{pct_bep:.0f}%** del break-even. "
+                f"Giorno BEP = {kpi['bep_giorno']} su 365."
+            )
+        else:
+            st.success(
+                f"Fatturato al **{pct_bep:.0f}%** del break-even. "
+                f"Giorno BEP = {kpi['bep_giorno']} — margine confortevole."
+            )
+
+    # ── Detail table ───────────────────────────────────────────────────────
+    st.subheader("Dettaglio Calcolo")
+
+    tipo_sums = tipo_df.groupby("tipo_costo")["importo"].sum().to_dict() if not tipo_df.empty else {}
+    detail = pd.DataFrame([
+        {"Voce": "Ricavi (IP)", "Importo": tipo_sums.get("IP", 0)},
+        {"Voce": "Costi Fissi (F)", "Importo": tipo_sums.get("F", 0)},
+        {"Voce": "Costi Variabili (V)", "Importo": tipo_sums.get("V", 0)},
+        {"Voce": "Personale (P)", "Importo": tipo_sums.get("P", 0)},
+        {"Voce": "Finanziari (X)", "Importo": tipo_sums.get("X", 0)},
+    ])
+    st.dataframe(
+        detail.style.format({"Importo": "{:,.0f}"}),
+        use_container_width=True, hide_index=True,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
