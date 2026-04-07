@@ -19,7 +19,7 @@ VALID_CATEGORIE = {
     "RUMORE",
     "PREZZO",
     "WIFI",
-    "ALTRO",
+    "GENERICA",
 }
 VALID_SENTIMENTI = {"POSITIVO", "NEGATIVO", "MISTO"}
 
@@ -43,7 +43,7 @@ Punteggio: {r["punteggio_raw"]}/{scala}
 Testo: {r["testo"]}
 
 Rispondi SOLO con JSON valido:
-{{"categoria": "PULIZIA|CIBO|STAFF|STRUTTURA|POSIZIONE|RUMORE|PREZZO|WIFI|ALTRO", "sentiment": "POSITIVO|NEGATIVO|MISTO", "riassunto": "max 1 frase in italiano"}}"""
+{{"categoria": "PULIZIA|CIBO|STAFF|STRUTTURA|POSIZIONE|RUMORE|PREZZO|WIFI|GENERICA", "sentiment": "POSITIVO|NEGATIVO|MISTO", "riassunto": "max 1 frase in italiano"}}"""
 
     lines = [
         "Sei un analista hotel. Classifica ciascuna delle seguenti review.",
@@ -88,8 +88,8 @@ def parse_classification(raw_text: str) -> dict:
 
     categoria = data.get("categoria", "").upper()
     if categoria not in VALID_CATEGORIE:
-        log.warning("Invalid categoria '%s', falling back to ALTRO", categoria)
-        categoria = "ALTRO"
+        log.warning("Invalid categoria '%s', falling back to GENERICA", categoria)
+        categoria = "GENERICA"
 
     sentiment = data.get("sentiment", "").upper()
     if sentiment not in VALID_SENTIMENTI:
@@ -125,7 +125,7 @@ def parse_batch_classification(raw_text: str, count: int) -> list[dict]:
     for item in data:
         cat = item.get("categoria", "").upper()
         if cat not in VALID_CATEGORIE:
-            cat = "ALTRO"
+            cat = "GENERICA"
         sent = item.get("sentiment", "").upper()
         if sent not in VALID_SENTIMENTI:
             sent = None

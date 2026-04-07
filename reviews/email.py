@@ -81,25 +81,29 @@ def render_weekly_report(
     for cat, count in top_cats:
         cat_rows += f"<tr><td>{cat}</td><td>{count}</td></tr>"
 
-    neg_rows = ""
-    for r in negatives:
-        neg_rows += (
+    # All reviews detail rows
+    all_rows_html = ""
+    for r in sorted(rows, key=lambda x: x.get("punteggio_norm", 10)):
+        score = r.get("punteggio_norm", 0)
+        color = "#C0392B" if score <= 6 else "#2C3E50"
+        all_rows_html += (
             f"<tr>"
+            f"<td>{r.get('data_review', '')!s:.10s}</td>"
             f"<td>{r.get('piattaforma')}</td>"
             f"<td>{r.get('business_unit_id')}</td>"
-            f"<td>{r.get('punteggio_norm', 0):.0f}/10</td>"
+            f"<td style='color:{color};font-weight:bold;'>{score:.0f}/10</td>"
             f"<td>{r.get('categoria_nlp') or 'N/A'}</td>"
-            f"<td>{r.get('riassunto_nlp') or r.get('testo', '')[:80]}</td>"
+            f"<td>{r.get('riassunto_nlp') or r.get('testo', '')[:100]}</td>"
             f"</tr>"
         )
 
-    return f"""<html><body style="font-family: Arial, sans-serif; max-width: 700px; margin: auto;">
+    return f"""<html><body style="font-family: Arial, sans-serif; max-width: 800px; margin: auto;">
 <h2>Reviews settimanali — {date_start} / {date_end}</h2>
 
 <table style="margin-bottom: 20px;">
 <tr><td><strong>Totale review:</strong></td><td>{total}</td></tr>
 <tr><td><strong>Punteggio medio:</strong></td><td>{avg_score:.1f}/10</td></tr>
-<tr><td><strong>Review negative (<=6):</strong></td><td>{len(negatives)}</td></tr>
+<tr><td><strong>Review negative (<=6):</strong></td><td style="color:#C0392B;font-weight:bold;">{len(negatives)}</td></tr>
 </table>
 
 <h3>Per piattaforma</h3>
@@ -118,8 +122,13 @@ def render_weekly_report(
 {cat_rows}
 </table>
 
-{"<h3>Review negative</h3>" if negatives else ""}
-{"<table border='1' cellpadding='6' cellspacing='0' style='border-collapse: collapse;'><tr style='background: #C0392B; color: white;'><th>Piattaforma</th><th>BU</th><th>Score</th><th>Categoria</th><th>Riassunto</th></tr>" + neg_rows + "</table>" if negatives else "<p>Nessuna review negativa questa settimana!</p>"}
+<h3>Tutte le review</h3>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; font-size: 13px;">
+<tr style="background: #1F4E79; color: white;">
+<th>Data</th><th>Piattaforma</th><th>BU</th><th>Score</th><th>Categoria</th><th>Riassunto</th>
+</tr>
+{all_rows_html}
+</table>
 
 </body></html>"""
 
