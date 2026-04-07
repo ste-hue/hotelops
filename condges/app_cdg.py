@@ -23,6 +23,7 @@ import streamlit as st
 from io import BytesIO
 
 from core import config as cfg
+from condges.cdg_engine import compute_ce_cascade, compute_indicatori
 
 MESI_NOMI = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"]
 ANNO = 2026
@@ -99,6 +100,52 @@ def load_saldi_banca() -> pd.DataFrame:
         return bq.query(sql).to_dataframe()
     except Exception:
         return pd.DataFrame(columns=["banca_id", "saldo_finale", "data_snapshot"])
+
+
+@st.cache_data(ttl=300, show_spinner="Caricamento CE...")
+def load_consuntivo_ce(societa: str, anno: int) -> pd.DataFrame:
+    """Consuntivo aggregato per categoria_ce (for CE cascade)."""
+    bq = get_bq()
+    sql = f"""
+    SELECT
+      cat.categoria_ce,
+      CASE
+        WHEN c.cod_conto LIKE '47%' OR c.cod_conto LIKE '48%' OR c.cod_conto LIKE '53%'
+        THEN SUM(imp_avere) - SUM(imp_dare)
+        ELSE SUM(imp_dare) - SUM(imp_avere)
+      END as importo
+    FROM `{cfg.F_MOVIMENTI_CONTABILI}` c
+    JOIN `{cfg.D_CATEGORIE_CONTI}` cat
+      ON REPLACE(cat.codice_conto, '.', '') = c.cod_conto
+    WHERE c.anno = {anno} AND c.societa_id = '{societa}'
+    GROUP BY cat.categoria_ce
+    """
+    return bq.query(sql).to_dataframe()
+
+
+@st.cache_data(ttl=300, show_spinner="Caricamento dettaglio CE...")
+def load_consuntivo_ce_detail(societa: str, anno: int) -> pd.DataFrame:
+    """Consuntivo per codice conto (for CE drill-down)."""
+    bq = get_bq()
+    sql = f"""
+    SELECT
+      cat.codice_conto,
+      cat.descrizione,
+      cat.categoria_ce,
+      cat.tipo_costo,
+      CASE
+        WHEN c.cod_conto LIKE '47%' OR c.cod_conto LIKE '48%' OR c.cod_conto LIKE '53%'
+        THEN SUM(imp_avere) - SUM(imp_dare)
+        ELSE SUM(imp_dare) - SUM(imp_avere)
+      END as importo
+    FROM `{cfg.F_MOVIMENTI_CONTABILI}` c
+    JOIN `{cfg.D_CATEGORIE_CONTI}` cat
+      ON REPLACE(cat.codice_conto, '.', '') = c.cod_conto
+    WHERE c.anno = {anno} AND c.societa_id = '{societa}'
+    GROUP BY cat.codice_conto, cat.descrizione, cat.categoria_ce, cat.tipo_costo
+    ORDER BY cat.categoria_ce, cat.codice_conto
+    """
+    return bq.query(sql).to_dataframe()
 
 
 # ── Budget Engine ─────────────────────────────────────────────────────────────
@@ -613,7 +660,61 @@ def page_tesoreria(adjusted: pd.DataFrame, consuntivo: pd.DataFrame,
 # ══════════════════════════════════════════════════════════════════════════════
 
 def page_ce(consuntivo: pd.DataFrame, last_actual_month: int):
-    st.info("Conto Economico — in costruzione")
+    """Conto Economico riclassificato."""
+    ce_data = load_consuntivo_ce(SOCIETA, ANNO)
+    ce_detail = load_consuntivo_ce_detail(SOCIETA, ANNO)
+
+    if ce_data.empty:
+        st.warning("Nessun dato consuntivo trovato.")
+        return
+
+    cascade = compute_ce_cascade(ce_data)
+
+    st.subheader(f"CE Riclassificato — {SOCIETA} {ANNO}")
+    if last_actual_month > 0:
+        st.caption(f"Consuntivo mesi 1-{last_actual_month} ({MESI_NOMI[last_actual_month - 1]})")
+
+    rows_display = []
+    for r in cascade:
+        prefix = "  " * r["indent"]
+        label = f"**{r['label']}**" if r["is_subtotal"] else f"{prefix}{r['label']}"
+        rows_display.append({
+            "Voce": label,
+            "Importo": r["importo"],
+            "% Ricavi": r["pct_ricavi"],
+        })
+
+    ce_df = pd.DataFrame(rows_display)
+
+    def _color_subtotal(row):
+        if "**" in str(row["Voce"]):
+            return ["font-weight: bold; background-color: #f0f9ff"] * len(row)
+        return [""] * len(row)
+
+    st.dataframe(
+        ce_df.style
+        .format({"Importo": "{:,.0f}", "% Ricavi": "{:.1f}%"})
+        .apply(_color_subtotal, axis=1),
+        use_container_width=True, hide_index=True,
+        height=500,
+    )
+
+    st.subheader("Dettaglio per Categoria")
+
+    for cat in ["Ricavi", "Acquisti", "Costi Produttivi", "Costo del Personale",
+                "Costi Commerciali", "Costi Amministrativi", "Oneri Finanziari"]:
+        cat_df = ce_detail[ce_detail["categoria_ce"] == cat]
+        if cat_df.empty:
+            continue
+        total = cat_df["importo"].sum()
+        with st.expander(f"{cat} — {total:,.0f} €"):
+            display = cat_df[["codice_conto", "descrizione", "tipo_costo", "importo"]].copy()
+            display.columns = ["Codice", "Descrizione", "Tipo", "Importo"]
+            display = display.sort_values("Importo", ascending=False)
+            st.dataframe(
+                display.style.format({"Importo": "{:,.0f}"}),
+                use_container_width=True, hide_index=True,
+            )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
