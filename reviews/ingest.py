@@ -119,7 +119,7 @@ def normalize_google(item: dict, societa: str = "ORTI") -> dict:
         "testo_negativo": None,
         "titolo": None,
         "lingua": item.get("language", ""),
-        "data_review": item.get("publishedAtDate", ""),
+        "data_review": (item.get("publishedAtDate") or "")[:10],
         "data_soggiorno": None,
         "reviewer_nome": item.get("name"),
         "reviewer_paese": None,
