@@ -369,8 +369,29 @@ def write_to_csv(rows: list[dict], csv_path: Path, logger: logging.Logger):
     logger.info(f"  CSV: {len(new_rows)} righe → {csv_path.name}")
 
 
+def delete_period_bq(bq_client, societa_id: str, min_date: str, max_date: str, logger: logging.Logger) -> int:
+    """DELETE rows for (societa, date range). Returns number of rows deleted."""
+    q = f"""
+    DELETE FROM `{BQ_TABLE}`
+    WHERE societa_id = @societa
+      AND data_registrazione BETWEEN @min_d AND @max_d
+    """
+    job = bq_client.query(
+        q,
+        job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("societa", "STRING", societa_id),
+            bigquery.ScalarQueryParameter("min_d", "DATE", min_date),
+            bigquery.ScalarQueryParameter("max_d", "DATE", max_date),
+        ]),
+    )
+    job.result()
+    deleted = job.num_dml_affected_rows or 0
+    logger.info(f"  DELETE {societa_id} [{min_date}..{max_date}]: {deleted} righe rimosse")
+    return deleted
+
+
 def process_societa(societa_id: str, files: list[Path], datahub: Path | None,
-                    bq_client, dry_run: bool, logger: logging.Logger):
+                    bq_client, dry_run: bool, replace: bool, logger: logging.Logger):
     all_rows = []
     for f in files:
         if f.suffix.lower() == ".xlsx":
@@ -388,9 +409,18 @@ def process_societa(societa_id: str, files: list[Path], datahub: Path | None,
     if dry_run:
         return
 
-    existing = load_hashes_bq(bq_client, societa_id, logger)
-    new_rows = [r for r in all_rows if r["hash_riga"] not in existing]
-    logger.info(f"  {societa_id}: {len(new_rows)} nuove, {len(all_rows) - len(new_rows)} già presenti")
+    if replace:
+        # SNAPSHOT-by-period semantics: delete the date range covered by the file,
+        # then insert all rows. Idempotent regardless of parser/hash scheme.
+        dates = [r["data_registrazione"] for r in all_rows if r["data_registrazione"]]
+        min_date, max_date = min(dates), max(dates)
+        logger.info(f"  {societa_id}: replace mode, range {min_date}..{max_date}")
+        delete_period_bq(bq_client, societa_id, min_date, max_date, logger)
+        new_rows = all_rows
+    else:
+        existing = load_hashes_bq(bq_client, societa_id, logger)
+        new_rows = [r for r in all_rows if r["hash_riga"] not in existing]
+        logger.info(f"  {societa_id}: {len(new_rows)} nuove, {len(all_rows) - len(new_rows)} già presenti")
 
     write_to_bq(new_rows, bq_client, logger)
 
@@ -407,6 +437,8 @@ def main():
     parser.add_argument("--societa", choices=["INTUR", "ORTI"], help="Società (required with --file)")
     parser.add_argument("--no-sync", action="store_true", help="Skip rclone sync")
     parser.add_argument("--dry-run", action="store_true", help="Parse only, no write")
+    parser.add_argument("--replace", action="store_true",
+                        help="SNAPSHOT mode: DELETE rows in the file's date range before insert (true idempotency)")
     args = parser.parse_args()
 
     logger = setup_logger()
@@ -457,7 +489,7 @@ def main():
 
     for societa_id, files in files_by_societa.items():
         logger.info(f"=== {societa_id} ===")
-        process_societa(societa_id, files, datahub, bq_client, args.dry_run, logger)
+        process_societa(societa_id, files, datahub, bq_client, args.dry_run, args.replace, logger)
 
     logger.info("DONE")
 
