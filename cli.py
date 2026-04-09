@@ -27,6 +27,7 @@ from pathlib import Path
 
 from condges.cli_commands import (
     cmd_chiudi,
+    cmd_docs,
     cmd_health,
     cmd_help,
     cmd_pf,
@@ -498,6 +499,16 @@ def main():
     p_reviews.add_argument("--report", action="store_true", help="Invia report settimanale")
     p_reviews.add_argument("--dry-run", action="store_true", help="Preview senza azioni")
 
+    # docs
+    p_docs = sub.add_parser("docs", help="Gestione doc tecniche del repo")
+    p_docs.add_argument(
+        "docs_action",
+        nargs="?",
+        default="check",
+        choices=["check"],
+        help="check: verifica freshness doc vs codice (default)",
+    )
+
     # reconcile
     p_rec = sub.add_parser("reconcile", help="Riconciliazione banca vs libro")
     p_rec.add_argument("--societa", required=True, choices=["ORTI", "INTUR"])
@@ -534,6 +545,7 @@ def main():
         "cls": cmd_classifica,
         "ingest": cmd_ingest,
         "app": cmd_app,
+        "docs": cmd_docs,
         "reconcile": cmd_reconcile,
         "reviews": cmd_reviews,
         "help": cmd_help,

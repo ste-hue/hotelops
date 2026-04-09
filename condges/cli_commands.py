@@ -202,6 +202,30 @@ def cmd_health(args):
         except Exception as e:
             print(f"    ? {table_id.split('.')[-1]}: {e}")
 
+    # Docs freshness
+    print()
+    try:
+        from scripts.check_docs_freshness import check_doc, collect_docs, format_report
+
+        reports = [check_doc(d) for d in collect_docs()]
+        print(format_report(reports))
+    except Exception as e:
+        print(f"  📚 DOCS FRESHNESS: errore — {e}")
+
+
+def cmd_docs(args):
+    """Docs subcommand: check freshness of repo docs vs code."""
+    import sys
+
+    from scripts.check_docs_freshness import run
+
+    action = getattr(args, "docs_action", None) or "check"
+    if action == "check":
+        sys.exit(run())
+    else:
+        print(f"Azione sconosciuta: {action}. Usa: hotelops docs check")
+        sys.exit(2)
+
 
 # ── Saldo banca helper ────────────────────────────────────────────────────
 
