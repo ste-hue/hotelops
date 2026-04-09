@@ -355,7 +355,7 @@ class CoefficienteConsumoRow(BaseModel):
 PiattaformaReview = Literal["BOOKING", "TRIPADVISOR", "GOOGLE", "EXPEDIA"]
 CategoriaNlp = Literal[
     "PULIZIA", "CIBO", "STAFF", "STRUTTURA", "POSIZIONE",
-    "RUMORE", "PREZZO", "WIFI", "ALTRO",
+    "RUMORE", "PREZZO", "WIFI", "GENERICA",
 ]
 SentimentNlp = Literal["POSITIVO", "NEGATIVO", "MISTO"]
 TipoViaggio = Literal["COPPIA", "FAMIGLIA", "BUSINESS", "SOLO", "AMICI"]
@@ -401,10 +401,10 @@ class ReviewRow(BaseModel):
 
     @field_validator("testo")
     @classmethod
-    def testo_not_empty(cls, v: str) -> str:
-        if not v or not v.strip():
-            raise ValueError("testo vuoto")
-        return v.strip()
+    def testo_strip(cls, v: str) -> str:
+        # Empty text is allowed: Google and Booking permit star-only reviews.
+        # A 1-star review without comment is still a valid alert signal.
+        return (v or "").strip()
 
     @field_validator("punteggio_norm")
     @classmethod

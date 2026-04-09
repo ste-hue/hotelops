@@ -176,8 +176,13 @@ NORMALIZERS = {
 
 
 def normalize_items(raw_items: list[dict], societa: str = "ORTI") -> list[dict]:
-    """Normalize a list of raw Apify items to ReviewRow dicts."""
+    """Normalize a list of raw Apify items to ReviewRow dicts.
+
+    Drops items with missing/invalid score (punteggio_norm outside 1-10).
+    Such items are noise: no alert signal, no KPI value.
+    """
     rows = []
+    dropped_no_score = 0
     for item in raw_items:
         piattaforma = item.get("_piattaforma")
         normalizer = NORMALIZERS.get(piattaforma)
@@ -185,9 +190,22 @@ def normalize_items(raw_items: list[dict], societa: str = "ORTI") -> list[dict]:
             log.warning("No normalizer for piattaforma=%s, skipping", piattaforma)
             continue
         try:
-            rows.append(normalizer(item, societa=societa))
+            row = normalizer(item, societa=societa)
         except Exception:
             log.exception("Failed to normalize item from %s", piattaforma)
+            continue
+
+        norm = row.get("punteggio_norm", 0)
+        if not (1.0 <= norm <= 10.0):
+            dropped_no_score += 1
+            continue
+        rows.append(row)
+
+    if dropped_no_score:
+        log.warning(
+            "Dropped %d reviews with invalid score (missing stars)",
+            dropped_no_score,
+        )
     return rows
 
 

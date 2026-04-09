@@ -22,30 +22,46 @@ def _get_client() -> ApifyClient:
     return ApifyClient(token)
 
 
+# Hard cap per property per run. Even if actor ignores the param,
+# we log a warning and the dedup layer throws away the excess.
+MAX_REVIEWS_PER_PROPERTY = 15
+
+
 def _build_input(piattaforma: str, bu: str, url: str) -> dict:
-    """Build actor-specific run input from a property URL."""
+    """Build actor-specific run input from a property URL.
+
+    Each actor has its own parameter naming — see reviews/PROPERTIES.md.
+    Target: get the last MAX_REVIEWS_PER_PROPERTY reviews sorted by newest.
+    """
+    n = MAX_REVIEWS_PER_PROPERTY
     if piattaforma == "BOOKING":
+        # voyager/booking-reviews-scraper uses maxReviewsPerHotel, not maxReviews
         return {
             "startUrls": [{"url": url}],
-            "maxReviews": 5,
+            "maxReviewsPerHotel": n,
             "reviewsSort": "f_recent_desc",
         }
     elif piattaforma == "TRIPADVISOR":
+        # maxcopell/tripadvisor-reviews respects maxItems (confirmed 2026-04-09)
         return {
             "startUrls": [{"url": url}],
-            "maxItems": 5,
+            "maxItems": n,
             "language": "ALL",
         }
     elif piattaforma == "GOOGLE":
+        # compass/Google-Maps-Reviews-Scraper respects maxReviews (confirmed 2026-04-09)
         return {
             "startUrls": [{"url": url}],
-            "maxReviews": 5,
+            "maxReviews": n,
             "reviewsSort": "newest",
         }
     elif piattaforma == "EXPEDIA":
+        # memo23/expedia-scraper — param name unconfirmed. Try both.
+        # TODO(2026-04-09): verify which param Expedia actor respects.
         return {
             "startUrls": [{"url": url}],
-            "maxReviews": 5,
+            "maxReviewsPerHotel": n,
+            "maxReviews": n,
         }
     else:
         raise ValueError(f"Unknown piattaforma: {piattaforma}")
@@ -87,6 +103,17 @@ def scrape_platform(
         dataset_id = run["defaultDatasetId"]
         items = list(client.dataset(dataset_id).iterate_items())
         log.info("Collected %d items for %s / %s", len(items), b, piattaforma)
+
+        # Observability: warn loudly if the actor ignored our cap.
+        # This is how we caught the 2026-04-09 cost blowout.
+        if len(items) > MAX_REVIEWS_PER_PROPERTY:
+            log.warning(
+                "CAP VIOLATED: %s/%s returned %d items, expected <= %d. "
+                "Actor param likely wrong. Truncating to %d downstream.",
+                piattaforma, b, len(items), MAX_REVIEWS_PER_PROPERTY,
+                MAX_REVIEWS_PER_PROPERTY,
+            )
+            items = items[:MAX_REVIEWS_PER_PROPERTY]
 
         # Tag each item with BU for downstream processing
         for item in items:
