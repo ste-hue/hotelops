@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from datetime import date, timedelta
+import time
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
+from google.api_core.exceptions import BadRequest
 from google.cloud import bigquery
 
 from reviews.config import ALERT_THRESHOLD, ALERT_RECIPIENTS
@@ -12,6 +16,19 @@ from reviews.config import ALERT_THRESHOLD, ALERT_RECIPIENTS
 log = logging.getLogger(__name__)
 
 GRACE_WINDOW_DAYS = 7
+
+# Retry backoff for mark_alerts_sent when UPDATE hits the streaming buffer.
+# Tests monkeypatch this to [0, 0, 0] to skip sleeps.
+# Total wait ~3.5 min — catches fast buffer flushes + transient BQ flakiness.
+# Slow flushes (30-90 min) are handled by the pending state file instead.
+_MARK_ALERTS_RETRY_DELAYS = [30, 60, 120]
+
+# Durable state file for hashes whose UPDATE failed after all retries.
+# Reconciled at the start of the next scrape run, so emails sent but flag
+# not persisted don't trigger re-alerts (watermark would have moved past them).
+_PENDING_STATE_PATH = (
+    Path(__file__).resolve().parent.parent / ".hotelops_state" / "pending_alert_flags.json"
+)
 
 
 def should_alert(row: dict) -> bool:
@@ -106,18 +123,20 @@ def send_alerts(
     return alerted
 
 
-def mark_alerts_sent(review_hashes: list[str]) -> None:
-    """UPDATE f_reviews SET alert_inviato=TRUE for the given hashes.
+def _is_streaming_buffer_error(exc: BaseException) -> bool:
+    """True if exc is a BQ error about the streaming buffer blocking UPDATE.
 
-    Uses a parameterized ARRAY query (never string interpolation).
-    No-op if the list is empty.
+    BigQuery raises BadRequest 400 with message containing "streaming buffer"
+    when UPDATE/DELETE touches rows inserted via insert_rows_json() within
+    the last ~30-90 min. This is the specific failure mode we want to retry.
     """
-    if not review_hashes:
-        return
+    return isinstance(exc, BadRequest) and "streaming buffer" in str(exc).lower()
 
-    from core.config import F_REVIEWS, PROJECT
 
-    client = bigquery.Client(project=PROJECT)
+def _run_update_flag(client: bigquery.Client, review_hashes: list[str]) -> None:
+    """Run the parameterized UPDATE. Extracted so retry + flush share it."""
+    from core.config import F_REVIEWS
+
     sql = f"""
     UPDATE `{F_REVIEWS}`
     SET alert_inviato = TRUE
@@ -129,7 +148,124 @@ def mark_alerts_sent(review_hashes: list[str]) -> None:
         ]
     )
     client.query(sql, job_config=job_config).result()
-    log.info("mark_alerts_sent: flagged %d reviews", len(review_hashes))
+
+
+def _persist_pending(review_hashes: list[str]) -> None:
+    """Append hashes to the durable pending-state file.
+
+    Merges with existing entries (union of hashes, never loses old ones).
+    Next scrape run calls flush_pending_alert_flags() to retry them.
+    """
+    _PENDING_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    existing: set[str] = set()
+    if _PENDING_STATE_PATH.exists():
+        try:
+            data = json.loads(_PENDING_STATE_PATH.read_text())
+            existing = set(data.get("hashes", []))
+        except Exception:
+            log.warning("Pending state file corrupt, overwriting")
+    merged = sorted(existing | set(review_hashes))
+    _PENDING_STATE_PATH.write_text(
+        json.dumps(
+            {
+                "hashes": merged,
+                "last_updated": datetime.now(timezone.utc).isoformat(),
+            },
+            indent=2,
+        )
+    )
+    log.error(
+        "PENDING ALERT FLAGS: persisted %d hashes to %s — will retry next run",
+        len(merged), _PENDING_STATE_PATH,
+    )
+
+
+def mark_alerts_sent(review_hashes: list[str]) -> None:
+    """UPDATE f_reviews SET alert_inviato=TRUE for the given hashes.
+
+    Uses a parameterized ARRAY query (never string interpolation).
+    No-op if the list is empty.
+
+    Streaming buffer handling: if the UPDATE fails because rows are still
+    in the buffer (recent insert_rows_json), retry with backoff. If all
+    retries fail, persist hashes to the pending state file so the next
+    scrape run can reconcile after the buffer has flushed. Emails have
+    already been sent at this point — we just need to close the flag
+    eventually to prevent duplicate alerts later.
+    """
+    if not review_hashes:
+        return
+
+    from core.config import PROJECT
+
+    client = bigquery.Client(project=PROJECT)
+
+    attempts = len(_MARK_ALERTS_RETRY_DELAYS) + 1
+    for attempt in range(attempts):
+        try:
+            _run_update_flag(client, review_hashes)
+            log.info("mark_alerts_sent: flagged %d reviews", len(review_hashes))
+            return
+        except Exception as e:
+            last_attempt = attempt == attempts - 1
+            if not _is_streaming_buffer_error(e) or last_attempt:
+                if _is_streaming_buffer_error(e):
+                    log.warning(
+                        "mark_alerts_sent: streaming buffer still blocking after %d attempts",
+                        attempts,
+                    )
+                    _persist_pending(review_hashes)
+                    return
+                raise
+            delay = _MARK_ALERTS_RETRY_DELAYS[attempt]
+            log.warning(
+                "mark_alerts_sent attempt %d/%d hit streaming buffer, retrying in %ds",
+                attempt + 1, attempts, delay,
+            )
+            time.sleep(delay)
+
+
+def flush_pending_alert_flags() -> int:
+    """Retry pending alert-flag UPDATEs from a previous run.
+
+    Called at the start of a scrape run — by then the streaming buffer has
+    usually flushed. On success, removes the state file. On failure, leaves
+    it for the next run. Never raises: this is a best-effort reconciliation.
+
+    Returns: number of hashes successfully flagged (0 if no pending).
+    """
+    if not _PENDING_STATE_PATH.exists():
+        return 0
+    try:
+        data = json.loads(_PENDING_STATE_PATH.read_text())
+        hashes = list(data.get("hashes", []))
+    except Exception:
+        log.warning("Pending state file unreadable, removing")
+        _PENDING_STATE_PATH.unlink(missing_ok=True)
+        return 0
+    if not hashes:
+        _PENDING_STATE_PATH.unlink(missing_ok=True)
+        return 0
+
+    from core.config import PROJECT
+
+    log.info("flush_pending_alert_flags: retrying %d pending hashes", len(hashes))
+    try:
+        client = bigquery.Client(project=PROJECT)
+        _run_update_flag(client, hashes)
+    except Exception as e:
+        if _is_streaming_buffer_error(e):
+            log.warning(
+                "flush_pending_alert_flags: still blocked by streaming buffer, "
+                "leaving state file for next run"
+            )
+        else:
+            log.exception("flush_pending_alert_flags failed unexpectedly")
+        return 0
+
+    _PENDING_STATE_PATH.unlink(missing_ok=True)
+    log.info("flush_pending_alert_flags: flagged %d hashes, cleared state", len(hashes))
+    return len(hashes)
 
 
 def send_gap_alert(gap_keys: list[tuple[str, str]], dry_run: bool = False) -> None:

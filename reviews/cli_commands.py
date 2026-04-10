@@ -71,11 +71,23 @@ def _cmd_scrape(args):
         filter_by_watermark,
     )
     from reviews.classify import classify_reviews
-    from reviews.alert import send_alerts, mark_alerts_sent, send_gap_alert
+    from reviews.alert import (
+        send_alerts,
+        mark_alerts_sent,
+        send_gap_alert,
+        flush_pending_alert_flags,
+    )
 
     platform = args.only.upper() if args.only else None
 
     print(f"\n  Scraping {'all platforms' if not platform else platform}...")
+
+    # 0. Reconcile any pending alert flags from a previous run that crashed
+    #    on the streaming buffer. Best-effort, never raises.
+    if not args.dry_run:
+        flushed = flush_pending_alert_flags()
+        if flushed:
+            print(f"  Reconciled {flushed} pending alert flags from previous run")
 
     # 1. Read watermarks BEFORE scraping. In dry_run we still exercise the
     #    read path to catch BQ auth/connectivity issues early, but we degrade

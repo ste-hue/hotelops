@@ -185,3 +185,148 @@ def test_mark_alerts_sent_noop_on_empty_list():
         mark_alerts_sent([])
 
     assert not fake_client.query.called
+
+
+def _make_buffer_error():
+    from google.api_core.exceptions import BadRequest
+
+    return BadRequest(
+        "UPDATE or DELETE statement over table foo would affect rows "
+        "in the streaming buffer, which is not supported"
+    )
+
+
+def test_mark_alerts_sent_retries_on_streaming_buffer_then_succeeds(tmp_path, monkeypatch):
+    """First 2 attempts hit streaming buffer, 3rd succeeds — no pending file."""
+    from reviews import alert as alert_mod
+
+    monkeypatch.setattr(alert_mod, "_MARK_ALERTS_RETRY_DELAYS", [0, 0, 0])
+    monkeypatch.setattr(
+        alert_mod, "_PENDING_STATE_PATH", tmp_path / "pending.json"
+    )
+
+    fake_client = MagicMock()
+    fake_query = MagicMock()
+    fake_client.query.return_value = fake_query
+
+    call_count = {"n": 0}
+
+    def query_side_effect(*args, **kwargs):
+        call_count["n"] += 1
+        if call_count["n"] < 3:
+            raise _make_buffer_error()
+        return fake_query
+
+    fake_client.query.side_effect = query_side_effect
+
+    with patch.object(alert_mod.bigquery, "Client", return_value=fake_client):
+        alert_mod.mark_alerts_sent(["h1", "h2"])
+
+    assert call_count["n"] == 3
+    assert not (tmp_path / "pending.json").exists()
+
+
+def test_mark_alerts_sent_persists_pending_after_all_retries_fail(tmp_path, monkeypatch):
+    """All retries exhausted: hashes persisted to pending state file, no raise."""
+    import json as _json
+    from reviews import alert as alert_mod
+
+    monkeypatch.setattr(alert_mod, "_MARK_ALERTS_RETRY_DELAYS", [0, 0, 0])
+    state_path = tmp_path / "pending.json"
+    monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", state_path)
+
+    fake_client = MagicMock()
+    fake_client.query.side_effect = _make_buffer_error()
+
+    with patch.object(alert_mod.bigquery, "Client", return_value=fake_client):
+        # Must NOT raise — pending file is the graceful fallback
+        alert_mod.mark_alerts_sent(["h1", "h2"])
+
+    assert state_path.exists()
+    data = _json.loads(state_path.read_text())
+    assert sorted(data["hashes"]) == ["h1", "h2"]
+    assert "last_updated" in data
+
+
+def test_mark_alerts_sent_reraises_non_buffer_errors(tmp_path, monkeypatch):
+    """Non-streaming-buffer errors propagate immediately (no retry, no pending)."""
+    from reviews import alert as alert_mod
+
+    monkeypatch.setattr(alert_mod, "_MARK_ALERTS_RETRY_DELAYS", [0, 0, 0])
+    monkeypatch.setattr(
+        alert_mod, "_PENDING_STATE_PATH", tmp_path / "pending.json"
+    )
+
+    fake_client = MagicMock()
+    fake_client.query.side_effect = RuntimeError("some other failure")
+
+    with patch.object(alert_mod.bigquery, "Client", return_value=fake_client):
+        try:
+            alert_mod.mark_alerts_sent(["h1"])
+            raised = False
+        except RuntimeError:
+            raised = True
+
+    assert raised is True
+    assert not (tmp_path / "pending.json").exists()
+
+
+def test_flush_pending_alert_flags_success_clears_state(tmp_path, monkeypatch):
+    """On successful flush, state file is removed."""
+    import json as _json
+    from reviews import alert as alert_mod
+
+    state_path = tmp_path / "pending.json"
+    state_path.write_text(_json.dumps({"hashes": ["h1", "h2"], "last_updated": "x"}))
+    monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", state_path)
+
+    fake_client = MagicMock()
+    with patch.object(alert_mod.bigquery, "Client", return_value=fake_client):
+        flushed = alert_mod.flush_pending_alert_flags()
+
+    assert flushed == 2
+    assert not state_path.exists()
+
+
+def test_flush_pending_alert_flags_noop_when_no_state(tmp_path, monkeypatch):
+    from reviews import alert as alert_mod
+
+    monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", tmp_path / "nope.json")
+    flushed = alert_mod.flush_pending_alert_flags()
+    assert flushed == 0
+
+
+def test_flush_pending_alert_flags_keeps_state_if_buffer_still_blocking(
+    tmp_path, monkeypatch
+):
+    """If the buffer is still blocking, state file stays intact for next run."""
+    import json as _json
+    from reviews import alert as alert_mod
+
+    state_path = tmp_path / "pending.json"
+    state_path.write_text(_json.dumps({"hashes": ["h1"], "last_updated": "x"}))
+    monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", state_path)
+
+    fake_client = MagicMock()
+    fake_client.query.side_effect = _make_buffer_error()
+
+    with patch.object(alert_mod.bigquery, "Client", return_value=fake_client):
+        flushed = alert_mod.flush_pending_alert_flags()
+
+    assert flushed == 0
+    assert state_path.exists()  # preserved for next attempt
+
+
+def test_persist_pending_merges_with_existing(tmp_path, monkeypatch):
+    """Repeated failures merge hashes, never lose old ones."""
+    import json as _json
+    from reviews import alert as alert_mod
+
+    state_path = tmp_path / "pending.json"
+    monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", state_path)
+
+    alert_mod._persist_pending(["h1", "h2"])
+    alert_mod._persist_pending(["h2", "h3"])
+
+    data = _json.loads(state_path.read_text())
+    assert sorted(data["hashes"]) == ["h1", "h2", "h3"]
