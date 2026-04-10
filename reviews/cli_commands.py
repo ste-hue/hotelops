@@ -77,13 +77,18 @@ def _cmd_scrape(args):
 
     print(f"\n  Scraping {'all platforms' if not platform else platform}...")
 
-    # 1. Read watermarks BEFORE scraping (if read fails, abort)
-    if args.dry_run:
-        watermarks = {}
-    else:
-        try:
-            watermarks = read_watermarks()
-        except Exception as e:
+    # 1. Read watermarks BEFORE scraping. In dry_run we still exercise the
+    #    read path to catch BQ auth/connectivity issues early, but we degrade
+    #    to an empty dict on failure instead of aborting.
+    try:
+        watermarks = read_watermarks()
+        if args.dry_run:
+            print(f"  [DRY RUN] Watermarks loaded: {len(watermarks)} keys")
+    except Exception as e:
+        if args.dry_run:
+            print(f"  [DRY RUN] WARNING: read_watermarks failed: {e}")
+            watermarks = {}
+        else:
             print(f"  ABORT: read_watermarks failed: {e}")
             raise
 
