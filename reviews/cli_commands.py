@@ -61,16 +61,38 @@ def _cmd_summary(args):
 
 
 def _cmd_scrape(args):
-    """Trigger manual scrape."""
-    from reviews.scrape import scrape_platform, scrape_all
-    from reviews.ingest import normalize_items, dedup_reviews, load_to_bq
+    """Trigger manual scrape. Watermark-gated pipeline."""
+    from reviews.scrape import scrape_platform, scrape_all, MAX_REVIEWS_PER_PROPERTY
+    from reviews.ingest import (
+        normalize_items,
+        dedup_reviews,
+        load_to_bq,
+        read_watermarks,
+        filter_by_watermark,
+    )
     from reviews.classify import classify_reviews
-    from reviews.alert import send_alerts
+    from reviews.alert import send_alerts, mark_alerts_sent, send_gap_alert
 
     platform = args.only.upper() if args.only else None
 
     print(f"\n  Scraping {'all platforms' if not platform else platform}...")
 
+    # 1. Read watermarks BEFORE scraping. In dry_run we still exercise the
+    #    read path to catch BQ auth/connectivity issues early, but we degrade
+    #    to an empty dict on failure instead of aborting.
+    try:
+        watermarks = read_watermarks()
+        if args.dry_run:
+            print(f"  [DRY RUN] Watermarks loaded: {len(watermarks)} keys")
+    except Exception as e:
+        if args.dry_run:
+            print(f"  [DRY RUN] WARNING: read_watermarks failed: {e}")
+            watermarks = {}
+        else:
+            print(f"  ABORT: read_watermarks failed: {e}")
+            raise
+
+    # 2. Scrape
     if platform:
         raw = scrape_platform(platform, dry_run=args.dry_run)
     else:
@@ -82,18 +104,49 @@ def _cmd_scrape(args):
 
     print(f"  Collected {len(raw)} raw items")
 
+    # 3. Normalize
     rows = normalize_items(raw)
     rows = dedup_reviews(rows)
     print(f"  Normalized: {len(rows)} unique reviews")
 
-    rows = classify_reviews(rows)
-    print(f"  Classified: {len(rows)} reviews")
+    # 4. Watermark filter — drop already-seen, detect gaps
+    #    Track which keys were first-run (watermark was None) BEFORE filtering.
+    present_keys = {(r["piattaforma"], r["business_unit_id"]) for r in rows}
+    first_run_keys = {k for k in present_keys if k not in watermarks}
 
-    inserted = load_to_bq(rows)
+    new_rows, gap_keys = filter_by_watermark(
+        watermarks, rows, cap=MAX_REVIEWS_PER_PROPERTY
+    )
+    print(f"  Watermark filter: {len(new_rows)} new (dropped {len(rows) - len(new_rows)})")
+    if gap_keys:
+        print(f"  ⚠️  Gap suspected on: {gap_keys}")
+
+    if not new_rows:
+        print("  No new reviews; skipping classify/load/alert.")
+        if gap_keys:
+            send_gap_alert(gap_keys)
+        return
+
+    # 5. Classify (only new)
+    new_rows = classify_reviews(new_rows)
+    print(f"  Classified: {len(new_rows)} reviews")
+
+    # 6. Load to BQ
+    inserted = load_to_bq(new_rows)
     print(f"  Loaded to BQ: {inserted} new reviews")
 
-    alerted = send_alerts(rows)
+    # 7. Send alerts (only on new, with grace window for first-run keys)
+    alerted = send_alerts(new_rows, first_run_keys=first_run_keys)
     print(f"  Alerts sent: {len(alerted)}")
+
+    # 8. Persist alert flag
+    if alerted:
+        mark_alerts_sent([r["review_hash"] for r in alerted])
+        print(f"  alert_inviato flagged on {len(alerted)} rows")
+
+    # 9. Gap mail (if any)
+    if gap_keys:
+        send_gap_alert(gap_keys)
 
 
 def _cmd_alert(args):
