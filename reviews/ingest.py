@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 
 from core.schemas import make_hash, validate_batch, ReviewRow
@@ -267,3 +268,54 @@ def load_to_bq(
 
     log.info("Inserted %d new reviews into %s", len(new_rows), F_REVIEWS)
     return len(new_rows)
+
+
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def filter_by_watermark(
+    watermarks: dict[tuple[str, str], str],
+    items: list[dict],
+    cap: int,
+) -> tuple[list[dict], list[tuple[str, str]]]:
+    """Drop items with data_review <= watermark for their (piattaforma, bu) key.
+
+    Args:
+        watermarks: dict (piattaforma, business_unit_id) -> 'YYYY-MM-DD'.
+                    Missing key means no watermark → all items for that key pass.
+        items: normalized review dicts.
+        cap: per-key cap used to detect suspected gaps.
+
+    Returns:
+        (kept_items, gap_keys). gap_keys lists (piattaforma, bu) pairs where
+        len(kept) == cap — possible gap, caller should emit a warning email.
+
+    Malformed data_review (not YYYY-MM-DD) is dropped with a warning log.
+    Pure function; no BQ access.
+    """
+    kept: list[dict] = []
+    per_key_count: dict[tuple[str, str], int] = {}
+    dropped_malformed = 0
+
+    for item in items:
+        data = item.get("data_review") or ""
+        if not _ISO_DATE.match(data):
+            dropped_malformed += 1
+            continue
+
+        key = (item.get("piattaforma"), item.get("business_unit_id"))
+        wm = watermarks.get(key)
+        if wm is not None and data <= wm:
+            continue
+
+        kept.append(item)
+        per_key_count[key] = per_key_count.get(key, 0) + 1
+
+    if dropped_malformed:
+        log.warning(
+            "filter_by_watermark: dropped %d items with malformed data_review",
+            dropped_malformed,
+        )
+
+    gap_keys = [k for k, n in per_key_count.items() if n == cap]
+    return kept, gap_keys
