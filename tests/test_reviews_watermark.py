@@ -126,3 +126,30 @@ def test_read_watermarks_empty(monkeypatch):
     with patch("reviews.ingest.bigquery.Client", return_value=fake_client):
         from reviews.ingest import read_watermarks
         assert read_watermarks() == {}
+
+
+def test_regression_old_negative_review_blocked_by_watermark():
+    """
+    Bug 2026-04-10: alert.py sent mail for a Zuzana review from Jul 2025
+    because alert_inviato was never persisted. With the watermark gate,
+    an old negative review already in f_reviews (reflected in the
+    watermark) must NOT be re-alerted — it's dropped at the filter
+    stage, never reaches classify/load/alert.
+    """
+    # watermark says "we've seen up to 2026-04-06 on BOOKING/HOTEL"
+    watermarks = {("BOOKING", "HOTEL"): "2026-04-06"}
+
+    # actor re-returns an old negative review (pre-watermark)
+    items = [
+        {
+            "piattaforma": "BOOKING",
+            "business_unit_id": "HOTEL",
+            "data_review": "2025-07-15",
+            "review_id": "zuzana",
+            "punteggio_norm": 4.0,
+        }
+    ]
+
+    kept, gap_keys = filter_by_watermark(watermarks, items, cap=15)
+    assert kept == []  # blocked — no alert possible downstream
+    assert gap_keys == []  # not a gap either, just stale
