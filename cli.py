@@ -22,10 +22,40 @@ Richiede: gcloud auth (stefano@panoramagroup.it)
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
-from condges.cli_commands import (
+
+def _load_dotenv() -> None:
+    """Load .env from repo root into os.environ (idempotent, no deps).
+
+    Manual loader invece di `python-dotenv` o `export $(... | xargs)` perché
+    quest'ultimo splitta su spazi i valori (es. Gmail App Password formato
+    'xxxx xxxx xxxx xxxx') — bug reale che ci ha fatto perdere un'ora.
+    Formato: KEY=VALUE per riga, `#` per commenti, quote opzionali.
+    Non sovrascrive var già presenti (shell vince).
+    """
+    env_path = Path(__file__).resolve().parent / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_dotenv()
+
+
+# noqa: E402 — import after _load_dotenv() è intenzionale: i submodule possono
+# leggere env var al toplevel, quindi .env va caricato prima.
+from condges.cli_commands import (  # noqa: E402
     cmd_chiudi,
     cmd_docs,
     cmd_health,
@@ -33,7 +63,7 @@ from condges.cli_commands import (
     cmd_pf,
     cmd_saldo,
 )
-from reviews.cli_commands import cmd_reviews
+from reviews.cli_commands import cmd_reviews  # noqa: E402
 
 BQ_PROJECT = "hotelops-suite"
 
