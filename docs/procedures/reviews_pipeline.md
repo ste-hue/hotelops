@@ -58,16 +58,15 @@ le pagine Store sono JS-rendered e inaffidabili).
 
 | Piattaforma | Actor ID | Version | Max-cap param atteso | Date-filter param | Stato `scrape.py` |
 |---|---|---|---|---|---|
-| BOOKING | voyager/booking-reviews-scraper | 0.99 | `maxReviewsPerHotel` | `cutoffDate` | ⚠️ manda `reviewsSort` invece di `sortReviewsBy` |
-| TRIPADVISOR | maxcopell/tripadvisor-reviews | 0.99 | `maxItemsPerQuery` | `lastReviewDate` | ⚠️ manda `maxItems` + `language` invece di `maxItemsPerQuery` + `reviewsLanguages` |
+| BOOKING | voyager/booking-reviews-scraper | 0.99 | `maxReviewsPerHotel` | `cutoffDate` | ✅ `sortReviewsBy` (fix 2026-04-10) |
+| TRIPADVISOR | maxcopell/tripadvisor-reviews | 0.99 | `maxItemsPerQuery` | `lastReviewDate` | ✅ `maxItemsPerQuery`, lingua omessa (fix 2026-04-10) |
 | GOOGLE | compass/Google-Maps-Reviews-Scraper | 1.0 | `maxReviews` | `reviewsStartDate` | ✅ corretto |
-| EXPEDIA | memo23/expedia-scraper | 0.0 | `maxItems` | `reviewsFrom` | ⚠️ manda `maxReviewsPerHotel` + `maxReviews` (entrambi ignorati) |
+| EXPEDIA | memo23/expedia-scraper | 0.0 | `maxItems` | `reviewsFrom` | ✅ `maxItems` (fix 2026-04-10) |
 
-Tre dei quattro actor stanno ignorando silenziosamente nostri parametri.
-Spiega perché TripAdvisor ha solo 10 row in BQ e perché Expedia ha pagato
-pay-per-event full-limit il 2026-04-09. **Fix in branch separato
-`fix/apify-param-names`** dopo il merge di `feat/reviews-watermark` —
-deve stare isolato dal watermark per non mescolare concerns.
+Fix applicato in `fix/apify-param-names` (2026-04-10): 6 unit test in
+`tests/test_reviews_scrape.py` verificano l'input emesso per ogni
+piattaforma contro lo schema live. Rieseguire `inspect_actors.py`
+periodicamente per intercettare drift futuro.
 
 Safety net: in `scrape_platform` se `len(items) > MAX_REVIEWS_PER_PROPERTY`
 logghiamo `CAP VIOLATED` e tronchiamo. Così abbiamo scoperto il blow-out
@@ -180,12 +179,18 @@ seconda linea di difesa. Vedi ADR 0003 e
 `docs/superpowers/specs/2026-04-10-reviews-watermark-design.md`.
 Regression test: `tests/test_reviews_watermark.py::test_regression_old_negative_review_blocked_by_watermark`.
 
-### 🔴 Param names Apify sbagliati su 3/4 actor
-Scoperto il 2026-04-10 via `reviews/inspect_actors.py`. Vedi tabella
-"Actor Apify per piattaforma" sopra. BOOKING, TRIPADVISOR, EXPEDIA stanno
-mandando parametri ignorati. Il cap_violation guard ci salva dai cost
-blowout, ma ordine/lingua/filtri non sono quelli che pensavamo. Fix in
-branch separato `fix/apify-param-names` post-merge watermark.
+### ✅ Param names Apify — RISOLTO 2026-04-10
+Scoperto il 2026-04-10 via `reviews/inspect_actors.py`: BOOKING,
+TRIPADVISOR, EXPEDIA mandavano parametri ignorati silenziosamente.
+La live run di smoke-test del watermark branch lo ha reso tangibile:
+Expedia RESIDENCE ha restituito 226 items invece di 15 (cap violated,
+pay-per-item). Fix in branch `fix/apify-param-names`:
+- BOOKING: `reviewsSort` → `sortReviewsBy`
+- TRIPADVISOR: `maxItems` + `language:"ALL"` → `maxItemsPerQuery`, lingua omessa
+- EXPEDIA: `maxReviewsPerHotel` + `maxReviews` → `maxItems`
+- GOOGLE: invariato (già corretto)
+
+6 unit test in `tests/test_reviews_scrape.py` bloccano regressioni.
 
 ### 🔴 Google ha 42 row totali, gap di 5+ settimane (ancora aperto)
 `MAX(data_review)` Google pre-watermark = `2026-03-03`. Booking/Expedia
@@ -299,7 +304,7 @@ Drift schema/code. Controllare `tests/test_reviews_schema_sync.py`, garantisce a
 ## TODO prioritari
 
 1. ✅ ~~Fix `alert.py` → scrivere `alert_inviato=true` dopo invio~~ — risolto 2026-04-10 (watermark gate + `mark_alerts_sent` + regression test).
-2. 🔴 **Branch `fix/apify-param-names`** — BOOKING `reviewsSort`→`sortReviewsBy`; TRIPADVISOR `maxItems`+`language`→`maxItemsPerQuery`+`reviewsLanguages`; EXPEDIA `maxReviewsPerHotel`+`maxReviews`→`maxItems`. Verificare con `inspect_actors.py` dopo il fix e smoke-testare un run per piattaforma.
+2. ✅ ~~Branch `fix/apify-param-names`~~ — risolto 2026-04-10. BOOKING `sortReviewsBy`, TRIPADVISOR `maxItemsPerQuery` (lingua omessa), EXPEDIA `maxItems`. 6 unit test in `tests/test_reviews_scrape.py`.
 3. 🔴 Introdurre `f_pipeline_runs` + PipelineRun context manager (Layer 2 refactor). Sblocca: "il cron è girato ieri?", watermark esplicito come backup, alert "ultimo run OK > 36h fa".
 4. ✅ ~~Backfill `data_review` Google~~ — fatto 2026-04-10, 42 row sistemate, watermarks GOOGLE ora materializzati.
 5. 🟡 Verificare perché Google era rotto prima del 9 aprile (gap 5+ settimane). Il primo run post-watermark ci dirà se era il scraping o se le review reali mancavano.
