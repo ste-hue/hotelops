@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from google.cloud import bigquery
 
 from core.schemas import make_hash, validate_batch, ReviewRow
+from reviews.config import PROPERTIES
 
 log = logging.getLogger(__name__)
 
@@ -43,12 +44,18 @@ def normalize_booking(item: dict, societa: str = "ORTI") -> dict:
     liked = item.get("likedText") or ""
     disliked = item.get("dislikedText") or ""
     testo = f"{liked} {disliked}".strip() or item.get("reviewTitle") or ""
+    bu = item.get("_bu", "HOTEL")
+    # Booking non espone deep-link per singola review: fallback sulla pagina
+    # hotel (+ anchor #tab-reviews) così l'email alert ha almeno un link
+    # utile invece di "N/A".
+    hotel_url = PROPERTIES.get(bu, {}).get("BOOKING")
+    url_review = f"{hotel_url}#tab-reviews" if hotel_url else None
     return {
         "review_hash": make_hash("BOOKING", review_id),
         "piattaforma": "BOOKING",
         "review_id": review_id,
         "societa_id": societa,
-        "business_unit_id": item.get("_bu", "HOTEL"),
+        "business_unit_id": bu,
         "punteggio_raw": score,
         "punteggio_norm": score,
         "testo": testo,
@@ -62,7 +69,7 @@ def normalize_booking(item: dict, societa: str = "ORTI") -> dict:
         "reviewer_paese": item.get("userLocation"),
         "tipo_viaggio": _map_trip_type(item.get("travelerType")),
         "camera_tipo": item.get("roomInfo"),
-        "url_review": None,
+        "url_review": url_review,
         "categoria_nlp": None,
         "sentiment_nlp": None,
         "riassunto_nlp": None,

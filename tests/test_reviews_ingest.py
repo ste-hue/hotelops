@@ -35,6 +35,10 @@ def test_normalize_booking():
     assert row["testo"] == "Posizione bella Camera sporca"
     assert row["testo_positivo"] == "Posizione bella"
     assert row["data_review"] == "2026-04-01"
+    # Booking non espone per-review URL: fallback sulla pagina hotel da config.
+    assert row["url_review"] is not None
+    assert "booking.com" in row["url_review"]
+    assert row["url_review"].endswith("#tab-reviews")
     ReviewRow(**row)
 
 
