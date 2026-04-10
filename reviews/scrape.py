@@ -85,6 +85,7 @@ def scrape_platform(
 
     bus = [bu] if bu else list(PROPERTIES.keys())
     all_items = []
+    platform_cost_usd = 0.0
 
     client = _get_client()
 
@@ -105,7 +106,24 @@ def scrape_platform(
 
         dataset_id = run["defaultDatasetId"]
         items = list(client.dataset(dataset_id).iterate_items())
-        log.info("Collected %d items for %s / %s", len(items), b, piattaforma)
+
+        # Cost observability: log Apify usage per run. `usageTotalUsd` is
+        # included in the `.call()` response; fall back to a refetch if
+        # missing (older SDK versions). Log-only for now — see task #15.
+        run_cost_usd = run.get("usageTotalUsd")
+        if run_cost_usd is None:
+            try:
+                run_cost_usd = client.run(run["id"]).get().get("usageTotalUsd")
+            except Exception:
+                log.debug("Could not fetch usageTotalUsd for run %s", run.get("id"))
+        if run_cost_usd is not None:
+            platform_cost_usd += float(run_cost_usd)
+
+        log.info(
+            "Collected %d items for %s / %s (cost=$%.4f)",
+            len(items), b, piattaforma,
+            float(run_cost_usd) if run_cost_usd is not None else 0.0,
+        )
 
         # Observability: warn loudly if the actor ignored our cap.
         # This is how we caught the 2026-04-09 cost blowout.
@@ -124,6 +142,9 @@ def scrape_platform(
             item["_piattaforma"] = piattaforma
 
         all_items.extend(items)
+
+    if not dry_run:
+        log.info("APIFY COST %s: $%.4f", piattaforma, platform_cost_usd)
 
     return all_items
 
