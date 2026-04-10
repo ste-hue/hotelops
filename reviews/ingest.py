@@ -337,6 +337,7 @@ def read_watermarks() -> dict[tuple[str, str], str]:
 
     client = bigquery.Client(project=PROJECT)
 
+    # Safe: F_REVIEWS is an internal config constant (core.config), not user input.
     wm_sql = f"""
     SELECT piattaforma, business_unit_id, MAX(data_review) AS watermark
     FROM `{F_REVIEWS}`

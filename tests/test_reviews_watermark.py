@@ -1,5 +1,7 @@
 """Tests for watermark-based review filtering."""
 
+from unittest.mock import MagicMock, patch
+
 from reviews.ingest import filter_by_watermark
 
 
@@ -83,9 +85,6 @@ def test_filter_multiple_keys_independent_gap():
     kept, gap_keys = filter_by_watermark(watermarks, items, cap=15)
     assert len(kept) == 16
     assert gap_keys == [("BOOKING", "HOTEL")]
-
-
-from unittest.mock import MagicMock, patch
 
 
 def test_read_watermarks_returns_dict(monkeypatch):
