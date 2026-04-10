@@ -1,0 +1,103 @@
+{
+  "actor": "tri_angle/hotel-review-aggregator",
+  "run_id": "EIUma7wGa0aq9QYdM",
+  "build_id": "566lu3Vd4auttpvHL",
+  "input": {
+    "startIds": [
+      "ChIJoUcAhEGVOxMRe-U7t45iyGE"
+    ],
+    "providers": [
+      "google-maps",
+      "tripadvisor",
+      "booking",
+      "expedia"
+    ],
+    "reviewsFromDate": "2026-04-01",
+    "scrapeReviewPictures": false,
+    "scrapeReviewResponses": false
+  },
+  "status": "SUCCEEDED",
+  "elapsed_secs": 105.5,
+  "cost_usd": 0.01809,
+  "n_items": 5,
+  "by_provider": {
+    "booking": 5
+  },
+  "items": [
+    {
+      "googleMapsPlaceId": "ChIJoUcAhEGVOxMRe-U7t45iyGE",
+      "placeName": "Hotel Panorama",
+      "placeAlternateNames": [],
+      "placeUrl": "https://www.booking.com/hotel/it/panorama-maiori.en-gb.html?aid=304142&sid=55c0911821c68c14f675f98cbcf4a906&dest_id=0&",
+      "placeAddress": "Via Santa Tecla, 8, 84010 Maiori SA, Italy",
+      "provider": "booking",
+      "reviewId": "28b8f1845b99177b",
+      "reviewUrl": null,
+      "reviewTitle": "War ok",
+      "reviewText": "Liked: Die Lage war top, das Personal war sehr Freundlich\n\nDisliked: das Hotel ist aber in die Jahre gekommen , sehr hellh\u00f6rig, ich hatte mit Fr\u00fcst\u00fcck aber der Kaffee war schrecklich, wen ich einen guten Kaffee wollte hat es extra gekostet",
+      "reviewDate": "2026-04-10T07:49:16.000Z",
+      "reviewRating": 8,
+      "authorName": "Isufi"
+    },
+    {
+      "googleMapsPlaceId": "ChIJoUcAhEGVOxMRe-U7t45iyGE",
+      "placeName": "Hotel Panorama",
+      "placeAlternateNames": [],
+      "placeUrl": "https://www.booking.com/hotel/it/panorama-maiori.en-gb.html?aid=304142&sid=55c0911821c68c14f675f98cbcf4a906&dest_id=0&",
+      "placeAddress": "Via Santa Tecla, 8, 84010 Maiori SA, Italy",
+      "provider": "booking",
+      "reviewId": "81475a3a5dfda742",
+      "reviewUrl": null,
+      "reviewTitle": "Il costo a notte con prima colazione lo reputo eccessivo considerando ci\u00f2 che non mi \u00e8 piaciuto",
+      "reviewText": "Liked: Posizione della struttura \nBellissima la terrazza panoramica\nColazione ottima \nPersonale sempre gentile\n\nDisliked: La camera mi ha un po\u2019 deluso \nQuando siamo arrivati il riscaldamento non funzionava, fortunatamente hanno risolto subito dopo aver fatto la segnalazione\nArredo molto minimal \nBagno da migliorare (rubinetteria datata, \u00e8 cieco e non c\u2019\u00e8 aspiratore, soffitto con doghe in metallo\u2026)\nSul balcone mi sarei aspettata un tavolino con sedie per godersi la vista mare",
+      "reviewDate": "2026-04-09T19:58:03.000Z",
+      "reviewRating": 6,
+      "authorName": "Luana"
+    },
+    {
+      "googleMapsPlaceId": "ChIJoUcAhEGVOxMRe-U7t45iyGE",
+      "placeName": "Hotel Panorama",
+      "placeAlternateNames": [],
+      "placeUrl": "https://www.booking.com/hotel/it/panorama-maiori.en-gb.html?aid=304142&sid=55c0911821c68c14f675f98cbcf4a906&dest_id=0&",
+      "placeAddress": "Via Santa Tecla, 8, 84010 Maiori SA, Italy",
+      "provider": "booking",
+      "reviewId": "e4e7081f0c8429b0",
+      "reviewUrl": null,
+      "reviewTitle": "Personnel du jour et direction pas du tout arrangement, sous class\u00e9 par rapport \u00e0 note demand\u00e9 et notre paiement",
+      "reviewText": "Liked: Rien \u00e0 \u00e9viter\n\nDisliked: Personnel pas du tout arrangeant, direction encore moins chambre r\u00e9serv\u00e9e vue mer et sous-class\u00e9 vue rien du tout, sous pr\u00e9texte qu\u2019on a mal r\u00e9serv\u00e9. H\u00f4tel \u00e0 \u00e9viter",
+      "reviewDate": "2026-04-09T19:13:35.000Z",
+      "reviewRating": 1,
+      "authorName": "Andre"
+    },
+    {
+      "googleMapsPlaceId": "ChIJoUcAhEGVOxMRe-U7t45iyGE",
+      "placeName": "Hotel Panorama",
+      "placeAlternateNames": [],
+      "placeUrl": "https://www.booking.com/hotel/it/panorama-maiori.en-gb.html?aid=304142&sid=55c0911821c68c14f675f98cbcf4a906&dest_id=0&",
+      "placeAddress": "Via Santa Tecla, 8, 84010 Maiori SA, Italy",
+      "provider": "booking",
+      "reviewId": "0773b252f43b49af",
+      "reviewUrl": null,
+      "reviewTitle": "Exceptional",
+      "reviewText": "",
+      "reviewDate": "2026-04-06T06:16:14.000Z",
+      "reviewRating": 10,
+      "authorName": "Carmina"
+    },
+    {
+      "googleMapsPlaceId": "ChIJoUcAhEGVOxMRe-U7t45iyGE",
+      "placeName": "Hotel Panorama",
+      "placeAlternateNames": [],
+      "placeUrl": "https://www.booking.com/hotel/it/panorama-maiori.en-gb.html?aid=304142&sid=55c0911821c68c14f675f98cbcf4a906&dest_id=0&",
+      "placeAddress": "Via Santa Tecla, 8, 84010 Maiori SA, Italy",
+      "provider": "booking",
+      "reviewId": "3a9c8084551fe672",
+      "reviewUrl": null,
+      "reviewTitle": "Ok f\u00fcr eine Nacht aber Preis Leistung nicht angemessen.",
+      "reviewText": "Liked: Sehr gute Lage und fantastische Aussicht von der Dachterasse.\n\nDisliked: D\u00fcnne W\u00e4nde, gesamte Ausstattung deutlich in die Jahre gekommen.",
+      "reviewDate": "2026-04-05T20:29:40.000Z",
+      "reviewRating": 7,
+      "authorName": "Verena"
+    }
+  ]
+}
