@@ -56,3 +56,79 @@ def test_unknown_platform_raises():
     import pytest
     with pytest.raises(ValueError, match="Unknown piattaforma"):
         _build_input("YELP", "HOTEL", "https://example.com/yelp")
+
+
+def test_persist_apify_run_validates_and_inserts():
+    """persist_apify_run should validate via schema and call insert_rows_json."""
+    from unittest.mock import MagicMock, patch
+    from reviews.scrape import persist_apify_run
+
+    fake_client = MagicMock()
+    fake_client.insert_rows_json.return_value = []
+
+    with patch("google.cloud.bigquery.Client", return_value=fake_client):
+        persist_apify_run(
+            run_id="abc123",
+            piattaforma="BOOKING",
+            business_unit_id="HOTEL",
+            actor_id="voyager/booking-reviews-scraper",
+            n_items=15,
+            cost_usd=0.075,
+            cap_violated=False,
+        )
+
+    assert fake_client.insert_rows_json.called
+    args = fake_client.insert_rows_json.call_args
+    inserted_rows = args.args[1]
+    assert len(inserted_rows) == 1
+    row = inserted_rows[0]
+    assert row["run_id"] == "abc123"
+    assert row["piattaforma"] == "BOOKING"
+    assert row["n_items"] == 15
+    assert row["cost_usd"] == 0.075
+    assert row["cap_violated"] is False
+    assert "ts_run" in row
+
+
+def test_persist_apify_run_accepts_none_cost():
+    """cost_usd=None is valid (Apify doesn't always return usageTotalUsd)."""
+    from unittest.mock import MagicMock, patch
+    from reviews.scrape import persist_apify_run
+
+    fake_client = MagicMock()
+    fake_client.insert_rows_json.return_value = []
+
+    with patch("google.cloud.bigquery.Client", return_value=fake_client):
+        persist_apify_run(
+            run_id="xyz",
+            piattaforma="GOOGLE",
+            business_unit_id="HOTEL",
+            actor_id="compass/Google-Maps-Reviews-Scraper",
+            n_items=0,
+            cost_usd=None,
+            cap_violated=False,
+        )
+
+    row = fake_client.insert_rows_json.call_args.args[1][0]
+    assert row["cost_usd"] is None
+
+
+def test_persist_apify_run_swallows_bq_errors():
+    """BQ failures must never raise — costs are observability, not blocker."""
+    from unittest.mock import MagicMock, patch
+    from reviews.scrape import persist_apify_run
+
+    fake_client = MagicMock()
+    fake_client.insert_rows_json.side_effect = RuntimeError("BQ down")
+
+    # Must NOT raise
+    with patch("google.cloud.bigquery.Client", return_value=fake_client):
+        persist_apify_run(
+            run_id="r1",
+            piattaforma="BOOKING",
+            business_unit_id="HOTEL",
+            actor_id="voyager/booking-reviews-scraper",
+            n_items=5,
+            cost_usd=0.025,
+            cap_violated=False,
+        )

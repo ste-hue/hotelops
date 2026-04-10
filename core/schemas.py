@@ -414,6 +414,38 @@ class ReviewRow(BaseModel):
         return v
 
 
+# ── f_apify_runs ─────────────────────────────────────────────────────────────
+
+class ApifyRunRow(BaseModel):
+    """Schema for f_apify_runs — one row per Apify actor run (cost observability).
+
+    Source: reviews/scrape.py after each client.actor().call().
+    Pattern: APPEND (no dedup — run_id is unique per Apify invocation).
+    """
+    run_id: str
+    piattaforma: PiattaformaReview
+    business_unit_id: BusinessUnitId
+    actor_id: str
+    ts_run: str  # ISO timestamp
+    n_items: int
+    cost_usd: Optional[float] = None  # None when Apify doesn't return usageTotalUsd
+    cap_violated: bool = False
+
+    @field_validator("run_id")
+    @classmethod
+    def run_id_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("run_id vuoto")
+        return v.strip()
+
+    @field_validator("n_items")
+    @classmethod
+    def n_items_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"n_items negativo: {v}")
+        return v
+
+
 def validate_batch(
     rows: list[dict],
     model: type[BaseModel],

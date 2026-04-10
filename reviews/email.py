@@ -43,6 +43,80 @@ def send_email(
     log.info("Email sent to %s: %s", to, subject)
 
 
+def _fetch_apify_costs(date_start: str, date_end: str) -> list[dict]:
+    """Query f_apify_runs for runs between date_start and date_end (inclusive).
+
+    Returns list of dicts with (piattaforma, n_runs, n_items, cost_usd).
+    On BQ failure, returns empty list — cost section just won't render.
+    """
+    try:
+        from google.cloud import bigquery
+        from core.config import F_APIFY_RUNS, PROJECT
+
+        client = bigquery.Client(project=PROJECT)
+        sql = f"""
+        SELECT
+          piattaforma,
+          COUNT(*) AS n_runs,
+          SUM(n_items) AS n_items,
+          SUM(cost_usd) AS cost_usd,
+          COUNTIF(cap_violated) AS n_cap_violated
+        FROM `{F_APIFY_RUNS}`
+        WHERE DATE(ts_run) BETWEEN @start AND @end
+        GROUP BY piattaforma
+        ORDER BY piattaforma
+        """
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("start", "DATE", date_start),
+                bigquery.ScalarQueryParameter("end", "DATE", date_end),
+            ]
+        )
+        return [dict(r) for r in client.query(sql, job_config=job_config).result()]
+    except Exception:
+        log.exception("_fetch_apify_costs failed (non-fatal)")
+        return []
+
+
+def _render_cost_section(cost_rows: list[dict]) -> str:
+    """Render the 'Costi Apify' block. Empty string if no data."""
+    if not cost_rows:
+        return ""
+    total_cost = sum((r.get("cost_usd") or 0.0) for r in cost_rows)
+    total_items = sum((r.get("n_items") or 0) for r in cost_rows)
+    total_runs = sum((r.get("n_runs") or 0) for r in cost_rows)
+    total_violations = sum((r.get("n_cap_violated") or 0) for r in cost_rows)
+
+    cost_body = ""
+    for r in cost_rows:
+        cost = r.get("cost_usd") or 0.0
+        cost_body += (
+            f"<tr>"
+            f"<td>{r.get('piattaforma')}</td>"
+            f"<td>{r.get('n_runs', 0)}</td>"
+            f"<td>{r.get('n_items', 0)}</td>"
+            f"<td>${cost:.4f}</td>"
+            f"<td>{r.get('n_cap_violated', 0)}</td>"
+            f"</tr>"
+        )
+    violations_color = "#C0392B" if total_violations > 0 else "#2C3E50"
+    return f"""
+<h3>Costi Apify (scraping)</h3>
+<table style="margin-bottom: 10px;">
+<tr><td><strong>Spesa totale:</strong></td><td>${total_cost:.4f}</td></tr>
+<tr><td><strong>Run totali:</strong></td><td>{total_runs}</td></tr>
+<tr><td><strong>Review scaricate:</strong></td><td>{total_items}</td></tr>
+<tr><td><strong>Cap violati:</strong></td><td style="color:{violations_color};font-weight:bold;">{total_violations}</td></tr>
+</table>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
+<tr style="background: #1F4E79; color: white;">
+<th>Piattaforma</th><th># Run</th><th># Item</th><th>Cost USD</th><th>Cap viol.</th>
+</tr>
+{cost_body}
+</table>
+"""
+
+
 def render_weekly_report(
     rows: list[dict],
     date_start: str,
@@ -50,11 +124,13 @@ def render_weekly_report(
 ) -> str:
     """Render weekly review report as HTML."""
     total = len(rows)
+    cost_section = _render_cost_section(_fetch_apify_costs(date_start, date_end))
     if total == 0:
-        return f"""<html><body>
-        <h2>Reviews settimanali — {date_start} / {date_end}</h2>
-        <p>Nessuna review ricevuta questa settimana.</p>
-        </body></html>"""
+        return f"""<html><body style="font-family: Arial, sans-serif; max-width: 800px; margin: auto;">
+<h2>Reviews settimanali — {date_start} / {date_end}</h2>
+<p>Nessuna review ricevuta questa settimana.</p>
+{cost_section}
+</body></html>"""
 
     avg_score = sum(r.get("punteggio_norm", 0) for r in rows) / total
     negatives = [r for r in rows if r.get("punteggio_norm", 10) <= 6.0]
@@ -129,6 +205,8 @@ def render_weekly_report(
 </tr>
 {all_rows_html}
 </table>
+
+{cost_section}
 
 </body></html>"""
 

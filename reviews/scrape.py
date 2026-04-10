@@ -4,12 +4,52 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from apify_client import ApifyClient
 
 from reviews.config import APIFY_ACTORS, PROPERTIES
 
 log = logging.getLogger(__name__)
+
+
+def persist_apify_run(
+    run_id: str,
+    piattaforma: str,
+    business_unit_id: str,
+    actor_id: str,
+    n_items: int,
+    cost_usd: float | None,
+    cap_violated: bool,
+) -> None:
+    """Insert one row into f_apify_runs for cost observability.
+
+    Best-effort: on BQ failure, log warning and continue. Losing a cost
+    row must never block the review pipeline — costs are observability,
+    not business data.
+    """
+    from google.cloud import bigquery
+    from core.config import F_APIFY_RUNS, PROJECT
+    from core.schemas import ApifyRunRow, validate_batch
+
+    row = {
+        "run_id": run_id,
+        "piattaforma": piattaforma,
+        "business_unit_id": business_unit_id,
+        "actor_id": actor_id,
+        "ts_run": datetime.now(timezone.utc).isoformat(),
+        "n_items": n_items,
+        "cost_usd": cost_usd,
+        "cap_violated": cap_violated,
+    }
+    try:
+        validate_batch([row], ApifyRunRow, context="f_apify_runs persist")
+        client = bigquery.Client(project=PROJECT)
+        errors = client.insert_rows_json(F_APIFY_RUNS, [row])
+        if errors:
+            log.warning("f_apify_runs insert errors: %s", errors)
+    except Exception:
+        log.exception("persist_apify_run failed for run_id=%s (non-fatal)", run_id)
 
 
 def _get_client() -> ApifyClient:
@@ -127,14 +167,28 @@ def scrape_platform(
 
         # Observability: warn loudly if the actor ignored our cap.
         # This is how we caught the 2026-04-09 cost blowout.
-        if len(items) > MAX_REVIEWS_PER_PROPERTY:
+        n_items_raw = len(items)
+        cap_violated = n_items_raw > MAX_REVIEWS_PER_PROPERTY
+        if cap_violated:
             log.warning(
                 "CAP VIOLATED: %s/%s returned %d items, expected <= %d. "
                 "Actor param likely wrong. Truncating to %d downstream.",
-                piattaforma, b, len(items), MAX_REVIEWS_PER_PROPERTY,
+                piattaforma, b, n_items_raw, MAX_REVIEWS_PER_PROPERTY,
                 MAX_REVIEWS_PER_PROPERTY,
             )
             items = items[:MAX_REVIEWS_PER_PROPERTY]
+
+        # Persist run observability row (best-effort, never raises).
+        # n_items = pre-truncation, so cost audits see the real blast radius.
+        persist_apify_run(
+            run_id=run["id"],
+            piattaforma=piattaforma,
+            business_unit_id=b,
+            actor_id=actor_id,
+            n_items=n_items_raw,
+            cost_usd=float(run_cost_usd) if run_cost_usd is not None else None,
+            cap_violated=cap_violated,
+        )
 
         # Tag each item with BU for downstream processing
         for item in items:

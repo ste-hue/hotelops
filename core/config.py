@@ -20,6 +20,7 @@ F_RICAVI_STORICI            = _t("f_ricavi_storici")
 F_COEFFICIENTI_CONSUMO      = _t("f_coefficienti_consumo")
 F_PMS_STATISTICHE           = _t("f_pms_statistiche")
 F_REVIEWS                   = _t("f_reviews")
+F_APIFY_RUNS                = _t("f_apify_runs")
 
 # Dimension tables
 D_VOCI_PIANO_FINANZIARIO    = _t("d_voci_piano_finanziario")

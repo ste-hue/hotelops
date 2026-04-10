@@ -317,6 +317,47 @@ def test_flush_pending_alert_flags_keeps_state_if_buffer_still_blocking(
     assert state_path.exists()  # preserved for next attempt
 
 
+def test_weekly_report_renders_cost_section_when_data_present():
+    """Cost section must render when _fetch_apify_costs returns rows."""
+    from reviews.email import render_weekly_report
+
+    fake_costs = [
+        {
+            "piattaforma": "BOOKING",
+            "n_runs": 3,
+            "n_items": 45,
+            "cost_usd": 0.2250,
+            "n_cap_violated": 0,
+        },
+        {
+            "piattaforma": "EXPEDIA",
+            "n_runs": 3,
+            "n_items": 12,
+            "cost_usd": 0.0600,
+            "n_cap_violated": 1,
+        },
+    ]
+    with patch("reviews.email._fetch_apify_costs", return_value=fake_costs):
+        html = render_weekly_report(rows=[], date_start="2026-04-06", date_end="2026-04-12")
+
+    assert "Costi Apify" in html
+    assert "$0.2850" in html  # total cost = 0.225 + 0.06
+    assert "BOOKING" in html
+    assert "EXPEDIA" in html
+    # Cap violations are highlighted
+    assert "Cap violati" in html
+
+
+def test_weekly_report_omits_cost_section_when_no_data():
+    """Cost section is silent when _fetch_apify_costs returns empty."""
+    from reviews.email import render_weekly_report
+
+    with patch("reviews.email._fetch_apify_costs", return_value=[]):
+        html = render_weekly_report(rows=[], date_start="2026-04-06", date_end="2026-04-12")
+
+    assert "Costi Apify" not in html
+
+
 def test_persist_pending_merges_with_existing(tmp_path, monkeypatch):
     """Repeated failures merge hashes, never lose old ones."""
     import json as _json
