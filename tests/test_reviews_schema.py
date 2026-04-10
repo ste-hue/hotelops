@@ -86,9 +86,11 @@ class TestReviewRow:
         with pytest.raises(ValueError):
             ReviewRow(**_valid_row(review_hash=""))
 
-    def test_testo_not_empty(self):
-        with pytest.raises(ValueError):
-            ReviewRow(**_valid_row(testo=""))
+    def test_testo_accepts_empty(self):
+        # Star-only reviews (Google/Booking) have no text; schema allows empty.
+        # Changed 2026-04-09 — see docs/procedures/reviews_pipeline.md.
+        model = ReviewRow(**_valid_row(testo=""))
+        assert model.testo == ""
 
     def test_validate_batch_ok(self):
         rows = [_valid_row(), _valid_row(review_hash="xyz789")]
