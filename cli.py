@@ -527,6 +527,8 @@ def main():
     p_reviews.add_argument("--mese", type=int, help="Mese per stats")
     p_reviews.add_argument("--anno", type=int, default=2026)
     p_reviews.add_argument("--report", action="store_true", help="Invia report settimanale")
+    p_reviews.add_argument("--start", type=str, help="Override start date report (YYYY-MM-DD)")
+    p_reviews.add_argument("--end", type=str, help="Override end date report (YYYY-MM-DD)")
     p_reviews.add_argument("--dry-run", action="store_true", help="Preview senza azioni")
 
     # docs

@@ -225,15 +225,29 @@ def _cmd_stats(args):
 
 
 def _cmd_report(args):
-    """Manually trigger weekly report."""
+    """Manually trigger weekly report.
+
+    Default window: ultima settimana ISO completa chiusa (Lun-Dom precedenti).
+    Questo è il contratto col cron settimanale (lanciato il lunedì mattina)
+    e non va cambiato senza rompere la coerenza storica dei run.
+
+    Override manuale: --start / --end (YYYY-MM-DD) per ispezioni ad hoc —
+    es. recap della settimana in corso, o drill-down su un range specifico.
+    """
     from datetime import date, timedelta
     from google.cloud import bigquery
     from core.config import F_REVIEWS, PROJECT
     from reviews.email import send_weekly_report
 
-    today = date.today()
-    end = today - timedelta(days=today.weekday() + 1)  # last Sunday
-    start = end - timedelta(days=6)  # last Monday
+    if args.start and args.end:
+        start = date.fromisoformat(args.start)
+        end = date.fromisoformat(args.end)
+    elif args.start or args.end:
+        raise SystemExit("--start e --end vanno forniti insieme")
+    else:
+        today = date.today()
+        end = today - timedelta(days=today.weekday() + 1)  # last Sunday
+        start = end - timedelta(days=6)  # last Monday
 
     client = bigquery.Client(project=PROJECT)
     sql = f"""
