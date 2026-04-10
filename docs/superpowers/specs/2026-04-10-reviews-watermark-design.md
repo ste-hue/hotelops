@@ -91,6 +91,18 @@ La funzione nuova `filter_by_watermark(watermarks, items)` vive in `ingest.py`.
    Output: `dict[(piattaforma, business_unit_id), str]` (`data_review` è stringa
    ISO `YYYY-MM-DD` per schema, confronto lessicografico = cronologico).
 
+   **Il filtro `LENGTH=10` è silenzioso per definizione.** Per non perdere visibilità
+   sul format drift, `read_watermarks()` esegue anche una seconda query di controllo:
+   ```sql
+   SELECT piattaforma, COUNT(*) AS n_malformed
+   FROM `hotelops-suite.hotelops.f_reviews`
+   WHERE LENGTH(data_review) <> 10
+   GROUP BY piattaforma
+   ```
+   Se `n_malformed > 0` per qualche piattaforma → log `WATERMARK EXCLUDED <n> malformed
+   rows on <piattaforma>` (warning, non errore). Così il bug pre-fix resta tracciato
+   finché il backfill non passa.
+
 2. **Scrape** (invariato): ogni actor ritorna fino a 15 items recenti.
 
 3. **Normalize + filter**: per ogni item,
@@ -192,6 +204,18 @@ Step di ricerca, ~15 min, prima di toccare codice:
 3. Per ciascun actor dove esiste → passarlo in `_build_input` usando il watermark.
    Il filtro client-side resta come safety net.
 4. Risultato → aggiornare `docs/procedures/reviews_pipeline.md` tabella actor.
+
+## Limitazioni note (v1)
+
+- **Gap detection rigida a `len(kept) == CAP`**. Un actor che torna 14/15 perché una
+  review è stata cancellata sulla piattaforma non triggera l'allarme anche se c'è un
+  gap vero. Viceversa, 15/15 nuovi dopo un weekend su una property ad alto volume
+  potrebbe essere legittimo e generare falso allarme. Accettabile per v1: riguardare
+  dopo 2–4 settimane di dati reali. Il log `GAP SUSPECTED` serve proprio a osservare
+  i pattern prima di irrigidire l'euristica.
+- **Crash window tra `mail sent` e `mark_alerts_sent`**. Se il processo crasha dopo
+  l'SMTP success e prima dell'UPDATE BQ, al prossimo run l'alert riparte. Scelta
+  consapevole: *alert duplicato > alert perso* nel contesto hotel ops.
 
 ## Fuori scope (rimandato)
 
