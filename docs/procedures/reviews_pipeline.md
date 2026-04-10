@@ -195,17 +195,21 @@ il prossimo run su Google pescherà tutto ciò che è `> 2026-03-03` — se il
 gap era dovuto a scraping rotto e non a mancanza di review reali, dovremmo
 vederlo nel prossimo run. Da monitorare.
 
-### 🟡 Format drift `data_review` su Google (backfill da rieseguire)
-42 row Google esistenti hanno `data_review` come timestamp ISO
+### ✅ Format drift `data_review` su Google — RISOLTO 2026-04-10
+42 row Google esistenti avevano `data_review` come timestamp ISO
 (`2025-04-13T15:37:24.784Z`) invece di `YYYY-MM-DD`. Il fix in
-`normalize_google` vale solo per i nuovi. `read_watermarks` filtra
-`LENGTH=10` e logga `WATERMARK EXCLUDED N malformed ...` per audit.
-Backfill SQL pronto, **rieseguire dopo 2026-04-10** (streaming buffer):
+`normalize_google` vale per i nuovi; il backfill SQL ha sistemato gli
+esistenti dopo il merge del watermark branch:
 ```sql
 UPDATE `hotelops-suite.hotelops.f_reviews`
 SET data_review = SUBSTR(data_review, 1, 10)
 WHERE piattaforma = 'GOOGLE' AND LENGTH(data_review) > 10
+-- 42 rows affected
 ```
+Post-fix: `read_watermarks` restituisce 11 chiavi invece di 8 (le 3
+GOOGLE BU ora materializzano MAX(data_review)), il log
+`WATERMARK EXCLUDED` è muto, e il prossimo cron eviterà i 42 Haiku
+sprecati a ri-classificare GOOGLE storici.
 
 ## Domande aperte di design (da risolvere)
 
@@ -297,7 +301,7 @@ Drift schema/code. Controllare `tests/test_reviews_schema_sync.py`, garantisce a
 1. ✅ ~~Fix `alert.py` → scrivere `alert_inviato=true` dopo invio~~ — risolto 2026-04-10 (watermark gate + `mark_alerts_sent` + regression test).
 2. 🔴 **Branch `fix/apify-param-names`** — BOOKING `reviewsSort`→`sortReviewsBy`; TRIPADVISOR `maxItems`+`language`→`maxItemsPerQuery`+`reviewsLanguages`; EXPEDIA `maxReviewsPerHotel`+`maxReviews`→`maxItems`. Verificare con `inspect_actors.py` dopo il fix e smoke-testare un run per piattaforma.
 3. 🔴 Introdurre `f_pipeline_runs` + PipelineRun context manager (Layer 2 refactor). Sblocca: "il cron è girato ieri?", watermark esplicito come backup, alert "ultimo run OK > 36h fa".
-4. 🟡 Backfill `data_review` Google (streaming buffer dovrebbe essere libero dopo 2026-04-10). Finché non gira, il log `WATERMARK EXCLUDED N malformed rows on GOOGLE` è il canary.
+4. ✅ ~~Backfill `data_review` Google~~ — fatto 2026-04-10, 42 row sistemate, watermarks GOOGLE ora materializzati.
 5. 🟡 Verificare perché Google era rotto prima del 9 aprile (gap 5+ settimane). Il primo run post-watermark ci dirà se era il scraping o se le review reali mancavano.
 6. 🟡 **Cost tracking** via `GET /v2/actor-runs/{runId}` → `usageTotalUsd`. Task #15 nel tracker. Log post-run + comando `hotelops reviews --cost-audit <runId>`.
 7. 🟡 Env var override del cap per gap recovery manuale (`APIFY_MAX_REVIEWS_OVERRIDE=50`).
