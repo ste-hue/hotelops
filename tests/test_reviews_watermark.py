@@ -83,3 +83,47 @@ def test_filter_multiple_keys_independent_gap():
     kept, gap_keys = filter_by_watermark(watermarks, items, cap=15)
     assert len(kept) == 16
     assert gap_keys == [("BOOKING", "HOTEL")]
+
+
+from unittest.mock import MagicMock, patch
+
+
+def test_read_watermarks_returns_dict(monkeypatch):
+    fake_client = MagicMock()
+
+    # First query: watermarks
+    watermark_rows = [
+        MagicMock(piattaforma="BOOKING", business_unit_id="HOTEL", watermark="2026-04-06"),
+        MagicMock(piattaforma="GOOGLE", business_unit_id="HOTEL", watermark="2026-03-03"),
+    ]
+    # Second query: malformed count
+    malformed_rows = [
+        MagicMock(piattaforma="GOOGLE", n_malformed=42),
+    ]
+
+    fake_client.query.side_effect = [
+        MagicMock(result=MagicMock(return_value=iter(watermark_rows))),
+        MagicMock(result=MagicMock(return_value=iter(malformed_rows))),
+    ]
+
+    with patch("reviews.ingest.bigquery.Client", return_value=fake_client):
+        from reviews.ingest import read_watermarks
+        result = read_watermarks()
+
+    assert result == {
+        ("BOOKING", "HOTEL"): "2026-04-06",
+        ("GOOGLE", "HOTEL"): "2026-03-03",
+    }
+    # Two queries issued: watermark + malformed audit
+    assert fake_client.query.call_count == 2
+
+
+def test_read_watermarks_empty(monkeypatch):
+    fake_client = MagicMock()
+    fake_client.query.side_effect = [
+        MagicMock(result=MagicMock(return_value=iter([]))),
+        MagicMock(result=MagicMock(return_value=iter([]))),
+    ]
+    with patch("reviews.ingest.bigquery.Client", return_value=fake_client):
+        from reviews.ingest import read_watermarks
+        assert read_watermarks() == {}

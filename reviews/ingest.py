@@ -6,6 +6,8 @@ import logging
 import re
 from datetime import datetime, timezone
 
+from google.cloud import bigquery
+
 from core.schemas import make_hash, validate_batch, ReviewRow
 
 log = logging.getLogger(__name__)
@@ -230,7 +232,6 @@ def load_to_bq(
 
     Returns number of rows inserted.
     """
-    from google.cloud import bigquery
     from core.config import F_REVIEWS, PROJECT
 
     if not rows:
@@ -319,3 +320,46 @@ def filter_by_watermark(
 
     gap_keys = [k for k, n in per_key_count.items() if n == cap]
     return kept, gap_keys
+
+
+def read_watermarks() -> dict[tuple[str, str], str]:
+    """Read per-(piattaforma, business_unit_id) watermark from f_reviews.
+
+    Watermark = MAX(data_review) filtered by LENGTH(data_review)=10 to guard
+    against format drift (the pre-fix Google rows with ISO timestamps).
+    Also issues a second audit query to log how many rows are excluded by
+    the LENGTH guard, so the drift stays visible until backfill.
+
+    Raises on BQ error — caller must abort the run (never proceed with an
+    involuntarily empty watermark).
+    """
+    from core.config import F_REVIEWS, PROJECT
+
+    client = bigquery.Client(project=PROJECT)
+
+    wm_sql = f"""
+    SELECT piattaforma, business_unit_id, MAX(data_review) AS watermark
+    FROM `{F_REVIEWS}`
+    WHERE LENGTH(data_review) = 10
+    GROUP BY piattaforma, business_unit_id
+    """
+    result = {
+        (row.piattaforma, row.business_unit_id): row.watermark
+        for row in client.query(wm_sql).result()
+    }
+
+    audit_sql = f"""
+    SELECT piattaforma, COUNT(*) AS n_malformed
+    FROM `{F_REVIEWS}`
+    WHERE LENGTH(data_review) <> 10
+    GROUP BY piattaforma
+    """
+    for row in client.query(audit_sql).result():
+        log.warning(
+            "WATERMARK EXCLUDED %d malformed data_review rows on %s",
+            row.n_malformed,
+            row.piattaforma,
+        )
+
+    log.info("read_watermarks: %d keys", len(result))
+    return result
