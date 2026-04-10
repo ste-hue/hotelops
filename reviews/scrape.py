@@ -33,35 +33,38 @@ def _build_input(piattaforma: str, bu: str, url: str) -> dict:
     Each actor has its own parameter naming — see reviews/PROPERTIES.md.
     Target: get the last MAX_REVIEWS_PER_PROPERTY reviews sorted by newest.
     """
+    # Param names verified against live Apify actor schemas via
+    # `python -m reviews.inspect_actors` on 2026-04-10. See ADR 0003
+    # "Scoperta collaterale: param names Apify".
     n = MAX_REVIEWS_PER_PROPERTY
     if piattaforma == "BOOKING":
-        # voyager/booking-reviews-scraper uses maxReviewsPerHotel, not maxReviews
+        # voyager/booking-reviews-scraper 0.99: sortReviewsBy (not reviewsSort)
         return {
             "startUrls": [{"url": url}],
             "maxReviewsPerHotel": n,
-            "reviewsSort": "f_recent_desc",
+            "sortReviewsBy": "f_recent_desc",
         }
     elif piattaforma == "TRIPADVISOR":
-        # maxcopell/tripadvisor-reviews respects maxItems (confirmed 2026-04-09)
+        # maxcopell/tripadvisor-reviews 0.99: maxItemsPerQuery (not maxItems).
+        # reviewsLanguages is an array; omit for "all languages" default.
         return {
             "startUrls": [{"url": url}],
-            "maxItems": n,
-            "language": "ALL",
+            "maxItemsPerQuery": n,
         }
     elif piattaforma == "GOOGLE":
-        # compass/Google-Maps-Reviews-Scraper respects maxReviews (confirmed 2026-04-09)
+        # compass/Google-Maps-Reviews-Scraper 1.0: maxReviews + reviewsSort OK
         return {
             "startUrls": [{"url": url}],
             "maxReviews": n,
             "reviewsSort": "newest",
         }
     elif piattaforma == "EXPEDIA":
-        # memo23/expedia-scraper — param name unconfirmed. Try both.
-        # TODO(2026-04-09): verify which param Expedia actor respects.
+        # memo23/expedia-scraper 0.0: maxItems is the ONLY cap param.
+        # The old maxReviewsPerHotel/maxReviews were both silently ignored,
+        # causing the 2026-04-10 blowout (226 items for a 15-cap request).
         return {
             "startUrls": [{"url": url}],
-            "maxReviewsPerHotel": n,
-            "maxReviews": n,
+            "maxItems": n,
         }
     else:
         raise ValueError(f"Unknown piattaforma: {piattaforma}")

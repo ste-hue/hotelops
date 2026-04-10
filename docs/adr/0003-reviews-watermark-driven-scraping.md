@@ -99,6 +99,12 @@ separato `fix/apify-param-names` dopo il merge del watermark, per non
 mescolare concerns. L'uso del date-filter server-side è un enhancement
 da valutare dopo, una volta che i param names sono corretti.
 
+**Update 2026-04-10 (post-merge):** `fix/apify-param-names` è stato
+applicato lo stesso giorno. La live run di Task 11 ha reso tangibile
+il costo del bug — Expedia RESIDENCE ha restituito 226 items per un
+cap di 15, causando un pay-per-item fee non necessario. 6 unit test in
+`tests/test_reviews_scrape.py` bloccano regressioni di `_build_input`.
+
 ## Alternative scartate
 
 - **Solo flag-based (`alert_inviato`)**: fragile a rebuild di `f_reviews`,
