@@ -1,11 +1,13 @@
-# Status — 2026-04-10
+# Status — 2026-04-11
 
 ## In corso
-- Layer 2 refactor — observability: `f_pipeline_runs` + PipelineRun context manager + `hotelops health` esteso, non ancora iniziato
+- `f_pipeline_runs` creazione tabella BQ — manuale, da runnare prima del prossimo cron (comando in commit Layer 2)
 - v_condges_banca_dettaglio: view SQL creata, non ancora materializzata su BQ
 - xlsx-movimenti-parser: piano scritto (`docs/superpowers/plans/2026-03-30-xlsx-movimenti-parser.md`), non eseguito
 
 ## Completato di recente
+- 2026-04-11: reviews **Layer 2 f_pipeline_runs observability** (merge commit + `b9f46a3` + `72b5e20`) — `PipelineRun` context manager in `core/pipeline_run.py` (INSERT RUNNING su __enter__, UPDATE finale su __exit__, best-effort BQ mai blocker), `PipelineRunRow` schema, `F_PIPELINE_RUNS` constant. `_cmd_scrape` wrappato con cattura rows_found/rows_new/alerts_sent/usage_total_usd/watermark meta. `scrape_platform`/`scrape_all` ora ritornano `(items, total_cost_usd)` tuple (deviazione vs spec per evitare re-query BQ). 3 health check: `check_watermark_staleness` (21d), `check_pipeline_staleness` (36h), `check_crashed_runs` (1h RUNNING stuck) wirati in `condges/cli_commands.cmd_health`. 15 test nuovi (11 PipelineRun + 4 health). **Tabella BQ da creare manualmente** prima del prossimo cron — comando in commit message.
+- 2026-04-11: reviews **Trip.com come 5° fonte review** (merge commit + `9d2ab7e`) — `knagymate/trip-com-reviews-scraper` per Hotel (774198), Residence (3094414), CVM (4043516). `PiattaformaReview` Literal esteso, `SCORE_SCALE`/`SCORE_SCALES`/`PIATTAFORME` allineati, help text `inspect_actors` aggiornato. `_build_input` branch TRIP usa `hotelUrl` (STRING, non `startUrls` array) + `maxReviews` — regression guard per blowout $3.38 del 2026-04-11 (schema defaults fallback = Grand Hyatt Shanghai, 1000 review). `normalize_trip` + `_extract_trip_hotel_id`: rating già 1-10, review anonime (no `reviewer_nome`), hash combina hotel_id|review_id per isolamento cross-hotel, content preferito per IT/EN con fallback a `translatedContent` per altre lingue. 10 test nuovi.
 - 2026-04-10: reviews **Task #17 — POC aggregator SHELVED** — `tri_angle/hotel-review-aggregator` archiviato in `docs/superpowers/poc-archive/` (script + output Run #1 + README con rationale). Blocker Expedia fundamental (Google-first cross-match non risolve Hotel Panorama), e il fan-out 4-actor corrente costa frazioni di cent/run → nessun incentivo a migrare. Worktree `.worktrees/poc-aggregator` rimosso, branch `poc/apify-aggregator` eliminato. Condizioni di riapertura documentate nel README.
 - 2026-04-10: reviews **Task #16 — Apify cost persistence** (`12df482`) — `ApifyRunRow` schema in `core/schemas.py` + `persist_apify_run()` in `reviews/scrape.py` (best-effort, mai blocker) + sezione "Costi Apify" in `render_weekly_report` via `_fetch_apify_costs`. `n_items` pre-truncation per audit onesto del blast radius. 6 test nuovi (3 persist + 2 cost section + 1 schema). **Verificato end-to-end live**: 3 run BOOKING in `f_apify_runs` (HOTEL/RESIDENCE/CVM, $0.0001 ciascuno), email settimanale mostra breakdown corretto ($0.0003 totali, 45 item, 0 cap viol).
 - 2026-04-10: reviews **`mark_alerts_sent` streaming buffer fix** (`af685b2`) — retry 3× (30+60+120s) su `BadRequest "streaming buffer"`, altri errori sollevano immediati. Se i retry falliscono, hash persistite in `.hotelops_state/pending_alert_flags.json` (merge-not-overwrite). `flush_pending_alert_flags()` chiamato step 0 di `_cmd_scrape` per auto-reconciliation quando il buffer si è svuotato. 9 test nuovi in `tests/test_reviews_alert.py`, 198/198 suite verde.
@@ -28,11 +30,13 @@
 ## Rotto / da fixare
 - 🟡 **Gap residuo crash totale** `send_email` → `mark_alerts_sent` — il fix `af685b2` cattura il caso streaming buffer (retry + pending file), ma se il processo muore completamente tra send_email e persist_pending non c'è traccia locale. Scelta consapevole "alert duplicato > alert perso" ancora in piedi, ora blast radius molto ridotto.
 - 🔴 Google rotto 5+ settimane prima del 9 aprile — `MAX(data_review)` Google pre-watermark = 2026-03-03 vs Booking/Expedia 2026-04-06. Root cause sconosciuta. Il prossimo cron post-watermark ci dirà se era scraping rotto o review reali mancanti.
-- 🟡 Cron reviews su host stefano — nessuna observability ancora (Layer 2 sblocca). Gap alert watermark copre in parte.
 - 🟡 Crash window tra `send_email` e `mark_alerts_sent` UPDATE — scelta consapevole "alert duplicato > alert perso", da rivedere se succede. (Ora aggravata dal bug streaming buffer sopra.)
 
 ## Prossimi passi
-- Layer 2: `f_pipeline_runs` + PipelineRun context manager in reviews/ingest/banca, `hotelops health` con alert se ultimo run OK > 36h fa
+- Creare tabella BQ `f_pipeline_runs` manualmente (comando in commit Layer 2) prima del prossimo cron reviews
+- Prima scrape reale Trip.com per validare `normalize_trip` end-to-end + verificare rating normalization
+- Instrumentare banca/flussi pipeline con `PipelineRun` (context manager è già generico)
+- Valutare email alert per `check_watermark_staleness` dopo 2-3 settimane di dati (oggi solo display CLI)
 - Investigare perché Google era rotto prima del 9 aprile (confronto con prossimo cron post-fix)
 - Env var override del cap per gap recovery manuale (`APIFY_MAX_REVIEWS_OVERRIDE=50`)
 - Server-side date filter come ottimizzazione costi Apify (`cutoffDate`/`lastReviewDate`/`reviewsStartDate`/`reviewsFrom`) — POC aggregator ha confermato che `reviewsFromDate` funziona server-side per il nuovo actor
