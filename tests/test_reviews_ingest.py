@@ -5,6 +5,8 @@ from reviews.ingest import (
     normalize_tripadvisor,
     normalize_google,
     normalize_expedia,
+    normalize_trip,
+    _extract_trip_hotel_id,
     dedup_reviews,
 )
 from core.schemas import ReviewRow
@@ -102,6 +104,100 @@ def test_normalize_expedia():
     assert row["data_review"] == "2026-04-01"
     assert row["data_soggiorno"] == "2026-03-28"
     ReviewRow(**row)
+
+
+def _trip_raw(**overrides) -> dict:
+    base = {
+        "_bu": "HOTEL",
+        "_piattaforma": "TRIP",
+        "id": "t_001",
+        "rating": 8.5,
+        "content": "Ottimo soggiorno, staff gentile.",
+        "translatedContent": "Great stay, kind staff.",
+        "language": "it",
+        "createDate": "2025-10-15 12:34:56",
+        "checkInDate": "2025-10-10",
+        "roomTypeName": "Camera doppia",
+        "travelType": "couple",
+        "travelTypeText": "Couple",
+        "commentLevel": "Recommended",
+        "usefulCount": 2,
+    }
+    base.update(overrides)
+    return base
+
+
+def test_extract_trip_hotel_id():
+    url = "https://www.trip.com/hotels/maiori-hotel-detail-774198/panorama/"
+    assert _extract_trip_hotel_id(url) == "774198"
+    assert _extract_trip_hotel_id("https://it.trip.com/hotels/maiori-hotel-detail-3094414/angelina-residence/") == "3094414"
+    assert _extract_trip_hotel_id(None) == ""
+    assert _extract_trip_hotel_id("https://other.site/x") == ""
+
+
+def test_normalize_trip_italian_uses_content():
+    """IT language: use content (original) not translatedContent."""
+    row = normalize_trip(_trip_raw(), societa="ORTI")
+    assert row["piattaforma"] == "TRIP"
+    assert row["punteggio_raw"] == 8.5
+    assert row["punteggio_norm"] == 8.5  # already 1-10
+    assert row["business_unit_id"] == "HOTEL"
+    assert row["testo"] == "Ottimo soggiorno, staff gentile."
+    assert row["lingua"] == "it"
+    assert row["data_review"] == "2025-10-15"
+    assert row["data_soggiorno"] == "2025-10-10"
+    assert row["reviewer_nome"] is None
+    assert row["camera_tipo"] == "Camera doppia"
+    assert row["tipo_viaggio"] == "COPPIA"
+    assert row["titolo"] == "Recommended"
+    assert "trip.com" in (row["url_review"] or "")
+    ReviewRow(**row)
+
+
+def test_normalize_trip_non_latin_falls_back_to_translation():
+    """Chinese review: content is CJK, fall back to translatedContent."""
+    row = normalize_trip(_trip_raw(language="zh", content="很好的酒店", translatedContent="Great hotel"))
+    assert row["testo"] == "Great hotel"
+    assert row["lingua"] == "zh"
+
+
+def test_normalize_trip_english_uses_content():
+    """EN language: prefer original content over translation."""
+    row = normalize_trip(_trip_raw(language="en", content="Lovely place", translatedContent="Posto delizioso"))
+    assert row["testo"] == "Lovely place"
+
+
+def test_normalize_trip_no_translation_keeps_content():
+    """Non-IT/EN language, no translation available: keep the original."""
+    row = normalize_trip(_trip_raw(language="zh", content="很好", translatedContent=""))
+    assert row["testo"] == "很好"
+
+
+def test_normalize_trip_review_hash_stable():
+    """Same hotel_id + review_id → same hash across runs."""
+    row1 = normalize_trip(_trip_raw())
+    row2 = normalize_trip(_trip_raw())
+    assert row1["review_hash"] == row2["review_hash"]
+
+
+def test_normalize_trip_review_hash_isolated_from_other_hotels():
+    """Same review_id across different hotels must produce different hashes."""
+    hotel_row = normalize_trip(_trip_raw(_bu="HOTEL"))
+    residence_row = normalize_trip(_trip_raw(_bu="RESIDENCE"))
+    assert hotel_row["review_hash"] != residence_row["review_hash"]
+
+
+def test_normalize_trip_score_passthrough():
+    """Trip.com rating is already on 1-10 scale (ratingMax=10), no rescale."""
+    row = normalize_trip(_trip_raw(rating=5.0))
+    assert row["punteggio_raw"] == 5.0
+    assert row["punteggio_norm"] == 5.0
+
+
+def test_normalize_trip_travel_type_mapping():
+    """travelTypeText maps through the same _TRIP_TYPE_MAP as other platforms."""
+    row = normalize_trip(_trip_raw(travelTypeText="Family", travelType="family"))
+    assert row["tipo_viaggio"] == "FAMIGLIA"
 
 
 def test_dedup_reviews():

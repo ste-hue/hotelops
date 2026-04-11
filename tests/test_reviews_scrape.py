@@ -52,6 +52,18 @@ def test_google_unchanged():
     assert inp["startUrls"] == [{"url": "https://example.com/google"}]
 
 
+def test_trip_uses_hotelUrl_not_startUrls():
+    """knagymate/trip-com-reviews-scraper schema: hotelUrl (string), maxReviews.
+    Passing startUrls/totalLimit causes the actor to silently fall back to its
+    schema defaults (Grand Hyatt Shanghai, 1000 reviews) — regression guard
+    for the 2026-04-11 $3.38 exploration blowout."""
+    inp = _build_input("TRIP", "HOTEL", "https://www.trip.com/hotels/maiori-hotel-detail-774198/panorama/")
+    assert inp["hotelUrl"] == "https://www.trip.com/hotels/maiori-hotel-detail-774198/panorama/"
+    assert inp["maxReviews"] == MAX_REVIEWS_PER_PROPERTY
+    assert "startUrls" not in inp
+    assert "totalLimit" not in inp
+
+
 def test_unknown_platform_raises():
     import pytest
     with pytest.raises(ValueError, match="Unknown piattaforma"):

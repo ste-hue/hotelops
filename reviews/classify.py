@@ -28,6 +28,7 @@ SCORE_SCALES = {
     "TRIPADVISOR": 5,
     "GOOGLE": 5,
     "EXPEDIA": 10,
+    "TRIP": 10,
 }
 
 

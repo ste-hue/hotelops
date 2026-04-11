@@ -106,6 +106,15 @@ def _build_input(piattaforma: str, bu: str, url: str) -> dict:
             "startUrls": [{"url": url}],
             "maxItems": n,
         }
+    elif piattaforma == "TRIP":
+        # knagymate/trip-com-reviews-scraper: hotelUrl is a STRING (not array).
+        # Passing startUrls/totalLimit silently falls back to schema defaults
+        # (Grand Hyatt Shanghai, 1000 reviews) — caused the 2026-04-11 $3.38
+        # exploration blowout. Schema verified via inspect_actors.
+        return {
+            "hotelUrl": url,
+            "maxReviews": n,
+        }
     else:
         raise ValueError(f"Unknown piattaforma: {piattaforma}")
 
