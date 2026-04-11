@@ -202,6 +202,44 @@ def cmd_health(args):
         except Exception as e:
             print(f"    ? {table_id.split('.')[-1]}: {e}")
 
+    # Pipeline observability (Layer 2: f_pipeline_runs)
+    try:
+        from core.pipeline_run import (
+            STALENESS_THRESHOLD_DAYS,
+            check_crashed_runs,
+            check_pipeline_staleness,
+            check_watermark_staleness,
+        )
+
+        stale_watermarks = check_watermark_staleness()
+        if stale_watermarks:
+            print(f"\n  ⚠️  STALE WATERMARKS (>{STALENESS_THRESHOLD_DAYS}d silence):")
+            for s in stale_watermarks:
+                print(
+                    f"    {s['piattaforma']}/{s['business_unit_id']}: "
+                    f"last review {s['watermark']} ({s['days_stale']}d ago)"
+                )
+
+        stale_pipelines = check_pipeline_staleness()
+        if stale_pipelines:
+            print("\n  🔴 STALE PIPELINES (no OK run in >36h):")
+            for s in stale_pipelines:
+                print(
+                    f"    {s['pipeline_name']}: last OK {s['last_ok']} "
+                    f"({s['hours_since']}h ago)"
+                )
+
+        crashed = check_crashed_runs()
+        if crashed:
+            print("\n  💀 CRASHED RUNS (RUNNING >1h):")
+            for c in crashed:
+                print(
+                    f"    {c['pipeline_name']} ({c['run_id'][:8]}): "
+                    f"started {c['started_at']} ({c['hours_running']}h ago)"
+                )
+    except Exception as e:
+        print(f"\n  PIPELINE OBSERVABILITY: errore — {e}")
+
     # Docs freshness
     print()
     try:

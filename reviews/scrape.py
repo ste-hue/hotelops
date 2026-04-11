@@ -114,10 +114,12 @@ def scrape_platform(
     piattaforma: str,
     bu: str | None = None,
     dry_run: bool = False,
-) -> list[dict]:
+) -> tuple[list[dict], float]:
     """Scrape reviews for a platform (optionally filtered by BU).
 
-    Returns list of raw JSON items from the Apify dataset.
+    Returns (items, total_cost_usd): raw JSON items from the Apify dataset
+    plus the summed usageTotalUsd across all actor calls in this invocation.
+    Cost is 0.0 in dry_run or when Apify doesn't return usageTotalUsd.
     """
     actor_id = APIFY_ACTORS.get(piattaforma)
     if not actor_id:
@@ -200,16 +202,22 @@ def scrape_platform(
     if not dry_run:
         log.info("APIFY COST %s: $%.4f", piattaforma, platform_cost_usd)
 
-    return all_items
+    return all_items, platform_cost_usd
 
 
-def scrape_all(dry_run: bool = False) -> list[dict]:
-    """Scrape all platforms, all BUs. Returns combined raw items."""
+def scrape_all(dry_run: bool = False) -> tuple[list[dict], float]:
+    """Scrape all platforms, all BUs.
+
+    Returns (items, total_cost_usd): combined raw items across platforms
+    plus the summed usageTotalUsd. Cost is 0.0 in dry_run.
+    """
     all_items = []
+    total_cost = 0.0
     for piattaforma in APIFY_ACTORS:
         try:
-            items = scrape_platform(piattaforma, dry_run=dry_run)
+            items, cost = scrape_platform(piattaforma, dry_run=dry_run)
             all_items.extend(items)
+            total_cost += cost
         except Exception:
             log.exception("Failed to scrape %s", piattaforma)
-    return all_items
+    return all_items, total_cost
