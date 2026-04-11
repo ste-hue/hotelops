@@ -446,6 +446,30 @@ class ApifyRunRow(BaseModel):
         return v
 
 
+# ── f_pipeline_runs ──────────────────────────────────────────────────────────
+
+
+class PipelineRunRow(BaseModel):
+    """Schema for f_pipeline_runs — one row per pipeline execution.
+
+    Layer 2 observability: answers "did the cron run?", "did it succeed?",
+    "is any pipeline silently dead?". Complementary to f_apify_runs
+    (one row per actor.call() — cost observability).
+    """
+    run_id: str
+    pipeline_name: str
+    started_at: str  # ISO timestamp
+    ended_at: Optional[str] = None
+    status: Literal["RUNNING", "OK", "FAIL", "PARTIAL"]
+    societa_id: Optional[SocietaId] = None
+    rows_found: Optional[int] = None
+    rows_new: Optional[int] = None
+    alerts_sent: Optional[int] = None
+    usage_total_usd: Optional[float] = None
+    error_message: Optional[str] = None
+    meta_json: Optional[str] = None
+
+
 def validate_batch(
     rows: list[dict],
     model: type[BaseModel],
