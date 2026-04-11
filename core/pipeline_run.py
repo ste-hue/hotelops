@@ -15,15 +15,16 @@ Usage:
 
 Design principles:
     - Never raise on BQ failure. Observability must not break the pipeline.
-    - INSERT a RUNNING row on enter (so crashed runs stay visible).
-    - UPDATE the row with final status/metrics on exit.
-    - Streaming-buffer UPDATE failures are logged and swallowed — the
-      crashed-run health check picks up any orphans.
+    - Single INSERT on __exit__ with the final state (OK / FAIL / PARTIAL).
+      An earlier version INSERTed RUNNING on __enter__ and UPDATEd on __exit__,
+      but the UPDATE always hit BigQuery's streaming buffer (the INSERT was
+      seconds earlier) and orphaned every successful run as stuck-RUNNING.
+      One write, no buffer collision — crashed processes are detected by
+      `check_pipeline_staleness` (last OK > 36h for a 2x/day cron).
 
-Plus three health-check functions used by `hotelops health`:
+Plus two health-check functions used by `hotelops health`:
     - check_watermark_staleness  -- detects Type 2 (silent platform death)
-    - check_pipeline_staleness   -- detects Type 1 (cron failed)
-    - check_crashed_runs         -- detects stuck RUNNING rows
+    - check_pipeline_staleness   -- detects Type 1 (cron failed / process died)
 """
 
 from __future__ import annotations
@@ -39,11 +40,16 @@ log = logging.getLogger(__name__)
 
 STALENESS_THRESHOLD_DAYS = 21
 PIPELINE_STALENESS_HOURS = 36
-CRASHED_RUN_HOURS = 1
 
 
 class PipelineRun:
-    """Context manager that records a pipeline run in f_pipeline_runs."""
+    """Context manager that records a pipeline run in f_pipeline_runs.
+
+    Writes exactly one row on __exit__ with the final state. No RUNNING
+    placeholder, no UPDATE — the streaming buffer makes in-process UPDATE
+    unreliable. A crashed process leaves no row at all; the absence is
+    detected by check_pipeline_staleness (last OK > threshold).
+    """
 
     def __init__(self, pipeline_name: str, societa_id: str | None = None):
         self.run_id = str(uuid.uuid4())
@@ -51,7 +57,7 @@ class PipelineRun:
         self.societa_id = societa_id
         self.started_at: str | None = None
         self.ended_at: str | None = None
-        self.status = "RUNNING"
+        self.status = "OK"
         self.rows_found: int | None = None
         self.rows_new: int | None = None
         self.alerts_sent: int | None = None
@@ -61,7 +67,6 @@ class PipelineRun:
 
     def __enter__(self) -> "PipelineRun":
         self.started_at = datetime.now(timezone.utc).isoformat()
-        self._insert_running()
         return self
 
     def __exit__(
@@ -74,9 +79,7 @@ class PipelineRun:
         if exc_val is not None:
             self.status = "FAIL"
             self.error_message = str(exc_val)[:500]
-        elif self.status == "RUNNING":
-            self.status = "OK"
-        self._update_final()
+        self._insert_final()
         return False  # don't suppress exceptions
 
     def _to_row(self) -> dict:
@@ -95,8 +98,8 @@ class PipelineRun:
             "meta_json": json.dumps(self.meta) if self.meta else None,
         }
 
-    def _insert_running(self) -> None:
-        """Insert initial RUNNING row. Best-effort — never raises."""
+    def _insert_final(self) -> None:
+        """Insert the single terminal row. Best-effort — never raises."""
         try:
             from core.config import F_PIPELINE_RUNS, PROJECT
             from google.cloud import bigquery
@@ -106,59 +109,7 @@ class PipelineRun:
             if errors:
                 log.warning("f_pipeline_runs INSERT errors: %s", errors)
         except Exception:
-            log.exception("PipelineRun._insert_running failed (non-fatal)")
-
-    def _update_final(self) -> None:
-        """UPDATE the row with final status + metrics. Best-effort.
-
-        The UPDATE typically hits the streaming buffer (same row was inserted
-        seconds ago). We catch any BQ error, log it, and return — the
-        crashed-run health check will flag any orphaned RUNNING rows.
-        """
-        try:
-            from core.config import F_PIPELINE_RUNS, PROJECT
-            from google.cloud import bigquery
-
-            client = bigquery.Client(project=PROJECT)
-
-            sql = f"""
-            UPDATE `{F_PIPELINE_RUNS}`
-            SET ended_at = @ended_at,
-                status = @status,
-                rows_found = @rows_found,
-                rows_new = @rows_new,
-                alerts_sent = @alerts_sent,
-                usage_total_usd = @usage_total_usd,
-                error_message = @error_message,
-                meta_json = @meta_json
-            WHERE run_id = @run_id
-            """
-            job_config = bigquery.QueryJobConfig(
-                query_parameters=[
-                    bigquery.ScalarQueryParameter("run_id", "STRING", self.run_id),
-                    bigquery.ScalarQueryParameter("ended_at", "TIMESTAMP", self.ended_at),
-                    bigquery.ScalarQueryParameter("status", "STRING", self.status),
-                    bigquery.ScalarQueryParameter("rows_found", "INT64", self.rows_found),
-                    bigquery.ScalarQueryParameter("rows_new", "INT64", self.rows_new),
-                    bigquery.ScalarQueryParameter("alerts_sent", "INT64", self.alerts_sent),
-                    bigquery.ScalarQueryParameter(
-                        "usage_total_usd", "FLOAT64", self.usage_total_usd
-                    ),
-                    bigquery.ScalarQueryParameter(
-                        "error_message", "STRING", self.error_message
-                    ),
-                    bigquery.ScalarQueryParameter(
-                        "meta_json",
-                        "STRING",
-                        json.dumps(self.meta) if self.meta else None,
-                    ),
-                ]
-            )
-            client.query(sql, job_config=job_config).result()
-        except Exception:
-            # Streaming buffer + any transient BQ failure — log and move on.
-            # Orphaned RUNNING rows are handled by check_crashed_runs().
-            log.exception("PipelineRun._update_final failed (non-fatal)")
+            log.exception("PipelineRun._insert_final failed (non-fatal)")
 
 
 # ── Health checks ────────────────────────────────────────────────────────────
@@ -229,31 +180,3 @@ def check_pipeline_staleness(threshold_hours: int = PIPELINE_STALENESS_HOURS) ->
     return [dict(r) for r in client.query(sql, job_config=job_config).result()]
 
 
-def check_crashed_runs(threshold_hours: int = CRASHED_RUN_HOURS) -> list[dict]:
-    """Find runs stuck in RUNNING status for too long (probably crashed).
-
-    Returns a list of crashed runs:
-        [{"run_id": str, "pipeline_name": str,
-          "started_at": str, "hours_running": int}]
-    """
-    from core.config import F_PIPELINE_RUNS, PROJECT
-    from google.cloud import bigquery
-
-    client = bigquery.Client(project=PROJECT)
-    sql = f"""
-    SELECT
-        run_id,
-        pipeline_name,
-        started_at,
-        TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), started_at, HOUR) AS hours_running
-    FROM `{F_PIPELINE_RUNS}`
-    WHERE status = 'RUNNING'
-      AND TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), started_at, HOUR) > @threshold
-    ORDER BY started_at
-    """
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("threshold", "INT64", threshold_hours),
-        ]
-    )
-    return [dict(r) for r in client.query(sql, job_config=job_config).result()]

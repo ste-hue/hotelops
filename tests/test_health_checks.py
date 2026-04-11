@@ -76,22 +76,3 @@ def test_check_pipeline_staleness_returns_stale_pipelines():
     assert result[0]["hours_since"] == 52
 
 
-def test_check_crashed_runs_returns_stuck_runs():
-    from core.pipeline_run import check_crashed_runs
-
-    fake_client = _fake_query_client(
-        [
-            {
-                "run_id": "abc-123",
-                "pipeline_name": "reviews_scrape",
-                "started_at": "2026-04-11T02:00:00Z",
-                "hours_running": 4,
-            }
-        ]
-    )
-    with patch("google.cloud.bigquery.Client", return_value=fake_client):
-        result = check_crashed_runs(threshold_hours=1)
-
-    assert len(result) == 1
-    assert result[0]["run_id"] == "abc-123"
-    assert result[0]["hours_running"] == 4

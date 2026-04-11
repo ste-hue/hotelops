@@ -1,8 +1,8 @@
 """Tests for PipelineRun context manager.
 
 Observability Layer 2: records a row per pipeline execution in f_pipeline_runs.
-All BQ interactions are best-effort — the pipeline must complete even if
-the observability writes fail.
+Single INSERT on __exit__ — no RUNNING placeholder, no UPDATE (streaming
+buffer made that unreliable). All BQ interactions are best-effort.
 """
 
 import json
@@ -17,7 +17,6 @@ class TestPipelineRun:
             mock_client.return_value = MagicMock()
             with PipelineRun("test") as run:
                 assert len(run.run_id) == 36  # UUID format
-                assert run.status == "RUNNING"
                 assert run.started_at is not None
 
     def test_status_ok_on_clean_exit(self):
@@ -60,34 +59,65 @@ class TestPipelineRun:
                 pass
             assert len(run_ref.error_message) == 500
 
-    def test_inserts_running_row_on_enter(self):
+    def test_no_write_on_enter(self):
+        """__enter__ must NOT touch BigQuery — we write once, on exit."""
         from core.pipeline_run import PipelineRun
 
         fake_client = MagicMock()
-        fake_client.insert_rows_json.return_value = []
         with patch("google.cloud.bigquery.Client", return_value=fake_client):
-            with PipelineRun("test"):
-                pass
+            run = PipelineRun("test").__enter__()
+            assert not fake_client.insert_rows_json.called
+            assert not fake_client.query.called
+            # Cleanly close so the test client doesn't leak state.
+            run.__exit__(None, None, None)
 
-        assert fake_client.insert_rows_json.called
-        insert_call = fake_client.insert_rows_json.call_args
-        row = insert_call.args[1][0]
-        assert row["status"] == "RUNNING"
-        assert row["pipeline_name"] == "test"
-
-    def test_updates_final_row_on_exit(self):
+    def test_inserts_final_row_on_exit(self):
         from core.pipeline_run import PipelineRun
 
         fake_client = MagicMock()
         fake_client.insert_rows_json.return_value = []
         with patch("google.cloud.bigquery.Client", return_value=fake_client):
             with PipelineRun("test") as run:
+                run.rows_found = 10
                 run.rows_new = 5
 
-        assert fake_client.query.called
-        sql = fake_client.query.call_args.args[0]
-        assert "UPDATE" in sql
-        assert "status = @status" in sql
+        assert fake_client.insert_rows_json.called
+        row = fake_client.insert_rows_json.call_args.args[1][0]
+        assert row["status"] == "OK"
+        assert row["pipeline_name"] == "test"
+        assert row["rows_found"] == 10
+        assert row["rows_new"] == 5
+        assert row["ended_at"] is not None
+
+    def test_inserts_fail_row_on_exception(self):
+        from core.pipeline_run import PipelineRun
+
+        fake_client = MagicMock()
+        fake_client.insert_rows_json.return_value = []
+        with patch("google.cloud.bigquery.Client", return_value=fake_client):
+            try:
+                with PipelineRun("test") as run:
+                    run.rows_found = 10
+                    raise RuntimeError("boom")
+            except RuntimeError:
+                pass
+
+        row = fake_client.insert_rows_json.call_args.args[1][0]
+        assert row["status"] == "FAIL"
+        assert row["rows_found"] == 10
+        assert "boom" in row["error_message"]
+
+    def test_never_calls_query(self):
+        """No UPDATE anywhere — streaming buffer would block it."""
+        from core.pipeline_run import PipelineRun
+
+        fake_client = MagicMock()
+        fake_client.insert_rows_json.return_value = []
+        with patch("google.cloud.bigquery.Client", return_value=fake_client):
+            with PipelineRun("test") as run:
+                run.rows_new = 1
+
+        assert not fake_client.query.called
 
     def test_meta_serialized_as_json(self):
         from core.pipeline_run import PipelineRun
@@ -101,7 +131,7 @@ class TestPipelineRun:
                 "watermarks": {"BOOKING|HOTEL": "2026-04-10"}
             }
 
-    def test_bq_failure_on_enter_does_not_raise(self):
+    def test_bq_failure_on_exit_does_not_raise(self):
         """Observability must never break the pipeline."""
         from core.pipeline_run import PipelineRun
 
@@ -111,18 +141,6 @@ class TestPipelineRun:
             # Must NOT raise
             with PipelineRun("test") as run:
                 run.rows_found = 10
-            assert run.status == "OK"
-
-    def test_bq_failure_on_exit_does_not_raise(self):
-        from core.pipeline_run import PipelineRun
-
-        fake_client = MagicMock()
-        fake_client.insert_rows_json.return_value = []
-        fake_client.query.side_effect = RuntimeError("BQ down on UPDATE")
-        with patch("google.cloud.bigquery.Client", return_value=fake_client):
-            with PipelineRun("test") as run:
-                run.rows_found = 10
-            # No exception propagated
             assert run.status == "OK"
 
     def test_societa_id_passed_through(self):

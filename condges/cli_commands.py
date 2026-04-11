@@ -206,7 +206,6 @@ def cmd_health(args):
     try:
         from core.pipeline_run import (
             STALENESS_THRESHOLD_DAYS,
-            check_crashed_runs,
             check_pipeline_staleness,
             check_watermark_staleness,
         )
@@ -227,15 +226,6 @@ def cmd_health(args):
                 print(
                     f"    {s['pipeline_name']}: last OK {s['last_ok']} "
                     f"({s['hours_since']}h ago)"
-                )
-
-        crashed = check_crashed_runs()
-        if crashed:
-            print("\n  💀 CRASHED RUNS (RUNNING >1h):")
-            for c in crashed:
-                print(
-                    f"    {c['pipeline_name']} ({c['run_id'][:8]}): "
-                    f"started {c['started_at']} ({c['hours_running']}h ago)"
                 )
     except Exception as e:
         print(f"\n  PIPELINE OBSERVABILITY: errore — {e}")

@@ -460,7 +460,7 @@ class PipelineRunRow(BaseModel):
     pipeline_name: str
     started_at: str  # ISO timestamp
     ended_at: Optional[str] = None
-    status: Literal["RUNNING", "OK", "FAIL", "PARTIAL"]
+    status: Literal["OK", "FAIL", "PARTIAL"]
     societa_id: Optional[SocietaId] = None
     rows_found: Optional[int] = None
     rows_new: Optional[int] = None
