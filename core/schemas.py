@@ -352,7 +352,7 @@ class CoefficienteConsumoRow(BaseModel):
 
 # ── f_reviews ───────────────────────────────────────────────────────────────
 
-PiattaformaReview = Literal["BOOKING", "TRIPADVISOR", "GOOGLE", "EXPEDIA"]
+PiattaformaReview = Literal["BOOKING", "TRIPADVISOR", "GOOGLE", "EXPEDIA", "TRIP"]
 CategoriaNlp = Literal[
     "PULIZIA", "CIBO", "STAFF", "STRUTTURA", "POSIZIONE",
     "RUMORE", "PREZZO", "WIFI", "GENERICA",

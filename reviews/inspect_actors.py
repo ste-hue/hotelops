@@ -101,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--only",
-        help="Inspect a single piattaforma (BOOKING|TRIPADVISOR|GOOGLE|EXPEDIA)",
+        help="Inspect a single piattaforma (BOOKING|TRIPADVISOR|GOOGLE|EXPEDIA|TRIP)",
     )
     args = parser.parse_args(argv)
 

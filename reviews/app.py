@@ -9,7 +9,7 @@ import streamlit as st
 
 from core import config as cfg
 
-PIATTAFORME = ["BOOKING", "TRIPADVISOR", "GOOGLE", "EXPEDIA"]
+PIATTAFORME = ["BOOKING", "TRIPADVISOR", "GOOGLE", "EXPEDIA", "TRIP"]
 
 
 @st.cache_resource

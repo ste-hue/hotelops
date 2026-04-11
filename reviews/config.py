@@ -7,6 +7,7 @@ APIFY_ACTORS = {
     "TRIPADVISOR": "maxcopell/tripadvisor-reviews",
     "GOOGLE": "compass/google-maps-reviews-scraper",
     "EXPEDIA": "memo23/expedia-scraper",
+    "TRIP": "knagymate/trip-com-reviews-scraper",
 }
 
 # Property URLs/IDs per platform per BU.
@@ -18,18 +19,21 @@ PROPERTIES: dict[str, dict[str, str]] = {
         "TRIPADVISOR": "https://www.tripadvisor.it/Hotel_Review-g194806-d23514860-Reviews-Hotel_Panorama-Maiori_Amalfi_Coast_Province_of_Salerno_Campania.html",
         "GOOGLE": "https://www.google.com/maps/search/?api=1&query=Hotel%20Panorama&query_place_id=ChIJoUcAhEGVOxMRe-U7t45iyGE",
         "EXPEDIA": "https://www.expedia.com/Maiori-Hotels-HOTEL-PANORAMA.h68690805.Hotel-Information",
+        "TRIP": "https://www.trip.com/hotels/maiori-hotel-detail-774198/panorama/",
     },
     "RESIDENCE": {
         "BOOKING": "https://www.booking.com/hotel/it/panorama-residence.html",
         "TRIPADVISOR": "https://www.tripadvisor.it/Hotel_Review-g194806-d14975421-Reviews-Angelina_Residence-Maiori_Amalfi_Coast_Province_of_Salerno_Campania.html",
         "GOOGLE": "https://www.google.com/maps/search/?api=1&query=Angelina%20Residence&query_place_id=ChIJAQCQLUKVOxMROoGIbplDgGs",
         "EXPEDIA": "https://www.expedia.com/Maiori-Hotels-Angelina-Residence.h5205793.Hotel-Information",
+        "TRIP": "https://it.trip.com/hotels/maiori-hotel-detail-3094414/angelina-residence/",
     },
     "CVM": {
         "BOOKING": "https://www.booking.com/hotel/it/casa-vacanze-maiori.html",
         "TRIPADVISOR": "https://www.tripadvisor.it/Hotel_Review-g194806-d14140532-Reviews-Casa_Vacanze_Maiori-Maiori_Amalfi_Coast_Province_of_Salerno_Campania.html",
         "GOOGLE": "https://www.google.com/maps/search/?api=1&query=Holiday%20Maiori&query_place_id=ChIJScCVV0aVOxMR9WheVKthBUc",
         "EXPEDIA": "",  # Non trovato su Expedia
+        "TRIP": "https://my.trip.com/hotels/maiori-hotel-detail-4043516/casa-vacanze-maiori/",
     },
     # LIDO: probabilmente non presente sulle OTA
 }
@@ -40,6 +44,7 @@ SCORE_SCALE = {
     "TRIPADVISOR": 5.0,  # 1-5 -> multiply by 2
     "GOOGLE": 5.0,  # 1-5 -> multiply by 2
     "EXPEDIA": 10.0,  # already 1-10
+    "TRIP": 10.0,  # already 1-10 (ratingMax=10)
 }
 
 # Alert threshold (normalized 1-10)

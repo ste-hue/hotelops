@@ -177,11 +177,85 @@ def normalize_expedia(item: dict, societa: str = "ORTI") -> dict:
     }
 
 
+_TRIP_HOTEL_ID_RE = re.compile(r"hotel-detail-(\d+)/")
+
+
+def _extract_trip_hotel_id(url: str | None) -> str:
+    """Extract hotel ID from a Trip.com detail URL.
+
+    Example: https://www.trip.com/hotels/maiori-hotel-detail-774198/panorama/
+    → "774198". Returns empty string if the URL doesn't match.
+    """
+    if not url:
+        return ""
+    m = _TRIP_HOTEL_ID_RE.search(url)
+    return m.group(1) if m else ""
+
+
+def normalize_trip(item: dict, societa: str = "ORTI") -> dict:
+    """Normalize a knagymate/trip-com-reviews-scraper item.
+
+    Notes on the actor's output schema (verified 2026-04-11):
+    - `rating` is already on a 1-10 scale (ratingMax=10), no rescale.
+    - `id` is per-review; combined with the hotel ID (extracted from the
+      property URL) to form a stable review_hash. The item itself doesn't
+      carry the hotel ID, so we recover it from PROPERTIES[bu]["TRIP"].
+    - Reviews are anonymous: no author name.
+    - `createDate` is "YYYY-MM-DD HH:MM:SS" — slice first 10 chars.
+    - `content` is the original-language text; `translatedContent` is the
+      Trip.com auto-translation. Prefer original for IT/EN, fall back to
+      the translation otherwise so Claude NLP has something to read.
+    - No per-review URL — fall back to the hotel page for the alert link.
+    """
+    bu = item.get("_bu", "HOTEL")
+    hotel_url = PROPERTIES.get(bu, {}).get("TRIP") or ""
+    hotel_id = _extract_trip_hotel_id(hotel_url)
+
+    review_id = str(item.get("id", ""))
+    score = float(item.get("rating") or 0)
+    lang = (item.get("language") or "").lower()
+
+    content = (item.get("content") or "").strip()
+    translated = (item.get("translatedContent") or "").strip()
+    if lang in ("it", "en") and content:
+        testo = content
+    else:
+        testo = translated or content
+
+    return {
+        "review_hash": make_hash("TRIP", f"{hotel_id}|{review_id}"),
+        "piattaforma": "TRIP",
+        "review_id": review_id,
+        "societa_id": societa,
+        "business_unit_id": bu,
+        "punteggio_raw": score,
+        "punteggio_norm": score,  # already 1-10
+        "testo": testo,
+        "testo_positivo": None,
+        "testo_negativo": None,
+        "titolo": item.get("commentLevel"),
+        "lingua": lang,
+        "data_review": (item.get("createDate") or "")[:10],
+        "data_soggiorno": (item.get("checkInDate") or "")[:10] or None,
+        "reviewer_nome": None,  # Trip.com reviews are anonymous
+        "reviewer_paese": None,
+        "tipo_viaggio": _map_trip_type(item.get("travelTypeText") or item.get("travelType")),
+        "camera_tipo": item.get("roomTypeName"),
+        "url_review": hotel_url or None,
+        "categoria_nlp": None,
+        "sentiment_nlp": None,
+        "riassunto_nlp": None,
+        "alert_inviato": False,
+        "data_ingest": _ts_now(),
+    }
+
+
 NORMALIZERS = {
     "BOOKING": normalize_booking,
     "TRIPADVISOR": normalize_tripadvisor,
     "GOOGLE": normalize_google,
     "EXPEDIA": normalize_expedia,
+    "TRIP": normalize_trip,
 }
 
 
