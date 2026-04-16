@@ -7,6 +7,8 @@
 - **revman vertical**: identificato come verticale #3 (revenue management). Fonti dati mappate: Dashboard Manager (produzione giornaliera), Rates Dashboard (tariffe forward), Availability Search (disponibilità camere). Email inviata a HotelCube (Lara Durisotti) per documentazione API — in attesa risposta.
 
 ## Completato di recente
+- 2026-04-16: fix **`extract_saldo_mps2026` date parsing** — aggiunto handling date testo (via `parse_date` DD/MM) + guard date future. Previene snapshot con date sbagliate in `f_saldi_banca_snapshot`.
+- 2026-04-16: docs **vault-code drift fix** — REVIEWS.md aggiunto Trip.com (5a piattaforma), CONDGES.md corretto nomi app Streamlit (`app_cdg.py`, `app_scadenzario.py`), PLATFORM.md aggiornato da 9 a 15 views.
 - 2026-04-16: fix **ORTI Cc2/Cc3 bank mapping** — Cc2=MPS, Cc3=MPS_KROSS (era invertito). Verificato su Esolver "Elenco Banche" 2026-04-15. Fix in `classify.py`, `ingest_scheda_contabile.py`, `CLAUDE.md`.
 - 2026-04-16: ingest **`ingest_bilanci_annuali.py`** — parser bilanci XBRL markdown → `f_bilanci_annuali`. SNAPSHOT per (societa, anno). DELETE+INSERT.
 - 2026-04-16: ingest **`ingest_scheda_190101.py`** — movimenti ledger banca da scheda contabile Esolver conto 190101 → `f_movimenti_contabili`. Copre gap dove prima nota non include dettaglio banca.
@@ -28,7 +30,7 @@
 - **revman come verticale #3**: confermato. Scope dipende da risposta API HotelCube. Se API disponibili → ingest automatico. Se no → export manuali periodici + pipeline parse.
 
 ## Rotto / da fixare
-- 🟡 **`extract_saldo_mps2026` date parsing** — inverte MM/DD su date ambigue (es. 03/05 → May 3 invece di Mar 5). Scoperto da 3 snapshot con date future in `f_saldi_banca_snapshot`. Dati errati cancellati, funzione non ancora fixata.
+- ✅ ~~**`extract_saldo_mps2026` date parsing**~~ — fixato 2026-04-16: aggiunto parse_date per testo + future-date guard.
 - 🟡 **Gap residuo crash totale** `send_email` → `mark_alerts_sent` — il fix `af685b2` cattura il caso streaming buffer (retry + pending file), ma se il processo muore completamente tra send_email e persist_pending non c'è traccia locale. Scelta consapevole "alert duplicato > alert perso" ancora in piedi, ora blast radius molto ridotto.
 - 🔴 Google rotto 5+ settimane prima del 9 aprile — `MAX(data_review)` Google pre-watermark = 2026-03-03 vs Booking/Expedia 2026-04-06. Root cause sconosciuta. Il prossimo cron post-watermark ci dirà se era scraping rotto o review reali mancanti.
 - 🟡 Crash window tra `send_email` e `mark_alerts_sent` UPDATE — scelta consapevole "alert duplicato > alert perso", da rivedere se succede.
@@ -43,4 +45,4 @@
 - Valutare email alert per `check_watermark_staleness` dopo 2-3 settimane di dati (oggi solo display CLI)
 - Investigare perché Google era rotto prima del 9 aprile (confronto con prossimo cron post-fix)
 - Valutare esecuzione xlsx-movimenti-parser
-- Fix `extract_saldo_mps2026` date parsing (MM/DD vs DD/MM)
+- Test Google reviews scrape manuale (`hotelops reviews --scrape --only google`) — verificare se actor funziona post-monitoring
