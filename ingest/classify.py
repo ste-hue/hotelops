@@ -123,8 +123,8 @@ BANCA_PATTERNS = {
 
 ESOLVER_CC_MAP = {
     ("ORTI", "1"): "INTESA",
-    ("ORTI", "2"): "MPS_KROSS",
-    ("ORTI", "3"): "MPS",
+    ("ORTI", "2"): "MPS",
+    ("ORTI", "3"): "MPS_KROSS",
     ("INTUR", "1"): "SELLA",
     ("INTUR", "2"): "MPS",
     ("INTUR", "3"): "INTESA",

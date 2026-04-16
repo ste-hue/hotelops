@@ -76,16 +76,17 @@ BANCA_PATTERNS = {
     "BCP": ["BCP", "CREDITO_POPOLARE", "CREDITOPOPOLARE"],
 }
 
-# Esolver conto number → banca_id mapping (from ABI config)
+# Esolver conto number → banca_id mapping
+# Source of truth: Esolver "Elenco Banche" per ditta (verified 2026-04-15)
 ESOLVER_CC_MAP = {
     # ORTI
-    ("ORTI", "3"): "MPS",
-    ("ORTI", "2"): "MPS_KROSS",
     ("ORTI", "1"): "INTESA",
+    ("ORTI", "2"): "MPS",
+    ("ORTI", "3"): "MPS_KROSS",  # MPS CC 000001205058
     # INTUR
+    ("INTUR", "1"): "SELLA",
     ("INTUR", "2"): "MPS",
     ("INTUR", "3"): "INTESA",
-    ("INTUR", "1"): "SELLA",
     ("INTUR", "4"): "BCP",
 }
 

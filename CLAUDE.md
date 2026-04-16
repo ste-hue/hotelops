@@ -298,8 +298,8 @@ Source CSV: `core/bq/dimensioni/d_voci_piano_finanziario.csv`.
 | Societa | Cc# | banca_id | Banca |
 |---------|-----|----------|-------|
 | ORTI | Cc1 | INTESA | Intesa Sanpaolo |
-| ORTI | Cc2 | MPS_KROSS | MPS Kross |
-| ORTI | Cc3 | MPS | Monte dei Paschi |
+| ORTI | Cc2 | MPS | Monte dei Paschi |
+| ORTI | Cc3 | MPS_KROSS | MPS Kross |
 | INTUR | Cc1 | SELLA | Banca Sella |
 | INTUR | Cc2 | MPS | Monte dei Paschi |
 | INTUR | Cc3 | INTESA | Intesa Sanpaolo |
