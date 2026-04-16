@@ -286,31 +286,28 @@ class SchemaViolationError(Exception):
 
 
 class PmsStatisticheRow(BaseModel):
-    """Schema for f_pms_statistiche — PMS room/occupancy statistics.
+    """Schema for f_pms_statistiche — PMS daily room/occupancy/revenue statistics.
 
-    Source: HotelCube PMS Range Report (2023-2025+).
-    Monthly granularity. The denominator for cost-per-room-night coefficients.
+    Source: HotelCube PMS Dashboard Manager (daily export per BU).
+    Daily granularity. BU detected from Camere Totali signature.
     """
     societa_id: SocietaId
-    anno: int
-    mese: int
-    camere_disponibili: int
+    business_unit_id: str
+    data: str  # YYYY-MM-DD
+    camere_totali: int
     camere_vendute: int
-    pax_in_casa: int
+    camere_bloccate: int
     occupazione_pct: float  # 0-100
+    pax_in_casa: int
     adr: float  # Average Daily Rate
     revpar: float  # Revenue Per Available Room
-    ricavo_camere: float  # Total room revenue
+    revenue_room: float
+    revenue_fb: float
+    revenue_parking: float
+    revenue_totale: float
     fonte: str
     hash_riga: str
     data_caricamento: str
-
-    @field_validator("mese")
-    @classmethod
-    def _mese_range(cls, v: int) -> int:
-        if not 1 <= v <= 12:
-            raise ValueError(f"mese fuori range: {v}")
-        return v
 
     @field_validator("occupazione_pct")
     @classmethod

@@ -629,18 +629,34 @@ def transform(raw: dict, meta: dict, counter: int) -> dict:
         "data_ingresso": meta["data_ingresso"],
         "file_sorgente": meta["filename"],
         "riga_sorgente": raw["riga"],
-        "hash_riga": md5(societa, banca, d_op.strftime("%Y-%m-%d"), netto, raw["desc"]),
+        "hash_riga": md5(societa, banca, d_op.strftime("%Y-%m-%d"), d_val.strftime("%Y-%m-%d"), netto),
     }
 
 
 # -- Pipeline -----------------------------------------------------------------
 
 def load_hashes(bq_client: bigquery.Client) -> set:
+    """Load dedup hashes from BQ.
+
+    Computes both legacy (desc-based) hashes and current (date_val-based)
+    hashes so that cross-format duplicates are caught regardless of which
+    export format was ingested first.
+    """
     try:
         result = bq_client.query(
-            f"SELECT hash_riga FROM `{BQ_TABLE}` WHERE hash_riga IS NOT NULL"
+            f"""SELECT hash_riga, societa_id, banca_id,
+                       FORMAT_DATE('%Y-%m-%d', data_operazione) AS d_op,
+                       FORMAT_DATE('%Y-%m-%d', data_valuta) AS d_val,
+                       importo_netto
+                FROM `{BQ_TABLE}`"""
         ).result()
-        return {row.hash_riga for row in result}
+        hashes = set()
+        for row in result:
+            if row.hash_riga:
+                hashes.add(row.hash_riga)  # legacy hash
+            # current hash (format-agnostic)
+            hashes.add(md5(row.societa_id, row.banca_id, row.d_op, row.d_val, row.importo_netto))
+        return hashes
     except Exception as e:
         logging.getLogger("ingest_banca").warning(f"Could not load hashes from BQ: {e}")
         return set()
