@@ -22,6 +22,7 @@ F_PMS_STATISTICHE           = _t("f_pms_statistiche")
 F_REVIEWS                   = _t("f_reviews")
 F_APIFY_RUNS                = _t("f_apify_runs")
 F_PIPELINE_RUNS             = _t("f_pipeline_runs")
+F_BILANCI_ANNUALI           = _t("f_bilanci_annuali")
 
 # Dimension tables
 D_VOCI_PIANO_FINANZIARIO    = _t("d_voci_piano_finanziario")
