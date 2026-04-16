@@ -430,7 +430,13 @@ def extract_saldo_mps2026(path: Path, meta: dict, logger: logging.Logger) -> dic
                         if v is None:
                             continue
                         if hasattr(v, "year"):
+                            # openpyxl datetime — extract date directly
                             data_finale = v.date() if hasattr(v, "date") else v
+                        elif isinstance(v, str):
+                            # Text date in header — parse with DD/MM priority
+                            parsed = parse_date(v)
+                            if parsed.year > 2000:
+                                data_finale = parsed.date() if hasattr(parsed, "date") else parsed
                         elif isinstance(v, (int, float)):
                             saldo_finale = float(v)
                     break
@@ -439,10 +445,13 @@ def extract_saldo_mps2026(path: Path, meta: dict, logger: logging.Logger) -> dic
         if saldo_finale is None:
             return None
         societa, banca = infer_ids(meta["societa_banca"])
+        from datetime import date as _date
         if data_finale is None:
-            from datetime import date as _date
             data_finale = _date.today()
             logger.warning(f"  data_finale not found in {path.name}, using today")
+        elif data_finale > _date.today():
+            logger.warning(f"  data_finale {data_finale} is in the future for {path.name}, using today")
+            data_finale = _date.today()
         snapshot = {
             "societa_id": societa,
             "banca_id": banca,
