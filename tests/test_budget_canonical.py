@@ -71,3 +71,78 @@ def test_recognized_fonte_set(bq_client):
         f"  3. Add to the CASE in core/bq/views/v_budget_canonical.sql.\n"
         f"  4. Redeploy the view.\n"
     )
+
+
+# Format: (societa, anno, mese, cod_conto, expected_fonte, rationale)
+# Expected fonte must be one of RECOGNIZED_FONTI.
+KNOWN_WINNERS = [
+    ("ORTI", 2026, 1, "670101", "PERSONALE",
+     "payroll — PERSONALE > INCIDENZA > GASPAROTTO"),
+    ("ORTI", 2026, 1, "651101", "STRUTTURALI",
+     "fitto ORTI→INTUR — STRUTTURALI > GASPAROTTO"),
+    ("ORTI", 2026, 1, "479101", "CONS2025_IP",
+     "oneri 47 — CONS2025_IP > GASPAROTTO"),
+    ("ORTI", 2026, 1, "57091301", "MAPPATURA",
+     "MAPPATURA wins via exact-code precedence"),
+]
+
+
+@pytest.mark.bq
+@pytest.mark.parametrize(
+    "societa,anno,mese,cod_conto,expected_fonte,rationale", KNOWN_WINNERS
+)
+def test_deterministic_winner(
+    bq_client, societa, anno, mese, cod_conto, expected_fonte, rationale,
+):
+    """T3: Known overlapping accounts resolve to the expected fonte."""
+    from google.cloud.bigquery import ScalarQueryParameter, QueryJobConfig
+
+    sql = """
+    SELECT fonte
+    FROM `hotelops-suite.hotelops.v_budget_canonical`
+    WHERE societa_id = @s AND anno = @a AND mese = @m AND cod_conto = @c
+    """
+    job_config = QueryJobConfig(query_parameters=[
+        ScalarQueryParameter("s", "STRING", societa),
+        ScalarQueryParameter("a", "INT64", anno),
+        ScalarQueryParameter("m", "INT64", mese),
+        ScalarQueryParameter("c", "STRING", cod_conto),
+    ])
+    rows = list(bq_client.query(sql, job_config=job_config).result())
+    assert len(rows) == 1, (
+        f"Expected exactly 1 row for ({societa}, {anno}, {mese}, {cod_conto}), "
+        f"got {len(rows)}"
+    )
+    assert rows[0]["fonte"] == expected_fonte, (
+        f"For ({societa}, {anno}, {mese}, {cod_conto}): "
+        f"expected fonte={expected_fonte} ({rationale}), got {rows[0]['fonte']}"
+    )
+
+
+@pytest.mark.bq
+def test_category_level_suppression_drops_gasparotto_siblings(bq_client):
+    """T3 (variant): A GASPAROTTO sibling code in 'Costo del Personale' must
+    be suppressed by PERSONALE/INCIDENZA category-level coverage, even when
+    PERSONALE has no row at the exact cod_conto.
+
+    cod_conto 670111 is a GASPAROTTO row in 'Costo del Personale' that was
+    correctly category-suppressed (n_in_canonical = 0 verified during plan exec).
+    """
+    suppressed_cod_conto = "670111"
+
+    from google.cloud.bigquery import ScalarQueryParameter, QueryJobConfig
+
+    sql = """
+    SELECT COUNT(*) AS n
+    FROM `hotelops-suite.hotelops.v_budget_canonical`
+    WHERE cod_conto = @c AND fonte = 'GASPAROTTO' AND anno = 2026
+    """
+    job_config = QueryJobConfig(query_parameters=[
+        ScalarQueryParameter("c", "STRING", suppressed_cod_conto),
+    ])
+    n = next(bq_client.query(sql, job_config=job_config).result())["n"]
+    assert n == 0, (
+        f"GASPAROTTO row for {suppressed_cod_conto} should be suppressed by "
+        f"category-level rule (PERSONALE/INCIDENZA covers 'Costo del Personale'), "
+        f"but {n} GASPAROTTO rows survived."
+    )
