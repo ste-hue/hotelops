@@ -1,5 +1,6 @@
 """Shared pytest fixtures for hotelops tests."""
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -45,3 +46,16 @@ def mock_bq_client():
         client = MagicMock()
         mock_cls.return_value = client
         yield client
+
+
+@pytest.fixture(scope="session")
+def bq_client():
+    """Real BigQuery client for invariant tests against live views.
+
+    Skipped when HOTELOPS_SKIP_BQ=1 (CI / offline development).
+    Tests using this fixture should also be marked @pytest.mark.bq.
+    """
+    if os.environ.get("HOTELOPS_SKIP_BQ") == "1":
+        pytest.skip("HOTELOPS_SKIP_BQ=1 — skipping live BigQuery test")
+    from google.cloud import bigquery
+    return bigquery.Client(project="hotelops-suite")
