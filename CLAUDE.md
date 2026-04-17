@@ -4,6 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Last checkpoint:** 2026-04-04 | **Version:** 0.5.0
 
+> **For AI agents**: before touching code or answering, read the Obsidian vault instructions in this order:
+> 1. `<vault>/hotelops/INVARIANTS.md` — la costituzione (I1–I8, canonical truth per concept).
+> 2. `<vault>/hotelops/AI_INSTRUCTIONS.md` — layer model, canonical truth registry, operational loop, anti-goals.
+>
+> `CLAUDE.md` (this file) covers **repo mechanics**: commands, schemas, pipeline internals. Vocabulary, invariants, and the operational loop live in the vault.
+
 ## Project Overview
 
 hotelops is the financial data platform for Gruppo Panorama hotel operations. It ingests data from banks, ERP (Esolver), PMS (HotelCube), and manual budgets into BigQuery, then serves the **condges** (Controllo di Gestione) vertical through two complementary lenses: **Rosa (CASSA)** for cash flow forecasts ("quando il soldo entra/esce?") and **Gasparotto (COMPETENZA)** for budget vs actuals ("quanto consumo/genero?"). Every financial event has three temporal dimensions: COMPETENZA, CASSA, IMPEGNO. BigQuery is the source of truth.
