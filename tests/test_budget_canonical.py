@@ -48,3 +48,26 @@ def test_grain_uniqueness(bq_client):
         f"Grain violation in v_budget_canonical: {len(rows)} duplicate keys. "
         f"First: {dict(rows[0]) if rows else 'n/a'}"
     )
+
+
+@pytest.mark.bq
+def test_recognized_fonte_set(bq_client):
+    """T2: Every fonte in f_budget_mensile must be in RECOGNIZED_FONTI.
+
+    This protects against silent rank-NULL fallthrough. If this fails, a new
+    fonte was added without updating the precedence rule.
+    """
+    sql = """
+    SELECT DISTINCT fonte
+    FROM `hotelops-suite.hotelops.f_budget_mensile`
+    """
+    found = {r["fonte"] for r in bq_client.query(sql).result()}
+    unknown = found - RECOGNIZED_FONTI
+    assert not unknown, (
+        f"Unrecognized fonti in f_budget_mensile: {unknown}.\n"
+        f"To fix:\n"
+        f"  1. Decide each fonte's precedence rank.\n"
+        f"  2. Add to RECOGNIZED_FONTI in tests/test_budget_canonical.py.\n"
+        f"  3. Add to the CASE in core/bq/views/v_budget_canonical.sql.\n"
+        f"  4. Redeploy the view.\n"
+    )
