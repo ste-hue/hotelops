@@ -31,6 +31,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = [
+    "bq: tests that query live BigQuery (skip with -m 'not bq' or HOTELOPS_SKIP_BQ=1)",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
