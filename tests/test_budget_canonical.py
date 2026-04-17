@@ -146,3 +146,33 @@ def test_category_level_suppression_drops_gasparotto_siblings(bq_client):
         f"category-level rule (PERSONALE/INCIDENZA covers 'Costo del Personale'), "
         f"but {n} GASPAROTTO rows survived."
     )
+
+
+@pytest.mark.bq
+def test_canonical_never_expands_raw(bq_client):
+    """T4: Canonical row count ≤ raw row count at the (societa, anno, mese)
+    scope. Dedup must reduce or preserve, never invent.
+    """
+    sql = """
+    WITH raw AS (
+      SELECT societa_id, anno, mese, COUNT(*) AS n_raw
+      FROM `hotelops-suite.hotelops.f_budget_mensile`
+      GROUP BY societa_id, anno, mese
+    ),
+    canon AS (
+      SELECT societa_id, anno, mese, COUNT(*) AS n_canon
+      FROM `hotelops-suite.hotelops.v_budget_canonical`
+      GROUP BY societa_id, anno, mese
+    )
+    SELECT
+      r.societa_id, r.anno, r.mese, r.n_raw, COALESCE(c.n_canon, 0) AS n_canon
+    FROM raw r
+    LEFT JOIN canon c USING (societa_id, anno, mese)
+    WHERE COALESCE(c.n_canon, 0) > r.n_raw
+    LIMIT 10
+    """
+    rows = list(bq_client.query(sql).result())
+    assert not rows, (
+        f"Dedup expanded rows in {len(rows)} (societa, anno, mese) scopes. "
+        f"First: {dict(rows[0]) if rows else 'n/a'}"
+    )
