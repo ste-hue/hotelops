@@ -696,12 +696,13 @@ def cmd_accodamenti(args):
     from pathlib import Path
     from condges.cassa_giornaliera import (
         DEFAULT_OUTPUT,
-        RCLONE_REMOTE,
         print_ultime_date,
-        rclone_sync,
         report_ultime_date,
         run_accodamenti_to_excel,
     )
+    from core.datahub_sync import rclone_sync
+
+    remote_subpath = "ingresso/accodamenti/ORTI"
 
     input_dir = (
         Path(args.input).expanduser()
@@ -717,9 +718,9 @@ def cmd_accodamenti(args):
     print(f"  Output: {output_path}")
 
     if not args.no_sync:
-        print(f"  Sync:   {RCLONE_REMOTE}")
+        print(f"  Sync:   {remote_subpath}")
         try:
-            rclone_sync(RCLONE_REMOTE, input_dir)
+            rclone_sync(remote_subpath, input_dir, include="*.txt")
         except (RuntimeError, FileNotFoundError) as e:
             print(f"\n  ⚠️  Sync rclone fallito: {e}")
             print("      (usa --no-sync per saltare)")

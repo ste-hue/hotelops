@@ -42,7 +42,7 @@ from core.bq.client import get_client
 from core.config import PROJECT
 from core.datahub_sync import RcloneError, rclone_sync
 from ingest._logging import setup_logging as _setup_logging
-from ingest.banca.parser_accodamenti import (
+from core.parsers.accodamenti import (
     parse_corrispettivi,
     parse_fatture,
     parse_movimenti,
