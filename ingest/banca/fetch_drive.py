@@ -2,7 +2,8 @@
 """
 Sync bank files from Google Drive to local staging using rclone.
 
-Syncs homebanking/{ORTI,INTUR}/ from 00_hotelops_datahub/ingresso/.
+Syncs homebanking/{ORTI,INTUR}/ from the datahub ingresso/ subtree
+(see core.datahub_sync for the remote root).
 
 Usage:
     python -m ingest.banca.fetch_drive --staging ~/.cache/hotelops/banche_staging
@@ -10,11 +11,10 @@ Usage:
 """
 
 import argparse
-import subprocess
 import sys
 from pathlib import Path
 
-REMOTE = "mywork:00_hotelops_datahub/ingresso/homebanking"
+from core.datahub_sync import RcloneError, rclone_sync
 
 
 def main():
@@ -25,18 +25,17 @@ def main():
     args = parser.parse_args()
 
     staging = Path(args.staging)
-    staging.mkdir(parents=True, exist_ok=True)
 
-    cmd = ["rclone", "sync", REMOTE, str(staging)]
-    if args.dry_run:
-        cmd.append("--dry-run")
-    if args.verbose:
-        cmd.append("-v")
-
-    print(f"Syncing {REMOTE} → {staging}")
-    result = subprocess.run(cmd)
-    if result.returncode != 0:
-        print("rclone sync failed")
+    print(f"Syncing ingresso/homebanking → {staging}")
+    try:
+        rclone_sync(
+            "ingresso/homebanking",
+            staging,
+            dry_run=args.dry_run,
+            verbose=args.verbose,
+        )
+    except RcloneError as e:
+        print(f"rclone sync failed: {e}")
         sys.exit(1)
 
     print("Sync complete")

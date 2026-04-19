@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from core.config import V_PIANO_FINANZIARIO_MENSILE
 from core.schemas import ChiusuraMensileRow, validate_batch
 
 
@@ -22,7 +23,7 @@ def cmd_pf(args):
       ROUND(importo_budget, 0) AS budget,
       ROUND(scostamento, 0) AS delta,
       scostamento_pct
-    FROM `hotelops-suite.hotelops.v_piano_finanziario_mensile`
+    FROM `{V_PIANO_FINANZIARIO_MENSILE}`
     WHERE anno = {anno} AND societa_id = '{societa}'
       AND (importo_consuntivo != 0 OR importo_budget != 0)
       {mese_filter}
@@ -44,7 +45,10 @@ def cmd_pf(args):
             if current_mese is not None:
                 _print_subtotals(
                     fmt_eur,
-                    tot_consuntivo_e, tot_budget_e, tot_consuntivo_u, tot_budget_u
+                    tot_consuntivo_e,
+                    tot_budget_e,
+                    tot_consuntivo_u,
+                    tot_budget_u,
                 )
                 tot_consuntivo_e = tot_budget_e = tot_consuntivo_u = tot_budget_u = 0
             current_mese = mese
@@ -338,7 +342,7 @@ def cmd_chiudi(args):
       ROUND(importo_budget, 0) AS budget,
       ROUND(scostamento, 0) AS delta,
       scostamento_pct
-    FROM `hotelops-suite.hotelops.v_piano_finanziario_mensile`
+    FROM `{V_PIANO_FINANZIARIO_MENSILE}`
     WHERE anno = {anno} AND mese = {mese_chiuso} AND societa_id = '{societa}'
       AND (importo_consuntivo != 0 OR importo_budget != 0)
     ORDER BY ord
@@ -443,7 +447,7 @@ def cmd_chiudi(args):
         SELECT mese, anno AS fwd_anno,
           ROUND(SUM(CASE WHEN sezione = 'ENTRATE' THEN importo_budget ELSE 0 END), 0) AS entrate_prev,
           ROUND(SUM(CASE WHEN sezione = 'USCITE' THEN importo_budget ELSE 0 END), 0) AS uscite_prev
-        FROM `hotelops-suite.hotelops.v_piano_finanziario_mensile`
+        FROM `{V_PIANO_FINANZIARIO_MENSILE}`
         WHERE societa_id = '{societa}'
           AND ((anno = {anno} AND mese > {mese_chiuso})
                OR (anno = {anno + 1} AND mese <= {(mese_chiuso + 3) % 12 or 12}))
@@ -454,7 +458,7 @@ def cmd_chiudi(args):
         SELECT mese, {anno} AS fwd_anno,
           ROUND(SUM(CASE WHEN sezione = 'ENTRATE' THEN importo_budget ELSE 0 END), 0) AS entrate_prev,
           ROUND(SUM(CASE WHEN sezione = 'USCITE' THEN importo_budget ELSE 0 END), 0) AS uscite_prev
-        FROM `hotelops-suite.hotelops.v_piano_finanziario_mensile`
+        FROM `{V_PIANO_FINANZIARIO_MENSILE}`
         WHERE anno = {anno} AND societa_id = '{societa}'
           AND mese BETWEEN {mese_chiuso + 1} AND {min(mese_chiuso + 3, 12)}
         GROUP BY mese ORDER BY mese
@@ -599,7 +603,12 @@ def cmd_scadenzario(args):
     """Scadenzario fornitori → aggiorna PF Excel."""
     from datetime import date
     from io import BytesIO
-    from condges.app_scadenzario import parse_scadenze, load_fornitori_map, write_pf, MESI_NOMI
+    from condges.app_scadenzario import (
+        parse_scadenze,
+        load_fornitori_map,
+        write_pf,
+        MESI_NOMI,
+    )
 
     if not args.pf:
         print("  Uso: hotelops scad --pf <PF.xlsx> --file <scadenzario.xlsx>")
@@ -610,12 +619,15 @@ def cmd_scadenzario(args):
 
     # Detect società from PF
     import openpyxl
+
     wb_peek = openpyxl.load_workbook(args.pf, data_only=True, read_only=True)
     societa = ""
     if "Piano Finanziario" in wb_peek.sheetnames:
         a1 = wb_peek["Piano Finanziario"].cell(row=1, column=1).value
         if a1:
-            societa = str(a1).strip().replace(" S.R.L.", "").replace(" s.r.l.", "").upper()
+            societa = (
+                str(a1).strip().replace(" S.R.L.", "").replace(" s.r.l.", "").upper()
+            )
     wb_peek.close()
 
     print(f"\n{'═' * 60}")
@@ -657,8 +669,7 @@ def cmd_scadenzario(args):
         print(f"  {voce_label}: {len(entries)} fornitori, €{voce_total:,.0f}")
         for e in entries:
             month_detail = ", ".join(
-                f"{MESI_NOMI[m - 1]}=€{v:,.0f}"
-                for m, v in sorted(e["months"].items())
+                f"{MESI_NOMI[m - 1]}=€{v:,.0f}" for m, v in sorted(e["months"].items())
             )
             print(f"    {e['nome']}: {month_detail}")
     print(f"  {'─' * 56}")
@@ -668,11 +679,70 @@ def cmd_scadenzario(args):
     if len(unmapped) > 0:
         print(f"  ⚠️  {len(unmapped)} fornitori non mappati (non scritti):")
         for _, u in unmapped.head(5).iterrows():
-            print(f"     - {int(u['codice_fornitore'])} {u['nome']}: €{u['totale']:,.0f}")
+            print(
+                f"     - {int(u['codice_fornitore'])} {u['nome']}: €{u['totale']:,.0f}"
+            )
         if len(unmapped) > 5:
             print(f"     ... e altri {len(unmapped) - 5}")
 
     print(f"{'═' * 60}\n")
+
+
+# ── Accodamenti: cassa giornaliera HotelCube → Excel ────────────────────────
+
+
+def cmd_accodamenti(args):
+    """Accodamenti HotelCube → riconciliazione cassa giornaliera → Excel."""
+    from pathlib import Path
+    from condges.cassa_giornaliera import (
+        DEFAULT_OUTPUT,
+        RCLONE_REMOTE,
+        print_ultime_date,
+        rclone_sync,
+        report_ultime_date,
+        run_accodamenti_to_excel,
+    )
+
+    input_dir = (
+        Path(args.input).expanduser()
+        if args.input
+        else Path.home() / ".cache" / "hotelops" / "accodamenti" / "ORTI"
+    )
+    output_path = Path(args.output).expanduser() if args.output else DEFAULT_OUTPUT
+
+    print(f"\n{'═' * 60}")
+    print("  ACCODAMENTI HOTELCUBE → CASSA GIORNALIERA")
+    print(f"{'═' * 60}")
+    print(f"  Input:  {input_dir}")
+    print(f"  Output: {output_path}")
+
+    if not args.no_sync:
+        print(f"  Sync:   {RCLONE_REMOTE}")
+        try:
+            rclone_sync(RCLONE_REMOTE, input_dir)
+        except (RuntimeError, FileNotFoundError) as e:
+            print(f"\n  ⚠️  Sync rclone fallito: {e}")
+            print("      (usa --no-sync per saltare)")
+            return
+    else:
+        print("  Sync:   [skip --no-sync]")
+
+    if not input_dir.exists() or not any(input_dir.rglob("*.txt")):
+        print(f"\n  ⚠️  Nessun TXT trovato in {input_dir}")
+        return
+
+    print()
+    stats = run_accodamenti_to_excel(input_dir, output_path)
+
+    print(
+        f"\n  ✓ {stats['giorni']} giorni riconciliati "
+        f"({stats['corrispettivi']} corr, {stats['movimenti']} mov, "
+        f"{stats['fatture']} fatt)"
+    )
+    print(f"  ✓ {stats['output']}")
+
+    ultime = report_ultime_date(input_dir)
+    print_ultime_date(ultime)
 
 
 # ── Help ─────────────────────────────────────────────────────────────────

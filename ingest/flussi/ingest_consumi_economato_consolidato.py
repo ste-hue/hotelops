@@ -25,55 +25,157 @@ from pathlib import Path
 import openpyxl
 from google.cloud import bigquery
 
-BQ_PROJECT = "hotelops-suite"
-BQ_TABLE   = f"{BQ_PROJECT}.hotelops.f_consumi_economato"
+from core.bq.client import get_client
+from core.config import PROJECT
+
+BQ_TABLE = f"{PROJECT}.hotelops.f_consumi_economato"
 SOCIETA_ID = "ORTI"
 
 # Mapping codice reparto → dimensioni
 # Fonte: economato_reparti.csv + codici dal file ECO_SituazioneConsumi
 REPARTO_MAP: dict[str, dict] = {
-    "BARBEACH": {"reparto_id": "BAR_BEACH",   "funzione_id": "F&B",       "business_unit_id": "LIDO",      "is_evento": False},
-    "BRK":      {"reparto_id": "BRK",         "funzione_id": "F&B",       "business_unit_id": "HOTEL",     "is_evento": False},
-    "CANTINA":  {"reparto_id": "CANTINA",      "funzione_id": "F&B",       "business_unit_id": "HOTEL",     "is_evento": False},
-    "CUCINA":   {"reparto_id": "CUCINA",       "funzione_id": "F&B",       "business_unit_id": "HOTEL",     "is_evento": False},
-    "DEPERIME": {"reparto_id": "DEPERIMENTO",  "funzione_id": "LOGISTICA", "business_unit_id": "HOTEL",     "is_evento": False},
-    "DIPEND":   {"reparto_id": "DIPENDENTI",   "funzione_id": "ROOMS",     "business_unit_id": "HOTEL",     "is_evento": False},
-    "DMANHOTE": {"reparto_id": "MANUTENZIONE", "funzione_id": "MAN",       "business_unit_id": "HOTEL",     "is_evento": False},
-    "DUFFICID": {"reparto_id": "UFFICI",       "funzione_id": "AMM",       "business_unit_id": "HQ",        "is_evento": False},
-    "EVENTI":   {"reparto_id": "EVENTO",       "funzione_id": "EVENTO",    "business_unit_id": "HOTEL",     "is_evento": True},
-    "HSKCVM":   {"reparto_id": "HSK_CVM",      "funzione_id": "ROOMS",     "business_unit_id": "CVM",       "is_evento": False},
-    "HSKHOTEL": {"reparto_id": "HSK_HOTEL",    "funzione_id": "ROOMS",     "business_unit_id": "HOTEL",     "is_evento": False},
-    "HSKRES":   {"reparto_id": "HSK_AR",       "funzione_id": "ROOMS",     "business_unit_id": "RESIDENCE", "is_evento": False},
-    "IMBARCAZ": {"reparto_id": "IMBARCAZIONE", "funzione_id": "LOGISTICA", "business_unit_id": "HOTEL",     "is_evento": False},
-    "MANHOTEL": {"reparto_id": "MANUTENZIONE", "funzione_id": "MAN",       "business_unit_id": "HOTEL",     "is_evento": False},
-    "OMAGGI":   {"reparto_id": "OMAGGI",       "funzione_id": "AMM",       "business_unit_id": "HOTEL",     "is_evento": False},
-    "POOLHTL":  {"reparto_id": "PISCINA_HP",   "funzione_id": "ROOMS",     "business_unit_id": "HOTEL",     "is_evento": False},
-    "POOLRES":  {"reparto_id": "PISCINA_AR",   "funzione_id": "ROOMS",     "business_unit_id": "RESIDENCE", "is_evento": False},
-    "PROPRIET": {"reparto_id": "DIREZIONE",    "funzione_id": "AMM",       "business_unit_id": "HQ",        "is_evento": False},
-    "RECEP":    {"reparto_id": "RECEPTION",    "funzione_id": "ROOMS",     "business_unit_id": "HOTEL",     "is_evento": False},
-    "UFFICI":   {"reparto_id": "UFFICI",       "funzione_id": "AMM",       "business_unit_id": "HQ",        "is_evento": False},
+    "BARBEACH": {
+        "reparto_id": "BAR_BEACH",
+        "funzione_id": "F&B",
+        "business_unit_id": "LIDO",
+        "is_evento": False,
+    },
+    "BRK": {
+        "reparto_id": "BRK",
+        "funzione_id": "F&B",
+        "business_unit_id": "HOTEL",
+        "is_evento": False,
+    },
+    "CANTINA": {
+        "reparto_id": "CANTINA",
+        "funzione_id": "F&B",
+        "business_unit_id": "HOTEL",
+        "is_evento": False,
+    },
+    "CUCINA": {
+        "reparto_id": "CUCINA",
+        "funzione_id": "F&B",
+        "business_unit_id": "HOTEL",
+        "is_evento": False,
+    },
+    "DEPERIME": {
+        "reparto_id": "DEPERIMENTO",
+        "funzione_id": "LOGISTICA",
+        "business_unit_id": "HOTEL",
+        "is_evento": False,
+    },
+    "DIPEND": {
+        "reparto_id": "DIPENDENTI",
+        "funzione_id": "ROOMS",
+        "business_unit_id": "HOTEL",
+        "is_evento": False,
+    },
+    "DMANHOTE": {
+        "reparto_id": "MANUTENZIONE",
+        "funzione_id": "MAN",
+        "business_unit_id": "HOTEL",
+        "is_evento": False,
+    },
+    "DUFFICID": {
+        "reparto_id": "UFFICI",
+        "funzione_id": "AMM",
+        "business_unit_id": "HQ",
+        "is_evento": False,
+    },
+    "EVENTI": {
+        "reparto_id": "EVENTO",
+        "funzione_id": "EVENTO",
+        "business_unit_id": "HOTEL",
+        "is_evento": True,
+    },
+    "HSKCVM": {
+        "reparto_id": "HSK_CVM",
+        "funzione_id": "ROOMS",
+        "business_unit_id": "CVM",
+        "is_evento": False,
+    },
+    "HSKHOTEL": {
+        "reparto_id": "HSK_HOTEL",
+        "funzione_id": "ROOMS",
+        "business_unit_id": "HOTEL",
+        "is_evento": False,
+    },
+    "HSKRES": {
+        "reparto_id": "HSK_AR",
+        "funzione_id": "ROOMS",
+        "business_unit_id": "RESIDENCE",
+        "is_evento": False,
+    },
+    "IMBARCAZ": {
+        "reparto_id": "IMBARCAZIONE",
+        "funzione_id": "LOGISTICA",
+        "business_unit_id": "HOTEL",
+        "is_evento": False,
+    },
+    "MANHOTEL": {
+        "reparto_id": "MANUTENZIONE",
+        "funzione_id": "MAN",
+        "business_unit_id": "HOTEL",
+        "is_evento": False,
+    },
+    "OMAGGI": {
+        "reparto_id": "OMAGGI",
+        "funzione_id": "AMM",
+        "business_unit_id": "HOTEL",
+        "is_evento": False,
+    },
+    "POOLHTL": {
+        "reparto_id": "PISCINA_HP",
+        "funzione_id": "ROOMS",
+        "business_unit_id": "HOTEL",
+        "is_evento": False,
+    },
+    "POOLRES": {
+        "reparto_id": "PISCINA_AR",
+        "funzione_id": "ROOMS",
+        "business_unit_id": "RESIDENCE",
+        "is_evento": False,
+    },
+    "PROPRIET": {
+        "reparto_id": "DIREZIONE",
+        "funzione_id": "AMM",
+        "business_unit_id": "HQ",
+        "is_evento": False,
+    },
+    "RECEP": {
+        "reparto_id": "RECEPTION",
+        "funzione_id": "ROOMS",
+        "business_unit_id": "HOTEL",
+        "is_evento": False,
+    },
+    "UFFICI": {
+        "reparto_id": "UFFICI",
+        "funzione_id": "AMM",
+        "business_unit_id": "HQ",
+        "is_evento": False,
+    },
 }
 
 BQ_SCHEMA = [
-    bigquery.SchemaField("hash_riga",          "STRING",  mode="REQUIRED"),
-    bigquery.SchemaField("societa_id",          "STRING",  mode="REQUIRED"),
-    bigquery.SchemaField("anno",                "INTEGER", mode="REQUIRED"),
-    bigquery.SchemaField("mese",                "INTEGER", mode="REQUIRED"),
-    bigquery.SchemaField("business_unit_id",    "STRING"),
-    bigquery.SchemaField("funzione_id",         "STRING"),
-    bigquery.SchemaField("reparto_id",          "STRING"),
-    bigquery.SchemaField("reparto_raw",         "STRING"),
-    bigquery.SchemaField("is_evento",           "BOOL"),
-    bigquery.SchemaField("evento_nome",         "STRING"),
-    bigquery.SchemaField("codice_prodotto",     "STRING"),
-    bigquery.SchemaField("descrizione",         "STRING"),
-    bigquery.SchemaField("classe",              "STRING"),
-    bigquery.SchemaField("categoria_prodotto",  "STRING"),
-    bigquery.SchemaField("sottocategoria",      "STRING"),
-    bigquery.SchemaField("quantita",            "FLOAT64"),
-    bigquery.SchemaField("importo",             "FLOAT64"),
-    bigquery.SchemaField("file_sorgente",       "STRING"),
-    bigquery.SchemaField("data_caricamento",    "TIMESTAMP"),
+    bigquery.SchemaField("hash_riga", "STRING", mode="REQUIRED"),
+    bigquery.SchemaField("societa_id", "STRING", mode="REQUIRED"),
+    bigquery.SchemaField("anno", "INTEGER", mode="REQUIRED"),
+    bigquery.SchemaField("mese", "INTEGER", mode="REQUIRED"),
+    bigquery.SchemaField("business_unit_id", "STRING"),
+    bigquery.SchemaField("funzione_id", "STRING"),
+    bigquery.SchemaField("reparto_id", "STRING"),
+    bigquery.SchemaField("reparto_raw", "STRING"),
+    bigquery.SchemaField("is_evento", "BOOL"),
+    bigquery.SchemaField("evento_nome", "STRING"),
+    bigquery.SchemaField("codice_prodotto", "STRING"),
+    bigquery.SchemaField("descrizione", "STRING"),
+    bigquery.SchemaField("classe", "STRING"),
+    bigquery.SchemaField("categoria_prodotto", "STRING"),
+    bigquery.SchemaField("sottocategoria", "STRING"),
+    bigquery.SchemaField("quantita", "FLOAT64"),
+    bigquery.SchemaField("importo", "FLOAT64"),
+    bigquery.SchemaField("file_sorgente", "STRING"),
+    bigquery.SchemaField("data_caricamento", "TIMESTAMP"),
 ]
 
 
@@ -101,29 +203,33 @@ def parse_file(path: Path, logger: logging.Logger) -> list[dict]:
                 return i
         return -1
 
-    col_codice  = ci("codice")
-    col_desc    = ci("descri")
-    col_data    = ci("data")
+    col_codice = ci("codice")
+    col_desc = ci("descri")
+    col_data = ci("data")
     col_reparto = ci("reparto")
-    col_classe  = ci("classe")
-    col_cat     = ci("categor")
-    col_subcat  = ci("subcateg")
-    col_qtq     = ci("quantit")
-    col_euro    = ci("euro")
+    col_classe = ci("classe")
+    col_cat = ci("categor")
+    col_subcat = ci("subcateg")
+    col_qtq = ci("quantit")
+    col_euro = ci("euro")
 
     now = datetime.now(timezone.utc)
     records: list[dict] = []
     unknown_reparti: set[str] = set()
 
-    for row in rows_raw[header_idx + 1:]:
+    for row in rows_raw[header_idx + 1 :]:
         if not row or not row[col_codice]:
             continue
         codice = str(row[col_codice]).strip()
         if not codice or codice.lower() in ("codice", "totale"):
             continue
 
-        data_cell   = row[col_data] if col_data >= 0 else None
-        reparto_raw = str(row[col_reparto]).strip() if col_reparto >= 0 and row[col_reparto] else ""
+        data_cell = row[col_data] if col_data >= 0 else None
+        reparto_raw = (
+            str(row[col_reparto]).strip()
+            if col_reparto >= 0 and row[col_reparto]
+            else ""
+        )
 
         if not isinstance(data_cell, datetime):
             continue
@@ -134,53 +240,74 @@ def parse_file(path: Path, logger: logging.Logger) -> list[dict]:
         dim = REPARTO_MAP.get(reparto_raw)
         if dim is None:
             unknown_reparti.add(reparto_raw)
-            dim = {"reparto_id": reparto_raw, "funzione_id": "UNKNOWN",
-                   "business_unit_id": "HOTEL", "is_evento": False}
+            dim = {
+                "reparto_id": reparto_raw,
+                "funzione_id": "UNKNOWN",
+                "business_unit_id": "HOTEL",
+                "is_evento": False,
+            }
 
-        desc     = str(row[col_desc]).strip()    if col_desc >= 0 and row[col_desc] else ""
-        classe   = str(row[col_classe]).strip()  if col_classe >= 0 and row[col_classe] else ""
-        cat      = str(row[col_cat]).strip()     if col_cat >= 0 and row[col_cat] else ""
-        subcat   = str(row[col_subcat]).strip()  if col_subcat >= 0 and row[col_subcat] else ""
-        quantita = float(row[col_qtq])  if col_qtq >= 0 and isinstance(row[col_qtq], (int, float)) else 0.0
-        importo  = float(row[col_euro]) if col_euro >= 0 and isinstance(row[col_euro], (int, float)) else 0.0
+        desc = str(row[col_desc]).strip() if col_desc >= 0 and row[col_desc] else ""
+        classe = (
+            str(row[col_classe]).strip() if col_classe >= 0 and row[col_classe] else ""
+        )
+        cat = str(row[col_cat]).strip() if col_cat >= 0 and row[col_cat] else ""
+        subcat = (
+            str(row[col_subcat]).strip() if col_subcat >= 0 and row[col_subcat] else ""
+        )
+        quantita = (
+            float(row[col_qtq])
+            if col_qtq >= 0 and isinstance(row[col_qtq], (int, float))
+            else 0.0
+        )
+        importo = (
+            float(row[col_euro])
+            if col_euro >= 0 and isinstance(row[col_euro], (int, float))
+            else 0.0
+        )
 
         classe = classe.rstrip(" -").strip()
-        cat    = cat.rstrip(" -").strip()
+        cat = cat.rstrip(" -").strip()
         subcat = subcat.rstrip(" -").strip()
 
-        hash_src  = f"{SOCIETA_ID}|{anno}|{mese}|{dim['reparto_id']}|{codice}|{quantita}|{importo}"
+        hash_src = f"{SOCIETA_ID}|{anno}|{mese}|{dim['reparto_id']}|{codice}|{quantita}|{importo}"
         hash_riga = hashlib.md5(hash_src.encode()).hexdigest()
 
-        records.append({
-            "hash_riga":          hash_riga,
-            "societa_id":         SOCIETA_ID,
-            "anno":               anno,
-            "mese":               mese,
-            "business_unit_id":   dim["business_unit_id"],
-            "funzione_id":        dim["funzione_id"],
-            "reparto_id":         dim["reparto_id"],
-            "reparto_raw":        reparto_raw,
-            "is_evento":          dim["is_evento"],
-            "evento_nome":        reparto_raw if dim["is_evento"] else "",
-            "codice_prodotto":    codice,
-            "descrizione":        desc,
-            "classe":             classe,
-            "categoria_prodotto": cat,
-            "sottocategoria":     subcat,
-            "quantita":           quantita,
-            "importo":            round(importo, 4),
-            "file_sorgente":      path.name,
-            "data_caricamento":   now.isoformat(),
-        })
+        records.append(
+            {
+                "hash_riga": hash_riga,
+                "societa_id": SOCIETA_ID,
+                "anno": anno,
+                "mese": mese,
+                "business_unit_id": dim["business_unit_id"],
+                "funzione_id": dim["funzione_id"],
+                "reparto_id": dim["reparto_id"],
+                "reparto_raw": reparto_raw,
+                "is_evento": dim["is_evento"],
+                "evento_nome": reparto_raw if dim["is_evento"] else "",
+                "codice_prodotto": codice,
+                "descrizione": desc,
+                "classe": classe,
+                "categoria_prodotto": cat,
+                "sottocategoria": subcat,
+                "quantita": quantita,
+                "importo": round(importo, 4),
+                "file_sorgente": path.name,
+                "data_caricamento": now.isoformat(),
+            }
+        )
 
     if unknown_reparti:
-        logger.warning(f"Reparti non mappati (taggati UNKNOWN): {sorted(unknown_reparti)}")
+        logger.warning(
+            f"Reparti non mappati (taggati UNKNOWN): {sorted(unknown_reparti)}"
+        )
 
     return records
 
 
 def print_summary(records: list[dict], logger: logging.Logger) -> None:
     from collections import defaultdict
+
     by_mese: dict[tuple, float] = defaultdict(float)
     by_reparto: dict[str, float] = defaultdict(float)
     for r in records:
@@ -200,7 +327,7 @@ def print_summary(records: list[dict], logger: logging.Logger) -> None:
 
 
 def load_to_bq(records: list[dict], logger: logging.Logger) -> None:
-    client = bigquery.Client(project=BQ_PROJECT)
+    client = get_client()
 
     # Dedup: find hashes already in BQ
     hashes = [r["hash_riga"] for r in records]
@@ -219,7 +346,8 @@ def load_to_bq(records: list[dict], logger: logging.Logger) -> None:
         return
 
     job = client.load_table_from_json(
-        new_records, BQ_TABLE,
+        new_records,
+        BQ_TABLE,
         job_config=bigquery.LoadJobConfig(
             schema=BQ_SCHEMA,
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,

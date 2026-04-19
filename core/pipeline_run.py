@@ -101,10 +101,10 @@ class PipelineRun:
     def _insert_final(self) -> None:
         """Insert the single terminal row. Best-effort — never raises."""
         try:
-            from core.config import F_PIPELINE_RUNS, PROJECT
-            from google.cloud import bigquery
+            from core.bq.client import get_client
+            from core.config import F_PIPELINE_RUNS
 
-            client = bigquery.Client(project=PROJECT)
+            client = get_client()
             errors = client.insert_rows_json(F_PIPELINE_RUNS, [self._to_row()])
             if errors:
                 log.warning("f_pipeline_runs INSERT errors: %s", errors)
@@ -115,7 +115,9 @@ class PipelineRun:
 # ── Health checks ────────────────────────────────────────────────────────────
 
 
-def check_watermark_staleness(threshold_days: int = STALENESS_THRESHOLD_DAYS) -> list[dict]:
+def check_watermark_staleness(
+    threshold_days: int = STALENESS_THRESHOLD_DAYS,
+) -> list[dict]:
     """Check if any (piattaforma, bu) watermark is older than threshold.
 
     Catches the "Type 2" failure mode: everything runs OK but a platform
@@ -125,10 +127,11 @@ def check_watermark_staleness(threshold_days: int = STALENESS_THRESHOLD_DAYS) ->
         [{"piattaforma": str, "business_unit_id": str,
           "watermark": str, "days_stale": int}]
     """
-    from core.config import F_REVIEWS, PROJECT
+    from core.bq.client import get_client
+    from core.config import F_REVIEWS
     from google.cloud import bigquery
 
-    client = bigquery.Client(project=PROJECT)
+    client = get_client()
     sql = f"""
     SELECT
         piattaforma,
@@ -149,7 +152,9 @@ def check_watermark_staleness(threshold_days: int = STALENESS_THRESHOLD_DAYS) ->
     return [dict(r) for r in client.query(sql, job_config=job_config).result()]
 
 
-def check_pipeline_staleness(threshold_hours: int = PIPELINE_STALENESS_HOURS) -> list[dict]:
+def check_pipeline_staleness(
+    threshold_hours: int = PIPELINE_STALENESS_HOURS,
+) -> list[dict]:
     """Check if any pipeline hasn't had a successful run in threshold_hours.
 
     Catches the "Type 1" failure mode: cron crashed, BQ was down, etc.
@@ -157,10 +162,11 @@ def check_pipeline_staleness(threshold_hours: int = PIPELINE_STALENESS_HOURS) ->
     Returns a list of stale pipelines:
         [{"pipeline_name": str, "last_ok": str, "hours_since": int}]
     """
-    from core.config import F_PIPELINE_RUNS, PROJECT
+    from core.bq.client import get_client
+    from core.config import F_PIPELINE_RUNS
     from google.cloud import bigquery
 
-    client = bigquery.Client(project=PROJECT)
+    client = get_client()
     sql = f"""
     SELECT
         pipeline_name,
@@ -178,5 +184,3 @@ def check_pipeline_staleness(threshold_hours: int = PIPELINE_STALENESS_HOURS) ->
         ]
     )
     return [dict(r) for r in client.query(sql, job_config=job_config).result()]
-
-

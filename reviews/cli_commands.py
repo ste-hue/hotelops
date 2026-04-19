@@ -23,10 +23,10 @@ def cmd_reviews(args):
 
 def _cmd_summary(args):
     """Show latest reviews summary."""
-    from google.cloud import bigquery
-    from core.config import F_REVIEWS, PROJECT
+    from core.bq.client import get_client
+    from core.config import F_REVIEWS
 
-    client = bigquery.Client(project=PROJECT)
+    client = get_client()
 
     sql = f"""
     SELECT piattaforma, business_unit_id, punteggio_norm, punteggio_raw,
@@ -142,7 +142,9 @@ def _cmd_scrape(args):
         new_rows, gap_keys = filter_by_watermark(
             watermarks, rows, cap=MAX_REVIEWS_PER_PROPERTY
         )
-        print(f"  Watermark filter: {len(new_rows)} new (dropped {len(rows) - len(new_rows)})")
+        print(
+            f"  Watermark filter: {len(new_rows)} new (dropped {len(rows) - len(new_rows)})"
+        )
         if gap_keys:
             print(f"  ⚠️  Gap suspected on: {gap_keys}")
 
@@ -188,10 +190,10 @@ def _cmd_scrape(args):
 
 def _cmd_alert(args):
     """Show reviews that triggered alerts."""
-    from google.cloud import bigquery
-    from core.config import F_REVIEWS, PROJECT
+    from core.bq.client import get_client
+    from core.config import F_REVIEWS
 
-    client = bigquery.Client(project=PROJECT)
+    client = get_client()
 
     sql = f"""
     SELECT piattaforma, business_unit_id, punteggio_norm, punteggio_raw,
@@ -218,10 +220,10 @@ def _cmd_alert(args):
 
 def _cmd_stats(args):
     """Show review statistics for a month."""
-    from google.cloud import bigquery
-    from core.config import F_REVIEWS, PROJECT
+    from core.bq.client import get_client
+    from core.config import F_REVIEWS
 
-    client = bigquery.Client(project=PROJECT)
+    client = get_client()
     anno = args.anno or 2026
     mese_filter = (
         f"AND EXTRACT(MONTH FROM data_review) = {args.mese}" if args.mese else ""
@@ -272,8 +274,8 @@ def _cmd_report(args):
     es. recap della settimana in corso, o drill-down su un range specifico.
     """
     from datetime import date, timedelta
-    from google.cloud import bigquery
-    from core.config import F_REVIEWS, PROJECT
+    from core.bq.client import get_client
+    from core.config import F_REVIEWS
     from reviews.email import send_weekly_report
 
     if args.start and args.end:
@@ -286,7 +288,7 @@ def _cmd_report(args):
         end = today - timedelta(days=today.weekday() + 1)  # last Sunday
         start = end - timedelta(days=6)  # last Monday
 
-    client = bigquery.Client(project=PROJECT)
+    client = get_client()
     sql = f"""
     SELECT *
     FROM `{F_REVIEWS}`

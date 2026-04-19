@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 class FakeBQRow(dict):
     """Minimal stand-in for google.cloud.bigquery.Row.
@@ -15,10 +17,18 @@ class FakeBQRow(dict):
 
 def _fake_query_client(rows: list[dict]) -> MagicMock:
     fake = MagicMock()
-    fake.query.return_value.result.return_value = iter(
-        [FakeBQRow(r) for r in rows]
-    )
+    fake.query.return_value.result.return_value = iter([FakeBQRow(r) for r in rows])
     return fake
+
+
+@pytest.fixture(autouse=True)
+def _reset_bq_client_singleton():
+    """Clear the cached BQ client so each test's patch is honoured."""
+    import core.bq.client as bq_client_mod
+
+    bq_client_mod._client = None
+    yield
+    bq_client_mod._client = None
 
 
 def test_check_watermark_staleness_returns_stale_keys():
@@ -74,5 +84,3 @@ def test_check_pipeline_staleness_returns_stale_pipelines():
     assert len(result) == 1
     assert result[0]["pipeline_name"] == "reviews_scrape"
     assert result[0]["hours_since"] == 52
-
-

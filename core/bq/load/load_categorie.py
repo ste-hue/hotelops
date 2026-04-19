@@ -27,18 +27,22 @@ from pathlib import Path
 
 try:
     import openpyxl
+
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
 
 try:
     from google.cloud import bigquery
+
     HAS_BQ = True
 except ImportError:
     HAS_BQ = False
 
-BQ_PROJECT = "hotelops-suite"
-BQ_TABLE = f"{BQ_PROJECT}.hotelops.d_categorie_conti"
+from core.bq.client import get_client
+from core.config import PROJECT
+
+BQ_TABLE = f"{PROJECT}.hotelops.d_categorie_conti"
 
 DEFAULT_FILE = Path(
     "/Users/stefanodellapietra/Desktop/WORK/artifacts/"
@@ -95,14 +99,16 @@ def parse_categorie(filepath: Path, logger: logging.Logger) -> list[dict]:
         anno_inizio = int(row[4]) if row[4] else None
         anno_fine = int(row[5]) if row[5] else None
 
-        records.append({
-            "codice_conto": conto,
-            "descrizione": descrizione,
-            "tipo_costo": tipo_costo,
-            "categoria_ce": categoria_ce,
-            "anno_inizio": anno_inizio,
-            "anno_fine": anno_fine,
-        })
+        records.append(
+            {
+                "codice_conto": conto,
+                "descrizione": descrizione,
+                "tipo_costo": tipo_costo,
+                "categoria_ce": categoria_ce,
+                "anno_inizio": anno_inizio,
+                "anno_fine": anno_fine,
+            }
+        )
 
     logger.info(f"  CATEGORIE: {len(records)} righe parsate (skip {skipped})")
     return records
@@ -129,8 +135,14 @@ def quality_summary(rows: list[dict], logger: logging.Logger) -> None:
     logger.info("═" * 50)
 
 
-FIELDS = ["codice_conto", "descrizione", "tipo_costo", "categoria_ce",
-           "anno_inizio", "anno_fine"]
+FIELDS = [
+    "codice_conto",
+    "descrizione",
+    "tipo_costo",
+    "categoria_ce",
+    "anno_inizio",
+    "anno_fine",
+]
 
 
 def dump_csv(rows: list[dict], path: Path, logger: logging.Logger) -> None:
@@ -142,14 +154,18 @@ def dump_csv(rows: list[dict], path: Path, logger: logging.Logger) -> None:
     logger.info(f"  CSV: {path}  ({len(rows)} righe)")
 
 
-BQ_SCHEMA = [
-    bigquery.SchemaField("codice_conto", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("descrizione", "STRING"),
-    bigquery.SchemaField("tipo_costo", "STRING"),
-    bigquery.SchemaField("categoria_ce", "STRING"),
-    bigquery.SchemaField("anno_inizio", "INTEGER"),
-    bigquery.SchemaField("anno_fine", "INTEGER"),
-] if HAS_BQ else []
+BQ_SCHEMA = (
+    [
+        bigquery.SchemaField("codice_conto", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("descrizione", "STRING"),
+        bigquery.SchemaField("tipo_costo", "STRING"),
+        bigquery.SchemaField("categoria_ce", "STRING"),
+        bigquery.SchemaField("anno_inizio", "INTEGER"),
+        bigquery.SchemaField("anno_fine", "INTEGER"),
+    ]
+    if HAS_BQ
+    else []
+)
 
 
 def load_to_bq(rows: list[dict], logger: logging.Logger) -> None:
@@ -157,9 +173,10 @@ def load_to_bq(rows: list[dict], logger: logging.Logger) -> None:
         logger.warning("Nessuna riga da caricare")
         return
 
-    bq_client = bigquery.Client(project=BQ_PROJECT)
+    bq_client = get_client()
     job = bq_client.load_table_from_json(
-        rows, BQ_TABLE,
+        rows,
+        BQ_TABLE,
         job_config=bigquery.LoadJobConfig(
             schema=BQ_SCHEMA,
             write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
@@ -173,15 +190,18 @@ def load_to_bq(rows: list[dict], logger: logging.Logger) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="CATEGORIE → d_categorie_conti"
+    parser = argparse.ArgumentParser(description="CATEGORIE → d_categorie_conti")
+    parser.add_argument(
+        "--file",
+        default=str(DEFAULT_FILE),
+        help="Path al file XLSX con foglio CATEGORIE",
     )
-    parser.add_argument("--file", default=str(DEFAULT_FILE),
-                        help="Path al file XLSX con foglio CATEGORIE")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Parse + CSV, no BQ write")
-    parser.add_argument("--output-dir", default="output",
-                        help="Directory per CSV output in dry-run")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Parse + CSV, no BQ write"
+    )
+    parser.add_argument(
+        "--output-dir", default="output", help="Directory per CSV output in dry-run"
+    )
     args = parser.parse_args()
 
     logger = setup_logger()

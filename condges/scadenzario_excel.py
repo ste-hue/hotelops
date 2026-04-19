@@ -414,7 +414,9 @@ def load_from_bq(bq_client, societa: str) -> list[dict]:
     """Fallback: load from f_partite_aperte_fornitori, aggregate like sintetica."""
     from google.cloud import bigquery as bq_mod
 
-    sql = """
+    from core.config import F_PARTITE_APERTE_FORNITORI
+
+    sql = f"""
     SELECT
         codice_fornitore,
         nome_fornitore AS nome,
@@ -422,7 +424,7 @@ def load_from_bq(bq_client, societa: str) -> list[dict]:
         ROUND(SUM(CASE WHEN data_scadenza < CURRENT_DATE() THEN importo_residuo ELSE 0 END), 2) AS scaduto,
         EXTRACT(MONTH FROM data_scadenza) AS mese,
         ROUND(SUM(CASE WHEN data_scadenza >= CURRENT_DATE() THEN importo_residuo ELSE 0 END), 2) AS futuro
-    FROM `hotelops-suite.hotelops.f_partite_aperte_fornitori`
+    FROM `{F_PARTITE_APERTE_FORNITORI}`
     WHERE societa_id = @societa
     GROUP BY codice_fornitore, nome_fornitore, mese
     ORDER BY codice_fornitore, mese
@@ -585,9 +587,9 @@ def run(
     if file:
         partite, bucket_months = parse_sintetica_scadenze(file)
     else:
-        from google.cloud import bigquery
+        from core.bq.client import get_client
 
-        bq = bigquery.Client(project="hotelops-suite")
+        bq = get_client()
         partite = load_from_bq(bq, societa)
         bucket_months = None
 

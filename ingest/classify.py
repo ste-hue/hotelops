@@ -24,7 +24,6 @@ import argparse
 import csv
 import io
 import logging
-import os
 import re
 import shutil
 import subprocess
@@ -34,20 +33,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from core.datahub_sync import (
+    DATAHUB_ROOT,
+    RcloneError,
+    rclone_copy_to_remote,
+    rclone_copyto,
+)
+
 log = logging.getLogger("ingest.classify")
 
 # ── Datahub root ──────────────────────────────────────────────────────────────
 
-DEFAULT_DATAHUB = Path(
-    os.path.expanduser(
-        "~/Library/CloudStorage/GoogleDrive-stefano@panoramagroup.it"
-        "/My Drive/hotelops_datahub"
-    )
-)
-
-# rclone remote for Drive (mount locale non è sempre sincronizzato)
-RCLONE_REMOTE = "mywork"
-RCLONE_DATAHUB = "00_hotelops_datahub"
+DEFAULT_DATAHUB = DATAHUB_ROOT
 
 # All datahub input files live under ingresso/
 INGRESSO_PREFIX = "ingresso"
@@ -92,7 +89,11 @@ class ClassificationResult:
         return None
 
     def summary(self) -> str:
-        lifecycle_label = "♻️ accumula" if self.lifecycle == LIFECYCLE_APPEND else "📸 snapshot (sostituisce)"
+        lifecycle_label = (
+            "♻️ accumula"
+            if self.lifecycle == LIFECYCLE_APPEND
+            else "📸 snapshot (sostituisce)"
+        )
         lines = [
             f"  File:        {self.file_path.name}",
             f"  Tipo:        {self.file_type} (confidence: {self.confidence:.0%})",
@@ -226,7 +227,9 @@ def infer_societa_from_cc(filename: str, banca: Optional[str] = None) -> Optiona
 # They are tried in priority order — first match wins.
 
 
-def _read_csv_sample(path: Path, delimiter: str = ",", max_rows: int = 5) -> tuple[list[str], list[list[str]]]:
+def _read_csv_sample(
+    path: Path, delimiter: str = ",", max_rows: int = 5
+) -> tuple[list[str], list[list[str]]]:
     """Read header + first N rows from a CSV-like file."""
     for enc in ("utf-8-sig", "latin-1", "cp1252"):
         try:
@@ -249,7 +252,9 @@ def _read_csv_sample(path: Path, delimiter: str = ",", max_rows: int = 5) -> tup
     return [], []
 
 
-def _read_xlsx_sample(path: Path, sheet_name: Optional[str] = None, max_rows: int = 10) -> tuple[list[list], str]:
+def _read_xlsx_sample(
+    path: Path, sheet_name: Optional[str] = None, max_rows: int = 10
+) -> tuple[list[list], str]:
     """Read first N rows from XLSX. Returns (rows, sheet_name_used)."""
     try:
         from openpyxl import load_workbook
@@ -407,6 +412,7 @@ def detect_movimenti_contabili(path: Path) -> Optional[ClassificationResult]:
         # Content sniff: col 0 contains ESOLVER path, col 9 is 6-digit code
         try:
             import openpyxl
+
             wb = openpyxl.load_workbook(str(path), read_only=True)
             ws = wb.active
             for i, row in enumerate(ws.iter_rows(max_row=3, values_only=True)):
@@ -432,6 +438,7 @@ def _infer_societa_from_xlsx(path: Path) -> Optional[str]:
         return "INTUR"
     try:
         import openpyxl
+
         wb = openpyxl.load_workbook(str(path), read_only=True)
         ws = wb.active
         for row in ws.iter_rows(max_row=1, values_only=True):
@@ -455,7 +462,9 @@ def _build_movimenti_result(
     ext = path.suffix  # preserve original extension
     canonical = f"{soc}_LISTAMOVCONT{ext.upper()}"
     dest = f"movimenti_contabili/{soc}" if societa else "movimenti_contabili"
-    pipeline = f"python -m ingest.flussi.ingest_movimenti_contabili --file {{dest_file}}"
+    pipeline = (
+        f"python -m ingest.flussi.ingest_movimenti_contabili --file {{dest_file}}"
+    )
     if societa:
         pipeline += f" --societa {societa}"
     return ClassificationResult(
@@ -657,7 +666,9 @@ def _build_pf_result(
     month_tag = m.group(0) if m else today
     canonical = f"{soc}_Piano_Finanziario_{month_tag}.xlsx"
     dest = f"piani_finanziari/{soc}" if societa else "piani_finanziari"
-    pipeline = f"python -m ingest.flussi.ingest_piano_finanziario_xlsx --file {{dest_file}}"
+    pipeline = (
+        f"python -m ingest.flussi.ingest_piano_finanziario_xlsx --file {{dest_file}}"
+    )
     if societa:
         pipeline += f" --societa {societa}"
     return ClassificationResult(
@@ -687,7 +698,9 @@ def detect_banca(path: Path) -> Optional[ClassificationResult]:
         header_upper = [h.upper() for h in header]
 
         # Sella CSV: has "Codice identificativo" + "Data operazione" + "Debito" + "Credito"
-        if _has_columns(header_upper, ["CODICE IDENTIFICATIVO", "DATA OPERAZIONE", "DEBITO"]):
+        if _has_columns(
+            header_upper, ["CODICE IDENTIFICATIVO", "DATA OPERAZIONE", "DEBITO"]
+        ):
             banca = banca or "SELLA"
             return _build_banca_result(path, societa, banca, confidence=0.95)
 
@@ -713,7 +726,9 @@ def detect_banca(path: Path) -> Optional[ClassificationResult]:
                 banca = banca or "MPS"
                 return _build_banca_result(path, societa, banca, confidence=0.90)
             # Intesa: Data Contabile + Data Valuta + Dare + Avere
-            if _has_columns(row_upper, ["DATA CONTABILE", "DATA VALUTA", "DARE", "AVERE"]):
+            if _has_columns(
+                row_upper, ["DATA CONTABILE", "DATA VALUTA", "DARE", "AVERE"]
+            ):
                 banca = banca or "INTESA"
                 return _build_banca_result(path, societa, banca, confidence=0.90)
             # Generic bank: DATA + DARE + AVERE
@@ -736,7 +751,9 @@ def _build_banca_result(
     canonical = f"{soc}_{bnk}_{today}{ext}"
     dest = f"homebanking/{soc}" if societa else "homebanking"
     # Bank ingest uses --source dir, not single file — just indicate pipeline
-    pipeline = f"python -m ingest.banca.ingest --datahub {{datahub}} --source {{staging}}"
+    pipeline = (
+        f"python -m ingest.banca.ingest --datahub {{datahub}} --source {{staging}}"
+    )
     return ClassificationResult(
         file_path=path,
         file_type=f"banca_{bnk.lower()}",
@@ -758,7 +775,11 @@ def detect_accodamenti(path: Path) -> Optional[ClassificationResult]:
 
     name = path.name
     # H_*_Corrispettivi.txt, R_*_Fatture.txt, C_*_Movimenti.txt
-    if re.match(r"^[HRC]_.*_(Corrispettivi|Fatture|Movimenti|Clienti)\.txt$", name, re.IGNORECASE):
+    if re.match(
+        r"^[HRC]_.*_(Corrispettivi|Fatture|Movimenti|Clienti)\.txt$",
+        name,
+        re.IGNORECASE,
+    ):
         societa = "ORTI"  # HotelCube = always ORTI
         bu_prefix = name[0].upper()
         bu_map = {"H": "HOTEL", "R": "RESIDENCE", "C": "CVM"}
@@ -809,7 +830,10 @@ def detect_coperti(path: Path) -> Optional[ClassificationResult]:
         header, _ = _read_csv_sample(path)
         header_upper = [h.upper() for h in header]
         joined = " ".join(header_upper)
-        if any(meal in joined for meal in ["BREAKFAST", "LUNCH", "DINNER", "COLAZIONE", "PRANZO", "CENA"]):
+        if any(
+            meal in joined
+            for meal in ["BREAKFAST", "LUNCH", "DINNER", "COLAZIONE", "PRANZO", "CENA"]
+        ):
             return _build_coperti_result(path, confidence=0.85)
 
     elif ext == ".xlsx":
@@ -853,18 +877,27 @@ def detect_economato(path: Path) -> Optional[ClassificationResult]:
         return None
 
     name_upper = path.name.upper()
-    if "CONSUMI" in name_upper or "ECONOMATO" in name_upper or "SITUAZIONECONSUMI" in name_upper:
-        is_consolidato = "SITUAZIONECONSUMI" in name_upper.replace(" ", "") or "CONSOLIDAT" in name_upper
+    if (
+        "CONSUMI" in name_upper
+        or "ECONOMATO" in name_upper
+        or "SITUAZIONECONSUMI" in name_upper
+    ):
+        is_consolidato = (
+            "SITUAZIONECONSUMI" in name_upper.replace(" ", "")
+            or "CONSOLIDAT" in name_upper
+        )
         return _build_economato_result(path, is_consolidato, confidence=0.90)
 
     # Content check
     rows, sheet = _read_xlsx_sample(path)
     for row in rows[:5]:
         row_upper = _cols_upper(row)
-        if _has_columns(row_upper, ["CODICE", "DESCRIZIONE", "QUANTITA"]) or _has_columns(
-            row_upper, ["CODICE", "DESCRIZIONE", "EURO"]
-        ):
-            is_consolidato = len(rows) > 3 and any("REPARTO" in str(c).upper() for r in rows[:3] for c in r)
+        if _has_columns(
+            row_upper, ["CODICE", "DESCRIZIONE", "QUANTITA"]
+        ) or _has_columns(row_upper, ["CODICE", "DESCRIZIONE", "EURO"]):
+            is_consolidato = len(rows) > 3 and any(
+                "REPARTO" in str(c).upper() for r in rows[:3] for c in r
+            )
             return _build_economato_result(path, is_consolidato, confidence=0.80)
 
     return None
@@ -879,7 +912,9 @@ def _build_economato_result(
         pipeline = f"python -m ingest.flussi.ingest_consumi_economato_consolidato --file {{dest_file}}"
     else:
         canonical = f"ECO_{today}.xlsx"
-        pipeline = f"python -m ingest.flussi.ingest_consumi_economato --source {{dest_file}}"
+        pipeline = (
+            f"python -m ingest.flussi.ingest_consumi_economato --source {{dest_file}}"
+        )
     return ClassificationResult(
         file_path=path,
         file_type="economato_consolidato" if is_consolidato else "economato",
@@ -968,23 +1003,28 @@ def route_file(
     """
     Copy file to its canonical datahub location via rclone (Drive) or local copy.
 
-    Destination path: {RCLONE_DATAHUB}/{INGRESSO_PREFIX}/{dest_folder}/{canonical_name}
-    e.g. 00_hotelops_datahub/ingresso/homebanking/ORTI/ORTI_MPS_20260323.xls
+    Destination subpath: {INGRESSO_PREFIX}/{dest_folder}/{canonical_name}
+    e.g. ingresso/homebanking/ORTI/ORTI_MPS_20260323.xls
 
     Returns the destination path (local staging copy), or None if routing not possible.
     """
-    if result.category == "unknown" or not result.dest_folder or not result.canonical_name:
-        log.warning(f"Cannot route {result.file_path.name}: unclassified or missing destination")
+    if (
+        result.category == "unknown"
+        or not result.dest_folder
+        or not result.canonical_name
+    ):
+        log.warning(
+            f"Cannot route {result.file_path.name}: unclassified or missing destination"
+        )
         return None
 
-    # Full remote path: ingresso/{category}/{societa}/filename
+    # Full remote subpath: ingresso/{category}/{societa}/
     remote_dest = f"{INGRESSO_PREFIX}/{result.dest_folder}"
-    remote_full = f"{RCLONE_REMOTE}:{RCLONE_DATAHUB}/{remote_dest}/"
 
     if dry_run:
         log.info(
             f"[DRY-RUN] Would rclone copy {result.file_path.name} "
-            f"→ {RCLONE_DATAHUB}/{remote_dest}/{result.canonical_name}"
+            f"→ {remote_dest}/{result.canonical_name}"
         )
         # Return a synthetic local path for downstream compatibility
         return datahub / INGRESSO_PREFIX / result.dest_folder / result.canonical_name
@@ -996,14 +1036,14 @@ def route_file(
         with tempfile.TemporaryDirectory() as tmp:
             staged = Path(tmp) / result.canonical_name
             shutil.copy2(result.file_path, staged)
-            cmd = ["rclone", "copy", str(staged), remote_full]
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-            if proc.returncode != 0:
-                log.error(f"rclone failed: {proc.stderr.strip()}")
+            try:
+                rclone_copy_to_remote(staged, remote_dest, timeout=60)
+            except RcloneError as e:
+                log.error(f"rclone failed: {e}")
                 return None
         log.info(
             f"Routed (rclone): {result.file_path.name} "
-            f"→ {RCLONE_DATAHUB}/{remote_dest}/{result.canonical_name}"
+            f"→ {remote_dest}/{result.canonical_name}"
         )
     else:
         # Fallback: local copy (mount locale)
@@ -1030,16 +1070,13 @@ def route_file(
 def _rclone_sync_to_local(remote_dest: str, canonical_name: str) -> Optional[Path]:
     """Sync a single file from Drive to local staging via rclone."""
     staging_dir = Path.home() / ".cache" / "hotelops" / "ingest_staging"
-    staging_dir.mkdir(parents=True, exist_ok=True)
     local_file = staging_dir / canonical_name
 
-    remote_path = f"{RCLONE_REMOTE}:{RCLONE_DATAHUB}/{INGRESSO_PREFIX}/{remote_dest}/{canonical_name}"
-    proc = subprocess.run(
-        ["rclone", "copyto", remote_path, str(local_file)],
-        capture_output=True, text=True, timeout=60,
-    )
-    if proc.returncode != 0:
-        log.error(f"rclone sync failed: {proc.stderr.strip()}")
+    remote_subpath = f"{INGRESSO_PREFIX}/{remote_dest}/{canonical_name}"
+    try:
+        rclone_copyto(remote_subpath, local_file, timeout=60)
+    except RcloneError as e:
+        log.error(f"rclone sync failed: {e}")
         return None
     return local_file
 
@@ -1139,7 +1176,9 @@ Examples:
         default=DEFAULT_DATAHUB,
         help=f"Datahub root (default: {DEFAULT_DATAHUB})",
     )
-    parser.add_argument("--dry-run", action="store_true", help="Show plan without executing")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show plan without executing"
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
     args = parser.parse_args()
@@ -1166,9 +1205,9 @@ Examples:
     results = classify_batch(files)
 
     # Display results
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  CLASSIFICAZIONE FILE — {len(results)} file analizzati")
-    print(f"{'='*70}\n")
+    print(f"{'=' * 70}\n")
 
     ok_count = 0
     unknown_count = 0
@@ -1196,7 +1235,9 @@ Examples:
             if dest_file:
                 routed_count += 1
                 prefix = "[DRY-RUN] " if args.dry_run else ""
-                print(f"  {prefix}→ {dest_file.relative_to(args.datahub) if not args.dry_run else dest_file}")
+                print(
+                    f"  {prefix}→ {dest_file.relative_to(args.datahub) if not args.dry_run else dest_file}"
+                )
 
         if args.ingest and dest_file:
             success = run_ingest(r, dest_file, args.datahub, dry_run=args.dry_run)
@@ -1206,11 +1247,13 @@ Examples:
         print()
 
     # Summary
-    print(f"{'─'*70}")
-    print(f"  Classificati: {ok_count}/{len(results)}  |  Non riconosciuti: {unknown_count}")
+    print(f"{'─' * 70}")
+    print(
+        f"  Classificati: {ok_count}/{len(results)}  |  Non riconosciuti: {unknown_count}"
+    )
     if args.route:
         print(f"  Smistati: {routed_count}  |  Ingeriti: {ingested_count}")
-    print(f"{'─'*70}\n")
+    print(f"{'─' * 70}\n")
 
 
 if __name__ == "__main__":

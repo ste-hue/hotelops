@@ -11,6 +11,8 @@ from pathlib import Path
 from google.api_core.exceptions import BadRequest
 from google.cloud import bigquery
 
+from core.bq.client import get_client
+
 from reviews.config import ALERT_THRESHOLD, ALERT_RECIPIENTS
 
 log = logging.getLogger(__name__)
@@ -27,7 +29,9 @@ _MARK_ALERTS_RETRY_DELAYS = [30, 60, 120]
 # Reconciled at the start of the next scrape run, so emails sent but flag
 # not persisted don't trigger re-alerts (watermark would have moved past them).
 _PENDING_STATE_PATH = (
-    Path(__file__).resolve().parent.parent / ".hotelops_state" / "pending_alert_flags.json"
+    Path(__file__).resolve().parent.parent
+    / ".hotelops_state"
+    / "pending_alert_flags.json"
 )
 
 
@@ -105,7 +109,9 @@ def send_alerts(
         if key in first_run_keys and not _within_grace_window(row):
             log.info(
                 "Grace window: skipping alert for %s %s (first-run, data_review=%s)",
-                key[0], key[1], row.get("data_review"),
+                key[0],
+                key[1],
+                row.get("data_review"),
             )
             continue
 
@@ -176,7 +182,8 @@ def _persist_pending(review_hashes: list[str]) -> None:
     )
     log.error(
         "PENDING ALERT FLAGS: persisted %d hashes to %s — will retry next run",
-        len(merged), _PENDING_STATE_PATH,
+        len(merged),
+        _PENDING_STATE_PATH,
     )
 
 
@@ -196,9 +203,7 @@ def mark_alerts_sent(review_hashes: list[str]) -> None:
     if not review_hashes:
         return
 
-    from core.config import PROJECT
-
-    client = bigquery.Client(project=PROJECT)
+    client = get_client()
 
     attempts = len(_MARK_ALERTS_RETRY_DELAYS) + 1
     for attempt in range(attempts):
@@ -220,7 +225,9 @@ def mark_alerts_sent(review_hashes: list[str]) -> None:
             delay = _MARK_ALERTS_RETRY_DELAYS[attempt]
             log.warning(
                 "mark_alerts_sent attempt %d/%d hit streaming buffer, retrying in %ds",
-                attempt + 1, attempts, delay,
+                attempt + 1,
+                attempts,
+                delay,
             )
             time.sleep(delay)
 
@@ -247,11 +254,9 @@ def flush_pending_alert_flags() -> int:
         _PENDING_STATE_PATH.unlink(missing_ok=True)
         return 0
 
-    from core.config import PROJECT
-
     log.info("flush_pending_alert_flags: retrying %d pending hashes", len(hashes))
     try:
-        client = bigquery.Client(project=PROJECT)
+        client = get_client()
         _run_update_flag(client, hashes)
     except Exception as e:
         if _is_streaming_buffer_error(e):

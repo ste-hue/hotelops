@@ -6,8 +6,7 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from google.cloud import bigquery
-
+from core.bq.client import get_client
 from core.schemas import make_hash, validate_batch, ReviewRow
 from reviews.config import PROPERTIES
 
@@ -239,7 +238,9 @@ def normalize_trip(item: dict, societa: str = "ORTI") -> dict:
         "data_soggiorno": (item.get("checkInDate") or "")[:10] or None,
         "reviewer_nome": None,  # Trip.com reviews are anonymous
         "reviewer_paese": None,
-        "tipo_viaggio": _map_trip_type(item.get("travelTypeText") or item.get("travelType")),
+        "tipo_viaggio": _map_trip_type(
+            item.get("travelTypeText") or item.get("travelType")
+        ),
         "camera_tipo": item.get("roomTypeName"),
         "url_review": hotel_url or None,
         "categoria_nlp": None,
@@ -313,7 +314,7 @@ def load_to_bq(
 
     Returns number of rows inserted.
     """
-    from core.config import F_REVIEWS, PROJECT
+    from core.config import F_REVIEWS
 
     if not rows:
         log.info("No rows to load.")
@@ -325,7 +326,7 @@ def load_to_bq(
         log.info("[DRY RUN] Would insert %d rows into %s", len(rows), F_REVIEWS)
         return 0
 
-    client = bigquery.Client(project=PROJECT)
+    client = get_client()
 
     hashes = [r["review_hash"] for r in rows]
     placeholders = ", ".join(f"'{h}'" for h in hashes)
@@ -414,9 +415,9 @@ def read_watermarks() -> dict[tuple[str, str], str]:
     Raises on BQ error — caller must abort the run (never proceed with an
     involuntarily empty watermark).
     """
-    from core.config import F_REVIEWS, PROJECT
+    from core.config import F_REVIEWS
 
-    client = bigquery.Client(project=PROJECT)
+    client = get_client()
 
     # Safe: F_REVIEWS is an internal config constant (core.config), not user input.
     wm_sql = f"""

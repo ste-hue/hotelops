@@ -22,22 +22,25 @@ from pathlib import Path
 
 try:
     import openpyxl
+
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
 
 try:
     from google.cloud import bigquery
+
     HAS_BQ = True
 except ImportError:
     HAS_BQ = False
 
+from core.bq.client import get_client
+from core.config import PROJECT
 from core.schemas import RicaviStoriciRow, make_hash, validate_batch
 
-BQ_PROJECT = "hotelops-suite"
 BQ_DATASET = "hotelops"
 BQ_TABLE = "f_ricavi_storici"
-BQ_TABLE_FULL = f"{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
+BQ_TABLE_FULL = f"{PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,9 +57,18 @@ STRUTTURA_MAP = {
 }
 
 MESI_IT = {
-    "Gennaio": 1, "Febbraio": 2, "Marzo": 3, "Aprile": 4,
-    "Maggio": 5, "Giugno": 6, "Luglio": 7, "Agosto": 8,
-    "Settembre": 9, "Ottobre": 10, "Novembre": 11, "Dicembre": 12,
+    "Gennaio": 1,
+    "Febbraio": 2,
+    "Marzo": 3,
+    "Aprile": 4,
+    "Maggio": 5,
+    "Giugno": 6,
+    "Luglio": 7,
+    "Agosto": 8,
+    "Settembre": 9,
+    "Ottobre": 10,
+    "Novembre": 11,
+    "Dicembre": 12,
 }
 
 
@@ -120,35 +132,41 @@ def parse_xlsx(path: Path, societa_id: str) -> list[dict]:
             except (TypeError, ValueError):
                 importo = 0.0
 
-            rows.append({
-                "societa_id": societa_id,
-                "business_unit_id": current_bu,
-                "anno": anno,
-                "mese": mese_num,
-                "importo_entrate": round(importo, 2),
-                "fonte": fonte,
-                "hash_riga": make_hash(societa_id, current_bu, anno, mese_num),
-                "data_caricamento": ts_now,
-            })
+            rows.append(
+                {
+                    "societa_id": societa_id,
+                    "business_unit_id": current_bu,
+                    "anno": anno,
+                    "mese": mese_num,
+                    "importo_entrate": round(importo, 2),
+                    "fonte": fonte,
+                    "hash_riga": make_hash(societa_id, current_bu, anno, mese_num),
+                    "data_caricamento": ts_now,
+                }
+            )
 
     return rows
 
 
-BQ_SCHEMA = [
-    bigquery.SchemaField("societa_id",       "STRING",    mode="REQUIRED"),
-    bigquery.SchemaField("business_unit_id",  "STRING",    mode="REQUIRED"),
-    bigquery.SchemaField("anno",             "INT64",     mode="REQUIRED"),
-    bigquery.SchemaField("mese",             "INT64",     mode="REQUIRED"),
-    bigquery.SchemaField("importo_entrate",  "FLOAT64",   mode="REQUIRED"),
-    bigquery.SchemaField("fonte",            "STRING",    mode="REQUIRED"),
-    bigquery.SchemaField("hash_riga",        "STRING",    mode="REQUIRED"),
-    bigquery.SchemaField("data_caricamento", "TIMESTAMP", mode="NULLABLE"),
-] if HAS_BQ else []
+BQ_SCHEMA = (
+    [
+        bigquery.SchemaField("societa_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("business_unit_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("anno", "INT64", mode="REQUIRED"),
+        bigquery.SchemaField("mese", "INT64", mode="REQUIRED"),
+        bigquery.SchemaField("importo_entrate", "FLOAT64", mode="REQUIRED"),
+        bigquery.SchemaField("fonte", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("hash_riga", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("data_caricamento", "TIMESTAMP", mode="NULLABLE"),
+    ]
+    if HAS_BQ
+    else []
+)
 
 
 def ensure_table(client):
     """Create table if not exists."""
-    dataset_ref = bigquery.DatasetReference(BQ_PROJECT, BQ_DATASET)
+    dataset_ref = bigquery.DatasetReference(PROJECT, BQ_DATASET)
     table_ref = dataset_ref.table(BQ_TABLE)
     try:
         client.get_table(table_ref)
@@ -173,14 +191,18 @@ def load_to_bq(rows: list[dict], dry_run: bool) -> None:
         log.error("google-cloud-bigquery not installed")
         sys.exit(1)
 
-    client = bigquery.Client(project=BQ_PROJECT)
+    client = get_client()
     ensure_table(client)
 
     existing = get_existing_hashes(client)
     new_rows = [r for r in rows if r["hash_riga"] not in existing]
 
-    log.info("Total rows: %d | already in BQ: %d | new: %d",
-             len(rows), len(rows) - len(new_rows), len(new_rows))
+    log.info(
+        "Total rows: %d | already in BQ: %d | new: %d",
+        len(rows),
+        len(rows) - len(new_rows),
+        len(new_rows),
+    )
 
     if not new_rows:
         log.info("Nothing to load.")

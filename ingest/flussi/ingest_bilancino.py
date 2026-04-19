@@ -27,23 +27,29 @@ from pathlib import Path
 
 try:
     import xlrd
+
     HAS_XLRD = True
 except ImportError:
     HAS_XLRD = False
 
 try:
     import openpyxl
+
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
 
 try:
     from google.cloud import bigquery
+
     HAS_BQ = True
 except ImportError:
     HAS_BQ = False
 
-BQ_TABLE = "hotelops-suite.hotelops.f_bilancino"
+from core.bq.client import get_client
+from core.config import PROJECT
+
+BQ_TABLE = f"{PROJECT}.hotelops.f_bilancino"
 
 # Account prefix → business_unit_id
 # 47.91.* = Hotel, 47.92.* = Residence, 47.93.* = CVM, 47.94.* = Spiaggia/Lido, 47.95.* = Affitti (HQ)
@@ -149,15 +155,17 @@ def _parse_xls(filepath: Path, logger: logging.Logger) -> list[dict]:
         saldo = float(row[7]) if row[7] else 0.0
         if dare == 0.0 and avere == 0.0 and saldo == 0.0:
             continue
-        rows.append({
-            "codice_conto": codice,
-            "descrizione": str(row[1]).strip(),
-            "tipo_conto": str(row[11]).strip(),
-            "sezione": str(row[12]).strip(),
-            "dare": dare,
-            "avere": avere,
-            "saldo": saldo,
-        })
+        rows.append(
+            {
+                "codice_conto": codice,
+                "descrizione": str(row[1]).strip(),
+                "tipo_conto": str(row[11]).strip(),
+                "sezione": str(row[12]).strip(),
+                "dare": dare,
+                "avere": avere,
+                "saldo": saldo,
+            }
+        )
     return rows
 
 
@@ -190,14 +198,16 @@ def _parse_xlsx(filepath: Path, logger: logging.Logger) -> list[dict]:
             continue
 
         tipo_conto, sezione = _parse_tipo_sezione(tipo_sez_raw)
-        entries.append({
-            "codice_conto": codice_raw,
-            "descrizione": descrizione,
-            "tipo_conto": tipo_conto,
-            "sezione": sezione,
-            "importo": importo,
-            "partitari": partitari,
-        })
+        entries.append(
+            {
+                "codice_conto": codice_raw,
+                "descrizione": descrizione,
+                "tipo_conto": tipo_conto,
+                "sezione": sezione,
+                "importo": importo,
+                "partitari": partitari,
+            }
+        )
     wb.close()
 
     # Build set of all codes for leaf detection
@@ -216,19 +226,23 @@ def _parse_xlsx(filepath: Path, logger: logging.Logger) -> list[dict]:
             continue
         if e["importo"] == 0.0:
             continue
-        rows.append({
-            "codice_conto": e["codice_conto"],
-            "descrizione": e["descrizione"],
-            "tipo_conto": e["tipo_conto"],
-            "sezione": e["sezione"],
-            "dare": 0.0,
-            "avere": 0.0,
-            "saldo": e["importo"],
-        })
+        rows.append(
+            {
+                "codice_conto": e["codice_conto"],
+                "descrizione": e["descrizione"],
+                "tipo_conto": e["tipo_conto"],
+                "sezione": e["sezione"],
+                "dare": 0.0,
+                "avere": 0.0,
+                "saldo": e["importo"],
+            }
+        )
     return rows
 
 
-def parse_bilancino(filepath: Path, societa_id: str, mese: str, logger: logging.Logger) -> list[dict]:
+def parse_bilancino(
+    filepath: Path, societa_id: str, mese: str, logger: logging.Logger
+) -> list[dict]:
     """Parse Esolver Bilancio di verifica (XLS or XLSX) → list of fact dicts."""
     suffix = filepath.suffix.lower()
     if suffix == ".xlsx":
@@ -246,28 +260,32 @@ def parse_bilancino(filepath: Path, societa_id: str, mese: str, logger: logging.
         categoria = infer_categoria(codice, entry["tipo_conto"], entry["sezione"])
         hash_riga = make_hash(societa_id, mese, codice)
 
-        rows.append({
-            "hash_riga": hash_riga,
-            "societa_id": societa_id,
-            "mese": mese,
-            "codice_conto": codice,
-            "descrizione": entry["descrizione"],
-            "tipo_conto": entry["tipo_conto"],
-            "sezione": entry["sezione"],
-            "dare": entry["dare"],
-            "avere": entry["avere"],
-            "saldo": entry["saldo"],
-            "business_unit_id": business_unit_id,
-            "categoria": categoria,
-            "file_sorgente": file_sorgente,
-            "data_ingresso": today,
-        })
+        rows.append(
+            {
+                "hash_riga": hash_riga,
+                "societa_id": societa_id,
+                "mese": mese,
+                "codice_conto": codice,
+                "descrizione": entry["descrizione"],
+                "tipo_conto": entry["tipo_conto"],
+                "sezione": entry["sezione"],
+                "dare": entry["dare"],
+                "avere": entry["avere"],
+                "saldo": entry["saldo"],
+                "business_unit_id": business_unit_id,
+                "categoria": categoria,
+                "file_sorgente": file_sorgente,
+                "data_ingresso": today,
+            }
+        )
 
     logger.info(f"Leaf rows with activity: {len(rows)}")
     return rows
 
 
-def load_hashes_bq(bq_client, mese: str, societa_id: str, logger: logging.Logger) -> set:
+def load_hashes_bq(
+    bq_client, mese: str, societa_id: str, logger: logging.Logger
+) -> set:
     try:
         result = bq_client.query(
             f"SELECT hash_riga FROM `{BQ_TABLE}` WHERE mese = '{mese}' AND societa_id = '{societa_id}'"
@@ -280,22 +298,26 @@ def load_hashes_bq(bq_client, mese: str, societa_id: str, logger: logging.Logger
         return set()
 
 
-BQ_SCHEMA = [
-    bigquery.SchemaField("hash_riga", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("societa_id", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("mese", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("codice_conto", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("descrizione", "STRING"),
-    bigquery.SchemaField("tipo_conto", "STRING"),
-    bigquery.SchemaField("sezione", "STRING"),
-    bigquery.SchemaField("dare", "FLOAT64"),
-    bigquery.SchemaField("avere", "FLOAT64"),
-    bigquery.SchemaField("saldo", "FLOAT64"),
-    bigquery.SchemaField("business_unit_id", "STRING"),
-    bigquery.SchemaField("categoria", "STRING"),
-    bigquery.SchemaField("file_sorgente", "STRING"),
-    bigquery.SchemaField("data_ingresso", "STRING"),
-] if HAS_BQ else []
+BQ_SCHEMA = (
+    [
+        bigquery.SchemaField("hash_riga", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("societa_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("mese", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("codice_conto", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("descrizione", "STRING"),
+        bigquery.SchemaField("tipo_conto", "STRING"),
+        bigquery.SchemaField("sezione", "STRING"),
+        bigquery.SchemaField("dare", "FLOAT64"),
+        bigquery.SchemaField("avere", "FLOAT64"),
+        bigquery.SchemaField("saldo", "FLOAT64"),
+        bigquery.SchemaField("business_unit_id", "STRING"),
+        bigquery.SchemaField("categoria", "STRING"),
+        bigquery.SchemaField("file_sorgente", "STRING"),
+        bigquery.SchemaField("data_ingresso", "STRING"),
+    ]
+    if HAS_BQ
+    else []
+)
 
 
 def write_to_bq(rows: list[dict], bq_client, logger: logging.Logger):
@@ -338,11 +360,24 @@ def write_to_csv(rows: list[dict], csv_path: Path, logger: logging.Logger):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Ingest Esolver Bilancio di verifica → f_bilancino")
-    parser.add_argument("--file", required=True, help="Path to XLS file (Bilancio di verifica)")
-    parser.add_argument("--societa", required=True, choices=["INTUR", "ORTI"], help="Società (INTUR o ORTI)")
-    parser.add_argument("--mese", required=True, help="Mese contabile (YYYY-MM, es. 2026-01)")
-    parser.add_argument("--datahub", help="Path to datahub root (for CSV backup). Optional.")
+    parser = argparse.ArgumentParser(
+        description="Ingest Esolver Bilancio di verifica → f_bilancino"
+    )
+    parser.add_argument(
+        "--file", required=True, help="Path to XLS file (Bilancio di verifica)"
+    )
+    parser.add_argument(
+        "--societa",
+        required=True,
+        choices=["INTUR", "ORTI"],
+        help="Società (INTUR o ORTI)",
+    )
+    parser.add_argument(
+        "--mese", required=True, help="Mese contabile (YYYY-MM, es. 2026-01)"
+    )
+    parser.add_argument(
+        "--datahub", help="Path to datahub root (for CSV backup). Optional."
+    )
     parser.add_argument("--dry-run", action="store_true", help="Parse only, no write")
     args = parser.parse_args()
 
@@ -368,20 +403,26 @@ def main():
         logger.info("  === Ricavi ===")
         for r in sorted(ricavi, key=lambda x: x["codice_conto"]):
             bu = r["business_unit_id"] or "?"
-            logger.info(f"    {r['codice_conto']} [{bu}] {r['descrizione']}: saldo={r['saldo']:,.2f}")
+            logger.info(
+                f"    {r['codice_conto']} [{bu}] {r['descrizione']}: saldo={r['saldo']:,.2f}"
+            )
 
     if args.dry_run:
         logger.info("DRY RUN — nessuna scrittura")
         return
 
     if not HAS_BQ:
-        logger.error("google-cloud-bigquery non installato. Run: pip install google-cloud-bigquery")
+        logger.error(
+            "google-cloud-bigquery non installato. Run: pip install google-cloud-bigquery"
+        )
         sys.exit(1)
 
-    bq_client = bigquery.Client(project="hotelops-suite")
+    bq_client = get_client()
     existing_hashes = load_hashes_bq(bq_client, args.mese, args.societa, logger)
     new_rows = [r for r in rows if r["hash_riga"] not in existing_hashes]
-    logger.info(f"Nuove righe da inserire: {len(new_rows)} (già presenti: {len(rows) - len(new_rows)})")
+    logger.info(
+        f"Nuove righe da inserire: {len(new_rows)} (già presenti: {len(rows) - len(new_rows)})"
+    )
 
     write_to_bq(new_rows, bq_client, logger)
 

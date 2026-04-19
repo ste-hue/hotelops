@@ -51,63 +51,77 @@ from pathlib import Path
 
 try:
     import openpyxl
+
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
 
 try:
     from google.cloud import bigquery
+
     HAS_BQ = True
 except ImportError:
     HAS_BQ = False
 
+from core.bq.client import get_client
+from core.config import PROJECT
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
-BQ_PROJECT = "hotelops-suite"
-BQ_TABLE = f"{BQ_PROJECT}.hotelops.f_piano_finanziario_input"
+BQ_TABLE = f"{PROJECT}.hotelops.f_piano_finanziario_input"
 FONTE = "PIANO_FINANZIARIO"
 
 # Month names → mese number
 MESI_IT = {
-    "GENNAIO": 1, "FEBBRAIO": 2, "MARZO": 3, "APRILE": 4,
-    "MAGGIO": 5, "GIUGNO": 6, "LUGLIO": 7, "AGOSTO": 8,
-    "SETTEMBRE": 9, "OTTOBRE": 10, "NOVEMBRE": 11, "DICEMBRE": 12,
+    "GENNAIO": 1,
+    "FEBBRAIO": 2,
+    "MARZO": 3,
+    "APRILE": 4,
+    "MAGGIO": 5,
+    "GIUGNO": 6,
+    "LUGLIO": 7,
+    "AGOSTO": 8,
+    "SETTEMBRE": 9,
+    "OTTOBRE": 10,
+    "NOVEMBRE": 11,
+    "DICEMBRE": 12,
 }
 
 # Row → voce_id mapping
 # Key: normalized label (first word or common substring)
 VOCE_MAP: dict[str, str] = {
-    "Entrate Hotel":            "ENTRATE_HOTEL",
-    "Entrate Residence":        "ENTRATE_RESIDENCE",
-    "Entrate CVM":              "ENTRATE_CVM",
-    "Entrate Supermercato":     "ENTRATE_SUPERMERCATO",
-    "Rientro Sospesi":          "ENTRATE_RIENTRO_SOSPESI",
-    "Caparre Intur":            "ENTRATE_CAPARRE_INTUR",
-    "Salari e Stipendi":        "USCITE_SALARI",
-    "Utenze":                   "USCITE_UTENZE",
-    "Materie Prime/Consumo":    "USCITE_MATERIE_PRIME",
-    "Materie Prime":            "USCITE_MATERIE_PRIME",
-    "Tasse e Imposte":          "USCITE_TASSE",
-    "Commissioni Portali":      "USCITE_COMMISSIONI",
-    "Commissioni":              "USCITE_COMMISSIONI",
-    "Mutui e Finaziamenti":     "USCITE_MUTUI",
-    "Mutui e Finanziamenti":    "USCITE_MUTUI",  # typo variant
-    "Consulenze":               "USCITE_CONSULENZE",
-    "Godimento Beni di Terzi":  "USCITE_GODIMENTO_BENI",
-    "Godimento Beni":           "USCITE_GODIMENTO_BENI",
-    "Varie ed Eventuali":       "USCITE_VARIE",
-    "Canoni e servizi":         "USCITE_CANONI",
-    "Deposito Fitto":           "USCITE_DEPOSITO_FITTO",
+    "Entrate Hotel": "ENTRATE_HOTEL",
+    "Entrate Residence": "ENTRATE_RESIDENCE",
+    "Entrate CVM": "ENTRATE_CVM",
+    "Entrate Supermercato": "ENTRATE_SUPERMERCATO",
+    "Rientro Sospesi": "ENTRATE_RIENTRO_SOSPESI",
+    "Caparre Intur": "ENTRATE_CAPARRE_INTUR",
+    "Salari e Stipendi": "USCITE_SALARI",
+    "Utenze": "USCITE_UTENZE",
+    "Materie Prime/Consumo": "USCITE_MATERIE_PRIME",
+    "Materie Prime": "USCITE_MATERIE_PRIME",
+    "Tasse e Imposte": "USCITE_TASSE",
+    "Commissioni Portali": "USCITE_COMMISSIONI",
+    "Commissioni": "USCITE_COMMISSIONI",
+    "Mutui e Finaziamenti": "USCITE_MUTUI",
+    "Mutui e Finanziamenti": "USCITE_MUTUI",  # typo variant
+    "Consulenze": "USCITE_CONSULENZE",
+    "Godimento Beni di Terzi": "USCITE_GODIMENTO_BENI",
+    "Godimento Beni": "USCITE_GODIMENTO_BENI",
+    "Varie ed Eventuali": "USCITE_VARIE",
+    "Canoni e servizi": "USCITE_CANONI",
+    "Deposito Fitto": "USCITE_DEPOSITO_FITTO",
     # INTUR-specific voci
-    "Fitto Hotel":              "ENTRATE_AFFITTI_INTUR",   # canone ORTI→INTUR (conto 53.xx)
-    "Fitto AR":                 "ENTRATE_AFFITTI_INTUR",   # affitto ramo d'azienda (same 53.xx)
-    "Entrate Farmacia":         "ENTRATE_AFFITTI_MINORI",  # affitto farmacia (47.95.xx)
-    "Entrate Spiaggia":         "ENTRATE_SPIAGGIA",
-    "Caparre da girocantare":   "ENTRATE_CAPARRE_INTUR",   # was CAPARRE_GIRO → align to d_voci
-    "Godimento Benidi Terzi":   "USCITE_GODIMENTO_BENI",   # INTUR typo
+    "Fitto Hotel": "ENTRATE_AFFITTI_INTUR",  # canone ORTI→INTUR (conto 53.xx)
+    "Fitto AR": "ENTRATE_AFFITTI_INTUR",  # affitto ramo d'azienda (same 53.xx)
+    "Entrate Farmacia": "ENTRATE_AFFITTI_MINORI",  # affitto farmacia (47.95.xx)
+    "Entrate Spiaggia": "ENTRATE_SPIAGGIA",
+    "Caparre da girocantare": "ENTRATE_CAPARRE_INTUR",  # was CAPARRE_GIRO → align to d_voci
+    "Godimento Benidi Terzi": "USCITE_GODIMENTO_BENI",  # INTUR typo
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _v(x) -> float:
     """Coerce cell to float, 0.0 for None/NaN."""
@@ -115,6 +129,7 @@ def _v(x) -> float:
         return 0.0
     if isinstance(x, (int, float)):
         import math
+
         return 0.0 if math.isnan(float(x)) else float(x)
     return 0.0
 
@@ -203,6 +218,7 @@ def setup_logger() -> logging.Logger:
 
 # ── Main parser ───────────────────────────────────────────────────────────────
 
+
 def parse_piano_finanziario(
     filepath: Path,
     societa_override: str | None,
@@ -267,7 +283,7 @@ def parse_piano_finanziario(
             # Check if row has any data
             has_data = any(_v(ws.cell(r, c).value) != 0 for c, _ in month_cols)
             if has_data:
-                logger.warning(f"  UNMAPPED row {r}: \"{label}\" — riga saltata")
+                logger.warning(f'  UNMAPPED row {r}: "{label}" — riga saltata')
                 voci_skipped += 1
             continue
 
@@ -277,18 +293,20 @@ def parse_piano_finanziario(
             if val == 0:
                 continue
 
-            records.append({
-                "hash_riga":        make_hash(societa_id, voce_id, anno, mese, FONTE),
-                "societa_id":       societa_id,
-                "voce_id":          voce_id,
-                "anno":             anno,
-                "mese":             mese,
-                "importo":          round(val, 2),
-                "fonte":            FONTE,
-                "note":             None,
-                "file_sorgente":    filepath.name,
-                "data_caricamento": now.isoformat(),
-            })
+            records.append(
+                {
+                    "hash_riga": make_hash(societa_id, voce_id, anno, mese, FONTE),
+                    "societa_id": societa_id,
+                    "voce_id": voce_id,
+                    "anno": anno,
+                    "mese": mese,
+                    "importo": round(val, 2),
+                    "fonte": FONTE,
+                    "note": None,
+                    "file_sorgente": filepath.name,
+                    "data_caricamento": now.isoformat(),
+                }
+            )
 
     wb.close()
 
@@ -303,9 +321,11 @@ def parse_piano_finanziario(
 
 # ── Pydantic validation ──────────────────────────────────────────────────────
 
+
 def validate_rows(rows: list[dict], logger: logging.Logger) -> list[dict]:
     try:
         from core.schemas import PianoFinanziarioInputRow, validate_batch
+
         validate_batch(rows, PianoFinanziarioInputRow, context="Piano Finanziario XLSX")
         logger.info(f"  Pydantic validation OK: {len(rows)} righe")
     except ImportError:
@@ -317,6 +337,7 @@ def validate_rows(rows: list[dict], logger: logging.Logger) -> list[dict]:
 
 
 # ── Quality summary ───────────────────────────────────────────────────────────
+
 
 def quality_summary(rows: list[dict], logger: logging.Logger) -> None:
     by_voce: dict[str, float] = {}
@@ -345,18 +366,22 @@ def quality_summary(rows: list[dict], logger: logging.Logger) -> None:
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
 
-BQ_SCHEMA = [
-    bigquery.SchemaField("hash_riga",        "STRING",    mode="REQUIRED"),
-    bigquery.SchemaField("societa_id",       "STRING",    mode="REQUIRED"),
-    bigquery.SchemaField("voce_id",          "STRING",    mode="REQUIRED"),
-    bigquery.SchemaField("anno",             "INTEGER",   mode="REQUIRED"),
-    bigquery.SchemaField("mese",             "INTEGER",   mode="REQUIRED"),
-    bigquery.SchemaField("importo",          "FLOAT64"),
-    bigquery.SchemaField("fonte",            "STRING"),
-    bigquery.SchemaField("note",             "STRING"),
-    bigquery.SchemaField("file_sorgente",    "STRING"),
-    bigquery.SchemaField("data_caricamento", "TIMESTAMP"),
-] if HAS_BQ else []
+BQ_SCHEMA = (
+    [
+        bigquery.SchemaField("hash_riga", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("societa_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("voce_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("anno", "INTEGER", mode="REQUIRED"),
+        bigquery.SchemaField("mese", "INTEGER", mode="REQUIRED"),
+        bigquery.SchemaField("importo", "FLOAT64"),
+        bigquery.SchemaField("fonte", "STRING"),
+        bigquery.SchemaField("note", "STRING"),
+        bigquery.SchemaField("file_sorgente", "STRING"),
+        bigquery.SchemaField("data_caricamento", "TIMESTAMP"),
+    ]
+    if HAS_BQ
+    else []
+)
 
 
 def load_to_bq(rows: list[dict], bq_client, logger: logging.Logger) -> None:
@@ -382,7 +407,8 @@ def load_to_bq(rows: list[dict], bq_client, logger: logging.Logger) -> None:
         return
 
     job = bq_client.load_table_from_json(
-        new_rows, BQ_TABLE,
+        new_rows,
+        BQ_TABLE,
         job_config=bigquery.LoadJobConfig(
             schema=BQ_SCHEMA,
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
@@ -398,8 +424,15 @@ def load_to_bq(rows: list[dict], bq_client, logger: logging.Logger) -> None:
 # ── CSV dump ──────────────────────────────────────────────────────────────────
 
 FIELDS = [
-    "hash_riga", "societa_id", "voce_id", "anno", "mese",
-    "importo", "fonte", "note", "file_sorgente",
+    "hash_riga",
+    "societa_id",
+    "voce_id",
+    "anno",
+    "mese",
+    "importo",
+    "fonte",
+    "note",
+    "file_sorgente",
 ]
 
 
@@ -414,6 +447,7 @@ def dump_csv(rows: list[dict], path: Path, logger: logging.Logger) -> None:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Piano Finanziario XLSX → f_piano_finanziario_input"
@@ -421,12 +455,16 @@ def main() -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--file", help="Single XLSX file")
     group.add_argument("--dir", help="Directory with multiple XLSX files")
-    parser.add_argument("--societa", choices=["ORTI", "INTUR"],
-                        help="Override società detection")
+    parser.add_argument(
+        "--societa", choices=["ORTI", "INTUR"], help="Override società detection"
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--output-dir", default="output")
-    parser.add_argument("--latest-only", action="store_true",
-                        help="Only process the most recent file per società")
+    parser.add_argument(
+        "--latest-only",
+        action="store_true",
+        help="Only process the most recent file per società",
+    )
     args = parser.parse_args()
 
     logger = setup_logger()
@@ -487,7 +525,9 @@ def main() -> None:
     quality_summary(all_rows, logger)
 
     if args.dry_run:
-        dump_csv(all_rows, Path(args.output_dir) / "f_piano_finanziario_xlsx.csv", logger)
+        dump_csv(
+            all_rows, Path(args.output_dir) / "f_piano_finanziario_xlsx.csv", logger
+        )
         logger.info("DRY RUN completato — nessuna scrittura su BQ.")
         return
 
@@ -495,7 +535,7 @@ def main() -> None:
         logger.error("google-cloud-bigquery non installato")
         sys.exit(1)
 
-    bq_client = bigquery.Client(project=BQ_PROJECT)
+    bq_client = get_client()
     load_to_bq(all_rows, bq_client, logger)
     logger.info("✓ DONE")
 

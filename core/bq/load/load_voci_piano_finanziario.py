@@ -20,30 +20,43 @@ from pathlib import Path
 
 try:
     from google.cloud import bigquery
+
     HAS_BQ = True
 except ImportError:
     HAS_BQ = False
 
-BQ_TABLE = "hotelops-suite.hotelops.d_voci_piano_finanziario"
+from core.bq.client import get_client
+from core.config import PROJECT
 
-DEFAULT_SOURCE = Path(__file__).resolve().parents[2] / "bq" / "dimensioni" / "d_voci_piano_finanziario.csv"
+BQ_TABLE = f"{PROJECT}.hotelops.d_voci_piano_finanziario"
 
-BQ_SCHEMA = [
-    bigquery.SchemaField("voce_id",            "STRING",  mode="REQUIRED"),
-    bigquery.SchemaField("voce_label",         "STRING"),
-    bigquery.SchemaField("sezione",            "STRING"),
-    bigquery.SchemaField("categoria",          "STRING"),
-    bigquery.SchemaField("societa_id",         "STRING"),
-    bigquery.SchemaField("fonte",              "STRING"),
-    bigquery.SchemaField("cod_conto_pattern",  "STRING"),
-    bigquery.SchemaField("cod_conto_pat2",     "STRING"),
-    bigquery.SchemaField("cod_conto_pat3",     "STRING"),
-    bigquery.SchemaField("banca_tipo_pat",     "STRING"),
-    bigquery.SchemaField("ord",                "INTEGER"),
-    bigquery.SchemaField("bu_filter",          "STRING"),
-    bigquery.SchemaField("categoria_ce",       "STRING"),
-    bigquery.SchemaField("tipo_costo",         "STRING"),
-] if HAS_BQ else []
+DEFAULT_SOURCE = (
+    Path(__file__).resolve().parents[2]
+    / "bq"
+    / "dimensioni"
+    / "d_voci_piano_finanziario.csv"
+)
+
+BQ_SCHEMA = (
+    [
+        bigquery.SchemaField("voce_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("voce_label", "STRING"),
+        bigquery.SchemaField("sezione", "STRING"),
+        bigquery.SchemaField("categoria", "STRING"),
+        bigquery.SchemaField("societa_id", "STRING"),
+        bigquery.SchemaField("fonte", "STRING"),
+        bigquery.SchemaField("cod_conto_pattern", "STRING"),
+        bigquery.SchemaField("cod_conto_pat2", "STRING"),
+        bigquery.SchemaField("cod_conto_pat3", "STRING"),
+        bigquery.SchemaField("banca_tipo_pat", "STRING"),
+        bigquery.SchemaField("ord", "INTEGER"),
+        bigquery.SchemaField("bu_filter", "STRING"),
+        bigquery.SchemaField("categoria_ce", "STRING"),
+        bigquery.SchemaField("tipo_costo", "STRING"),
+    ]
+    if HAS_BQ
+    else []
+)
 
 
 def setup_logger() -> logging.Logger:
@@ -66,29 +79,33 @@ def parse_csv(filepath: Path, logger: logging.Logger) -> list[dict]:
 
             ord_val = row.get("ord", "").strip()
 
-            rows.append({
-                "voce_id":           voce_id,
-                "voce_label":        row["voce_label"].strip() or None,
-                "sezione":           row["sezione"].strip() or None,
-                "categoria":         row["categoria"].strip() or None,
-                "societa_id":        row["societa_id"].strip() or None,
-                "fonte":             row["fonte"].strip() or None,
-                "cod_conto_pattern": row["cod_conto_pattern"].strip() or None,
-                "cod_conto_pat2":    row["cod_conto_pat2"].strip() or None,
-                "cod_conto_pat3":    row["cod_conto_pat3"].strip() or None,
-                "banca_tipo_pat":    row["banca_tipo_pat"].strip() or None,
-                "ord":               int(ord_val) if ord_val else None,
-                "bu_filter":         row["bu_filter"].strip() or None,
-                "categoria_ce":      row.get("categoria_ce", "").strip() or None,
-                "tipo_costo":        row.get("tipo_costo", "").strip() or None,
-            })
+            rows.append(
+                {
+                    "voce_id": voce_id,
+                    "voce_label": row["voce_label"].strip() or None,
+                    "sezione": row["sezione"].strip() or None,
+                    "categoria": row["categoria"].strip() or None,
+                    "societa_id": row["societa_id"].strip() or None,
+                    "fonte": row["fonte"].strip() or None,
+                    "cod_conto_pattern": row["cod_conto_pattern"].strip() or None,
+                    "cod_conto_pat2": row["cod_conto_pat2"].strip() or None,
+                    "cod_conto_pat3": row["cod_conto_pat3"].strip() or None,
+                    "banca_tipo_pat": row["banca_tipo_pat"].strip() or None,
+                    "ord": int(ord_val) if ord_val else None,
+                    "bu_filter": row["bu_filter"].strip() or None,
+                    "categoria_ce": row.get("categoria_ce", "").strip() or None,
+                    "tipo_costo": row.get("tipo_costo", "").strip() or None,
+                }
+            )
 
     logger.info(f"Voci parsate: {len(rows)}")
     return rows
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Load voci piano finanziario → d_voci_piano_finanziario")
+    parser = argparse.ArgumentParser(
+        description="Load voci piano finanziario → d_voci_piano_finanziario"
+    )
     parser.add_argument(
         "--file",
         default=str(DEFAULT_SOURCE),
@@ -121,14 +138,16 @@ def main():
     if args.dry_run:
         logger.info("DRY RUN — nessuna scrittura")
         for r in rows:
-            logger.info(f"  {r['voce_id']}: {r['voce_label']} | {r['fonte']} | {r['cod_conto_pattern']}")
+            logger.info(
+                f"  {r['voce_id']}: {r['voce_label']} | {r['fonte']} | {r['cod_conto_pattern']}"
+            )
         return
 
     if not HAS_BQ:
         logger.error("google-cloud-bigquery non installato")
         sys.exit(1)
 
-    bq_client = bigquery.Client(project="hotelops-suite")
+    bq_client = get_client()
 
     job_config = bigquery.LoadJobConfig(
         schema=BQ_SCHEMA,

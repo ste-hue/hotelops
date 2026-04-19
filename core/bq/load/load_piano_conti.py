@@ -37,25 +37,32 @@ from pathlib import Path
 
 try:
     import openpyxl
+
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
 
 try:
     from google.cloud import bigquery
+
     HAS_BQ = True
 except ImportError:
     HAS_BQ = False
 
-BQ_PROJECT = "hotelops-suite"
-BQ_TABLE = f"{BQ_PROJECT}.hotelops.d_piano_conti"
+from core.bq.client import get_client
+from core.config import PROJECT
+
+BQ_TABLE = f"{PROJECT}.hotelops.d_piano_conti"
 
 DEFAULT_FILE = Path(
     "/Users/stefanodellapietra/Desktop/WORK/artifacts/"
     "Costi Ricavi 2025-2026 Budget.xlsx"
 )
 
-SHEET_NAMES = ["piano dei conti nuovo", "piano dei conti nuovo "]  # handle trailing space
+SHEET_NAMES = [
+    "piano dei conti nuovo",
+    "piano dei conti nuovo ",
+]  # handle trailing space
 
 # Account prefix → business_unit_id (revenue accounts only)
 BU_RICAVI_MAP = {
@@ -167,14 +174,16 @@ def parse_piano_conti_nuovo(filepath: Path, logger: logging.Logger) -> list[dict
             skipped += 1
             continue
 
-        records.append({
-            "codice_conto": codice,
-            "descrizione": descrizione,
-            "tipo_conto": current_tipo or "",
-            "sezione": current_sezione or "",
-            "partitario": "",  # Not in this source
-            "business_unit_id": infer_business_unit(codice),
-        })
+        records.append(
+            {
+                "codice_conto": codice,
+                "descrizione": descrizione,
+                "tipo_conto": current_tipo or "",
+                "sezione": current_sezione or "",
+                "partitario": "",  # Not in this source
+                "business_unit_id": infer_business_unit(codice),
+            }
+        )
 
     logger.info(f"  Piano conti nuovo: {len(records)} conti parsati (skip {skipped})")
 
@@ -212,8 +221,14 @@ def quality_summary(rows: list[dict], logger: logging.Logger) -> None:
     logger.info("═" * 50)
 
 
-FIELDS = ["codice_conto", "descrizione", "tipo_conto", "sezione",
-           "partitario", "business_unit_id"]
+FIELDS = [
+    "codice_conto",
+    "descrizione",
+    "tipo_conto",
+    "sezione",
+    "partitario",
+    "business_unit_id",
+]
 
 
 def dump_csv(rows: list[dict], path: Path, logger: logging.Logger) -> None:
@@ -225,14 +240,18 @@ def dump_csv(rows: list[dict], path: Path, logger: logging.Logger) -> None:
     logger.info(f"  CSV: {path}  ({len(rows)} righe)")
 
 
-BQ_SCHEMA = [
-    bigquery.SchemaField("codice_conto", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("descrizione", "STRING"),
-    bigquery.SchemaField("tipo_conto", "STRING"),
-    bigquery.SchemaField("sezione", "STRING"),
-    bigquery.SchemaField("partitario", "STRING"),
-    bigquery.SchemaField("business_unit_id", "STRING"),
-] if HAS_BQ else []
+BQ_SCHEMA = (
+    [
+        bigquery.SchemaField("codice_conto", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("descrizione", "STRING"),
+        bigquery.SchemaField("tipo_conto", "STRING"),
+        bigquery.SchemaField("sezione", "STRING"),
+        bigquery.SchemaField("partitario", "STRING"),
+        bigquery.SchemaField("business_unit_id", "STRING"),
+    ]
+    if HAS_BQ
+    else []
+)
 
 
 def load_to_bq(rows: list[dict], logger: logging.Logger) -> None:
@@ -240,9 +259,10 @@ def load_to_bq(rows: list[dict], logger: logging.Logger) -> None:
         logger.warning("Nessuna riga da caricare")
         return
 
-    bq_client = bigquery.Client(project=BQ_PROJECT)
+    bq_client = get_client()
     job = bq_client.load_table_from_json(
-        rows, BQ_TABLE,
+        rows,
+        BQ_TABLE,
         job_config=bigquery.LoadJobConfig(
             schema=BQ_SCHEMA,
             write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
@@ -259,12 +279,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Piano dei conti nuovo 2026 → d_piano_conti"
     )
-    parser.add_argument("--file", default=str(DEFAULT_FILE),
-                        help="Path al file XLSX con foglio 'piano dei conti nuovo'")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Parse + CSV, no BQ write")
-    parser.add_argument("--output-dir", default="output",
-                        help="Directory per CSV output in dry-run")
+    parser.add_argument(
+        "--file",
+        default=str(DEFAULT_FILE),
+        help="Path al file XLSX con foglio 'piano dei conti nuovo'",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Parse + CSV, no BQ write"
+    )
+    parser.add_argument(
+        "--output-dir", default="output", help="Directory per CSV output in dry-run"
+    )
     args = parser.parse_args()
 
     logger = setup_logger()

@@ -28,8 +28,8 @@ def persist_apify_run(
     row must never block the review pipeline — costs are observability,
     not business data.
     """
-    from google.cloud import bigquery
-    from core.config import F_APIFY_RUNS, PROJECT
+    from core.bq.client import get_client
+    from core.config import F_APIFY_RUNS
     from core.schemas import ApifyRunRow, validate_batch
 
     row = {
@@ -44,7 +44,7 @@ def persist_apify_run(
     }
     try:
         validate_batch([row], ApifyRunRow, context="f_apify_runs persist")
-        client = bigquery.Client(project=PROJECT)
+        client = get_client()
         errors = client.insert_rows_json(F_APIFY_RUNS, [row])
         if errors:
             log.warning("f_apify_runs insert errors: %s", errors)
@@ -172,7 +172,9 @@ def scrape_platform(
 
         log.info(
             "Collected %d items for %s / %s (cost=$%.4f)",
-            len(items), b, piattaforma,
+            len(items),
+            b,
+            piattaforma,
             float(run_cost_usd) if run_cost_usd is not None else 0.0,
         )
 
@@ -184,7 +186,10 @@ def scrape_platform(
             log.warning(
                 "CAP VIOLATED: %s/%s returned %d items, expected <= %d. "
                 "Actor param likely wrong. Truncating to %d downstream.",
-                piattaforma, b, n_items_raw, MAX_REVIEWS_PER_PROPERTY,
+                piattaforma,
+                b,
+                n_items_raw,
+                MAX_REVIEWS_PER_PROPERTY,
                 MAX_REVIEWS_PER_PROPERTY,
             )
             items = items[:MAX_REVIEWS_PER_PROPERTY]

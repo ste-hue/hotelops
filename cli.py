@@ -11,6 +11,7 @@ Subcomandi:
     hotelops previsione  Inserisci/aggiorna previsione budget
     hotelops voci        Lista voci piano finanziario disponibili
     hotelops classifica  Classifica, smista e ingerisci file dati
+    hotelops accodamenti Accodamenti HotelCube → cassa giornaliera Excel
 
 Installazione:
     pip install -e .    (poi: hotelops pf)
@@ -56,6 +57,7 @@ _load_dotenv()
 # noqa: E402 — import after _load_dotenv() è intenzionale: i submodule possono
 # leggere env var al toplevel, quindi .env va caricato prima.
 from condges.cli_commands import (  # noqa: E402
+    cmd_accodamenti,
     cmd_chiudi,
     cmd_docs,
     cmd_health,
@@ -63,22 +65,16 @@ from condges.cli_commands import (  # noqa: E402
     cmd_pf,
     cmd_saldo,
 )
+from core.bq.client import get_client  # noqa: E402
+from core.config import PROJECT  # noqa: E402
+from core.datahub_sync import DATAHUB_ROOT  # noqa: E402
 from reviews.cli_commands import cmd_reviews  # noqa: E402
-
-BQ_PROJECT = "hotelops-suite"
 
 # ── Lazy BQ client ──────────────────────────────────────────────────────────
 
-_bq_client = None
-
 
 def bq():
-    global _bq_client
-    if _bq_client is None:
-        from google.cloud import bigquery
-
-        _bq_client = bigquery.Client(project=BQ_PROJECT)
-    return _bq_client
+    return get_client()
 
 
 def query(sql: str) -> list[dict]:
@@ -111,7 +107,7 @@ def cmd_bva(args):
     SELECT codice_conto_display, descrizione, categoria_ce, mese,
       ROUND(budget, 0) AS budget, ROUND(consuntivo, 0) AS consuntivo,
       ROUND(delta, 0) AS delta, status
-    FROM `hotelops-suite.hotelops.v_budget_vs_consuntivo`
+    FROM `{PROJECT}.hotelops.v_budget_vs_consuntivo`
     WHERE societa_id = '{societa}' AND anno = {anno} {mese_filter}
     ORDER BY ABS(delta) DESC
     LIMIT {args.limit or 30}
@@ -306,7 +302,10 @@ def cmd_ingest(args):
     # Special case: hotelops ingest coperti --gsheet
     if args.pipeline == "coperti" and args.gsheet:
         from ingest.flussi.ingest_coperti import (
-            fetch_gsheet, parse_xlsx_file, load_to_bq, quality_summary,
+            fetch_gsheet,
+            parse_xlsx_file,
+            load_to_bq,
+            quality_summary,
             GSHEET_ID_DEFAULT,
         )
         from datetime import datetime, timezone
@@ -340,6 +339,7 @@ def cmd_ingest(args):
     sys.argv = argv
     try:
         from ingest.orchestrate import main as orchestrate_main
+
         orchestrate_main()
     except SystemExit as e:
         if e.code and e.code != 0:
@@ -386,8 +386,11 @@ def cmd_reconcile(args):
 
     try:
         metrics = run_reconciliation(
-            args.datahub, args.societa, args.conto,
-            args.date_from, args.date_to,
+            args.datahub,
+            args.societa,
+            args.conto,
+            args.date_from,
+            args.date_to,
             min_score=args.min_score,
         )
     except Exception as e:
@@ -499,37 +502,69 @@ def main():
 
     # ingest
     p_ingest = sub.add_parser("ingest", help="Pipeline di ingestione dati")
-    p_ingest.add_argument("--only", choices=["banca", "flussi", "dimensioni"],
-                          help="Solo questo gruppo di pipeline")
-    p_ingest.add_argument("--pipeline", type=str,
-                          help="Solo questo pipeline specifico")
-    p_ingest.add_argument("--dry-run", action="store_true",
-                          help="Parse senza scrivere su BQ")
-    p_ingest.add_argument("--no-sync", action="store_true",
-                          help="Salta sync da Google Drive")
-    p_ingest.add_argument("--gsheet", nargs="?", const=True, default=None,
-                          help="Scarica da Google Sheet (per coperti)")
-    p_ingest.add_argument("--replace", action="store_true",
-                          help="DELETE-INSERT (sostituisce dati esistenti)")
+    p_ingest.add_argument(
+        "--only",
+        choices=["banca", "flussi", "dimensioni"],
+        help="Solo questo gruppo di pipeline",
+    )
+    p_ingest.add_argument("--pipeline", type=str, help="Solo questo pipeline specifico")
+    p_ingest.add_argument(
+        "--dry-run", action="store_true", help="Parse senza scrivere su BQ"
+    )
+    p_ingest.add_argument(
+        "--no-sync", action="store_true", help="Salta sync da Google Drive"
+    )
+    p_ingest.add_argument(
+        "--gsheet",
+        nargs="?",
+        const=True,
+        default=None,
+        help="Scarica da Google Sheet (per coperti)",
+    )
+    p_ingest.add_argument(
+        "--replace",
+        action="store_true",
+        help="DELETE-INSERT (sostituisce dati esistenti)",
+    )
     p_ingest.add_argument("--societa", choices=["ORTI", "INTUR"])
 
     # app
     p_app = sub.add_parser("app", help="Lancia app Streamlit")
-    p_app.add_argument("app_name", nargs="?", default=None,
-                       help="App da lanciare: pf (default), scadenzario")
+    p_app.add_argument(
+        "app_name",
+        nargs="?",
+        default=None,
+        help="App da lanciare: pf (default), scadenzario",
+    )
 
     # reviews
     p_reviews = sub.add_parser("reviews", help="Reviews ospiti: scrape, alert, stats")
-    p_reviews.add_argument("--scrape", action="store_true", help="Trigger scrape manuale")
-    p_reviews.add_argument("--only", type=str, help="Solo questa piattaforma (booking, tripadvisor, google, expedia)")
-    p_reviews.add_argument("--alert", action="store_true", help="Mostra review con alert")
+    p_reviews.add_argument(
+        "--scrape", action="store_true", help="Trigger scrape manuale"
+    )
+    p_reviews.add_argument(
+        "--only",
+        type=str,
+        help="Solo questa piattaforma (booking, tripadvisor, google, expedia)",
+    )
+    p_reviews.add_argument(
+        "--alert", action="store_true", help="Mostra review con alert"
+    )
     p_reviews.add_argument("--stats", action="store_true", help="Statistiche review")
     p_reviews.add_argument("--mese", type=int, help="Mese per stats")
     p_reviews.add_argument("--anno", type=int, default=2026)
-    p_reviews.add_argument("--report", action="store_true", help="Invia report settimanale")
-    p_reviews.add_argument("--start", type=str, help="Override start date report (YYYY-MM-DD)")
-    p_reviews.add_argument("--end", type=str, help="Override end date report (YYYY-MM-DD)")
-    p_reviews.add_argument("--dry-run", action="store_true", help="Preview senza azioni")
+    p_reviews.add_argument(
+        "--report", action="store_true", help="Invia report settimanale"
+    )
+    p_reviews.add_argument(
+        "--start", type=str, help="Override start date report (YYYY-MM-DD)"
+    )
+    p_reviews.add_argument(
+        "--end", type=str, help="Override end date report (YYYY-MM-DD)"
+    )
+    p_reviews.add_argument(
+        "--dry-run", action="store_true", help="Preview senza azioni"
+    )
 
     # docs
     p_docs = sub.add_parser("docs", help="Gestione doc tecniche del repo")
@@ -541,21 +576,42 @@ def main():
         help="check: verifica freshness doc vs codice (default)",
     )
 
+    # accodamenti
+    p_acc = sub.add_parser(
+        "accodamenti",
+        aliases=["acc"],
+        help="Accodamenti HotelCube → cassa giornaliera Excel",
+    )
+    p_acc.add_argument(
+        "--input",
+        help="Cartella TXT accodamenti (default: ~/.cache/hotelops/accodamenti/ORTI)",
+    )
+    p_acc.add_argument(
+        "--output",
+        help="Path Excel output (default: ~/Desktop/Riconciliazione_accodamenti.xlsx)",
+    )
+    p_acc.add_argument(
+        "--no-sync", action="store_true", help="Salta rclone sync da Drive"
+    )
+
     # reconcile
     p_rec = sub.add_parser("reconcile", help="Riconciliazione banca vs libro")
     p_rec.add_argument("--societa", required=True, choices=["ORTI", "INTUR"])
-    p_rec.add_argument("--conto", required=True,
-                       help="Conto banca (MPS, SELLA, INTESA, BCP, MPS_KROSS)")
-    p_rec.add_argument("--from", dest="date_from", required=True,
-                       help="Data inizio (YYYY-MM-DD)")
-    p_rec.add_argument("--to", dest="date_to", required=True,
-                       help="Data fine (YYYY-MM-DD)")
-    p_rec.add_argument("--datahub", default=str(Path(
-        "/Users/stefanodellapietra/Library/CloudStorage/"
-        "GoogleDrive-stefano@panoramagroup.it/My Drive/hotelops_datahub"
-    )), help="Path datahub root")
-    p_rec.add_argument("--min-score", type=float, default=0.0,
-                       help="Score minimo per match (0.0–1.0)")
+    p_rec.add_argument(
+        "--conto",
+        required=True,
+        help="Conto banca (MPS, SELLA, INTESA, BCP, MPS_KROSS)",
+    )
+    p_rec.add_argument(
+        "--from", dest="date_from", required=True, help="Data inizio (YYYY-MM-DD)"
+    )
+    p_rec.add_argument(
+        "--to", dest="date_to", required=True, help="Data fine (YYYY-MM-DD)"
+    )
+    p_rec.add_argument("--datahub", default=str(DATAHUB_ROOT), help="Path datahub root")
+    p_rec.add_argument(
+        "--min-score", type=float, default=0.0, help="Score minimo per match (0.0–1.0)"
+    )
 
     args = parser.parse_args()
 
@@ -579,6 +635,8 @@ def main():
         "app": cmd_app,
         "docs": cmd_docs,
         "reconcile": cmd_reconcile,
+        "accodamenti": cmd_accodamenti,
+        "acc": cmd_accodamenti,
         "reviews": cmd_reviews,
         "help": cmd_help,
     }

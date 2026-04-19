@@ -27,10 +27,11 @@ from pathlib import Path
 
 from google.cloud import bigquery
 
+from core.bq.client import get_client
+from core.config import PROJECT
 from core.schemas import PartitaApertaFornitoreRow, validate_batch
 
-BQ_TABLE = "hotelops-suite.hotelops.f_partite_aperte_fornitori"
-BQ_PROJECT = "hotelops-suite"
+BQ_TABLE = f"{PROJECT}.hotelops.f_partite_aperte_fornitori"
 
 # Payment code mapping (col 21 → col 22 in Esolver)
 PAYMENT_CODES = {
@@ -48,7 +49,9 @@ INTERCOMPANY_KEYWORDS = ["PANORAMA COMPANY", "INTUR", "ORTI S.R.L."]
 logger = logging.getLogger("partite_aperte")
 
 
-def parse_situazione_partite(filepath: Path, societa_override: str | None = None) -> list[dict]:
+def parse_situazione_partite(
+    filepath: Path, societa_override: str | None = None
+) -> list[dict]:
     """Parse Esolver 'Situazione partite sintetica per fornitori' Excel.
 
     Column mapping (from real Esolver export):
@@ -81,7 +84,9 @@ def parse_situazione_partite(filepath: Path, societa_override: str | None = None
     elif "ORTI" in societa_raw.upper():
         societa_id = "ORTI"
     else:
-        raise ValueError(f"Cannot determine società from '{societa_raw}'. Use --societa.")
+        raise ValueError(
+            f"Cannot determine società from '{societa_raw}'. Use --societa."
+        )
 
     # Determine snapshot date
     if isinstance(data_snapshot_raw, datetime):
@@ -131,32 +136,40 @@ def parse_situazione_partite(filepath: Path, societa_override: str | None = None
 
         # Payment info
         cod_pag = str(ws.cell(row=row_idx, column=21).value or "")
-        metodo_pag = ws.cell(row=row_idx, column=22).value or PAYMENT_CODES.get(cod_pag, "Sconosciuto")
+        metodo_pag = ws.cell(row=row_idx, column=22).value or PAYMENT_CODES.get(
+            cod_pag, "Sconosciuto"
+        )
 
         # Amounts
         importo_residuo = float(importo_raw)
         importo_abs_raw = ws.cell(row=row_idx, column=25).value
-        importo_abs = float(importo_abs_raw) if importo_abs_raw else abs(importo_residuo)
+        importo_abs = (
+            float(importo_abs_raw) if importo_abs_raw else abs(importo_residuo)
+        )
 
         # Intercompany flag
-        is_intercompany = any(kw in nome_fornitore.upper() for kw in INTERCOMPANY_KEYWORDS)
+        is_intercompany = any(
+            kw in nome_fornitore.upper() for kw in INTERCOMPANY_KEYWORDS
+        )
 
-        rows.append({
-            "societa_id": societa_id,
-            "data_snapshot": str(data_snapshot),
-            "codice_fornitore": int(codice_fornitore),
-            "nome_fornitore": nome_fornitore,
-            "tipo_documento": tipo_doc,
-            "numero_documento": num_doc,
-            "data_documento": str(data_doc) if data_doc else str(data_snapshot),
-            "data_scadenza": str(data_scadenza),
-            "importo_residuo": importo_residuo,
-            "importo_abs": importo_abs,
-            "codice_pagamento": cod_pag,
-            "metodo_pagamento": metodo_pag,
-            "is_intercompany": is_intercompany,
-            "file_sorgente": filepath.name,
-        })
+        rows.append(
+            {
+                "societa_id": societa_id,
+                "data_snapshot": str(data_snapshot),
+                "codice_fornitore": int(codice_fornitore),
+                "nome_fornitore": nome_fornitore,
+                "tipo_documento": tipo_doc,
+                "numero_documento": num_doc,
+                "data_documento": str(data_doc) if data_doc else str(data_snapshot),
+                "data_scadenza": str(data_scadenza),
+                "importo_residuo": importo_residuo,
+                "importo_abs": importo_abs,
+                "codice_pagamento": cod_pag,
+                "metodo_pagamento": metodo_pag,
+                "is_intercompany": is_intercompany,
+                "file_sorgente": filepath.name,
+            }
+        )
 
     logger.info(f"  Parsed: {len(rows)} partite, skipped {skipped} rows")
     return rows
@@ -232,7 +245,9 @@ def load_to_bq(client: bigquery.Client, rows: list[dict], dry_run: bool = False)
     data_snapshot = rows[0]["data_snapshot"]
 
     if dry_run:
-        logger.info(f"DRY RUN: would load {len(rows)} rows for {societa_id} @ {data_snapshot}")
+        logger.info(
+            f"DRY RUN: would load {len(rows)} rows for {societa_id} @ {data_snapshot}"
+        )
         _print_summary(rows)
         return
 
@@ -253,7 +268,9 @@ def load_to_bq(client: bigquery.Client, rows: list[dict], dry_run: bool = False)
         logger.error(f"  BQ insert errors: {errors[:3]}")
         raise RuntimeError(f"BQ insert failed: {errors[:3]}")
 
-    logger.info(f"  ✓ Loaded {len(rows)} partite aperte for {societa_id} @ {data_snapshot}")
+    logger.info(
+        f"  ✓ Loaded {len(rows)} partite aperte for {societa_id} @ {data_snapshot}"
+    )
     _print_summary(rows)
 
 
@@ -275,7 +292,9 @@ def _print_summary(rows: list[dict]):
         if r.get("is_intercompany"):
             intercompany_total += importo
 
-    logger.info(f"\n  SUMMARY: {len(rows)} partite, totale €{total:,.0f} (di cui intercompany €{intercompany_total:,.0f})")
+    logger.info(
+        f"\n  SUMMARY: {len(rows)} partite, totale €{total:,.0f} (di cui intercompany €{intercompany_total:,.0f})"
+    )
     logger.info("  Per mese di scadenza:")
     for k in sorted(by_month.keys()):
         logger.info(f"    {k}: €{by_month[k]:>12,.0f}")
@@ -287,10 +306,13 @@ def main():
     )
     parser.add_argument("--file", required=True, help="Path to Esolver Excel export")
     parser.add_argument("--societa", help="Override società (ORTI/INTUR)")
-    parser.add_argument("--dry-run", action="store_true", help="Parse only, no BQ write")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Parse only, no BQ write"
+    )
     args = parser.parse_args()
 
     from ingest._logging import setup_logging
+
     setup_logging("partite_aperte", Path(__file__).parent / "logs")
 
     filepath = Path(args.file)
@@ -313,7 +335,7 @@ def main():
     if args.dry_run:
         load_to_bq(None, rows, dry_run=True)
     else:
-        client = bigquery.Client(project=BQ_PROJECT)
+        client = get_client()
         load_to_bq(client, rows)
 
 

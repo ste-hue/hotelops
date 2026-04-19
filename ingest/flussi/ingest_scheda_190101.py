@@ -33,17 +33,28 @@ from pathlib import Path
 import openpyxl
 from google.cloud import bigquery
 
-from core.config import F_MOVIMENTI_CONTABILI, PROJECT
+from core.bq.client import get_client
+from core.config import F_MOVIMENTI_CONTABILI
 from core.schemas import MovimentoContabileRow, make_hash, validate_batch
 
 BQ_TABLE = F_MOVIMENTI_CONTABILI
 COD_CONTO_BANCA = "190101"
 
 EXPECTED_HEADER = [
-    "Data registrazione", "Rif. registrazione", "Causale contabile",
-    "Dare in UdC", "Avere in UdC", "Saldo in UdC", "Documento",
-    "Partitario", "Descrizione partitario", "Val.",
-    "Dare in valuta", "Avere in valuta", "Riferimenti IVA", "Centro imputazione",
+    "Data registrazione",
+    "Rif. registrazione",
+    "Causale contabile",
+    "Dare in UdC",
+    "Avere in UdC",
+    "Saldo in UdC",
+    "Documento",
+    "Partitario",
+    "Descrizione partitario",
+    "Val.",
+    "Dare in valuta",
+    "Avere in valuta",
+    "Riferimenti IVA",
+    "Centro imputazione",
 ]
 
 PNC_RE = re.compile(r"PNC\s*n\s*(\d+)", re.IGNORECASE)
@@ -91,41 +102,53 @@ def parse_file(path: Path, societa: str, logger: logging.Logger) -> list[dict]:
 
         if partitario_raw is None:
             continue
-        partitario = str(int(partitario_raw)) if isinstance(partitario_raw, (int, float)) else str(partitario_raw).strip()
+        partitario = (
+            str(int(partitario_raw))
+            if isinstance(partitario_raw, (int, float))
+            else str(partitario_raw).strip()
+        )
 
         pnc_match = PNC_RE.search(rif_reg)
         pnc_num = int(pnc_match.group(1)) if pnc_match else None
 
         data_reg = data_raw.date().isoformat()
         hash_riga = make_hash(
-            "SCHEDA_190101", societa, data_reg, rif_reg, partitario,
-            f"{dare:.2f}", f"{avere:.2f}", f"{saldo:.2f}",
+            "SCHEDA_190101",
+            societa,
+            data_reg,
+            rif_reg,
+            partitario,
+            f"{dare:.2f}",
+            f"{avere:.2f}",
+            f"{saldo:.2f}",
         )
 
-        rows.append({
-            "hash_riga": hash_riga,
-            "societa_id": societa,
-            "id_documento": pnc_num,
-            "num_progr_riga": None,
-            "gruppo_doc": "SCHEDA_190101",
-            "anno": data_raw.year,
-            "mese": data_raw.month,
-            "data_registrazione": data_reg,
-            "sigla_doc": None,
-            "rif_registrazione": rif_reg,
-            "num_doc_originale": str(documento).strip() if documento else None,
-            "data_originale": None,
-            "tipo_documento": None,
-            "cod_conto": COD_CONTO_BANCA,
-            "cod_partitario": partitario,
-            "rag_sociale": descr_part or None,
-            "causale_contabile": causale or None,
-            "imp_dare": dare,
-            "imp_avere": avere,
-            "cod_divisione": None,
-            "file_sorgente": path.name,
-            "data_ingresso": today,
-        })
+        rows.append(
+            {
+                "hash_riga": hash_riga,
+                "societa_id": societa,
+                "id_documento": pnc_num,
+                "num_progr_riga": None,
+                "gruppo_doc": "SCHEDA_190101",
+                "anno": data_raw.year,
+                "mese": data_raw.month,
+                "data_registrazione": data_reg,
+                "sigla_doc": None,
+                "rif_registrazione": rif_reg,
+                "num_doc_originale": str(documento).strip() if documento else None,
+                "data_originale": None,
+                "tipo_documento": None,
+                "cod_conto": COD_CONTO_BANCA,
+                "cod_partitario": partitario,
+                "rag_sociale": descr_part or None,
+                "causale_contabile": causale or None,
+                "imp_dare": dare,
+                "imp_avere": avere,
+                "cod_divisione": None,
+                "file_sorgente": path.name,
+                "data_ingresso": today,
+            }
+        )
 
     wb.close()
     logger.info(f"  {path.name}: {len(rows)} righe parsed")
@@ -138,9 +161,14 @@ def load_existing_hashes(bq_client, societa: str, logger: logging.Logger) -> set
     WHERE societa_id = @soc AND cod_conto = '{COD_CONTO_BANCA}'
       AND gruppo_doc = 'SCHEDA_190101'
     """
-    job = bq_client.query(q, job_config=bigquery.QueryJobConfig(query_parameters=[
-        bigquery.ScalarQueryParameter("soc", "STRING", societa),
-    ]))
+    job = bq_client.query(
+        q,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("soc", "STRING", societa),
+            ]
+        ),
+    )
     hashes = {r.hash_riga for r in job.result()}
     logger.info(f"  Hashes esistenti BQ ({societa}, 190101, SCHEDA): {len(hashes)}")
     return hashes
@@ -162,8 +190,12 @@ def write_to_bq(rows: list[dict], bq_client, logger: logging.Logger):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Ingest Esolver scheda contabile 190101 → f_movimenti_contabili")
-    ap.add_argument("--file", action="append", required=True, help="XLSX file (repeatable)")
+    ap = argparse.ArgumentParser(
+        description="Ingest Esolver scheda contabile 190101 → f_movimenti_contabili"
+    )
+    ap.add_argument(
+        "--file", action="append", required=True, help="XLSX file (repeatable)"
+    )
     ap.add_argument("--societa", required=True, choices=["ORTI", "INTUR"])
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
@@ -192,7 +224,7 @@ def main():
         logger.info("DRY-RUN: stop here")
         return
 
-    bq = bigquery.Client(project=PROJECT)
+    bq = get_client()
     existing = load_existing_hashes(bq, args.societa, logger)
     new_rows = [r for r in uniq if r["hash_riga"] not in existing]
     logger.info(f"Nuove: {len(new_rows)}, già presenti: {len(uniq) - len(new_rows)}")

@@ -14,9 +14,9 @@ PIATTAFORME = ["BOOKING", "TRIPADVISOR", "GOOGLE", "EXPEDIA", "TRIP"]
 
 @st.cache_resource
 def get_bq():
-    from google.cloud import bigquery
+    from core.bq.client import get_client
 
-    return bigquery.Client(project=cfg.PROJECT)
+    return get_client()
 
 
 @st.cache_data(ttl=300, show_spinner=False)

@@ -29,15 +29,20 @@ from pathlib import Path
 
 try:
     import openpyxl
+
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
 
 try:
     from google.cloud import bigquery
+
     HAS_BQ = True
 except ImportError:
     HAS_BQ = False
+
+from core.bq.client import get_client
+from core.config import PROJECT
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -47,47 +52,46 @@ DEFAULT_INCIDENZA = DATAHUB / "Incidenza_costi_personale.xlsx"
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
 
-BQ_PROJECT     = "hotelops-suite"
-BQ_TABLE       = f"{BQ_PROJECT}.hotelops.f_budget_mensile"
-ANNO           = 2026
-FONTI_GESTITE  = ("MAPPATURA", "INCIDENZA")
+BQ_TABLE = f"{PROJECT}.hotelops.f_budget_mensile"
+ANNO = 2026
+FONTI_GESTITE = ("MAPPATURA", "INCIDENZA")
 
 # ── Lookup: prefisso conto → (categoria_ce, tipo_costo) ──────────────────────
 
 CONTO_TO_CAT: dict[str, tuple[str, str]] = {
-    "47": ("Ricavi",                "IP"),
+    "47": ("Ricavi", "IP"),
     "53": ("Ricavi Extra Gestione", "IP"),
-    "55": ("Acquisti",              "V"),
-    "57": ("Costi Produttivi",      "F"),
-    "59": ("Costi Produttivi",      "F"),
-    "61": ("Costi Amministrativi",  "F"),
-    "63": ("Costi Commerciali",     "F"),
-    "64": ("Costi Produttivi",      "F"),
-    "65": ("Costi Produttivi",      "F"),
-    "67": ("Costo del Personale",   "P"),
-    "71": ("Oneri Tributari",       "F"),
-    "75": ("Oneri Finanziari",      "X"),
+    "55": ("Acquisti", "V"),
+    "57": ("Costi Produttivi", "F"),
+    "59": ("Costi Produttivi", "F"),
+    "61": ("Costi Amministrativi", "F"),
+    "63": ("Costi Commerciali", "F"),
+    "64": ("Costi Produttivi", "F"),
+    "65": ("Costi Produttivi", "F"),
+    "67": ("Costo del Personale", "P"),
+    "71": ("Oneri Tributari", "F"),
+    "75": ("Oneri Finanziari", "X"),
 }
 
 # BU normalize
 BU_NORMALIZE: dict[str, str] = {
-    "HOTEL":        "HOTEL",
-    "RESIDENCE":    "RESIDENCE",
+    "HOTEL": "HOTEL",
+    "RESIDENCE": "RESIDENCE",
     "CASA VACANZA": "CVM",
-    "SPIAGGIA":     "LIDO",
-    "PM":           "HQ",
-    "HQ":           "HQ",
+    "SPIAGGIA": "LIDO",
+    "PM": "HQ",
+    "HQ": "HQ",
 }
 
 # Divisione personale → BU
 DIVISION_TO_BU: dict[str, str] = {
-    "MANAGEMENT":   "HQ",
-    "AMM/ECO":      "HQ",
-    "ROOM DIVISION":"HOTEL",
+    "MANAGEMENT": "HQ",
+    "AMM/ECO": "HQ",
+    "ROOM DIVISION": "HOTEL",
     "MANUTENZIONE": "HOTEL",
-    "F&B":          "HOTEL",
-    "SPIAGGIA":     "LIDO",
-    "PROPRIETA'":   "HOTEL",
+    "F&B": "HOTEL",
+    "SPIAGGIA": "LIDO",
+    "PROPRIETA'": "HOTEL",
 }
 
 CONTO_PERSONALE = "67.01.01"
@@ -96,16 +100,19 @@ CONTO_PERSONALE = "67.01.01"
 # ── Seasonality ───────────────────────────────────────────────────────────────
 
 
-def fetch_seasonality_coefficients(societa_id: str, business_unit_id: str = "HQ") -> dict[int, float]:
+def fetch_seasonality_coefficients(
+    societa_id: str, business_unit_id: str = "HQ"
+) -> dict[int, float]:
     """Fetch monthly coefficients from d_coefficienti_stagionalita.
     Returns {mese: coefficiente}. Falls back to flat 1.0 if table missing.
     """
     try:
         from google.cloud import bigquery as _bq
-        client = _bq.Client(project="hotelops-suite")
-        q = """
+
+        client = get_client()
+        q = f"""
         SELECT mese, coefficiente
-        FROM `hotelops-suite.hotelops.d_coefficienti_stagionalita`
+        FROM `{PROJECT}.hotelops.d_coefficienti_stagionalita`
         WHERE societa_id = @societa AND business_unit_id = @bu
         """
         job_config = _bq.QueryJobConfig(
@@ -114,12 +121,16 @@ def fetch_seasonality_coefficients(societa_id: str, business_unit_id: str = "HQ"
                 _bq.ScalarQueryParameter("bu", "STRING", business_unit_id),
             ]
         )
-        return {row.mese: row.coefficiente for row in client.query(q, job_config=job_config).result()}
+        return {
+            row.mese: row.coefficiente
+            for row in client.query(q, job_config=job_config).result()
+        }
     except Exception:
         return {m: 1.0 for m in range(1, 13)}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _v(x) -> float:
     """Coerce any cell value to float, returning 0.0 for None/NaN."""
@@ -127,6 +138,7 @@ def _v(x) -> float:
         return 0.0
     if isinstance(x, (int, float)):
         import math
+
         return 0.0 if math.isnan(float(x)) else float(x)
     return 0.0
 
@@ -151,6 +163,7 @@ def setup_logger() -> logging.Logger:
 
 
 # ── 1. Costi fissi da MAPPATURA ───────────────────────────────────────────────
+
 
 def parse_budget_fissi(filepath: Path, logger: logging.Logger) -> list[dict]:
     """
@@ -197,7 +210,7 @@ def parse_budget_fissi(filepath: Path, logger: logging.Logger) -> list[dict]:
             if desc.lower().startswith(("subtotale", "totale")):
                 continue
 
-            codice       = row[0].strip()
+            codice = row[0].strip()
             categoria_ce, tipo_costo = _cat(codice)
 
             # Sum BU columns → 2026 annual budget per BU
@@ -223,21 +236,27 @@ def parse_budget_fissi(filepath: Path, logger: logging.Logger) -> list[dict]:
             for bu_id, annual in bu_amounts.items():
                 if annual == 0:
                     continue
-                seasonality = fetch_seasonality_coefficients(societa, bu_id if bu_id else "HQ")
+                seasonality = fetch_seasonality_coefficients(
+                    societa, bu_id if bu_id else "HQ"
+                )
                 for mese in range(1, 13):
-                    records.append({
-                        "societa_id":       societa,
-                        "anno":             ANNO,
-                        "mese":             mese,
-                        "codice_conto":     codice,
-                        "descrizione":      desc,
-                        "tipo_costo":       tipo_costo,
-                        "categoria_ce":     categoria_ce,
-                        "business_unit_id": bu_id,
-                        "importo":          round(annual / 12 * seasonality.get(mese, 1.0), 4),
-                        "fonte":            "MAPPATURA",
-                        "data_caricamento": now.isoformat(),
-                    })
+                    records.append(
+                        {
+                            "societa_id": societa,
+                            "anno": ANNO,
+                            "mese": mese,
+                            "codice_conto": codice,
+                            "descrizione": desc,
+                            "tipo_costo": tipo_costo,
+                            "categoria_ce": categoria_ce,
+                            "business_unit_id": bu_id,
+                            "importo": round(
+                                annual / 12 * seasonality.get(mese, 1.0), 4
+                            ),
+                            "fonte": "MAPPATURA",
+                            "data_caricamento": now.isoformat(),
+                        }
+                    )
             conti_loaded += 1
 
         logger.info(f"  {societa} ({sheet_name}): {conti_loaded} conti")
@@ -248,6 +267,7 @@ def parse_budget_fissi(filepath: Path, logger: logging.Logger) -> list[dict]:
 
 
 # ── 2. Personale da Incidenza ─────────────────────────────────────────────────
+
 
 def parse_personale_incidenza(filepath: Path, logger: logging.Logger) -> list[dict]:
     """
@@ -277,10 +297,10 @@ def parse_personale_incidenza(filepath: Path, logger: logging.Logger) -> list[di
     for row in ws.iter_rows(values_only=True):
         if not row or row[0] not in ("ORTI", "INTUR"):
             continue
-        soc       = row[0]
-        div       = str(row[1]).strip() if row[1] else "UNKNOWN"
-        sal       = _v(row[19])   # Costo Mensile
-        costo_tot = _v(row[20])   # Costo Totale (fallback quando presenze=None)
+        soc = row[0]
+        div = str(row[1]).strip() if row[1] else "UNKNOWN"
+        sal = _v(row[19])  # Costo Mensile
+        costo_tot = _v(row[20])  # Costo Totale (fallback quando presenze=None)
         if sal == 0 and costo_tot == 0:
             continue
         emp_count += 1
@@ -314,19 +334,21 @@ def parse_personale_incidenza(filepath: Path, logger: logging.Logger) -> list[di
             continue
         div_key = div.upper().replace("\u2019", "'").replace("\u2018", "'")
         bu = DIVISION_TO_BU.get(div_key, "HQ")
-        records.append({
-            "societa_id":       soc,
-            "anno":             ANNO,
-            "mese":             mese,
-            "codice_conto":     CONTO_PERSONALE,
-            "descrizione":      f"Personale {div}",
-            "tipo_costo":       "P",
-            "categoria_ce":     "Costo del Personale",
-            "business_unit_id": bu,
-            "importo":          round(importo, 4),
-            "fonte":            "INCIDENZA",
-            "data_caricamento": now.isoformat(),
-        })
+        records.append(
+            {
+                "societa_id": soc,
+                "anno": ANNO,
+                "mese": mese,
+                "codice_conto": CONTO_PERSONALE,
+                "descrizione": f"Personale {div}",
+                "tipo_costo": "P",
+                "categoria_ce": "Costo del Personale",
+                "business_unit_id": bu,
+                "importo": round(importo, 4),
+                "fonte": "INCIDENZA",
+                "data_caricamento": now.isoformat(),
+            }
+        )
         annual_by_soc[soc] += importo
 
     for soc, total in sorted(annual_by_soc.items()):
@@ -338,6 +360,7 @@ def parse_personale_incidenza(filepath: Path, logger: logging.Logger) -> list[di
 
 
 # ── 3. Quality summary ────────────────────────────────────────────────────────
+
 
 def quality_summary(rows: list[dict], logger: logging.Logger) -> None:
     by_soc: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
@@ -351,29 +374,38 @@ def quality_summary(rows: list[dict], logger: logging.Logger) -> None:
         d = by_soc[soc]
         total = sum(d.values())
         logger.info(f"  {soc}")
-        for t, label in [("F","Costi fissi"), ("V","Acquisti"), ("P","Personale"), ("X","Oneri fin.")]:
+        for t, label in [
+            ("F", "Costi fissi"),
+            ("V", "Acquisti"),
+            ("P", "Personale"),
+            ("X", "Oneri fin."),
+        ]:
             if d.get(t, 0):
                 logger.info(f"    {label:<14} ({t}) : {d[t]:>12,.0f} €/anno")
-        logger.info(f"    {'─'*40}")
+        logger.info(f"    {'─' * 40}")
         logger.info(f"    Totale costi       : {total:>12,.0f} €/anno")
     logger.info("═" * 52)
 
 
 # ── 4. BigQuery ───────────────────────────────────────────────────────────────
 
-BQ_SCHEMA = [
-    bigquery.SchemaField("societa_id",       "STRING",    mode="REQUIRED"),
-    bigquery.SchemaField("anno",             "INTEGER",   mode="REQUIRED"),
-    bigquery.SchemaField("mese",             "INTEGER",   mode="REQUIRED"),
-    bigquery.SchemaField("codice_conto",     "STRING",    mode="REQUIRED"),
-    bigquery.SchemaField("descrizione",      "STRING"),
-    bigquery.SchemaField("tipo_costo",       "STRING"),
-    bigquery.SchemaField("categoria_ce",     "STRING"),
-    bigquery.SchemaField("business_unit_id", "STRING"),
-    bigquery.SchemaField("importo",          "FLOAT64"),
-    bigquery.SchemaField("fonte",            "STRING"),
-    bigquery.SchemaField("data_caricamento", "TIMESTAMP"),
-] if HAS_BQ else []
+BQ_SCHEMA = (
+    [
+        bigquery.SchemaField("societa_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("anno", "INTEGER", mode="REQUIRED"),
+        bigquery.SchemaField("mese", "INTEGER", mode="REQUIRED"),
+        bigquery.SchemaField("codice_conto", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("descrizione", "STRING"),
+        bigquery.SchemaField("tipo_costo", "STRING"),
+        bigquery.SchemaField("categoria_ce", "STRING"),
+        bigquery.SchemaField("business_unit_id", "STRING"),
+        bigquery.SchemaField("importo", "FLOAT64"),
+        bigquery.SchemaField("fonte", "STRING"),
+        bigquery.SchemaField("data_caricamento", "TIMESTAMP"),
+    ]
+    if HAS_BQ
+    else []
+)
 
 
 def load_to_bq(rows: list[dict], bq_client, logger: logging.Logger) -> None:
@@ -389,7 +421,8 @@ def load_to_bq(rows: list[dict], bq_client, logger: logging.Logger) -> None:
     logger.info(f"  Righe precedenti anno={ANNO} cancellate")
 
     job = bq_client.load_table_from_json(
-        rows, BQ_TABLE,
+        rows,
+        BQ_TABLE,
         job_config=bigquery.LoadJobConfig(
             schema=BQ_SCHEMA,
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
@@ -405,8 +438,16 @@ def load_to_bq(rows: list[dict], bq_client, logger: logging.Logger) -> None:
 # ── 5. CSV dump ───────────────────────────────────────────────────────────────
 
 FIELDS = [
-    "societa_id", "anno", "mese", "codice_conto", "descrizione",
-    "tipo_costo", "categoria_ce", "business_unit_id", "importo", "fonte",
+    "societa_id",
+    "anno",
+    "mese",
+    "codice_conto",
+    "descrizione",
+    "tipo_costo",
+    "categoria_ce",
+    "business_unit_id",
+    "importo",
+    "fonte",
 ]
 
 
@@ -420,6 +461,7 @@ def dump_csv(rows: list[dict], path: Path, logger: logging.Logger) -> None:
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -449,8 +491,8 @@ def main() -> None:
     logger.info(f"Anno budget       : {ANNO}")
 
     fissi_rows = parse_budget_fissi(mappatura_path, logger)
-    pers_rows  = parse_personale_incidenza(incidenza_path, logger)
-    all_rows   = fissi_rows + pers_rows
+    pers_rows = parse_personale_incidenza(incidenza_path, logger)
+    all_rows = fissi_rows + pers_rows
 
     quality_summary(all_rows, logger)
 
@@ -463,7 +505,7 @@ def main() -> None:
         logger.error("google-cloud-bigquery non installato")
         sys.exit(1)
 
-    bq_client = bigquery.Client(project=BQ_PROJECT)
+    bq_client = get_client()
     load_to_bq(all_rows, bq_client, logger)
     logger.info("✓ DONE")
 

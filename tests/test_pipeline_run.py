@@ -8,6 +8,18 @@ buffer made that unreliable). All BQ interactions are best-effort.
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _reset_bq_client_singleton():
+    """Clear the cached BQ client so each test's patch is honoured."""
+    import core.bq.client as bq_client_mod
+
+    bq_client_mod._client = None
+    yield
+    bq_client_mod._client = None
+
 
 class TestPipelineRun:
     def test_generates_uuid_on_enter(self):

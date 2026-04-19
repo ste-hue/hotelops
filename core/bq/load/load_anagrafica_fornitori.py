@@ -20,26 +20,32 @@ from pathlib import Path
 
 import pandas as pd
 
+from core.bq.client import get_client
 from core.config import D_ANAGRAFICA_FORNITORI
 from core.schemas import AnagraficaFornitoreRow, validate_batch
 
 try:
     from google.cloud import bigquery
+
     HAS_BQ = True
 except ImportError:
     HAS_BQ = False
 
-BQ_SCHEMA = [
-    bigquery.SchemaField("codice_fornitore",  "INTEGER", mode="REQUIRED"),
-    bigquery.SchemaField("ragione_sociale",    "STRING",  mode="REQUIRED"),
-    bigquery.SchemaField("partita_iva",        "STRING"),
-    bigquery.SchemaField("codice_fiscale",     "STRING"),
-    bigquery.SchemaField("comune",             "STRING"),
-    bigquery.SchemaField("provincia",          "STRING"),
-    bigquery.SchemaField("tipo_soggetto",      "STRING"),
-    bigquery.SchemaField("stato_anagrafica",   "STRING"),
-    bigquery.SchemaField("data_caricamento",   "STRING",  mode="REQUIRED"),
-] if HAS_BQ else []
+BQ_SCHEMA = (
+    [
+        bigquery.SchemaField("codice_fornitore", "INTEGER", mode="REQUIRED"),
+        bigquery.SchemaField("ragione_sociale", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("partita_iva", "STRING"),
+        bigquery.SchemaField("codice_fiscale", "STRING"),
+        bigquery.SchemaField("comune", "STRING"),
+        bigquery.SchemaField("provincia", "STRING"),
+        bigquery.SchemaField("tipo_soggetto", "STRING"),
+        bigquery.SchemaField("stato_anagrafica", "STRING"),
+        bigquery.SchemaField("data_caricamento", "STRING", mode="REQUIRED"),
+    ]
+    if HAS_BQ
+    else []
+)
 
 
 def setup_logger() -> logging.Logger:
@@ -64,17 +70,19 @@ def parse_xlsx(filepath: Path, logger: logging.Logger) -> list[dict]:
         if pd.isna(codice) or pd.isna(rag_soc) or not str(rag_soc).strip():
             continue
 
-        rows.append({
-            "codice_fornitore": int(codice),
-            "ragione_sociale": str(rag_soc).strip(),
-            "partita_iva": str(r.get("Partita IVA", "")).strip() or None,
-            "codice_fiscale": str(r.get("Codice fiscale", "")).strip() or None,
-            "comune": str(r.get("Comune", "")).strip() or None,
-            "provincia": str(r.get("Provincia", "")).strip() or None,
-            "tipo_soggetto": str(r.get("Tipo soggetto", "")).strip() or None,
-            "stato_anagrafica": str(r.get("Stato anagrafica", "")).strip() or None,
-            "data_caricamento": now,
-        })
+        rows.append(
+            {
+                "codice_fornitore": int(codice),
+                "ragione_sociale": str(rag_soc).strip(),
+                "partita_iva": str(r.get("Partita IVA", "")).strip() or None,
+                "codice_fiscale": str(r.get("Codice fiscale", "")).strip() or None,
+                "comune": str(r.get("Comune", "")).strip() or None,
+                "provincia": str(r.get("Provincia", "")).strip() or None,
+                "tipo_soggetto": str(r.get("Tipo soggetto", "")).strip() or None,
+                "stato_anagrafica": str(r.get("Stato anagrafica", "")).strip() or None,
+                "data_caricamento": now,
+            }
+        )
 
     # Clean up None-string artifacts from pandas
     for row in rows:
@@ -116,19 +124,23 @@ def main():
         logger.error("google-cloud-bigquery non installato")
         sys.exit(1)
 
-    bq_client = bigquery.Client(project="hotelops-suite")
+    bq_client = get_client()
     job_config = bigquery.LoadJobConfig(
         schema=BQ_SCHEMA,
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
     )
-    job = bq_client.load_table_from_json(rows, D_ANAGRAFICA_FORNITORI, job_config=job_config)
+    job = bq_client.load_table_from_json(
+        rows, D_ANAGRAFICA_FORNITORI, job_config=job_config
+    )
     job.result()
 
     if job.errors:
         logger.error(f"BQ load errors: {job.errors}")
         sys.exit(1)
 
-    logger.info(f"d_anagrafica_fornitori caricato: {len(rows)} righe → {D_ANAGRAFICA_FORNITORI}")
+    logger.info(
+        f"d_anagrafica_fornitori caricato: {len(rows)} righe → {D_ANAGRAFICA_FORNITORI}"
+    )
 
 
 if __name__ == "__main__":

@@ -3,8 +3,20 @@
 from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from reviews.alert import should_alert, render_alert_body
 from reviews.email import render_weekly_report
+
+
+@pytest.fixture(autouse=True)
+def _reset_bq_client_singleton():
+    """Clear the cached BQ client so each test's patch is honoured."""
+    import core.bq.client as bq_client_mod
+
+    bq_client_mod._client = None
+    yield
+    bq_client_mod._client = None
 
 
 def test_should_alert_negative():
@@ -133,21 +145,23 @@ def test_send_alerts_no_grace_window_when_key_not_first_run():
     from reviews.alert import send_alerts
 
     old_date = (date.today() - timedelta(days=30)).isoformat()
-    rows = [{
-        "review_hash": "h1",
-        "piattaforma": "BOOKING",
-        "business_unit_id": "HOTEL",
-        "punteggio_norm": 4.0,
-        "punteggio_raw": 4.0,
-        "data_review": old_date,
-        "categoria_nlp": None,
-        "reviewer_nome": "X",
-        "reviewer_paese": None,
-        "riassunto_nlp": None,
-        "testo": "",
-        "url_review": None,
-        "alert_inviato": False,
-    }]
+    rows = [
+        {
+            "review_hash": "h1",
+            "piattaforma": "BOOKING",
+            "business_unit_id": "HOTEL",
+            "punteggio_norm": 4.0,
+            "punteggio_raw": 4.0,
+            "data_review": old_date,
+            "categoria_nlp": None,
+            "reviewer_nome": "X",
+            "reviewer_paese": None,
+            "riassunto_nlp": None,
+            "testo": "",
+            "url_review": None,
+            "alert_inviato": False,
+        }
+    ]
 
     with patch("reviews.email.send_email") as mock_send:
         alerted = send_alerts(rows, first_run_keys=set())
@@ -196,14 +210,14 @@ def _make_buffer_error():
     )
 
 
-def test_mark_alerts_sent_retries_on_streaming_buffer_then_succeeds(tmp_path, monkeypatch):
+def test_mark_alerts_sent_retries_on_streaming_buffer_then_succeeds(
+    tmp_path, monkeypatch
+):
     """First 2 attempts hit streaming buffer, 3rd succeeds — no pending file."""
     from reviews import alert as alert_mod
 
     monkeypatch.setattr(alert_mod, "_MARK_ALERTS_RETRY_DELAYS", [0, 0, 0])
-    monkeypatch.setattr(
-        alert_mod, "_PENDING_STATE_PATH", tmp_path / "pending.json"
-    )
+    monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", tmp_path / "pending.json")
 
     fake_client = MagicMock()
     fake_query = MagicMock()
@@ -226,7 +240,9 @@ def test_mark_alerts_sent_retries_on_streaming_buffer_then_succeeds(tmp_path, mo
     assert not (tmp_path / "pending.json").exists()
 
 
-def test_mark_alerts_sent_persists_pending_after_all_retries_fail(tmp_path, monkeypatch):
+def test_mark_alerts_sent_persists_pending_after_all_retries_fail(
+    tmp_path, monkeypatch
+):
     """All retries exhausted: hashes persisted to pending state file, no raise."""
     import json as _json
     from reviews import alert as alert_mod
@@ -253,9 +269,7 @@ def test_mark_alerts_sent_reraises_non_buffer_errors(tmp_path, monkeypatch):
     from reviews import alert as alert_mod
 
     monkeypatch.setattr(alert_mod, "_MARK_ALERTS_RETRY_DELAYS", [0, 0, 0])
-    monkeypatch.setattr(
-        alert_mod, "_PENDING_STATE_PATH", tmp_path / "pending.json"
-    )
+    monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", tmp_path / "pending.json")
 
     fake_client = MagicMock()
     fake_client.query.side_effect = RuntimeError("some other failure")
@@ -338,7 +352,9 @@ def test_weekly_report_renders_cost_section_when_data_present():
         },
     ]
     with patch("reviews.email._fetch_apify_costs", return_value=fake_costs):
-        html = render_weekly_report(rows=[], date_start="2026-04-06", date_end="2026-04-12")
+        html = render_weekly_report(
+            rows=[], date_start="2026-04-06", date_end="2026-04-12"
+        )
 
     assert "Costi Apify" in html
     assert "$0.2850" in html  # total cost = 0.225 + 0.06
@@ -353,7 +369,9 @@ def test_weekly_report_omits_cost_section_when_no_data():
     from reviews.email import render_weekly_report
 
     with patch("reviews.email._fetch_apify_costs", return_value=[]):
-        html = render_weekly_report(rows=[], date_start="2026-04-06", date_end="2026-04-12")
+        html = render_weekly_report(
+            rows=[], date_start="2026-04-06", date_end="2026-04-12"
+        )
 
     assert "Costi Apify" not in html
 

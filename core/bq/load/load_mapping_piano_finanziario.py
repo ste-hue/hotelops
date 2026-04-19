@@ -20,29 +20,38 @@ import logging
 import sys
 from pathlib import Path
 
+from core.bq.client import get_client
 from core.config import D_MAPPING_PIANO_FINANZIARIO
 from core.schemas import MappingPianoFinanziarioRow, validate_batch
 
 try:
     from google.cloud import bigquery
+
     HAS_BQ = True
 except ImportError:
     HAS_BQ = False
 
 DEFAULT_SOURCE = (
     Path(__file__).resolve().parents[2]
-    / "core" / "bq" / "dimensioni" / "d_mapping_piano_finanziario.csv"
+    / "core"
+    / "bq"
+    / "dimensioni"
+    / "d_mapping_piano_finanziario.csv"
 )
 
-BQ_SCHEMA = [
-    bigquery.SchemaField("societa_id",         "STRING",  mode="REQUIRED"),
-    bigquery.SchemaField("voce_id",            "STRING",  mode="REQUIRED"),
-    bigquery.SchemaField("sotto_voce",         "STRING",  mode="REQUIRED"),
-    bigquery.SchemaField("tipo",               "STRING",  mode="REQUIRED"),
-    bigquery.SchemaField("codice_fornitore",   "INTEGER"),
-    bigquery.SchemaField("cod_conto_pattern",  "STRING"),
-    bigquery.SchemaField("nome_esolver",       "STRING"),
-] if HAS_BQ else []
+BQ_SCHEMA = (
+    [
+        bigquery.SchemaField("societa_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("voce_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("sotto_voce", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("tipo", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("codice_fornitore", "INTEGER"),
+        bigquery.SchemaField("cod_conto_pattern", "STRING"),
+        bigquery.SchemaField("nome_esolver", "STRING"),
+    ]
+    if HAS_BQ
+    else []
+)
 
 
 def setup_logger() -> logging.Logger:
@@ -87,15 +96,17 @@ def parse_csv(filepath: Path, logger: logging.Logger) -> list[dict]:
                 logger.warning(f"Riga {i} skip: FORNITORE senza codice — {sotto_voce}")
                 continue
 
-            rows.append({
-                "societa_id": societa,
-                "voce_id": voce_id,
-                "sotto_voce": sotto_voce,
-                "tipo": tipo,
-                "codice_fornitore": int(cod_forn) if cod_forn else None,
-                "cod_conto_pattern": cod_conto or None,
-                "nome_esolver": nome or None,
-            })
+            rows.append(
+                {
+                    "societa_id": societa,
+                    "voce_id": voce_id,
+                    "sotto_voce": sotto_voce,
+                    "tipo": tipo,
+                    "codice_fornitore": int(cod_forn) if cod_forn else None,
+                    "cod_conto_pattern": cod_conto or None,
+                    "nome_esolver": nome or None,
+                }
+            )
 
     logger.info(f"Righe mappatura parsate: {len(rows)}")
     return rows
@@ -142,33 +153,45 @@ def main():
     if todos:
         logger.warning(f"TODO incompleti: {todos} righe senza codice")
 
-    validate_batch(rows, MappingPianoFinanziarioRow, context="mapping_piano_finanziario")
+    validate_batch(
+        rows, MappingPianoFinanziarioRow, context="mapping_piano_finanziario"
+    )
     logger.info("Schema validation OK")
 
     if args.dry_run:
         logger.info("DRY RUN — nessuna scrittura")
         for r in rows:
-            marker = r["codice_fornitore"] if r["tipo"] == "FORNITORE" else r["cod_conto_pattern"]
-            logger.info(f"  {r['societa_id']} | {r['voce_id']:30s} | {r['sotto_voce']:35s} | {r['tipo']:10s} | {marker}")
+            marker = (
+                r["codice_fornitore"]
+                if r["tipo"] == "FORNITORE"
+                else r["cod_conto_pattern"]
+            )
+            logger.info(
+                f"  {r['societa_id']} | {r['voce_id']:30s} | {r['sotto_voce']:35s} | {r['tipo']:10s} | {marker}"
+            )
         return
 
     if not HAS_BQ:
         logger.error("google-cloud-bigquery non installato")
         sys.exit(1)
 
-    bq_client = bigquery.Client(project="hotelops-suite")
+    bq_client = get_client()
     job_config = bigquery.LoadJobConfig(
         schema=BQ_SCHEMA,
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
     )
-    job = bq_client.load_table_from_json(rows, D_MAPPING_PIANO_FINANZIARIO, job_config=job_config)
+    job = bq_client.load_table_from_json(
+        rows, D_MAPPING_PIANO_FINANZIARIO, job_config=job_config
+    )
     job.result()
 
     if job.errors:
         logger.error(f"BQ load errors: {job.errors}")
         sys.exit(1)
 
-    logger.info(f"d_mapping_piano_finanziario caricato: {len(rows)} righe → {D_MAPPING_PIANO_FINANZIARIO}")
+    logger.info(
+        f"d_mapping_piano_finanziario caricato: {len(rows)} righe → {D_MAPPING_PIANO_FINANZIARIO}"
+    )
 
 
 if __name__ == "__main__":

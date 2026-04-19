@@ -36,11 +36,12 @@ import logging
 import sys
 from datetime import datetime, timezone
 
+from core.bq.client import get_client
+from core.config import PROJECT
 from core.schemas import PianoFinanziarioInputRow, validate_batch
 
-BQ_PROJECT = "hotelops-suite"
-BQ_TABLE = f"{BQ_PROJECT}.hotelops.f_piano_finanziario_input"
-BQ_VOCI_TABLE = f"{BQ_PROJECT}.hotelops.d_voci_piano_finanziario"
+BQ_TABLE = f"{PROJECT}.hotelops.f_piano_finanziario_input"
+BQ_VOCI_TABLE = f"{PROJECT}.hotelops.d_voci_piano_finanziario"
 DEFAULT_FONTE = "NANOCLAW"
 
 log = logging.getLogger("update_previsione")
@@ -77,7 +78,7 @@ def update_previsione(
     """
     from google.cloud import bigquery
 
-    bq_client = bigquery.Client(project=BQ_PROJECT)
+    bq_client = get_client()
 
     # Validate voce
     valid_voci = get_valid_voci(bq_client)
@@ -92,11 +93,17 @@ def update_previsione(
 
     # Validate societa
     if societa_id not in ("ORTI", "INTUR"):
-        return {"status": "error", "message": f"Società deve essere ORTI o INTUR, non '{societa_id}'"}
+        return {
+            "status": "error",
+            "message": f"Società deve essere ORTI o INTUR, non '{societa_id}'",
+        }
 
     # Validate mesi
     if not (1 <= mese_start <= 12 and 1 <= mese_end <= 12 and mese_start <= mese_end):
-        return {"status": "error", "message": f"Mesi non validi: {mese_start}-{mese_end}"}
+        return {
+            "status": "error",
+            "message": f"Mesi non validi: {mese_start}-{mese_end}",
+        }
 
     mesi = list(range(mese_start, mese_end + 1))
     now = datetime.now(timezone.utc)
@@ -104,18 +111,20 @@ def update_previsione(
     # Build rows
     new_rows = []
     for mese in mesi:
-        new_rows.append({
-            "hash_riga": _hash(societa_id, voce_id, anno, mese, fonte),
-            "societa_id": societa_id,
-            "voce_id": voce_id,
-            "anno": anno,
-            "mese": mese,
-            "importo": round(importo_mensile, 2),
-            "fonte": fonte,
-            "note": note,
-            "file_sorgente": f"nanoclaw:{now.strftime('%Y-%m-%d %H:%M')}",
-            "data_caricamento": now.isoformat(),
-        })
+        new_rows.append(
+            {
+                "hash_riga": _hash(societa_id, voce_id, anno, mese, fonte),
+                "societa_id": societa_id,
+                "voce_id": voce_id,
+                "anno": anno,
+                "mese": mese,
+                "importo": round(importo_mensile, 2),
+                "fonte": fonte,
+                "note": note,
+                "file_sorgente": f"nanoclaw:{now.strftime('%Y-%m-%d %H:%M')}",
+                "data_caricamento": now.isoformat(),
+            }
+        )
 
     totale = round(importo_mensile * len(mesi), 2)
 
@@ -238,12 +247,30 @@ VOCE_ALIASES = {
 }
 
 MESI_IT = {
-    "gennaio": 1, "febbraio": 2, "marzo": 3, "aprile": 4,
-    "maggio": 5, "giugno": 6, "luglio": 7, "agosto": 8,
-    "settembre": 9, "ottobre": 10, "novembre": 11, "dicembre": 12,
-    "gen": 1, "feb": 2, "mar": 3, "apr": 4,
-    "mag": 5, "giu": 6, "lug": 7, "ago": 8,
-    "set": 9, "ott": 10, "nov": 11, "dic": 12,
+    "gennaio": 1,
+    "febbraio": 2,
+    "marzo": 3,
+    "aprile": 4,
+    "maggio": 5,
+    "giugno": 6,
+    "luglio": 7,
+    "agosto": 8,
+    "settembre": 9,
+    "ottobre": 10,
+    "novembre": 11,
+    "dicembre": 12,
+    "gen": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "mag": 5,
+    "giu": 6,
+    "lug": 7,
+    "ago": 8,
+    "set": 9,
+    "ott": 10,
+    "nov": 11,
+    "dic": 12,
 }
 
 
@@ -269,13 +296,22 @@ def resolve_mese(text: str) -> int | None:
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Aggiorna previsione Piano Finanziario")
-    parser.add_argument("--voce", required=True, help="voce_id o alias (es. 'utenze', 'USCITE_UTENZE')")
+    parser = argparse.ArgumentParser(
+        description="Aggiorna previsione Piano Finanziario"
+    )
+    parser.add_argument(
+        "--voce", required=True, help="voce_id o alias (es. 'utenze', 'USCITE_UTENZE')"
+    )
     parser.add_argument("--societa", required=True, choices=["ORTI", "INTUR"])
     parser.add_argument("--anno", type=int, default=2026)
-    parser.add_argument("--mesi", required=True, help="Range mesi: '4-12' o '6' (singolo)")
-    parser.add_argument("--importo", type=float, required=True, help="Importo mensile (€)")
+    parser.add_argument(
+        "--mesi", required=True, help="Range mesi: '4-12' o '6' (singolo)"
+    )
+    parser.add_argument(
+        "--importo", type=float, required=True, help="Importo mensile (€)"
+    )
     parser.add_argument("--fonte", default=DEFAULT_FONTE)
     parser.add_argument("--note", default=None)
     parser.add_argument("--dry-run", action="store_true")

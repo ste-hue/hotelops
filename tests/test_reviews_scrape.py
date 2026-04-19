@@ -6,7 +6,19 @@ run against the live Apify API (snapshot taken 2026-04-10, see ADR 0003
 follow-up).
 """
 
+import pytest
+
 from reviews.scrape import MAX_REVIEWS_PER_PROPERTY, _build_input
+
+
+@pytest.fixture(autouse=True)
+def _reset_bq_client_singleton():
+    """Clear the cached BQ client so each test's patch is honoured."""
+    import core.bq.client as bq_client_mod
+
+    bq_client_mod._client = None
+    yield
+    bq_client_mod._client = None
 
 
 def test_booking_uses_sortReviewsBy_not_reviewsSort():
@@ -57,8 +69,15 @@ def test_trip_uses_hotelUrl_not_startUrls():
     Passing startUrls/totalLimit causes the actor to silently fall back to its
     schema defaults (Grand Hyatt Shanghai, 1000 reviews) — regression guard
     for the 2026-04-11 $3.38 exploration blowout."""
-    inp = _build_input("TRIP", "HOTEL", "https://www.trip.com/hotels/maiori-hotel-detail-774198/panorama/")
-    assert inp["hotelUrl"] == "https://www.trip.com/hotels/maiori-hotel-detail-774198/panorama/"
+    inp = _build_input(
+        "TRIP",
+        "HOTEL",
+        "https://www.trip.com/hotels/maiori-hotel-detail-774198/panorama/",
+    )
+    assert (
+        inp["hotelUrl"]
+        == "https://www.trip.com/hotels/maiori-hotel-detail-774198/panorama/"
+    )
     assert inp["maxReviews"] == MAX_REVIEWS_PER_PROPERTY
     assert "startUrls" not in inp
     assert "totalLimit" not in inp
@@ -66,6 +85,7 @@ def test_trip_uses_hotelUrl_not_startUrls():
 
 def test_unknown_platform_raises():
     import pytest
+
     with pytest.raises(ValueError, match="Unknown piattaforma"):
         _build_input("YELP", "HOTEL", "https://example.com/yelp")
 

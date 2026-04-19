@@ -24,6 +24,7 @@ import openpyxl
 import pandas as pd
 from google.cloud import bigquery
 
+from core.bq.client import get_client
 from core.config import F_PMS_STATISTICHE
 from core.schemas import PmsStatisticheRow, validate_batch
 
@@ -34,7 +35,7 @@ CAMERE_TOTALI_MAP = {
     86: "HOTEL",
     20: "RESIDENCE",
     10: "CVM",
-    7: "CVM",       # CVM sometimes shows 7
+    7: "CVM",  # CVM sometimes shows 7
 }
 
 
@@ -98,7 +99,9 @@ def extract_from_file(filepath: Path) -> dict | None:
     # --- BU detection ---
     bu = CAMERE_TOTALI_MAP.get(camere_totali)
     if bu is None:
-        logger.warning(f"  Unknown BU for Camere Totali={camere_totali} in {filepath.name}, skipping")
+        logger.warning(
+            f"  Unknown BU for Camere Totali={camere_totali} in {filepath.name}, skipping"
+        )
         return None
 
     # --- AdrRevPar ---
@@ -192,7 +195,9 @@ def main():
         try:
             row = extract_from_file(f)
             if row:
-                logger.info(f"  {f.name} -> {row['business_unit_id']} {row['data']} occ={row['occupazione_pct']}% rev=€{row['revenue_totale']:,.0f}")
+                logger.info(
+                    f"  {f.name} -> {row['business_unit_id']} {row['data']} occ={row['occupazione_pct']}% rev=€{row['revenue_totale']:,.0f}"
+                )
                 rows.append(row)
         except Exception as e:
             logger.error(f"  {f.name}: {e}")
@@ -202,7 +207,7 @@ def main():
         return
 
     # Dedup
-    bq_client = bigquery.Client(project="hotelops-suite")
+    bq_client = get_client()
     hashes = load_hashes(bq_client)
     new_rows = [r for r in rows if r["hash_riga"] not in hashes]
     dupes = len(rows) - len(new_rows)
@@ -222,7 +227,9 @@ def main():
     df["data"] = pd.to_datetime(df["data"])
     df["data_caricamento"] = pd.to_datetime(df["data_caricamento"])
     job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
-    bq_client.load_table_from_dataframe(df, F_PMS_STATISTICHE, job_config=job_config).result()
+    bq_client.load_table_from_dataframe(
+        df, F_PMS_STATISTICHE, job_config=job_config
+    ).result()
     logger.info(f"Wrote {len(new_rows)} rows to BigQuery")
 
 

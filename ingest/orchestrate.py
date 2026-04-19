@@ -41,24 +41,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+from core.datahub_sync import DATAHUB_ROOT
+
 # ── Paths ────────────────────────────────────────────────────────────────────
 
 HOTELOPS_ROOT = Path(__file__).resolve().parent.parent
 
 # Google Drive datahub (macOS default — override with --datahub)
-DEFAULT_DATAHUB = Path(
-    os.path.expanduser(
-        "~/Library/CloudStorage/GoogleDrive-stefano@panoramagroup.it"
-        "/My Drive/hotelops_datahub"
-    )
-)
+DEFAULT_DATAHUB = DATAHUB_ROOT
 
 # Local staging dirs
 STAGING_BASE = Path(os.path.expanduser("~/.cache/hotelops"))
 STAGING = {
-    "banche":       STAGING_BASE / "banche_staging",
-    "accodamenti":  STAGING_BASE / "accodamenti_staging",
-    "movimenti":    STAGING_BASE / "movimenti_staging",
+    "banche": STAGING_BASE / "banche_staging",
+    "accodamenti": STAGING_BASE / "accodamenti_staging",
+    "movimenti": STAGING_BASE / "movimenti_staging",
 }
 
 # Manifest — tracks every file we've ever processed
@@ -66,6 +63,7 @@ MANIFEST_DIR = DEFAULT_DATAHUB / "meta" / "pipeline"
 
 
 # ── Pipeline registry ────────────────────────────────────────────────────────
+
 
 class Pipeline:
     """Definition of one ingest pipeline."""
@@ -100,8 +98,10 @@ def _banca_args(ctx: dict) -> list[str]:
 
 def _accodamenti_args(ctx: dict) -> list[str]:
     args = [
-        "--datahub", str(ctx["datahub"]),
-        "--staging", str(STAGING["accodamenti"]),
+        "--datahub",
+        str(ctx["datahub"]),
+        "--staging",
+        str(STAGING["accodamenti"]),
     ]
     if ctx["no_sync"]:
         args.append("--no-sync")
@@ -114,8 +114,10 @@ def _accodamenti_args(ctx: dict) -> list[str]:
 
 def _movimenti_args(ctx: dict) -> list[str]:
     args = [
-        "--datahub", str(ctx["datahub"]),
-        "--staging", str(STAGING["movimenti"]),
+        "--datahub",
+        str(ctx["datahub"]),
+        "--staging",
+        str(STAGING["movimenti"]),
     ]
     if ctx["no_sync"]:
         args.append("--no-sync")
@@ -127,8 +129,10 @@ def _movimenti_args(ctx: dict) -> list[str]:
 def _economato_args(ctx: dict) -> list[str]:
     source = ctx["datahub"] / "economato"
     args = [
-        "--source", str(source),
-        "--datahub", str(ctx["datahub"]),
+        "--source",
+        str(source),
+        "--datahub",
+        str(ctx["datahub"]),
     ]
     if ctx["dry_run"]:
         args += ["--dry-run", "--output-dir", str(ctx["output_dir"])]
@@ -138,8 +142,10 @@ def _economato_args(ctx: dict) -> list[str]:
 def _coperti_args(ctx: dict) -> list[str]:
     source = ctx["datahub"] / "coperti"
     args = [
-        "--source", str(source),
-        "--datahub", str(ctx["datahub"]),
+        "--source",
+        str(source),
+        "--datahub",
+        str(ctx["datahub"]),
     ]
     if ctx["dry_run"]:
         args.append("--dry-run")
@@ -149,6 +155,7 @@ def _coperti_args(ctx: dict) -> list[str]:
 def _bilancino_discover(ctx: dict) -> list[list[str]]:
     """Discover bilancino files in bilancino/{ORTI,INTUR}/."""
     import re
+
     bil_dir = ctx["datahub"] / "bilancino"
     if not bil_dir.exists():
         return []
@@ -180,11 +187,19 @@ def _gasparotto_discover(ctx: dict) -> list[list[str]]:
     if not ingresso.exists():
         return []
     runs = []
-    for f in sorted(ingresso.glob("*Gasparotto*xlsx")) + sorted(ingresso.glob("*Master*xlsx")):
+    for f in sorted(ingresso.glob("*Gasparotto*xlsx")) + sorted(
+        ingresso.glob("*Master*xlsx")
+    ):
         if f.name.startswith("~$"):
             continue
         name_upper = f.name.upper()
-        societa = "ORTI" if "ORTI" in name_upper else "INTUR" if "INTUR" in name_upper else "ORTI"
+        societa = (
+            "ORTI"
+            if "ORTI" in name_upper
+            else "INTUR"
+            if "INTUR" in name_upper
+            else "ORTI"
+        )
         args = ["--file", str(f), "--societa", societa]
         if ctx["dry_run"]:
             args += ["--dry-run", "--output-dir", str(ctx["output_dir"])]
@@ -203,9 +218,7 @@ def _piano_fin_discover(ctx: dict) -> list[list[str]]:
     # Search in ORTI/ and INTUR/ subfolders
     has_files = (
         list((pf_dir / "ORTI").glob("*.xlsx")) if (pf_dir / "ORTI").exists() else []
-    ) + (
-        list((pf_dir / "INTUR").glob("*.xlsx")) if (pf_dir / "INTUR").exists() else []
-    )
+    ) + (list((pf_dir / "INTUR").glob("*.xlsx")) if (pf_dir / "INTUR").exists() else [])
     return [args] if has_files else []
 
 
@@ -271,7 +284,12 @@ def _scheda_contabile_discover(ctx: dict) -> list[list[str]]:
         sdir = sc_dir / societa_dir
         if not sdir.exists():
             continue
-        files = sorted(sdir.glob("*.xlsx")) + sorted(sdir.glob("*.xls")) + sorted(sdir.glob("*.csv")) + sorted(sdir.glob("*.CSV"))
+        files = (
+            sorted(sdir.glob("*.xlsx"))
+            + sorted(sdir.glob("*.xls"))
+            + sorted(sdir.glob("*.csv"))
+            + sorted(sdir.glob("*.CSV"))
+        )
         files = [f for f in files if not f.name.startswith("~$")]
         if files:
             args = ["--dir", str(sdir), "--societa", societa_dir]
@@ -284,8 +302,13 @@ def _scheda_contabile_discover(ctx: dict) -> list[list[str]]:
 def _sync_banca(ctx: dict) -> None:
     """Sync bank files from Drive."""
     subprocess.run(
-        [sys.executable, "-m", "ingest.banca.fetch_drive",
-         "--staging", str(STAGING["banche"])],
+        [
+            sys.executable,
+            "-m",
+            "ingest.banca.fetch_drive",
+            "--staging",
+            str(STAGING["banche"]),
+        ],
         cwd=str(HOTELOPS_ROOT),
         check=True,
     )
@@ -318,7 +341,6 @@ PIPELINES = [
         args_fn=_movimenti_args,
         description="Esolver journal entries → f_movimenti_contabili",
     ),
-
     # Flussi group — auto-discovering
     Pipeline(
         name="consumi_economato",
@@ -334,7 +356,6 @@ PIPELINES = [
         args_fn=_coperti_args,
         description="Meal covers → f_coperti_giornalieri",
     ),
-
     # Dimension tables — one-shot
     Pipeline(
         name="categorie",
@@ -361,34 +382,54 @@ PIPELINES = [
 
 # Multi-file pipelines (discover N files, run N times)
 MULTI_PIPELINES = [
-    ("bilancino", "flussi",
-     "ingest.flussi.ingest_bilancino",
-     _bilancino_discover,
-     "Trial balance → f_bilancino"),
-    ("gasparotto", "flussi",
-     "ingest.flussi.ingest_gasparotto",
-     _gasparotto_discover,
-     "Gasparotto budget → f_budget_mensile"),
-    ("piano_finanziario", "flussi",
-     "ingest.flussi.ingest_piano_finanziario_xlsx",
-     _piano_fin_discover,
-     "Piano finanziario → f_piano_finanziario_input"),
-    ("scheda_contabile", "flussi",
-     "ingest.flussi.ingest_scheda_contabile",
-     _scheda_contabile_discover,
-     "Scheda contabile Esolver → f_saldi_banca_snapshot"),
-    ("partite_fornitori", "flussi",
-     "ingest.flussi.ingest_partite_aperte",
-     _partite_discover,
-     "Partite aperte fornitori → f_partite_aperte_fornitori"),
+    (
+        "bilancino",
+        "flussi",
+        "ingest.flussi.ingest_bilancino",
+        _bilancino_discover,
+        "Trial balance → f_bilancino",
+    ),
+    (
+        "gasparotto",
+        "flussi",
+        "ingest.flussi.ingest_gasparotto",
+        _gasparotto_discover,
+        "Gasparotto budget → f_budget_mensile",
+    ),
+    (
+        "piano_finanziario",
+        "flussi",
+        "ingest.flussi.ingest_piano_finanziario_xlsx",
+        _piano_fin_discover,
+        "Piano finanziario → f_piano_finanziario_input",
+    ),
+    (
+        "scheda_contabile",
+        "flussi",
+        "ingest.flussi.ingest_scheda_contabile",
+        _scheda_contabile_discover,
+        "Scheda contabile Esolver → f_saldi_banca_snapshot",
+    ),
+    (
+        "partite_fornitori",
+        "flussi",
+        "ingest.flussi.ingest_partite_aperte",
+        _partite_discover,
+        "Partite aperte fornitori → f_partite_aperte_fornitori",
+    ),
 ]
 
 
 # ── Manifest ─────────────────────────────────────────────────────────────────
 
 MANIFEST_FIELDS = [
-    "timestamp", "pipeline", "status", "rows_before", "rows_after",
-    "duration_s", "error",
+    "timestamp",
+    "pipeline",
+    "status",
+    "rows_before",
+    "rows_after",
+    "duration_s",
+    "error",
 ]
 
 
@@ -412,8 +453,7 @@ class Manifest:
     def ensure_dirs(self):
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    def log_run(self, pipeline: str, status: str, duration_s: float,
-                error: str = ""):
+    def log_run(self, pipeline: str, status: str, duration_s: float, error: str = ""):
         self.ensure_dirs()
         now = datetime.now(timezone.utc).isoformat()
         row = {
@@ -435,15 +475,18 @@ class Manifest:
 
 # ── Runner ───────────────────────────────────────────────────────────────────
 
+
 def setup_logger(verbose: bool) -> logging.Logger:
     log = logging.getLogger("orchestrate")
     log.setLevel(logging.DEBUG if verbose else logging.INFO)
     if not log.handlers:
         h = logging.StreamHandler(sys.stdout)
-        h.setFormatter(logging.Formatter(
-            "%(asctime)s  %(levelname)-5s  %(message)s",
-            datefmt="%H:%M:%S",
-        ))
+        h.setFormatter(
+            logging.Formatter(
+                "%(asctime)s  %(levelname)-5s  %(message)s",
+                datefmt="%H:%M:%S",
+            )
+        )
         log.addHandler(h)
     return log
 
@@ -478,7 +521,11 @@ def run_pipeline(
                 logger.info(f"    {line}")
 
         if result.returncode != 0:
-            error_msg = result.stderr.strip() if result.stderr else f"exit code {result.returncode}"
+            error_msg = (
+                result.stderr.strip()
+                if result.stderr
+                else f"exit code {result.returncode}"
+            )
             logger.error(f"  ✗ {pipeline_name} FAILED ({duration:.1f}s): {error_msg}")
             manifest.log_run(pipeline_name, "FAILED", duration, error_msg)
             return False
@@ -503,18 +550,26 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Unified hotelops pipeline orchestrator"
     )
-    parser.add_argument("--datahub", default=str(DEFAULT_DATAHUB),
-                        help="Path to hotelops_datahub root")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Parse + CSV, no BigQuery writes")
-    parser.add_argument("--no-sync", action="store_true",
-                        help="Skip Drive sync (use local staging)")
-    parser.add_argument("--only", choices=["banca", "flussi", "dimensioni"],
-                        help="Run only this pipeline group")
-    parser.add_argument("--pipeline", type=str,
-                        help="Run only this specific pipeline by name")
-    parser.add_argument("--output-dir", default="output",
-                        help="CSV output dir for dry-run mode")
+    parser.add_argument(
+        "--datahub", default=str(DEFAULT_DATAHUB), help="Path to hotelops_datahub root"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Parse + CSV, no BigQuery writes"
+    )
+    parser.add_argument(
+        "--no-sync", action="store_true", help="Skip Drive sync (use local staging)"
+    )
+    parser.add_argument(
+        "--only",
+        choices=["banca", "flussi", "dimensioni"],
+        help="Run only this pipeline group",
+    )
+    parser.add_argument(
+        "--pipeline", type=str, help="Run only this specific pipeline by name"
+    )
+    parser.add_argument(
+        "--output-dir", default="output", help="CSV output dir for dry-run mode"
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -586,8 +641,12 @@ def main() -> None:
             continue
 
         ok = run_pipeline(
-            p.module, pipeline_args, logger, manifest,
-            p.name, args.dry_run,
+            p.module,
+            pipeline_args,
+            logger,
+            manifest,
+            p.name,
+            args.dry_run,
         )
         results[p.name] = "OK" if ok else "FAILED"
 
@@ -617,8 +676,12 @@ def main() -> None:
         for i, pipeline_args in enumerate(arg_lists):
             sub_name = f"{name}[{i}]"
             ok = run_pipeline(
-                module, pipeline_args, logger, manifest,
-                sub_name, args.dry_run,
+                module,
+                pipeline_args,
+                logger,
+                manifest,
+                sub_name,
+                args.dry_run,
             )
             if not ok:
                 all_ok = False
@@ -636,7 +699,13 @@ def main() -> None:
     skip_count = sum(1 for s in results.values() if s in ("SKIPPED", "NO_FILES"))
 
     for name, status in results.items():
-        icon = {"OK": "✓", "FAILED": "✗", "PARTIAL": "⚠", "SKIPPED": "⊘", "NO_FILES": "⊘"}
+        icon = {
+            "OK": "✓",
+            "FAILED": "✗",
+            "PARTIAL": "⚠",
+            "SKIPPED": "⊘",
+            "NO_FILES": "⊘",
+        }
         logger.info(f"  {icon.get(status, '?')} {name:<25s} {status}")
 
     logger.info(f"\n  Total: {ok_count} OK, {fail_count} failed, {skip_count} skipped")

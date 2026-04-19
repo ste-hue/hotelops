@@ -35,6 +35,7 @@ try:
 except ImportError:
     HAS_BQ = False
 
+from core.bq.client import get_client
 from core.config import D_COEFFICIENTI_STAGIONALITA, PROJECT
 from core.schemas import CoefficienteStagionalitaRow, make_hash, validate_batch
 
@@ -198,7 +199,7 @@ def fetch_seasonality_coefficients(
         return flat
 
     try:
-        client = bigquery.Client(project=PROJECT)
+        client = get_client()
         query = f"""
             SELECT mese, coefficiente
             FROM `{D_COEFFICIENTI_STAGIONALITA}`
@@ -207,9 +208,7 @@ def fetch_seasonality_coefficients(
         """
         job_config = bigquery.QueryJobConfig(
             query_parameters=[
-                bigquery.ScalarQueryParameter(
-                    "societa_id", "STRING", societa_id
-                ),
+                bigquery.ScalarQueryParameter("societa_id", "STRING", societa_id),
                 bigquery.ScalarQueryParameter(
                     "business_unit_id", "STRING", business_unit_id
                 ),
@@ -233,7 +232,11 @@ def print_coefficient_table(rows: list[dict], logger: logging.Logger) -> None:
         bu_coeffs[r["business_unit_id"]][r["mese"]] = r["coefficiente"]
 
     # Header
-    header = f"{'BU':<12s}" + "".join(f"{'M' + str(m):>7s}" for m in range(1, 13)) + f"{'SUM':>8s}"
+    header = (
+        f"{'BU':<12s}"
+        + "".join(f"{'M' + str(m):>7s}" for m in range(1, 13))
+        + f"{'SUM':>8s}"
+    )
     logger.info("")
     logger.info("Seasonality Coefficients:")
     logger.info("-" * len(header))
@@ -281,7 +284,7 @@ def main() -> None:
         logger.error("google-cloud-bigquery not installed")
         sys.exit(1)
 
-    client = bigquery.Client(project=PROJECT)
+    client = get_client()
 
     # Fetch revenue data
     logger.info(f"Fetching revenue data from {F_RICAVI_STORICI}...")

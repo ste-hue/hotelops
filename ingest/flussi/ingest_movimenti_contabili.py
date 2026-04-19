@@ -27,26 +27,29 @@ import argparse
 import csv
 import hashlib
 import logging
-import subprocess
 import sys
 from pathlib import Path
 
 try:
     import xlrd
+
     HAS_XLRD = True
 except ImportError:
     HAS_XLRD = False
 
 try:
     from google.cloud import bigquery
+
     HAS_BQ = True
 except ImportError:
     HAS_BQ = False
 
-BQ_PROJECT = "hotelops-suite"
-BQ_TABLE = f"{BQ_PROJECT}.hotelops.f_movimenti_contabili"
+from core.bq.client import get_client
+from core.config import PROJECT
+from core.datahub_sync import RcloneError, rclone_sync
 
-REMOTE_BASE = "mywork:00_hotelops_datahub/ingresso/movimenti_contabili"
+BQ_TABLE = f"{PROJECT}.hotelops.f_movimenti_contabili"
+
 STAGING_DEFAULT = Path.home() / ".cache/hotelops/movimenti_staging"
 
 FACT_HEADER = [
@@ -74,30 +77,34 @@ FACT_HEADER = [
     "data_ingresso",
 ]
 
-BQ_SCHEMA = [
-    bigquery.SchemaField("hash_riga", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("societa_id", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("id_documento", "INTEGER"),
-    bigquery.SchemaField("num_progr_riga", "INTEGER"),
-    bigquery.SchemaField("gruppo_doc", "STRING"),
-    bigquery.SchemaField("anno", "INTEGER"),
-    bigquery.SchemaField("mese", "INTEGER"),
-    bigquery.SchemaField("data_registrazione", "DATE"),
-    bigquery.SchemaField("sigla_doc", "STRING"),
-    bigquery.SchemaField("rif_registrazione", "STRING"),
-    bigquery.SchemaField("num_doc_originale", "STRING"),
-    bigquery.SchemaField("data_originale", "DATE"),
-    bigquery.SchemaField("tipo_documento", "STRING"),
-    bigquery.SchemaField("cod_conto", "STRING"),
-    bigquery.SchemaField("cod_partitario", "STRING"),
-    bigquery.SchemaField("rag_sociale", "STRING"),
-    bigquery.SchemaField("causale_contabile", "STRING"),
-    bigquery.SchemaField("imp_dare", "FLOAT64"),
-    bigquery.SchemaField("imp_avere", "FLOAT64"),
-    bigquery.SchemaField("cod_divisione", "STRING"),
-    bigquery.SchemaField("file_sorgente", "STRING"),
-    bigquery.SchemaField("data_ingresso", "DATE"),
-] if HAS_BQ else []
+BQ_SCHEMA = (
+    [
+        bigquery.SchemaField("hash_riga", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("societa_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("id_documento", "INTEGER"),
+        bigquery.SchemaField("num_progr_riga", "INTEGER"),
+        bigquery.SchemaField("gruppo_doc", "STRING"),
+        bigquery.SchemaField("anno", "INTEGER"),
+        bigquery.SchemaField("mese", "INTEGER"),
+        bigquery.SchemaField("data_registrazione", "DATE"),
+        bigquery.SchemaField("sigla_doc", "STRING"),
+        bigquery.SchemaField("rif_registrazione", "STRING"),
+        bigquery.SchemaField("num_doc_originale", "STRING"),
+        bigquery.SchemaField("data_originale", "DATE"),
+        bigquery.SchemaField("tipo_documento", "STRING"),
+        bigquery.SchemaField("cod_conto", "STRING"),
+        bigquery.SchemaField("cod_partitario", "STRING"),
+        bigquery.SchemaField("rag_sociale", "STRING"),
+        bigquery.SchemaField("causale_contabile", "STRING"),
+        bigquery.SchemaField("imp_dare", "FLOAT64"),
+        bigquery.SchemaField("imp_avere", "FLOAT64"),
+        bigquery.SchemaField("cod_divisione", "STRING"),
+        bigquery.SchemaField("file_sorgente", "STRING"),
+        bigquery.SchemaField("data_ingresso", "DATE"),
+    ]
+    if HAS_BQ
+    else []
+)
 
 
 def setup_logger() -> logging.Logger:
@@ -135,6 +142,7 @@ def parse_file(filepath: Path, societa_id: str, logger: logging.Logger) -> list[
         sys.exit(1)
 
     from datetime import date
+
     today = date.today().isoformat()
     file_sorgente = filepath.name
 
@@ -171,35 +179,39 @@ def parse_file(filepath: Path, societa_id: str, logger: logging.Logger) -> list[
 
         hash_riga = make_hash(societa_id, id_doc, num_progr)
 
-        rows.append({
-            "hash_riga": hash_riga,
-            "societa_id": societa_id,
-            "id_documento": id_doc,
-            "num_progr_riga": num_progr,
-            "gruppo_doc": gruppo_doc,
-            "anno": anno,
-            "mese": mese,
-            "data_registrazione": data_reg,
-            "sigla_doc": sigla_doc,
-            "rif_registrazione": rif_reg,
-            "num_doc_originale": num_doc_orig,
-            "data_originale": data_orig,
-            "tipo_documento": tipo_doc,
-            "cod_conto": cod_conto,
-            "cod_partitario": cod_partitario,
-            "rag_sociale": rag_sociale,
-            "causale_contabile": causale,
-            "imp_dare": imp_dare,
-            "imp_avere": imp_avere,
-            "cod_divisione": cod_divisione,
-            "file_sorgente": file_sorgente,
-            "data_ingresso": today,
-        })
+        rows.append(
+            {
+                "hash_riga": hash_riga,
+                "societa_id": societa_id,
+                "id_documento": id_doc,
+                "num_progr_riga": num_progr,
+                "gruppo_doc": gruppo_doc,
+                "anno": anno,
+                "mese": mese,
+                "data_registrazione": data_reg,
+                "sigla_doc": sigla_doc,
+                "rif_registrazione": rif_reg,
+                "num_doc_originale": num_doc_orig,
+                "data_originale": data_orig,
+                "tipo_documento": tipo_doc,
+                "cod_conto": cod_conto,
+                "cod_partitario": cod_partitario,
+                "rag_sociale": rag_sociale,
+                "causale_contabile": causale,
+                "imp_dare": imp_dare,
+                "imp_avere": imp_avere,
+                "cod_divisione": cod_divisione,
+                "file_sorgente": file_sorgente,
+                "data_ingresso": today,
+            }
+        )
 
     return rows
 
 
-def parse_file_xlsx(filepath: Path, societa_id: str, logger: logging.Logger) -> list[dict]:
+def parse_file_xlsx(
+    filepath: Path, societa_id: str, logger: logging.Logger
+) -> list[dict]:
     """Parse Esolver 'report-style' XLSX movimenti contabili.
 
     Column layout (26 cols):
@@ -257,7 +269,11 @@ def parse_file_xlsx(filepath: Path, societa_id: str, logger: logging.Logger) -> 
             continue
 
         cod_part_raw = raw_row[10]
-        cod_partitario = str(int(cod_part_raw)) if isinstance(cod_part_raw, (int, float)) and cod_part_raw else None
+        cod_partitario = (
+            str(int(cod_part_raw))
+            if isinstance(cod_part_raw, (int, float)) and cod_part_raw
+            else None
+        )
 
         imp_dare = float(raw_row[13]) if isinstance(raw_row[13], (int, float)) else 0.0
         imp_avere = float(raw_row[14]) if isinstance(raw_row[14], (int, float)) else 0.0
@@ -266,7 +282,11 @@ def parse_file_xlsx(filepath: Path, societa_id: str, logger: logging.Logger) -> 
         data_orig = None
         if raw_row[7] and str(raw_row[7]).strip():
             try:
-                data_orig = datetime.strptime(str(raw_row[7]).strip(), "%d/%m/%y").date().isoformat()
+                data_orig = (
+                    datetime.strptime(str(raw_row[7]).strip(), "%d/%m/%y")
+                    .date()
+                    .isoformat()
+                )
             except ValueError:
                 pass
 
@@ -274,30 +294,32 @@ def parse_file_xlsx(filepath: Path, societa_id: str, logger: logging.Logger) -> 
         hash_key = f"{societa_id}|{data_reg.isoformat()}|{pnc_num}|{idx}"
         hash_riga = hashlib.md5(hash_key.encode()).hexdigest()
 
-        rows.append({
-            "hash_riga": hash_riga,
-            "societa_id": societa_id,
-            "id_documento": pnc_num,
-            "num_progr_riga": idx,
-            "gruppo_doc": sigla_raw,
-            "anno": data_reg.year,
-            "mese": data_reg.month,
-            "data_registrazione": data_reg.isoformat(),
-            "sigla_doc": sigla_doc,
-            "rif_registrazione": None,
-            "num_doc_originale": None,
-            "data_originale": data_orig,
-            "tipo_documento": str(raw_row[8]).strip() if raw_row[8] else None,
-            "cod_conto": cod_conto,
-            "cod_partitario": cod_partitario,
-            "rag_sociale": str(raw_row[11]).strip() if raw_row[11] else None,
-            "causale_contabile": str(raw_row[12]).strip() if raw_row[12] else None,
-            "imp_dare": imp_dare,
-            "imp_avere": imp_avere,
-            "cod_divisione": None,
-            "file_sorgente": file_sorgente,
-            "data_ingresso": today,
-        })
+        rows.append(
+            {
+                "hash_riga": hash_riga,
+                "societa_id": societa_id,
+                "id_documento": pnc_num,
+                "num_progr_riga": idx,
+                "gruppo_doc": sigla_raw,
+                "anno": data_reg.year,
+                "mese": data_reg.month,
+                "data_registrazione": data_reg.isoformat(),
+                "sigla_doc": sigla_doc,
+                "rif_registrazione": None,
+                "num_doc_originale": None,
+                "data_originale": data_orig,
+                "tipo_documento": str(raw_row[8]).strip() if raw_row[8] else None,
+                "cod_conto": cod_conto,
+                "cod_partitario": cod_partitario,
+                "rag_sociale": str(raw_row[11]).strip() if raw_row[11] else None,
+                "causale_contabile": str(raw_row[12]).strip() if raw_row[12] else None,
+                "imp_dare": imp_dare,
+                "imp_avere": imp_avere,
+                "cod_divisione": None,
+                "file_sorgente": file_sorgente,
+                "data_ingresso": today,
+            }
+        )
 
     wb.close()
     return rows
@@ -306,18 +328,13 @@ def parse_file_xlsx(filepath: Path, societa_id: str, logger: logging.Logger) -> 
 def sync_from_drive(staging: Path, logger: logging.Logger):
     staging.mkdir(parents=True, exist_ok=True)
     for societa in ["INTUR", "ORTI"]:
-        remote = f"{REMOTE_BASE}/{societa}/"
         dest = staging / societa
-        dest.mkdir(parents=True, exist_ok=True)
-        logger.info(f"rclone sync {remote} → {dest}")
-        result = subprocess.run(
-            ["rclone", "sync", remote, str(dest)],
-            capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            logger.error(f"rclone error: {result.stderr}")
-        else:
+        logger.info(f"rclone sync ingresso/movimenti_contabili/{societa} → {dest}")
+        try:
+            rclone_sync(f"ingresso/movimenti_contabili/{societa}", dest)
             logger.info(f"  {societa}: sync OK")
+        except RcloneError as e:
+            logger.error(f"rclone error: {e}")
 
 
 def load_hashes_bq(bq_client, societa_id: str, logger: logging.Logger) -> set:
@@ -369,7 +386,9 @@ def write_to_csv(rows: list[dict], csv_path: Path, logger: logging.Logger):
     logger.info(f"  CSV: {len(new_rows)} righe → {csv_path.name}")
 
 
-def delete_period_bq(bq_client, societa_id: str, min_date: str, max_date: str, logger: logging.Logger) -> int:
+def delete_period_bq(
+    bq_client, societa_id: str, min_date: str, max_date: str, logger: logging.Logger
+) -> int:
     """DELETE rows for (societa, date range). Returns number of rows deleted."""
     q = f"""
     DELETE FROM `{BQ_TABLE}`
@@ -378,20 +397,31 @@ def delete_period_bq(bq_client, societa_id: str, min_date: str, max_date: str, l
     """
     job = bq_client.query(
         q,
-        job_config=bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("societa", "STRING", societa_id),
-            bigquery.ScalarQueryParameter("min_d", "DATE", min_date),
-            bigquery.ScalarQueryParameter("max_d", "DATE", max_date),
-        ]),
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("societa", "STRING", societa_id),
+                bigquery.ScalarQueryParameter("min_d", "DATE", min_date),
+                bigquery.ScalarQueryParameter("max_d", "DATE", max_date),
+            ]
+        ),
     )
     job.result()
     deleted = job.num_dml_affected_rows or 0
-    logger.info(f"  DELETE {societa_id} [{min_date}..{max_date}]: {deleted} righe rimosse")
+    logger.info(
+        f"  DELETE {societa_id} [{min_date}..{max_date}]: {deleted} righe rimosse"
+    )
     return deleted
 
 
-def process_societa(societa_id: str, files: list[Path], datahub: Path | None,
-                    bq_client, dry_run: bool, replace: bool, logger: logging.Logger):
+def process_societa(
+    societa_id: str,
+    files: list[Path],
+    datahub: Path | None,
+    bq_client,
+    dry_run: bool,
+    replace: bool,
+    logger: logging.Logger,
+):
     all_rows = []
     for f in files:
         if f.suffix.lower() == ".xlsx":
@@ -420,7 +450,9 @@ def process_societa(societa_id: str, files: list[Path], datahub: Path | None,
     else:
         existing = load_hashes_bq(bq_client, societa_id, logger)
         new_rows = [r for r in all_rows if r["hash_riga"] not in existing]
-        logger.info(f"  {societa_id}: {len(new_rows)} nuove, {len(all_rows) - len(new_rows)} già presenti")
+        logger.info(
+            f"  {societa_id}: {len(new_rows)} nuove, {len(all_rows) - len(new_rows)} già presenti"
+        )
 
     write_to_bq(new_rows, bq_client, logger)
 
@@ -430,15 +462,25 @@ def process_societa(societa_id: str, files: list[Path], datahub: Path | None,
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Ingest Lista movimenti contabili Esolver → f_movimenti_contabili")
+    parser = argparse.ArgumentParser(
+        description="Ingest Lista movimenti contabili Esolver → f_movimenti_contabili"
+    )
     parser.add_argument("--datahub", help="Path to datahub root")
-    parser.add_argument("--staging", help="Local staging dir (default: ~/.cache/hotelops/movimenti_staging)")
+    parser.add_argument(
+        "--staging",
+        help="Local staging dir (default: ~/.cache/hotelops/movimenti_staging)",
+    )
     parser.add_argument("--file", help="Single XLS or XLSX file to ingest")
-    parser.add_argument("--societa", choices=["INTUR", "ORTI"], help="Società (required with --file)")
+    parser.add_argument(
+        "--societa", choices=["INTUR", "ORTI"], help="Società (required with --file)"
+    )
     parser.add_argument("--no-sync", action="store_true", help="Skip rclone sync")
     parser.add_argument("--dry-run", action="store_true", help="Parse only, no write")
-    parser.add_argument("--replace", action="store_true",
-                        help="SNAPSHOT mode: DELETE rows in the file's date range before insert (true idempotency)")
+    parser.add_argument(
+        "--replace",
+        action="store_true",
+        help="SNAPSHOT mode: DELETE rows in the file's date range before insert (true idempotency)",
+    )
     args = parser.parse_args()
 
     logger = setup_logger()
@@ -466,8 +508,10 @@ def main():
             societa_dir = staging / societa
             if societa_dir.exists():
                 xls_files = (
-                    list(societa_dir.glob("*.XLS")) + list(societa_dir.glob("*.xls"))
-                    + list(societa_dir.glob("*.XLSX")) + list(societa_dir.glob("*.xlsx"))
+                    list(societa_dir.glob("*.XLS"))
+                    + list(societa_dir.glob("*.xls"))
+                    + list(societa_dir.glob("*.XLSX"))
+                    + list(societa_dir.glob("*.xlsx"))
                 )
                 if xls_files:
                     files_by_societa[societa] = xls_files
@@ -483,13 +527,15 @@ def main():
         if not HAS_BQ:
             logger.error("google-cloud-bigquery non installato")
             sys.exit(1)
-        bq_client = bigquery.Client(project=BQ_PROJECT)
+        bq_client = get_client()
 
     datahub = Path(args.datahub) if args.datahub else None
 
     for societa_id, files in files_by_societa.items():
         logger.info(f"=== {societa_id} ===")
-        process_societa(societa_id, files, datahub, bq_client, args.dry_run, args.replace, logger)
+        process_societa(
+            societa_id, files, datahub, bq_client, args.dry_run, args.replace, logger
+        )
 
     logger.info("DONE")
 

@@ -51,9 +51,11 @@ def _fetch_apify_costs(date_start: str, date_end: str) -> list[dict]:
     """
     try:
         from google.cloud import bigquery
-        from core.config import F_APIFY_RUNS, PROJECT
 
-        client = bigquery.Client(project=PROJECT)
+        from core.bq.client import get_client
+        from core.config import F_APIFY_RUNS
+
+        client = get_client()
         sql = f"""
         SELECT
           piattaforma,

@@ -31,7 +31,6 @@ import argparse
 import csv
 import hashlib
 import logging
-import subprocess
 import sys
 from datetime import datetime
 from decimal import Decimal
@@ -39,16 +38,20 @@ from pathlib import Path
 
 import pandas as pd
 from google.cloud import bigquery
+from core.bq.client import get_client
+from core.config import PROJECT
+from core.datahub_sync import RcloneError, rclone_sync
 from ingest._logging import setup_logging as _setup_logging
-from ingest.banca.parser_accodamenti import parse_corrispettivi, parse_fatture, parse_movimenti
+from ingest.banca.parser_accodamenti import (
+    parse_corrispettivi,
+    parse_fatture,
+    parse_movimenti,
+)
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
-BQ_PROJECT = "hotelops-suite"
 BQ_DATASET = "hotelops"
-BQ_TABLE = f"{BQ_PROJECT}.{BQ_DATASET}.f_accodamenti"
-
-REMOTE_ACCODAMENTI = "mywork:00_hotelops_datahub/ingresso/accodamenti/ORTI"
+BQ_TABLE = f"{PROJECT}.{BQ_DATASET}.f_accodamenti"
 
 DEFAULT_FUNZIONE = "CONTABILITA"
 DEFAULT_LOCATION = "N_A"
@@ -75,11 +78,26 @@ CONTO_CANALE: dict[str, str] = {
 }
 
 FACT_HEADER = [
-    "id_registrazione", "societa_id", "business_unit_id", "funzione_id",
-    "location_id", "oggetto_id", "banca_id", "data_registrazione",
-    "descrizione", "importo", "importo_dare", "importo_avere", "divisa",
-    "riferimento_registrazione", "documento", "riferimenti_iva",
-    "centro_imputazione", "data_ingresso", "file_sorgente", "riga_sorgente",
+    "id_registrazione",
+    "societa_id",
+    "business_unit_id",
+    "funzione_id",
+    "location_id",
+    "oggetto_id",
+    "banca_id",
+    "data_registrazione",
+    "descrizione",
+    "importo",
+    "importo_dare",
+    "importo_avere",
+    "divisa",
+    "riferimento_registrazione",
+    "documento",
+    "riferimenti_iva",
+    "centro_imputazione",
+    "data_ingresso",
+    "file_sorgente",
+    "riga_sorgente",
     "hash_riga",
 ]
 
@@ -146,6 +164,7 @@ def _file_type(filename: str) -> str:
 
 # ── Transform: eventi → f_ledger_movimenti rows ────────────────────────────────
 
+
 def _make_row(
     societa: str,
     bu: str,
@@ -163,14 +182,18 @@ def _make_row(
     data_iso = _parse_esolver_date(data_str)
     if not data_iso:
         return None
-    if importo == Decimal("0") and importo_dare == Decimal("0") and importo_avere == Decimal("0"):
+    if (
+        importo == Decimal("0")
+        and importo_dare == Decimal("0")
+        and importo_avere == Decimal("0")
+    ):
         return None
 
     ts = datetime.now().strftime("%Y%m%d%H%M%S")
     canale = _canale(conto)
 
     return {
-        "id_registrazione": f"ACC_{societa}_{bu}_{data_iso.replace('-','')}_{line_no:06d}_{ts}",
+        "id_registrazione": f"ACC_{societa}_{bu}_{data_iso.replace('-', '')}_{line_no:06d}_{ts}",
         "societa_id": societa,
         "business_unit_id": bu,
         "funzione_id": DEFAULT_FUNZIONE,
@@ -190,7 +213,9 @@ def _make_row(
         "data_ingresso": datetime.now().strftime("%Y-%m-%d"),
         "file_sorgente": file_name,
         "riga_sorgente": line_no,
-        "hash_riga": _md5(societa, bu, data_iso, float(importo), descrizione or "", conto),
+        "hash_riga": _md5(
+            societa, bu, data_iso, float(importo), descrizione or "", conto
+        ),
     }
 
 
@@ -215,13 +240,16 @@ def events_to_rows(events: list[dict], societa: str) -> list[dict]:
                 dare = gen.get("importo_dare", Decimal("0"))
                 avere = gen.get("importo_avere", Decimal("0"))
                 row = _make_row(
-                    societa=societa, bu=bu,
+                    societa=societa,
+                    bu=bu,
                     data_str=gen.get("data_doc", ""),
                     descrizione=gen.get("descrizione", "") or etype,
                     importo=dare - avere,
-                    importo_dare=dare, importo_avere=avere,
+                    importo_dare=dare,
+                    importo_avere=avere,
                     conto=gen.get("conto_esolver", ""),
-                    file_name=src_file, line_no=src_line,
+                    file_name=src_file,
+                    line_no=src_line,
                     metodo=gen.get("metodo_pagamento", ""),
                 )
                 if row:
@@ -234,13 +262,16 @@ def events_to_rows(events: list[dict], societa: str) -> list[dict]:
                 if importo == Decimal("0"):
                     continue
                 row = _make_row(
-                    societa=societa, bu=bu,
+                    societa=societa,
+                    bu=bu,
                     data_str=gen.get("data_doc", "") or tes.get("data_doc", ""),
                     descrizione=gen.get("descrizione", "") or f"Corrispettivo {bu}",
                     importo=importo,
-                    importo_dare=importo, importo_avere=Decimal("0"),
+                    importo_dare=importo,
+                    importo_avere=Decimal("0"),
                     conto=gen.get("conto_esolver", ""),
-                    file_name=src_file, line_no=src_line,
+                    file_name=src_file,
+                    line_no=src_line,
                     metodo=gen.get("metodo_pagamento", ""),
                 )
                 if row:
@@ -250,19 +281,26 @@ def events_to_rows(events: list[dict], societa: str) -> list[dict]:
             tes = event.get("tes", {})
             ivas = event.get("ivas", [])
             rigs = event.get("rigs", [])
-            totale = sum(iv["imponibile"] + iv["imposta"] for iv in ivas) if ivas else Decimal("0")
+            totale = (
+                sum(iv["imponibile"] + iv["imposta"] for iv in ivas)
+                if ivas
+                else Decimal("0")
+            )
             if totale == Decimal("0"):
                 totale = sum(r["imponibile"] for r in rigs)
             if totale == Decimal("0"):
                 continue
             row = _make_row(
-                societa=societa, bu=bu,
+                societa=societa,
+                bu=bu,
                 data_str=tes.get("data_doc", ""),
-                descrizione=f"Fattura {tes.get('num_doc','')} cliente {tes.get('codice_cliente','')}",
+                descrizione=f"Fattura {tes.get('num_doc', '')} cliente {tes.get('codice_cliente', '')}",
                 importo=totale,
-                importo_dare=totale, importo_avere=Decimal("0"),
+                importo_dare=totale,
+                importo_avere=Decimal("0"),
                 conto="110301",
-                file_name=src_file, line_no=src_line,
+                file_name=src_file,
+                line_no=src_line,
                 documento=str(tes.get("num_doc", "")),
             )
             if row:
@@ -297,11 +335,10 @@ def parse_and_transform(path: Path, societa: str, logger: logging.Logger) -> lis
 
 # ── BigQuery + CSV ─────────────────────────────────────────────────────────────
 
+
 def load_hashes_bq(bq_client: bigquery.Client, logger: logging.Logger) -> set:
     try:
-        result = bq_client.query(
-            f"SELECT hash_riga FROM `{BQ_TABLE}`"
-        ).result()
+        result = bq_client.query(f"SELECT hash_riga FROM `{BQ_TABLE}`").result()
         hashes = {row.hash_riga for row in result}
         logger.info(f"Hashes BQ esistenti (f_accodamenti): {len(hashes)}")
         return hashes
@@ -317,7 +354,9 @@ def write_to_bq(rows: list[dict], bq_client: bigquery.Client, logger: logging.Lo
     df["riga_sorgente"] = df["riga_sorgente"].astype(int)
     for col in ("importo", "importo_dare", "importo_avere"):
         df[col] = df[col].astype(float)
-    job_config = bigquery.LoadJobConfig(schema=BQ_SCHEMA, write_disposition="WRITE_APPEND")
+    job_config = bigquery.LoadJobConfig(
+        schema=BQ_SCHEMA, write_disposition="WRITE_APPEND"
+    )
     bq_client.load_table_from_dataframe(df, BQ_TABLE, job_config=job_config).result()
     logger.info(f"Scritte {len(rows)} righe → BigQuery {BQ_TABLE}")
 
@@ -335,21 +374,20 @@ def write_to_csv(rows: list[dict], fact_table: Path, logger: logging.Logger):
 
 # ── rclone sync ────────────────────────────────────────────────────────────────
 
+
 def sync_from_drive(staging: Path, dry_run: bool, logger: logging.Logger) -> bool:
-    staging.mkdir(parents=True, exist_ok=True)
-    cmd = ["rclone", "sync", REMOTE_ACCODAMENTI, str(staging)]
-    if dry_run:
-        cmd.append("--dry-run")
-    logger.info(f"Sync {REMOTE_ACCODAMENTI} → {staging}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        logger.error(f"rclone failed: {result.stderr}")
+    logger.info(f"Sync ingresso/accodamenti/ORTI → {staging}")
+    try:
+        rclone_sync("ingresso/accodamenti/ORTI", staging, dry_run=dry_run)
+    except RcloneError as e:
+        logger.error(f"rclone failed: {e}")
         return False
     logger.info("Sync completato")
     return True
 
 
 # ── Inspect ────────────────────────────────────────────────────────────────────
+
 
 def inspect_file(path: Path):
     """Dump struttura raw del file per debug formato."""
@@ -365,12 +403,15 @@ def inspect_file(path: Path):
     print("Prime 5 righe:")
     for i, line in enumerate(lines[:5], 1):
         fields = [f.strip() for f in line.split("|")]
-        print(f"  [{i:2d}] {len(fields)} campi → {fields[:12]}{'...' if len(fields)>12 else ''}")
+        print(
+            f"  [{i:2d}] {len(fields)} campi → {fields[:12]}{'...' if len(fields) > 12 else ''}"
+        )
     ftype = _file_type(path.name)
     print(f"Rilevato: tipo={ftype}")
 
 
 # ── Pipeline ───────────────────────────────────────────────────────────────────
+
 
 def process_file(
     path: Path,
@@ -413,14 +454,17 @@ def process_file(
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Esolver accodamenti → f_ledger_movimenti (BigQuery + CSV)"
     )
     parser.add_argument("--datahub", help="Path to datahub root")
     parser.add_argument("--staging", help="Dir locale per file accodamenti")
-    parser.add_argument("--societa", default=SOCIETA_DEFAULT, help="Società ID (default: INTUR)")
-    parser.add_argument("--project", default=BQ_PROJECT)
+    parser.add_argument(
+        "--societa", default=SOCIETA_DEFAULT, help="Società ID (default: INTUR)"
+    )
+    parser.add_argument("--project", default=PROJECT)
     parser.add_argument("--no-sync", action="store_true", help="Salta rclone sync")
     parser.add_argument("--dry-run", "-d", action="store_true")
     parser.add_argument("--verbose", "-v", action="store_true")
@@ -456,13 +500,19 @@ def main():
         logger.warning("Nessun .txt trovato. Esci.")
         return
 
-    bq_client = bigquery.Client(project=args.project)
+    bq_client = (
+        get_client()
+        if args.project == PROJECT
+        else bigquery.Client(project=args.project)
+    )
     hashes = load_hashes_bq(bq_client, logger)
 
     totals: dict[str, int] = {"parsed": 0, "new": 0, "dupes": 0, "errors": 0}
     for filepath in files:
         logger.info(f"Processo: {filepath.name}")
-        stats = process_file(filepath, bq_client, hashes, datahub, args.societa, logger, args.dry_run)
+        stats = process_file(
+            filepath, bq_client, hashes, datahub, args.societa, logger, args.dry_run
+        )
         for k in totals:
             totals[k] += stats.get(k, 0)
         logger.info(

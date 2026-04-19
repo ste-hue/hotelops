@@ -27,19 +27,21 @@ from typing import Optional
 import pandas as pd
 from google.cloud import bigquery
 
+from core.bq.client import get_client
+from core.config import PROJECT
 from core.contracts import SchemaViolationError, validate_columns
 from ingest._logging import setup_logging as _setup_logging
 from core.schemas import BancaMovimentoRow, validate_batch
 
 try:
     import openpyxl  # noqa: F401 - presence check
+
     HAS_EXCEL = True
 except ImportError:
     HAS_EXCEL = False
 
-BQ_PROJECT = "hotelops-suite"
-BQ_TABLE = "hotelops-suite.hotelops.f_banche_movimenti"
-BQ_SNAPSHOT_TABLE = "hotelops-suite.hotelops.f_saldi_banca_snapshot"
+BQ_TABLE = f"{PROJECT}.hotelops.f_banche_movimenti"
+BQ_SNAPSHOT_TABLE = f"{PROJECT}.hotelops.f_saldi_banca_snapshot"
 
 
 # -- Config -------------------------------------------------------------------
@@ -48,8 +50,13 @@ SOCIETA_KEYWORDS = {"INTUR": "INTUR", "ORTI": "ORTI"}
 # Longer keys first so MPS_KROSS is matched before MPS
 # Longer keys first so MPS_KROSS is matched before MPS
 BANCA_KEYWORDS = {
-    "MPS_KROSS": "MPS_KROSS", "MPS KROSS": "MPS_KROSS", "KROSS": "MPS_KROSS",
-    "INTESA": "INTESA", "SELLA": "SELLA", "BCP": "BCP", "MPS": "MPS",
+    "MPS_KROSS": "MPS_KROSS",
+    "MPS KROSS": "MPS_KROSS",
+    "KROSS": "MPS_KROSS",
+    "INTESA": "INTESA",
+    "SELLA": "SELLA",
+    "BCP": "BCP",
+    "MPS": "MPS",
 }
 
 EXCEL_EXTENSIONS = {".xls", ".xlsx"}
@@ -64,20 +71,43 @@ FOOTER_PREFIXES = ("saldo al",)
 
 def is_footer_row(raw: dict) -> bool:
     desc = (raw.get("desc") or "").strip().lower()
-    return desc in FOOTER_DESCRIPTIONS or any(desc.startswith(p) for p in FOOTER_PREFIXES)
+    return desc in FOOTER_DESCRIPTIONS or any(
+        desc.startswith(p) for p in FOOTER_PREFIXES
+    )
+
 
 FACT_HEADER = [
-    "id_movimento", "societa_id", "business_unit_id", "funzione_id",
-    "location_id", "oggetto_id", "banca_id", "data_operazione", "data_valuta",
-    "descrizione", "divisa", "importo_debito", "importo_credito", "importo_netto",
-    "categoria_raw", "sottocategoria_raw", "categoria_normalizzata",
-    "sottocategoria_normalizzata", "tipo_movimento", "codice_identificativo_banca",
-    "etichette", "note", "data_ingresso", "file_sorgente", "riga_sorgente",
+    "id_movimento",
+    "societa_id",
+    "business_unit_id",
+    "funzione_id",
+    "location_id",
+    "oggetto_id",
+    "banca_id",
+    "data_operazione",
+    "data_valuta",
+    "descrizione",
+    "divisa",
+    "importo_debito",
+    "importo_credito",
+    "importo_netto",
+    "categoria_raw",
+    "sottocategoria_raw",
+    "categoria_normalizzata",
+    "sottocategoria_normalizzata",
+    "tipo_movimento",
+    "codice_identificativo_banca",
+    "etichette",
+    "note",
+    "data_ingresso",
+    "file_sorgente",
+    "riga_sorgente",
     "hash_riga",
 ]
 
 
 # -- Helpers ------------------------------------------------------------------
+
 
 def setup_logging(log_dir: Path, verbose: bool = False) -> logging.Logger:
     return _setup_logging("ingest_banca", log_dir, verbose)
@@ -123,16 +153,16 @@ def infer_meta(filepath: Path) -> dict:
     name_upper = filepath.name.upper()
     path_upper = str(filepath).upper()
     date_match = re.search(r"\d{4}-\d{2}-\d{2}", filepath.name)
-    data_ingresso = date_match.group(0) if date_match else datetime.now().strftime("%Y-%m-%d")
+    data_ingresso = (
+        date_match.group(0) if date_match else datetime.now().strftime("%Y-%m-%d")
+    )
     # Try filename first, then full path
-    societa = (
-        next((v for k, v in SOCIETA_KEYWORDS.items() if k in name_upper), None)
-        or next((v for k, v in SOCIETA_KEYWORDS.items() if k in path_upper), "UNKNOWN")
-    )
-    banca = (
-        next((v for k, v in BANCA_KEYWORDS.items() if k in name_upper), None)
-        or next((v for k, v in BANCA_KEYWORDS.items() if k in path_upper), None)
-    )
+    societa = next(
+        (v for k, v in SOCIETA_KEYWORDS.items() if k in name_upper), None
+    ) or next((v for k, v in SOCIETA_KEYWORDS.items() if k in path_upper), "UNKNOWN")
+    banca = next(
+        (v for k, v in BANCA_KEYWORDS.items() if k in name_upper), None
+    ) or next((v for k, v in BANCA_KEYWORDS.items() if k in path_upper), None)
     # Fallback: detect banca from file content (headers/columns)
     if not banca:
         banca = _detect_banca_from_content(filepath) or "UNKNOWN"
@@ -146,8 +176,12 @@ def infer_meta(filepath: Path) -> dict:
 
 
 def infer_ids(societa_banca: str) -> tuple[str, str]:
-    societa = next((v for k, v in SOCIETA_KEYWORDS.items() if k in societa_banca), "UNKNOWN")
-    banca = next((v for k, v in BANCA_KEYWORDS.items() if k in societa_banca), "UNKNOWN")
+    societa = next(
+        (v for k, v in SOCIETA_KEYWORDS.items() if k in societa_banca), "UNKNOWN"
+    )
+    banca = next(
+        (v for k, v in BANCA_KEYWORDS.items() if k in societa_banca), "UNKNOWN"
+    )
     return societa, banca
 
 
@@ -180,9 +214,17 @@ def parse_date(s: str) -> datetime:
 # -- Readers ------------------------------------------------------------------
 
 SELLA_REQUIRED_COLUMNS = {
-    "Codice identificativo", "Data operazione", "Data valuta",
-    "Descrizione", "Divisa", "Debito", "Credito",
-    "Categoria", "Sottocategoria", "Etichette", "Note",
+    "Codice identificativo",
+    "Data operazione",
+    "Data valuta",
+    "Descrizione",
+    "Divisa",
+    "Debito",
+    "Credito",
+    "Categoria",
+    "Sottocategoria",
+    "Etichette",
+    "Note",
 }
 
 MPS_REQUIRED_COLUMNS = {"Data", "Valuta", "Dare", "Avere", "Descrizione operazioni"}
@@ -190,7 +232,12 @@ MPS2026_REQUIRED_COLUMNS = {"DATA CONT.", "DATA VAL.", "DESCRIZIONE", "IMPORTO(�
 
 INTESA_REQUIRED_COLUMNS = {"Data Contabile", "Data Valuta", "Dare", "Avere"}
 
-SELLA_XLS_REQUIRED_COLUMNS = {"Codice identificativo", "Data operazione", "Descrizione", "Debito"}
+SELLA_XLS_REQUIRED_COLUMNS = {
+    "Codice identificativo",
+    "Data operazione",
+    "Descrizione",
+    "Debito",
+}
 
 
 def read_sella_csv(path: Path, logger: logging.Logger) -> list[dict]:
@@ -204,20 +251,22 @@ def read_sella_csv(path: Path, logger: logging.Logger) -> list[dict]:
             context=f"Sella CSV {path.name}",
         )
         for i, row in enumerate(reader, start=2):
-            rows.append({
-                "riga": i,
-                "codice": row.get("Codice identificativo", ""),
-                "data_op": row.get("Data operazione", ""),
-                "data_val": row.get("Data valuta", ""),
-                "desc": row.get("Descrizione", ""),
-                "divisa": row.get("Divisa", "EUR"),
-                "debito": euro(row.get("Debito", "")),
-                "credito": euro(row.get("Credito", "")),
-                "cat": row.get("Categoria", ""),
-                "subcat": row.get("Sottocategoria", ""),
-                "tipo": row.get("Etichette", ""),
-                "note": row.get("Note", ""),
-            })
+            rows.append(
+                {
+                    "riga": i,
+                    "codice": row.get("Codice identificativo", ""),
+                    "data_op": row.get("Data operazione", ""),
+                    "data_val": row.get("Data valuta", ""),
+                    "desc": row.get("Descrizione", ""),
+                    "divisa": row.get("Divisa", "EUR"),
+                    "debito": euro(row.get("Debito", "")),
+                    "credito": euro(row.get("Credito", "")),
+                    "cat": row.get("Categoria", ""),
+                    "subcat": row.get("Sottocategoria", ""),
+                    "tipo": row.get("Etichette", ""),
+                    "note": row.get("Note", ""),
+                }
+            )
     logger.info(f"  {len(rows)} rows")
     return rows
 
@@ -252,24 +301,38 @@ def read_mps_excel(path: Path, logger: logging.Logger) -> list[dict]:
             continue
         if dare == 0 and avere == 0:
             continue
-        d_op = r["Data"].strftime("%d/%m/%y") if pd.notna(r["Data"]) and hasattr(r["Data"], "strftime") else str(r["Data"])
-        d_val = r["Valuta"].strftime("%d/%m/%y") if pd.notna(r["Valuta"]) and hasattr(r["Valuta"], "strftime") else str(r["Valuta"])
+        d_op = (
+            r["Data"].strftime("%d/%m/%y")
+            if pd.notna(r["Data"]) and hasattr(r["Data"], "strftime")
+            else str(r["Data"])
+        )
+        d_val = (
+            r["Valuta"].strftime("%d/%m/%y")
+            if pd.notna(r["Valuta"]) and hasattr(r["Valuta"], "strftime")
+            else str(r["Valuta"])
+        )
         causale = str(r.get("Causale", "")) if pd.notna(r.get("Causale")) else ""
-        desc = str(r.get("Descrizione operazioni", "")) if pd.notna(r.get("Descrizione operazioni")) else ""
-        rows.append({
-            "riga": i + 2,
-            "codice": "",
-            "data_op": d_op,
-            "data_val": d_val,
-            "desc": f"{causale} {desc}".strip(),
-            "divisa": "EUR",
-            "debito": abs(dare) if dare != 0 else 0.0,
-            "credito": abs(avere) if avere != 0 else 0.0,
-            "cat": causale,
-            "subcat": "",
-            "tipo": causale,
-            "note": "",
-        })
+        desc = (
+            str(r.get("Descrizione operazioni", ""))
+            if pd.notna(r.get("Descrizione operazioni"))
+            else ""
+        )
+        rows.append(
+            {
+                "riga": i + 2,
+                "codice": "",
+                "data_op": d_op,
+                "data_val": d_val,
+                "desc": f"{causale} {desc}".strip(),
+                "divisa": "EUR",
+                "debito": abs(dare) if dare != 0 else 0.0,
+                "credito": abs(avere) if avere != 0 else 0.0,
+                "cat": causale,
+                "subcat": "",
+                "tipo": causale,
+                "note": "",
+            }
+        )
     logger.info(f"  {len(rows)} rows")
     return rows
 
@@ -304,7 +367,9 @@ def read_intesa_excel(path: Path, logger: logging.Logger) -> list[dict]:
     col = {name: idx for idx, name in enumerate(header_row) if name}
 
     rows = []
-    for i, row in enumerate(ws.iter_rows(min_row=header_idx + 1, values_only=True), start=header_idx + 1):
+    for i, row in enumerate(
+        ws.iter_rows(min_row=header_idx + 1, values_only=True), start=header_idx + 1
+    ):
         dare_val = row[col["Dare"]]
         avere_val = row[col["Avere"]]
         if dare_val is None and avere_val is None:
@@ -321,29 +386,43 @@ def read_intesa_excel(path: Path, logger: logging.Logger) -> list[dict]:
             return str(v)
 
         desc_parts = []
-        for col_name in ["Descrizione Causale ABI/SWIFT", "Descrizioni Aggiuntive", "Descrizione Causale Banca"]:
+        for col_name in [
+            "Descrizione Causale ABI/SWIFT",
+            "Descrizioni Aggiuntive",
+            "Descrizione Causale Banca",
+        ]:
             if col_name in col:
                 v = row[col[col_name]]
                 if v:
                     desc_parts.append(str(v).strip())
 
-        causale = str(row[col["Causale ABI/Swift"]] or "").strip() if "Causale ABI/Swift" in col else ""
-        cro = str(row[col["Rif. Banca (CRO)"]] or "").strip() if "Rif. Banca (CRO)" in col else ""
+        causale = (
+            str(row[col["Causale ABI/Swift"]] or "").strip()
+            if "Causale ABI/Swift" in col
+            else ""
+        )
+        cro = (
+            str(row[col["Rif. Banca (CRO)"]] or "").strip()
+            if "Rif. Banca (CRO)" in col
+            else ""
+        )
 
-        rows.append({
-            "riga": i,
-            "codice": cro,
-            "data_op": fmt_date(row[col["Data Contabile"]]),
-            "data_val": fmt_date(row[col["Data Valuta"]]),
-            "desc": " | ".join(p for p in desc_parts if p),
-            "divisa": "EUR",
-            "debito": dare,
-            "credito": avere,
-            "cat": causale,
-            "subcat": "",
-            "tipo": causale,
-            "note": "",
-        })
+        rows.append(
+            {
+                "riga": i,
+                "codice": cro,
+                "data_op": fmt_date(row[col["Data Contabile"]]),
+                "data_val": fmt_date(row[col["Data Valuta"]]),
+                "desc": " | ".join(p for p in desc_parts if p),
+                "divisa": "EUR",
+                "debito": dare,
+                "credito": avere,
+                "cat": causale,
+                "subcat": "",
+                "tipo": causale,
+                "note": "",
+            }
+        )
 
     logger.info(f"  {len(rows)} rows")
     return rows
@@ -367,7 +446,9 @@ def read_mps2026_excel(path: Path, logger: logging.Logger) -> list[dict]:
             break
 
     if header_idx is None:
-        raise SchemaViolationError(f"MPS 2026 Excel {path.name}: cannot find header row")
+        raise SchemaViolationError(
+            f"MPS 2026 Excel {path.name}: cannot find header row"
+        )
 
     validate_columns(
         found=[c for c in header_row if c],
@@ -378,7 +459,9 @@ def read_mps2026_excel(path: Path, logger: logging.Logger) -> list[dict]:
     col = {name: idx for idx, name in enumerate(header_row) if name}
 
     rows = []
-    for i, row in enumerate(ws.iter_rows(min_row=header_idx + 1, values_only=True), start=header_idx + 1):
+    for i, row in enumerate(
+        ws.iter_rows(min_row=header_idx + 1, values_only=True), start=header_idx + 1
+    ):
         importo = row[col["IMPORTO(€)"]]
         if importo is None:
             continue
@@ -394,29 +477,35 @@ def read_mps2026_excel(path: Path, logger: logging.Logger) -> list[dict]:
                 return v.strftime("%d/%m/%Y")
             return str(v)
 
-        causale = str(row[col.get("CAUSALE", 3)] or "").strip() if "CAUSALE" in col else ""
+        causale = (
+            str(row[col.get("CAUSALE", 3)] or "").strip() if "CAUSALE" in col else ""
+        )
         desc = str(row[col["DESCRIZIONE"]] or "").strip()
 
-        rows.append({
-            "riga": i,
-            "codice": "",
-            "data_op": fmt_date(row[col["DATA CONT."]]),
-            "data_val": fmt_date(row[col["DATA VAL."]]),
-            "desc": f"{causale} {desc}".strip() if causale else desc,
-            "divisa": "EUR",
-            "debito": dare,
-            "credito": avere,
-            "cat": causale,
-            "subcat": "",
-            "tipo": causale,
-            "note": "",
-        })
+        rows.append(
+            {
+                "riga": i,
+                "codice": "",
+                "data_op": fmt_date(row[col["DATA CONT."]]),
+                "data_val": fmt_date(row[col["DATA VAL."]]),
+                "desc": f"{causale} {desc}".strip() if causale else desc,
+                "divisa": "EUR",
+                "debito": dare,
+                "credito": avere,
+                "cat": causale,
+                "subcat": "",
+                "tipo": causale,
+                "note": "",
+            }
+        )
 
     logger.info(f"  {len(rows)} rows")
     return rows
 
 
-def extract_saldo_mps2026(path: Path, meta: dict, logger: logging.Logger) -> dict | None:
+def extract_saldo_mps2026(
+    path: Path, meta: dict, logger: logging.Logger
+) -> dict | None:
     """Extract Saldo Finale + date from MPS 2026 OOXML header rows (before DATA CONT.)."""
     try:
         wb = openpyxl.load_workbook(io.BytesIO(path.read_bytes()), data_only=True)
@@ -426,7 +515,7 @@ def extract_saldo_mps2026(path: Path, meta: dict, logger: logging.Logger) -> dic
         for row in ws.iter_rows(max_row=30, values_only=True):
             for i, cell in enumerate(row):
                 if isinstance(cell, str) and "Saldo Finale" in cell:
-                    for v in row[i + 1:]:
+                    for v in row[i + 1 :]:
                         if v is None:
                             continue
                         if hasattr(v, "year"):
@@ -436,7 +525,9 @@ def extract_saldo_mps2026(path: Path, meta: dict, logger: logging.Logger) -> dic
                             # Text date in header — parse with DD/MM priority
                             parsed = parse_date(v)
                             if parsed.year > 2000:
-                                data_finale = parsed.date() if hasattr(parsed, "date") else parsed
+                                data_finale = (
+                                    parsed.date() if hasattr(parsed, "date") else parsed
+                                )
                         elif isinstance(v, (int, float)):
                             saldo_finale = float(v)
                     break
@@ -446,11 +537,14 @@ def extract_saldo_mps2026(path: Path, meta: dict, logger: logging.Logger) -> dic
             return None
         societa, banca = infer_ids(meta["societa_banca"])
         from datetime import date as _date
+
         if data_finale is None:
             data_finale = _date.today()
             logger.warning(f"  data_finale not found in {path.name}, using today")
         elif data_finale > _date.today():
-            logger.warning(f"  data_finale {data_finale} is in the future for {path.name}, using today")
+            logger.warning(
+                f"  data_finale {data_finale} is in the future for {path.name}, using today"
+            )
             data_finale = _date.today()
         snapshot = {
             "societa_id": societa,
@@ -458,19 +552,26 @@ def extract_saldo_mps2026(path: Path, meta: dict, logger: logging.Logger) -> dic
             "data_snapshot": data_finale.isoformat(),
             "saldo_finale": saldo_finale,
         }
-        logger.info(f"  Saldo Finale {societa}/{banca}: {data_finale} = €{saldo_finale:,.2f}")
+        logger.info(
+            f"  Saldo Finale {societa}/{banca}: {data_finale} = €{saldo_finale:,.2f}"
+        )
         return snapshot
     except Exception as e:
         logger.warning(f"  extract_saldo_mps2026 {path.name}: {e}")
         return None
 
 
-def upsert_saldo_snapshot(bq_client: bigquery.Client, snapshot: dict, dry_run: bool, logger: logging.Logger):
+def upsert_saldo_snapshot(
+    bq_client: bigquery.Client, snapshot: dict, dry_run: bool, logger: logging.Logger
+):
     """Write saldo snapshot to f_saldi_banca_snapshot (upsert by societa+banca+data_snapshot)."""
     if dry_run:
-        logger.info(f"  DRY RUN saldo: {snapshot['societa_id']}/{snapshot['banca_id']} {snapshot['data_snapshot']} = €{snapshot['saldo_finale']:,.2f}")
+        logger.info(
+            f"  DRY RUN saldo: {snapshot['societa_id']}/{snapshot['banca_id']} {snapshot['data_snapshot']} = €{snapshot['saldo_finale']:,.2f}"
+        )
         return
     from google.cloud import bigquery as bq_lib
+
     table_id = BQ_SNAPSHOT_TABLE
     try:
         bq_client.get_table(table_id)
@@ -494,14 +595,18 @@ def upsert_saldo_snapshot(bq_client: bigquery.Client, snapshot: dict, dry_run: b
         # Streaming buffer conflict — rows just inserted can't be DELETEd yet.
         # Safe to skip: we'll just INSERT (may produce a dupe for today, next run cleans up).
         if "streaming buffer" in str(e).lower():
-            logger.warning(f"  Saldo skip DELETE (streaming buffer): {snapshot['societa_id']}/{snapshot['banca_id']} — inserting anyway")
+            logger.warning(
+                f"  Saldo skip DELETE (streaming buffer): {snapshot['societa_id']}/{snapshot['banca_id']} — inserting anyway"
+            )
         else:
             raise
     errors = bq_client.insert_rows_json(table_id, [snapshot])
     if errors:
         logger.error(f"  Snapshot errors: {errors[:2]}")
     else:
-        logger.info(f"  ✓ Saldo snapshot saved: {snapshot['societa_id']}/{snapshot['banca_id']} {snapshot['data_snapshot']}")
+        logger.info(
+            f"  ✓ Saldo snapshot saved: {snapshot['societa_id']}/{snapshot['banca_id']} {snapshot['data_snapshot']}"
+        )
 
 
 def read_sella_xls(path: Path, logger: logging.Logger) -> list[dict]:
@@ -537,6 +642,7 @@ def read_sella_xls(path: Path, logger: logging.Logger) -> list[dict]:
         if cell_obj and cell_obj.ctype == xlrd.XL_CELL_DATE:
             t = xlrd.xldate_as_tuple(v, wb.datemode)
             from datetime import date
+
             return date(*t[:3]).strftime("%d/%m/%Y")
         return str(v).split(".")[0] if v else ""
 
@@ -548,27 +654,34 @@ def read_sella_xls(path: Path, logger: logging.Logger) -> list[dict]:
             continue
         data_op = xldate(cell(i, "Data operazione"), i, "Data operazione")
         data_val_raw = cell(i, "Data valuta") if "Data valuta" in col else ""
-        data_val = xldate(data_val_raw, i, "Data valuta") if data_val_raw not in ("", "-") else data_op
-        rows.append({
-            "riga": i + 1,
-            "codice": str(cell(i, "Codice identificativo") or ""),
-            "data_op": data_op,
-            "data_val": data_val,
-            "desc": str(cell(i, "Descrizione") or ""),
-            "divisa": str(cell(i, "Divisa") or "EUR") or "EUR",
-            "debito": debito,
-            "credito": credito,
-            "cat": str(cell(i, "Categoria") or ""),
-            "subcat": str(cell(i, "Sottocategoria") or ""),
-            "tipo": str(cell(i, "Etichette") or ""),
-            "note": str(cell(i, "Note") or ""),
-        })
+        data_val = (
+            xldate(data_val_raw, i, "Data valuta")
+            if data_val_raw not in ("", "-")
+            else data_op
+        )
+        rows.append(
+            {
+                "riga": i + 1,
+                "codice": str(cell(i, "Codice identificativo") or ""),
+                "data_op": data_op,
+                "data_val": data_val,
+                "desc": str(cell(i, "Descrizione") or ""),
+                "divisa": str(cell(i, "Divisa") or "EUR") or "EUR",
+                "debito": debito,
+                "credito": credito,
+                "cat": str(cell(i, "Categoria") or ""),
+                "subcat": str(cell(i, "Sottocategoria") or ""),
+                "tipo": str(cell(i, "Etichette") or ""),
+                "note": str(cell(i, "Note") or ""),
+            }
+        )
 
     logger.info(f"  {len(rows)} rows")
     return rows
 
 
 # -- Mappings -----------------------------------------------------------------
+
 
 def load_mappings(path: Path, logger: logging.Logger) -> dict:
     mappings = {}
@@ -579,7 +692,11 @@ def load_mappings(path: Path, logger: logging.Logger) -> dict:
         for row in csv.DictReader(f):
             if row.get("attivo", "TRUE").upper() != "TRUE":
                 continue
-            key = (row["sorgente_banca"], row.get("categoria_raw", ""), row.get("sottocategoria_raw", ""))
+            key = (
+                row["sorgente_banca"],
+                row.get("categoria_raw", ""),
+                row.get("sottocategoria_raw", ""),
+            )
             mappings[key] = {
                 "cat_norm": row["categoria_normalizzata"],
                 "subcat_norm": row["sottocategoria_normalizzata"],
@@ -604,6 +721,7 @@ def apply_mapping(row: dict, mappings: dict, sorgente: str) -> dict:
 
 
 # -- Transform ----------------------------------------------------------------
+
 
 def transform(raw: dict, meta: dict, counter: int) -> dict:
     societa, banca = infer_ids(meta["societa_banca"])
@@ -638,11 +756,14 @@ def transform(raw: dict, meta: dict, counter: int) -> dict:
         "data_ingresso": meta["data_ingresso"],
         "file_sorgente": meta["filename"],
         "riga_sorgente": raw["riga"],
-        "hash_riga": md5(societa, banca, d_op.strftime("%Y-%m-%d"), d_val.strftime("%Y-%m-%d"), netto),
+        "hash_riga": md5(
+            societa, banca, d_op.strftime("%Y-%m-%d"), d_val.strftime("%Y-%m-%d"), netto
+        ),
     }
 
 
 # -- Pipeline -----------------------------------------------------------------
+
 
 def load_hashes(bq_client: bigquery.Client) -> set:
     """Load dedup hashes from BQ.
@@ -664,15 +785,26 @@ def load_hashes(bq_client: bigquery.Client) -> set:
             if row.hash_riga:
                 hashes.add(row.hash_riga)  # legacy hash
             # current hash (format-agnostic)
-            hashes.add(md5(row.societa_id, row.banca_id, row.d_op, row.d_val, row.importo_netto))
+            hashes.add(
+                md5(
+                    row.societa_id, row.banca_id, row.d_op, row.d_val, row.importo_netto
+                )
+            )
         return hashes
     except Exception as e:
         logging.getLogger("ingest_banca").warning(f"Could not load hashes from BQ: {e}")
         return set()
 
 
-def process_file(filepath: Path, bq_client: bigquery.Client, mappings: dict, hashes: set,
-                 logger: logging.Logger, dry_run: bool = False, meta: dict = None) -> dict:
+def process_file(
+    filepath: Path,
+    bq_client: bigquery.Client,
+    mappings: dict,
+    hashes: set,
+    logger: logging.Logger,
+    dry_run: bool = False,
+    meta: dict = None,
+) -> dict:
     stats = {"file": filepath.name, "total": 0, "written": 0, "dupes": 0, "errors": 0}
 
     if meta is None:
@@ -695,7 +827,9 @@ def process_file(filepath: Path, bq_client: bigquery.Client, mappings: dict, has
             if meta["ext"] == "xls":
                 raw_rows = read_sella_xls(filepath, logger)
             else:
-                raise SchemaViolationError(f"SELLA file with unexpected format: {meta['ext']} — expected xls")
+                raise SchemaViolationError(
+                    f"SELLA file with unexpected format: {meta['ext']} — expected xls"
+                )
         elif "MPS" in sb and meta["ext"] == "xlsx":
             raw_rows = read_mps2026_excel(filepath, logger)
             snapshot = extract_saldo_mps2026(filepath, meta, logger)
@@ -727,14 +861,18 @@ def process_file(filepath: Path, bq_client: bigquery.Client, mappings: dict, has
         logger.info(f"DRY RUN: would write {len(new_rows)} rows")
         stats["written"] = 0
     elif new_rows:
-        validate_batch(new_rows, BancaMovimentoRow, f"f_banche_movimenti ({meta['societa_banca']})")
+        validate_batch(
+            new_rows, BancaMovimentoRow, f"f_banche_movimenti ({meta['societa_banca']})"
+        )
         df = pd.DataFrame(new_rows, columns=FACT_HEADER)
         df["data_operazione"] = pd.to_datetime(df["data_operazione"])
         df["data_valuta"] = pd.to_datetime(df["data_valuta"])
         df["data_ingresso"] = pd.to_datetime(df["data_ingresso"])
         df["riga_sorgente"] = df["riga_sorgente"].astype(int)
         job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
-        bq_client.load_table_from_dataframe(df, BQ_TABLE, job_config=job_config).result()
+        bq_client.load_table_from_dataframe(
+            df, BQ_TABLE, job_config=job_config
+        ).result()
         stats["written"] = len(new_rows)
         logger.info(f"Wrote {len(new_rows)} rows → BigQuery")
 
@@ -751,9 +889,13 @@ def collect_files(source: Path) -> list[Path]:
 
 def main():
     parser = argparse.ArgumentParser(description="Bank transaction ingestion")
-    parser.add_argument("--datahub", required=True, help="Path to datahub root (for mappings and logs)")
-    parser.add_argument("--source", "-s", help="Staging folder from rclone sync (default: auto)")
-    parser.add_argument("--project", default=BQ_PROJECT, help="GCP project")
+    parser.add_argument(
+        "--datahub", required=True, help="Path to datahub root (for mappings and logs)"
+    )
+    parser.add_argument(
+        "--source", "-s", help="Staging folder from rclone sync (default: auto)"
+    )
+    parser.add_argument("--project", default=PROJECT, help="GCP project")
     parser.add_argument("--dry-run", "-d", action="store_true")
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
@@ -768,12 +910,22 @@ def main():
     logger.info("=" * 60)
     logger.info("Bank ingestion pipeline START")
 
-    bq_client = bigquery.Client(project=args.project)
-    mappings = load_mappings(datahub / "dimensioni" / "mappature" / "dim_mapping_banca.csv", logger)
+    bq_client = (
+        get_client()
+        if args.project == PROJECT
+        else bigquery.Client(project=args.project)
+    )
+    mappings = load_mappings(
+        datahub / "dimensioni" / "mappature" / "dim_mapping_banca.csv", logger
+    )
     hashes = load_hashes(bq_client)
     logger.info(f"Existing hashes: {len(hashes)}")
 
-    source = Path(args.source) if args.source else Path.home() / ".cache/hotelops/tesoreria_staging"
+    source = (
+        Path(args.source)
+        if args.source
+        else Path.home() / ".cache/hotelops/tesoreria_staging"
+    )
     if not source.exists():
         logger.error(f"Source not found: {source} — run fetch_drive.py first")
         sys.exit(1)
@@ -784,10 +936,16 @@ def main():
     for filepath in files:
         meta = infer_meta(filepath)
         if "UNKNOWN" in meta["societa_banca"]:
-            logger.warning(f"SKIP — cannot infer societa/banca from filename or path: {filepath}")
+            logger.warning(
+                f"SKIP — cannot infer societa/banca from filename or path: {filepath}"
+            )
             continue
-        stats = process_file(filepath, bq_client, mappings, hashes, logger, args.dry_run, meta=meta)
-        logger.info(f"  {stats['file']}: {stats['total']} total, {stats['written']} written, {stats['dupes']} dupes, {stats['errors']} errors")
+        stats = process_file(
+            filepath, bq_client, mappings, hashes, logger, args.dry_run, meta=meta
+        )
+        logger.info(
+            f"  {stats['file']}: {stats['total']} total, {stats['written']} written, {stats['dupes']} dupes, {stats['errors']} errors"
+        )
 
     logger.info("Bank ingestion pipeline DONE")
     logger.info("=" * 60)

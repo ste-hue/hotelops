@@ -26,11 +26,13 @@ from pathlib import Path
 
 try:
     from google.cloud import bigquery
+
     HAS_BQ = True
 except ImportError:
     HAS_BQ = False
 
-from core.config import F_BILANCI_ANNUALI, PROJECT
+from core.bq.client import get_client
+from core.config import F_BILANCI_ANNUALI
 
 SEZIONI = [
     ("SP", re.compile(r"^#\s+Stato patrimoniale", re.MULTILINE)),
@@ -138,24 +140,30 @@ def parse_table(table_html: str) -> tuple[list[dict], int | None]:
                 # still useful as gruppo context
                 gruppo = voce
                 continue
-            rows.append({
-                "gruppo": gruppo,
-                "voce": voce,
-                "importo_current": cur,
-                "importo_prior": prior,
-            })
+            rows.append(
+                {
+                    "gruppo": gruppo,
+                    "voce": voce,
+                    "importo_current": cur,
+                    "importo_prior": prior,
+                }
+            )
 
     return rows, header_year
 
 
-def parse_bilancio_md(path: Path, logger: logging.Logger) -> tuple[str, int, list[dict]]:
+def parse_bilancio_md(
+    path: Path, logger: logging.Logger
+) -> tuple[str, int, list[dict]]:
     """Return (societa_id, anno, rows). Rows ready for BQ."""
     text = path.read_text(encoding="utf-8")
 
     # Detect fiscal year
     year_m = RE_FISCAL_YEAR.search(text)
     if not year_m:
-        raise ValueError(f"{path.name}: anno non rilevato (cerca 'Bilancio di esercizio al 31-12-YYYY')")
+        raise ValueError(
+            f"{path.name}: anno non rilevato (cerca 'Bilancio di esercizio al 31-12-YYYY')"
+        )
     anno = int(year_m.group(1))
 
     # Detect societa
@@ -189,17 +197,21 @@ def parse_bilancio_md(path: Path, logger: logging.Logger) -> tuple[str, int, lis
         for r in rows:
             if r["importo_current"] is None:
                 continue
-            out_rows.append({
-                "societa_id": societa_id,
-                "anno": anno,
-                "sezione": sez,
-                "gruppo": r["gruppo"] or None,
-                "voce": r["voce"],
-                "voce_norm": normalize_voce(r["voce"]),
-                "importo_eur": r["importo_current"],
-                "fonte_file": path.name,
-            })
-        logger.info(f"  {sez}: {sum(1 for r in rows if r['importo_current'] is not None)} righe con importo")
+            out_rows.append(
+                {
+                    "societa_id": societa_id,
+                    "anno": anno,
+                    "sezione": sez,
+                    "gruppo": r["gruppo"] or None,
+                    "voce": r["voce"],
+                    "voce_norm": normalize_voce(r["voce"]),
+                    "importo_eur": r["importo_current"],
+                    "fonte_file": path.name,
+                }
+            )
+        logger.info(
+            f"  {sez}: {sum(1 for r in rows if r['importo_current'] is not None)} righe con importo"
+        )
 
     return societa_id, anno, out_rows
 
@@ -211,17 +223,21 @@ def normalize_voce(voce: str) -> str:
     return s
 
 
-BQ_SCHEMA = [
-    bigquery.SchemaField("societa_id", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("anno", "INT64", mode="REQUIRED"),
-    bigquery.SchemaField("sezione", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("gruppo", "STRING"),
-    bigquery.SchemaField("voce", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("voce_norm", "STRING", mode="REQUIRED"),
-    bigquery.SchemaField("importo_eur", "NUMERIC", mode="REQUIRED"),
-    bigquery.SchemaField("fonte_file", "STRING"),
-    bigquery.SchemaField("ingested_at", "TIMESTAMP", mode="REQUIRED"),
-] if HAS_BQ else []
+BQ_SCHEMA = (
+    [
+        bigquery.SchemaField("societa_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("anno", "INT64", mode="REQUIRED"),
+        bigquery.SchemaField("sezione", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("gruppo", "STRING"),
+        bigquery.SchemaField("voce", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("voce_norm", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("importo_eur", "NUMERIC", mode="REQUIRED"),
+        bigquery.SchemaField("fonte_file", "STRING"),
+        bigquery.SchemaField("ingested_at", "TIMESTAMP", mode="REQUIRED"),
+    ]
+    if HAS_BQ
+    else []
+)
 
 
 def ensure_table(client, logger: logging.Logger) -> None:
@@ -266,8 +282,12 @@ def write_snapshot(client, rows: list[dict], logger: logging.Logger) -> None:
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Ingest bilanci annuali XBRL markdown → BQ")
-    ap.add_argument("--file", action="append", default=[], help="File markdown (ripetibile)")
+    ap = argparse.ArgumentParser(
+        description="Ingest bilanci annuali XBRL markdown → BQ"
+    )
+    ap.add_argument(
+        "--file", action="append", default=[], help="File markdown (ripetibile)"
+    )
     ap.add_argument("--dir", help="Directory con file markdown")
     ap.add_argument("--pattern", default="*_Bilancio.md", help="Glob per --dir")
     ap.add_argument("--dry-run", action="store_true")
@@ -299,14 +319,16 @@ def main():
         logger.info("DRY RUN — nessuna scrittura")
         # Print sample
         for r in all_rows[:5]:
-            logger.info(f"  {r['societa_id']} {r['anno']} {r['sezione']} | {r['voce']} = {r['importo_eur']:,.2f}")
+            logger.info(
+                f"  {r['societa_id']} {r['anno']} {r['sezione']} | {r['voce']} = {r['importo_eur']:,.2f}"
+            )
         return
 
     if not HAS_BQ:
         logger.error("google-cloud-bigquery non installato")
         sys.exit(1)
 
-    client = bigquery.Client(project=PROJECT)
+    client = get_client()
     write_snapshot(client, all_rows, logger)
     logger.info("DONE")
 

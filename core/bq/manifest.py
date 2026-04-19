@@ -18,6 +18,7 @@ from pathlib import Path
 
 import yaml
 
+from core.bq.client import get_client
 from core.config import PROJECT, DATASET
 
 log = logging.getLogger(__name__)
@@ -111,8 +112,7 @@ def _column_stats(
 
 
 def _get_client():
-    from google.cloud import bigquery
-    return bigquery.Client(project=PROJECT)
+    return get_client()
 
 
 def _introspect_table(client, table_name: str) -> dict:
@@ -184,9 +184,13 @@ def _introspect_table(client, table_name: str) -> dict:
             """
             for row in client.query(q).result():
                 result["columns"][col_name] = _column_stats(
-                    col_name, col_type,
-                    distinct=row.dist, values=None, sample=None,
-                    min_val=row.mn, max_val=row.mx,
+                    col_name,
+                    col_type,
+                    distinct=row.dist,
+                    values=None,
+                    sample=None,
+                    min_val=row.mn,
+                    max_val=row.mx,
                 )
 
         elif col_type in ("DATE", "TIMESTAMP", "DATETIME"):
@@ -201,10 +205,17 @@ def _introspect_table(client, table_name: str) -> dict:
                 mn = row.mn
                 mx = row.mx
                 result["columns"][col_name] = _column_stats(
-                    col_name, col_type,
-                    distinct=row.dist, values=None, sample=None,
-                    min_val=str(mn.date() if isinstance(mn, datetime) else mn) if mn else None,
-                    max_val=str(mx.date() if isinstance(mx, datetime) else mx) if mx else None,
+                    col_name,
+                    col_type,
+                    distinct=row.dist,
+                    values=None,
+                    sample=None,
+                    min_val=str(mn.date() if isinstance(mn, datetime) else mn)
+                    if mn
+                    else None,
+                    max_val=str(mx.date() if isinstance(mx, datetime) else mx)
+                    if mx
+                    else None,
                 )
 
         elif col_type == "STRING":
@@ -234,9 +245,13 @@ def _introspect_table(client, table_name: str) -> dict:
                 sample = [row.val for row in client.query(q).result()]
 
             result["columns"][col_name] = _column_stats(
-                col_name, col_type,
-                distinct=dist, values=values, sample=sample,
-                min_val=None, max_val=None,
+                col_name,
+                col_type,
+                distinct=dist,
+                values=values,
+                sample=sample,
+                min_val=None,
+                max_val=None,
             )
 
         elif col_type == "BOOLEAN":
@@ -286,7 +301,14 @@ def generate_manifest(
         yaml.add_representer(date, _yaml_representer_date)
 
         with open(path, "w") as f:
-            yaml.dump(manifest, f, default_flow_style=False, allow_unicode=True, sort_keys=False, width=120)
+            yaml.dump(
+                manifest,
+                f,
+                default_flow_style=False,
+                allow_unicode=True,
+                sort_keys=False,
+                width=120,
+            )
         log.info("Manifest written to %s", path)
 
     return manifest

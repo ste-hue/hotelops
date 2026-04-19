@@ -2,7 +2,19 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from reviews.ingest import filter_by_watermark
+
+
+@pytest.fixture(autouse=True)
+def _reset_bq_client_singleton():
+    """Clear the cached BQ client so each test's patch is honoured."""
+    import core.bq.client as bq_client_mod
+
+    bq_client_mod._client = None
+    yield
+    bq_client_mod._client = None
 
 
 def _item(piattaforma, bu, data_review, review_id="x"):
@@ -57,7 +69,9 @@ def test_filter_drops_malformed_date():
 
 def test_filter_gap_detection_when_all_items_new():
     watermarks = {("BOOKING", "HOTEL"): "2026-03-01"}
-    items = [_item("BOOKING", "HOTEL", f"2026-04-{i:02d}", str(i)) for i in range(1, 16)]
+    items = [
+        _item("BOOKING", "HOTEL", f"2026-04-{i:02d}", str(i)) for i in range(1, 16)
+    ]
     assert len(items) == 15
     kept, gap_keys = filter_by_watermark(watermarks, items, cap=15)
     assert len(kept) == 15
@@ -66,7 +80,9 @@ def test_filter_gap_detection_when_all_items_new():
 
 def test_filter_no_gap_when_below_cap():
     watermarks = {("BOOKING", "HOTEL"): "2026-03-01"}
-    items = [_item("BOOKING", "HOTEL", f"2026-04-{i:02d}", str(i)) for i in range(1, 15)]
+    items = [
+        _item("BOOKING", "HOTEL", f"2026-04-{i:02d}", str(i)) for i in range(1, 15)
+    ]
     assert len(items) == 14
     kept, gap_keys = filter_by_watermark(watermarks, items, cap=15)
     assert len(kept) == 14
@@ -78,10 +94,9 @@ def test_filter_multiple_keys_independent_gap():
         ("BOOKING", "HOTEL"): "2026-03-01",
         ("GOOGLE", "HOTEL"): "2026-03-01",
     }
-    items = (
-        [_item("BOOKING", "HOTEL", f"2026-04-{i:02d}", f"b{i}") for i in range(1, 16)]
-        + [_item("GOOGLE", "HOTEL", "2026-04-05", "g1")]
-    )
+    items = [
+        _item("BOOKING", "HOTEL", f"2026-04-{i:02d}", f"b{i}") for i in range(1, 16)
+    ] + [_item("GOOGLE", "HOTEL", "2026-04-05", "g1")]
     kept, gap_keys = filter_by_watermark(watermarks, items, cap=15)
     assert len(kept) == 16
     assert gap_keys == [("BOOKING", "HOTEL")]
@@ -92,8 +107,12 @@ def test_read_watermarks_returns_dict(monkeypatch):
 
     # First query: watermarks
     watermark_rows = [
-        MagicMock(piattaforma="BOOKING", business_unit_id="HOTEL", watermark="2026-04-06"),
-        MagicMock(piattaforma="GOOGLE", business_unit_id="HOTEL", watermark="2026-03-03"),
+        MagicMock(
+            piattaforma="BOOKING", business_unit_id="HOTEL", watermark="2026-04-06"
+        ),
+        MagicMock(
+            piattaforma="GOOGLE", business_unit_id="HOTEL", watermark="2026-03-03"
+        ),
     ]
     # Second query: malformed count
     malformed_rows = [
@@ -105,8 +124,9 @@ def test_read_watermarks_returns_dict(monkeypatch):
         MagicMock(result=MagicMock(return_value=iter(malformed_rows))),
     ]
 
-    with patch("reviews.ingest.bigquery.Client", return_value=fake_client):
+    with patch("google.cloud.bigquery.Client", return_value=fake_client):
         from reviews.ingest import read_watermarks
+
         result = read_watermarks()
 
     assert result == {
@@ -123,8 +143,9 @@ def test_read_watermarks_empty(monkeypatch):
         MagicMock(result=MagicMock(return_value=iter([]))),
         MagicMock(result=MagicMock(return_value=iter([]))),
     ]
-    with patch("reviews.ingest.bigquery.Client", return_value=fake_client):
+    with patch("google.cloud.bigquery.Client", return_value=fake_client):
         from reviews.ingest import read_watermarks
+
         assert read_watermarks() == {}
 
 

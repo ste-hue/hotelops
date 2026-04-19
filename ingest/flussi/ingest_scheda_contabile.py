@@ -50,20 +50,24 @@ from pathlib import Path
 
 try:
     import openpyxl
+
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
 
 try:
-    from google.cloud import bigquery
+    from google.cloud import bigquery  # noqa: F401 — presence check
+
     HAS_BQ = True
 except ImportError:
     HAS_BQ = False
 
+from core.bq.client import get_client
+from core.config import PROJECT
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
-BQ_PROJECT = "hotelops-suite"
-BQ_TABLE = f"{BQ_PROJECT}.hotelops.f_saldi_banca_snapshot"
+BQ_TABLE = f"{PROJECT}.hotelops.f_saldi_banca_snapshot"
 
 log = logging.getLogger("ingest.scheda_contabile")
 
@@ -92,6 +96,7 @@ ESOLVER_CC_MAP = {
 
 
 # ── Parsing helpers ───────────────────────────────────────────────────────────
+
 
 def parse_italian_number(val) -> float | None:
     """Parse Italian number format: '1.234,56' or '1234,56' → 1234.56."""
@@ -131,6 +136,7 @@ def parse_date(val) -> date | None:
 
 
 # ── DD/MM swap fix (XLSX only) ────────────────────────────────────────────────
+
 
 def _fix_excel_date_swap(rows_raw: list[dict]) -> list[dict]:
     """
@@ -176,12 +182,15 @@ def _fix_excel_date_swap(rows_raw: list[dict]) -> list[dict]:
             pass
 
     if fixed_count:
-        log.info(f"Fixed {fixed_count} DD/MM-swapped dates (Excel auto-detection artifact)")
+        log.info(
+            f"Fixed {fixed_count} DD/MM-swapped dates (Excel auto-detection artifact)"
+        )
 
     return rows_raw
 
 
 # ── Parsers ───────────────────────────────────────────────────────────────────
+
 
 def parse_scheda_csv(filepath: Path) -> list[dict]:
     """
@@ -218,15 +227,17 @@ def parse_scheda_csv(filepath: Path) -> list[dict]:
         dare = parse_italian_number(fields[3]) or 0.0
         avere = parse_italian_number(fields[4]) or 0.0
 
-        rows.append({
-            "data_registrazione": data,
-            "rif_registrazione": fields[1].strip() if len(fields) > 1 else "",
-            "causale": fields[2].strip() if len(fields) > 2 else "",
-            "dare": dare,
-            "avere": avere,
-            "saldo": saldo,
-            "documento": fields[6].strip() if len(fields) > 6 else "",
-        })
+        rows.append(
+            {
+                "data_registrazione": data,
+                "rif_registrazione": fields[1].strip() if len(fields) > 1 else "",
+                "causale": fields[2].strip() if len(fields) > 2 else "",
+                "dare": dare,
+                "avere": avere,
+                "saldo": saldo,
+                "documento": fields[6].strip() if len(fields) > 6 else "",
+            }
+        )
 
     return rows
 
@@ -259,16 +270,18 @@ def parse_scheda_xlsx(filepath: Path) -> list[dict]:
         dare = parse_italian_number(ws.cell(r, 4).value) or 0.0
         avere = parse_italian_number(ws.cell(r, 5).value) or 0.0
 
-        rows.append({
-            "data_registrazione": data,
-            "rif_registrazione": str(ws.cell(r, 2).value or "").strip(),
-            "causale": str(ws.cell(r, 3).value or "").strip(),
-            "dare": dare,
-            "avere": avere,
-            "saldo": saldo,
-            "documento": str(ws.cell(r, 7).value or "").strip(),
-            "_from_string": from_string,
-        })
+        rows.append(
+            {
+                "data_registrazione": data,
+                "rif_registrazione": str(ws.cell(r, 2).value or "").strip(),
+                "causale": str(ws.cell(r, 3).value or "").strip(),
+                "dare": dare,
+                "avere": avere,
+                "saldo": saldo,
+                "documento": str(ws.cell(r, 7).value or "").strip(),
+                "_from_string": from_string,
+            }
+        )
 
     # Fix DD/MM swaps from Excel auto-detection
     rows = _fix_excel_date_swap(rows)
@@ -292,6 +305,7 @@ def parse_scheda_contabile(filepath: Path) -> list[dict]:
 
 
 # ── Inference ─────────────────────────────────────────────────────────────────
+
 
 def extract_daily_saldi(rows: list[dict]) -> dict[date, float]:
     """
@@ -368,6 +382,7 @@ def infer_societa_from_filename(filename: str, banca: str | None = None) -> str 
 
 # ── BigQuery write ────────────────────────────────────────────────────────────
 
+
 def write_saldi_to_bq(
     saldi: dict[date, float],
     societa_id: str,
@@ -385,13 +400,15 @@ def write_saldi_to_bq(
 
     rows_to_write = []
     for d, saldo in sorted(saldi.items()):
-        rows_to_write.append({
-            "societa_id": societa_id,
-            "banca_id": banca_id,
-            "data_snapshot": d.isoformat(),
-            "saldo_finale": saldo,
-            "file_sorgente": "SCHEDA_CONTABILE",
-        })
+        rows_to_write.append(
+            {
+                "societa_id": societa_id,
+                "banca_id": banca_id,
+                "data_snapshot": d.isoformat(),
+                "saldo_finale": saldo,
+                "file_sorgente": "SCHEDA_CONTABILE",
+            }
+        )
 
     if dry_run:
         log.info(f"DRY RUN: {len(rows_to_write)} saldi for {societa_id}/{banca_id}")
@@ -399,7 +416,7 @@ def write_saldi_to_bq(
             log.info(f"  {r['data_snapshot']}: €{r['saldo_finale']:,.2f}")
         return len(rows_to_write)
 
-    client = bigquery.Client(project=BQ_PROJECT)
+    client = get_client()
 
     # DELETE existing snapshots for this societa+banca (from SCHEDA_CONTABILE source)
     dates = [r["data_snapshot"] for r in rows_to_write]
@@ -426,6 +443,7 @@ def write_saldi_to_bq(
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+
 def process_file(
     filepath: Path,
     societa_id: str,
@@ -439,7 +457,9 @@ def process_file(
     if not banca_id:
         banca_id = infer_banca_from_filename(filepath.name, societa_id)
         if not banca_id:
-            log.error(f"Cannot infer banca from filename: {filepath.name}. Use --banca.")
+            log.error(
+                f"Cannot infer banca from filename: {filepath.name}. Use --banca."
+            )
             return 0
         log.info(f"Inferred banca: {banca_id}")
 
@@ -448,8 +468,10 @@ def process_file(
         log.warning(f"No rows parsed from {filepath.name}")
         return 0
 
-    log.info(f"Parsed {len(rows)} movements, date range: "
-             f"{rows[0]['data_registrazione']} → {rows[-1]['data_registrazione']}")
+    log.info(
+        f"Parsed {len(rows)} movements, date range: "
+        f"{rows[0]['data_registrazione']} → {rows[-1]['data_registrazione']}"
+    )
 
     daily_saldi = extract_daily_saldi(rows)
     log.info(f"Extracted {len(daily_saldi)} end-of-day saldi")
@@ -462,17 +484,28 @@ def main():
         description="Scheda contabile Esolver → f_saldi_banca_snapshot"
     )
     parser.add_argument("--file", "-f", help="Single file to process")
-    parser.add_argument("--dir", "-d", help="Directory to scan (e.g. registro_banca_esolver/ORTI/)")
-    parser.add_argument("--societa", default=None, choices=["ORTI", "INTUR"],
-                        help="Società ID (auto-inferred from filename if omitted)")
-    parser.add_argument("--banca", default=None,
-                        choices=["MPS", "MPS_KROSS", "SELLA", "INTESA", "BCP"],
-                        help="Banca ID (auto-inferred from filename if omitted)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Parse and show results, no BQ writes")
+    parser.add_argument(
+        "--dir", "-d", help="Directory to scan (e.g. registro_banca_esolver/ORTI/)"
+    )
+    parser.add_argument(
+        "--societa",
+        default=None,
+        choices=["ORTI", "INTUR"],
+        help="Società ID (auto-inferred from filename if omitted)",
+    )
+    parser.add_argument(
+        "--banca",
+        default=None,
+        choices=["MPS", "MPS_KROSS", "SELLA", "INTESA", "BCP"],
+        help="Banca ID (auto-inferred from filename if omitted)",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Parse and show results, no BQ writes"
+    )
     args = parser.parse_args()
 
     from ingest._logging import setup_logging
+
     setup_logging("ingest.scheda_contabile", Path(__file__).parent / "logs")
 
     if not args.file and not args.dir:

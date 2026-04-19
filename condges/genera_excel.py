@@ -26,7 +26,7 @@ import sys
 from datetime import date
 
 try:
-    from google.cloud import bigquery
+    from google.cloud import bigquery  # noqa: F401 — presence check
 except ImportError:
     print("google-cloud-bigquery non installato")
     sys.exit(1)
@@ -35,8 +35,28 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-BQ_PROJECT = "hotelops-suite"
-MESI = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"]
+from core.bq.client import get_client
+from core.config import (
+    D_VOCI_PIANO_FINANZIARIO,
+    F_BANCHE_MOVIMENTI,
+    V_PIANO_FINANZIARIO_CONSUNTIVO,
+    V_PIANO_FINANZIARIO_MENSILE,
+)
+
+MESI = [
+    "Gen",
+    "Feb",
+    "Mar",
+    "Apr",
+    "Mag",
+    "Giu",
+    "Lug",
+    "Ago",
+    "Set",
+    "Ott",
+    "Nov",
+    "Dic",
+]
 
 # Styles
 FONT_HEADER = Font(name="Arial", bold=True, size=11)
@@ -52,14 +72,14 @@ FILL_TOTALE = PatternFill("solid", fgColor="DDDDDD")
 FILL_INPUT = PatternFill("solid", fgColor="FFFF00")
 FILL_CONSUNTIVO = PatternFill("solid", fgColor="E8F5E9")
 EUR_FMT = '#,##0;(#,##0);"-"'
-PCT_FMT = '0.0%'
+PCT_FMT = "0.0%"
 THIN_BORDER = Border(
     bottom=Side(style="thin", color="AAAAAA"),
 )
 
 
 def query_bq(sql: str) -> list[dict]:
-    client = bigquery.Client(project=BQ_PROJECT)
+    client = get_client()
     return [dict(r) for r in client.query(sql).result()]
 
 
@@ -68,7 +88,7 @@ def fetch_pf_data(anno: int) -> list[dict]:
     return query_bq(f"""
     SELECT societa_id, voce_id, voce_label, sezione, categoria, ord, mese,
       tipo_periodo, importo_consuntivo, importo_budget, scostamento, scostamento_pct
-    FROM `hotelops-suite.hotelops.v_piano_finanziario_mensile`
+    FROM `{V_PIANO_FINANZIARIO_MENSILE}`
     WHERE anno = {anno}
       AND (importo_consuntivo != 0 OR importo_budget != 0)
     ORDER BY societa_id, ord, mese
@@ -80,7 +100,7 @@ def fetch_stagionalita(anno_prev: int) -> list[dict]:
     return query_bq(f"""
     SELECT societa_id, voce_id, voce_label, sezione, mese,
       ROUND(importo, 2) AS importo
-    FROM `hotelops-suite.hotelops.v_piano_finanziario_consuntivo`
+    FROM `{V_PIANO_FINANZIARIO_CONSUNTIVO}`
     WHERE anno = {anno_prev}
     ORDER BY societa_id, voce_id, mese
     """)
@@ -88,9 +108,9 @@ def fetch_stagionalita(anno_prev: int) -> list[dict]:
 
 def fetch_voci() -> list[dict]:
     """Fetch all voci ordered."""
-    return query_bq("""
+    return query_bq(f"""
     SELECT voce_id, voce_label, sezione, categoria, ord, societa_id
-    FROM `hotelops-suite.hotelops.d_voci_piano_finanziario`
+    FROM `{D_VOCI_PIANO_FINANZIARIO}`
     ORDER BY ord
     """)
 
@@ -101,7 +121,7 @@ def fetch_saldo_banca(societa: str) -> tuple[float, dict]:
     rows = query_bq(f"""
     SELECT banca_id,
       ROUND(SUM(importo_netto), 2) AS saldo
-    FROM `hotelops-suite.hotelops.f_banche_movimenti`
+    FROM `{F_BANCHE_MOVIMENTI}`
     WHERE societa_id = '{societa}'
     GROUP BY 1
     ORDER BY 1
@@ -111,9 +131,17 @@ def fetch_saldo_banca(societa: str) -> tuple[float, dict]:
     return totale, per_banca
 
 
-def build_pf_sheet(wb: Workbook, sheet_name: str, societa: str, anno: int,
-                   voci: list[dict], pf_data: list[dict], stag_data: list[dict],
-                   saldo_iniziale: float = 0, saldi_banca: dict | None = None):
+def build_pf_sheet(
+    wb: Workbook,
+    sheet_name: str,
+    societa: str,
+    anno: int,
+    voci: list[dict],
+    pf_data: list[dict],
+    stag_data: list[dict],
+    saldo_iniziale: float = 0,
+    saldi_banca: dict | None = None,
+):
     """Build one PF sheet for a società."""
     ws = wb.create_sheet(sheet_name)
     mese_corrente = date.today().month
@@ -130,7 +158,9 @@ def build_pf_sheet(wb: Workbook, sheet_name: str, societa: str, anno: int,
             stag[(r["voce_id"], r["mese"])] = r.get("importo", 0)
 
     # Filter voci for this società
-    soc_voci = [v for v in voci if v["societa_id"] is None or v["societa_id"] == societa]
+    soc_voci = [
+        v for v in voci if v["societa_id"] is None or v["societa_id"] == societa
+    ]
 
     # Header
     ws.merge_cells("A1:N1")
@@ -144,7 +174,7 @@ def build_pf_sheet(wb: Workbook, sheet_name: str, societa: str, anno: int,
 
     # Column headers: A=Voce, B=Categoria, C-N=Gen-Dic, O=Totale, P=2025
     row = 5
-    headers = ["Voce", "Cat."] + MESI + ["TOTALE", f"{anno-1}"]
+    headers = ["Voce", "Cat."] + MESI + ["TOTALE", f"{anno - 1}"]
     for col, h in enumerate(headers, 1):
         cell = ws.cell(row, col, h)
         cell.font = FONT_HEADER
@@ -177,7 +207,9 @@ def build_pf_sheet(wb: Workbook, sheet_name: str, societa: str, anno: int,
 
         # Voce label + categoria
         ws.cell(row, 1, v["voce_label"]).font = Font(name="Arial", size=10)
-        ws.cell(row, 2, v.get("categoria", "")).font = Font(name="Arial", size=9, color="888888")
+        ws.cell(row, 2, v.get("categoria", "")).font = Font(
+            name="Arial", size=9, color="888888"
+        )
 
         # Monthly values
         for mese in range(1, 13):
@@ -215,7 +247,9 @@ def build_pf_sheet(wb: Workbook, sheet_name: str, societa: str, anno: int,
         # Previous year (col P = 16)
         anno_prev_total = sum(stag.get((vid, m), 0) for m in range(1, 13))
         if anno_prev_total:
-            ws.cell(row, 16, round(anno_prev_total)).font = Font(name="Arial", size=9, color="888888")
+            ws.cell(row, 16, round(anno_prev_total)).font = Font(
+                name="Arial", size=9, color="888888"
+            )
             ws.cell(row, 16).number_format = EUR_FMT
 
         ws.cell(row, 1).border = THIN_BORDER
@@ -273,19 +307,25 @@ def build_pf_sheet(wb: Workbook, sheet_name: str, societa: str, anno: int,
     ws.cell(row, 1).fill = FILL_TOTALE
     for col in range(3, 16):
         cl = get_column_letter(col)
-        ws.cell(row, col, f"={cl}{tot_e_row}-{cl}{tot_u_row}").font = Font(name="Arial", bold=True, size=10, color="008000")
+        ws.cell(row, col, f"={cl}{tot_e_row}-{cl}{tot_u_row}").font = Font(
+            name="Arial", bold=True, size=10, color="008000"
+        )
         ws.cell(row, col).number_format = EUR_FMT
         ws.cell(row, col).fill = FILL_TOTALE
 
     # Saldo banca reale (prima del cumulativo)
     row += 1
     if saldo_iniziale and saldi_banca:
-        ws.cell(row, 1, "SALDO BANCA INIZIALE").font = Font(name="Arial", bold=True, size=10, color="8B0000")
+        ws.cell(row, 1, "SALDO BANCA INIZIALE").font = Font(
+            name="Arial", bold=True, size=10, color="8B0000"
+        )
         ws.cell(row, 1).fill = PatternFill("solid", fgColor="FFF2CC")
         banca_note = ", ".join(f"{b}: €{int(s):,}" for b, s in saldi_banca.items())
         ws.cell(row, 2, banca_note).font = Font(name="Arial", size=8, color="888888")
         # Saldo iniziale in colonna Gen (C)
-        ws.cell(row, 3, round(saldo_iniziale)).font = Font(name="Arial", bold=True, size=10, color="8B0000")
+        ws.cell(row, 3, round(saldo_iniziale)).font = Font(
+            name="Arial", bold=True, size=10, color="8B0000"
+        )
         ws.cell(row, 3).number_format = EUR_FMT
         ws.cell(row, 3).fill = PatternFill("solid", fgColor="FFF2CC")
     saldo_row = row
@@ -299,11 +339,11 @@ def build_pf_sheet(wb: Workbook, sheet_name: str, societa: str, anno: int,
         if prev_cl is None:
             # First month: saldo iniziale + cash flow netto
             if saldo_iniziale:
-                ws.cell(row, col, f"={cl}{saldo_row}+{cl}{row-2}").font = FONT_FORMULA
+                ws.cell(row, col, f"={cl}{saldo_row}+{cl}{row - 2}").font = FONT_FORMULA
             else:
-                ws.cell(row, col, f"={cl}{row-2}").font = FONT_FORMULA
+                ws.cell(row, col, f"={cl}{row - 2}").font = FONT_FORMULA
         else:
-            ws.cell(row, col, f"={prev_cl}{row}+{cl}{row-2}").font = FONT_FORMULA
+            ws.cell(row, col, f"={prev_cl}{row}+{cl}{row - 2}").font = FONT_FORMULA
         ws.cell(row, col).number_format = EUR_FMT
         prev_cl = cl
 
@@ -311,7 +351,9 @@ def build_pf_sheet(wb: Workbook, sheet_name: str, societa: str, anno: int,
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Genera Piano Finanziario Excel da BigQuery")
+    parser = argparse.ArgumentParser(
+        description="Genera Piano Finanziario Excel da BigQuery"
+    )
     parser.add_argument("--anno", type=int, default=2026)
     parser.add_argument("--output", default=None, help="Output file path")
     args = parser.parse_args()
@@ -328,7 +370,7 @@ def main():
     print(f"  PF {anno}: {len(pf_data)} righe")
 
     stag_data = fetch_stagionalita(anno - 1)
-    print(f"  Stagionalità {anno-1}: {len(stag_data)} righe")
+    print(f"  Stagionalità {anno - 1}: {len(stag_data)} righe")
 
     wb = Workbook()
     wb.remove(wb.active)
@@ -337,8 +379,17 @@ def main():
         print(f"  Building sheet PF {societa}...")
         saldo_tot, saldi_per_banca = fetch_saldo_banca(societa)
         print(f"  Saldo banca {societa}: €{saldo_tot:,.0f}")
-        build_pf_sheet(wb, f"PF {societa}", societa, anno, voci, pf_data, stag_data,
-                       saldo_iniziale=saldo_tot, saldi_banca=saldi_per_banca)
+        build_pf_sheet(
+            wb,
+            f"PF {societa}",
+            societa,
+            anno,
+            voci,
+            pf_data,
+            stag_data,
+            saldo_iniziale=saldo_tot,
+            saldi_banca=saldi_per_banca,
+        )
 
     wb.save(output)
     print(f"\n✓ {output} generato ({len(wb.sheetnames)} fogli)")

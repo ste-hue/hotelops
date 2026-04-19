@@ -19,21 +19,31 @@ from pathlib import Path
 
 try:
     from google.cloud import bigquery
+
     HAS_BQ = True
 except ImportError:
     HAS_BQ = False
 
-BQ_TABLE = "hotelops-suite.hotelops.d_fornitori"
+from core.bq.client import get_client
+from core.config import PROJECT
 
-DEFAULT_SOURCE = Path(__file__).resolve().parents[2] / "bq" / "dimensioni" / "d_fornitori.csv"
+BQ_TABLE = f"{PROJECT}.hotelops.d_fornitori"
 
-BQ_SCHEMA = [
-    bigquery.SchemaField("codice_fornitore", "INTEGER", mode="REQUIRED"),
-    bigquery.SchemaField("nome_esolver",     "STRING"),
-    bigquery.SchemaField("nome_pf",          "STRING"),
-    bigquery.SchemaField("voce_id",          "STRING"),
-    bigquery.SchemaField("is_intercompany",  "BOOLEAN"),
-] if HAS_BQ else []
+DEFAULT_SOURCE = (
+    Path(__file__).resolve().parents[2] / "bq" / "dimensioni" / "d_fornitori.csv"
+)
+
+BQ_SCHEMA = (
+    [
+        bigquery.SchemaField("codice_fornitore", "INTEGER", mode="REQUIRED"),
+        bigquery.SchemaField("nome_esolver", "STRING"),
+        bigquery.SchemaField("nome_pf", "STRING"),
+        bigquery.SchemaField("voce_id", "STRING"),
+        bigquery.SchemaField("is_intercompany", "BOOLEAN"),
+    ]
+    if HAS_BQ
+    else []
+)
 
 
 def setup_logger() -> logging.Logger:
@@ -54,13 +64,15 @@ def parse_csv(filepath: Path, logger: logging.Logger) -> list[dict]:
             if not codice:
                 continue
             is_ic_raw = row.get("is_intercompany", "False").strip().lower()
-            rows.append({
-                "codice_fornitore": int(codice),
-                "nome_esolver":     row["nome_esolver"].strip() or None,
-                "nome_pf":          row.get("nome_pf", "").strip() or None,
-                "voce_id":          row.get("voce_id", "").strip() or None,
-                "is_intercompany":  is_ic_raw in ("true", "1", "yes"),
-            })
+            rows.append(
+                {
+                    "codice_fornitore": int(codice),
+                    "nome_esolver": row["nome_esolver"].strip() or None,
+                    "nome_pf": row.get("nome_pf", "").strip() or None,
+                    "voce_id": row.get("voce_id", "").strip() or None,
+                    "is_intercompany": is_ic_raw in ("true", "1", "yes"),
+                }
+            )
 
     logger.info(f"Fornitori parsati: {len(rows)}")
     return rows
@@ -92,14 +104,16 @@ def main():
     if args.dry_run:
         logger.info("DRY RUN — nessuna scrittura")
         for r in rows:
-            logger.info(f"  {r['codice_fornitore']:>4} | {r['nome_esolver']:<40} | {r['voce_id'] or '-'}")
+            logger.info(
+                f"  {r['codice_fornitore']:>4} | {r['nome_esolver']:<40} | {r['voce_id'] or '-'}"
+            )
         return
 
     if not HAS_BQ:
         logger.error("google-cloud-bigquery non installato")
         sys.exit(1)
 
-    bq_client = bigquery.Client(project="hotelops-suite")
+    bq_client = get_client()
 
     job_config = bigquery.LoadJobConfig(
         schema=BQ_SCHEMA,
