@@ -924,7 +924,7 @@ def main():
     source = (
         Path(args.source)
         if args.source
-        else Path.home() / ".cache/hotelops/tesoreria_staging"
+        else Path.home() / ".cache/hotelops/banche_staging"
     )
     if not source.exists():
         logger.error(f"Source not found: {source} — run fetch_drive.py first")

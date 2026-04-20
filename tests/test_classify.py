@@ -30,6 +30,7 @@ from ingest.classify import (
     infer_societa,
     infer_societa_from_cc,
     route_file,
+    run_ingest,
 )
 
 
@@ -48,7 +49,9 @@ def _write_csv_file(
             w.writerow(row)
 
 
-def _write_xlsx_file(path: Path, headers: list[str], rows: list[list], sheet_name: str = "Sheet1"):
+def _write_xlsx_file(
+    path: Path, headers: list[str], rows: list[list], sheet_name: str = "Sheet1"
+):
     """Write a minimal XLSX file using openpyxl."""
     from openpyxl import Workbook
 
@@ -113,10 +116,15 @@ class TestInferSocieta:
 
 class TestInferBanca:
     def test_cc_pattern_orti(self):
-        assert infer_banca("20260101_Conto_Banca_Cc1_Saldo.csv", societa="ORTI") == "INTESA"
+        assert (
+            infer_banca("20260101_Conto_Banca_Cc1_Saldo.csv", societa="ORTI")
+            == "INTESA"
+        )
 
     def test_cc_pattern_intur(self):
-        assert infer_banca("20260101_Conto_Banca_Cc4_Saldo.csv", societa="INTUR") == "BCP"
+        assert (
+            infer_banca("20260101_Conto_Banca_Cc4_Saldo.csv", societa="INTUR") == "BCP"
+        )
 
     def test_mps_kross_before_mps(self):
         assert infer_banca("ORTI_KROSS_20260322.xlsx") == "MPS_KROSS"
@@ -142,7 +150,12 @@ class TestInferBanca:
 
 class TestInferSocietaFromCc:
     def test_cc1_intesa_is_orti(self):
-        assert infer_societa_from_cc("20260101_Conto_BancaIntesa_Cc1_Saldo.csv", banca="INTESA") == "ORTI"
+        assert (
+            infer_societa_from_cc(
+                "20260101_Conto_BancaIntesa_Cc1_Saldo.csv", banca="INTESA"
+            )
+            == "ORTI"
+        )
 
     def test_cc4_bcp_is_intur(self):
         assert infer_societa_from_cc("file_Cc4_export.csv", banca="BCP") == "INTUR"
@@ -183,7 +196,10 @@ class TestDetectSchedaContabile:
         assert result.societa == "INTUR"
 
     def test_csv_esolver_naming(self, tmp_path):
-        f = tmp_path / "20260101_Conto_BancaIntesaSanpaolo_Cc1_Saldo51520-51_Esercizio2026.csv"
+        f = (
+            tmp_path
+            / "20260101_Conto_BancaIntesaSanpaolo_Cc1_Saldo51520-51_Esercizio2026.csv"
+        )
         _write_csv_file(
             f,
             ["Col1", "Col2", "Col3"],
@@ -333,10 +349,13 @@ class TestDetectGasparotto:
 
     def test_budget_ce_sheets(self, tmp_path):
         f = tmp_path / "budget_2026.xlsx"
-        _write_xlsx_multi_sheet(f, {
-            "Budget": (["Mese", "Importo"], [["Gen", 1000]]),
-            "Conto Economico": (["Voce", "Totale"], [["Ricavi", 5000]]),
-        })
+        _write_xlsx_multi_sheet(
+            f,
+            {
+                "Budget": (["Mese", "Importo"], [["Gen", 1000]]),
+                "Conto Economico": (["Voce", "Totale"], [["Ricavi", 5000]]),
+            },
+        )
         result = detect_gasparotto(f)
         assert result is not None
         assert result.category == "gasparotto"
@@ -363,10 +382,13 @@ class TestDetectPianoFinanziario:
 
     def test_sheet_name_match(self, tmp_path):
         f = tmp_path / "financial_plan.xlsx"
-        _write_xlsx_multi_sheet(f, {
-            "Piano Finanziario": (["Voce", "Gen", "Feb"], [["Hotel", 100, 120]]),
-            "Note": (["Nota"], [["test"]]),
-        })
+        _write_xlsx_multi_sheet(
+            f,
+            {
+                "Piano Finanziario": (["Voce", "Gen", "Feb"], [["Hotel", 100, 120]]),
+                "Note": (["Nota"], [["test"]]),
+            },
+        )
         result = detect_piano_finanziario(f)
         assert result is not None
         assert result.category == "piano_finanziario"
@@ -419,6 +441,34 @@ class TestDetectBanca:
         assert result is not None
         assert result.category == "banca"
         assert result.banca == "MPS"
+
+    def test_dest_folder_includes_banca(self, tmp_path):
+        """Bug #2: routing must land files in homebanking/{societa}/{banca}/."""
+        f = tmp_path / "ORTI_intesa.xlsx"
+        _write_xlsx_file(
+            f,
+            ["Data Contabile", "Data Valuta", "Descrizione", "Dare", "Avere"],
+            [["2026-01-01", "2026-01-02", "Bonifico", 0, 500]],
+        )
+        result = detect_banca(f)
+        assert result is not None
+        assert result.societa == "ORTI"
+        assert result.banca == "INTESA"
+        assert result.dest_folder == "homebanking/ORTI/INTESA"
+
+    def test_dest_folder_falls_back_without_banca(self, tmp_path):
+        """When banca is unknown, stay at homebanking/{societa} (no empty subfolder)."""
+        f = tmp_path / "ORTI_generic.xlsx"
+        _write_xlsx_file(
+            f,
+            ["Data", "Dare", "Avere", "Descrizione"],
+            [["2026-01-01", 10, 0, "x"]],
+        )
+        result = detect_banca(f)
+        assert result is not None
+        assert result.societa == "ORTI"
+        assert result.banca is None
+        assert result.dest_folder == "homebanking/ORTI"
 
     def test_non_matching_csv_returns_none(self, tmp_path):
         f = tmp_path / "products.csv"
@@ -492,10 +542,13 @@ class TestDetectCoperti:
 
     def test_scarico_sheets(self, tmp_path):
         f = tmp_path / "covers.xlsx"
-        _write_xlsx_multi_sheet(f, {
-            "SCARICO_BRK": (["Date", "Count"], [["2026-03-01", 30]]),
-            "SCARICO_LUNCH": (["Date", "Count"], [["2026-03-01", 45]]),
-        })
+        _write_xlsx_multi_sheet(
+            f,
+            {
+                "SCARICO_BRK": (["Date", "Count"], [["2026-03-01", 30]]),
+                "SCARICO_LUNCH": (["Date", "Count"], [["2026-03-01", 45]]),
+            },
+        )
         result = detect_coperti(f)
         assert result is not None
         assert result.category == "coperti"
@@ -512,7 +565,9 @@ class TestDetectCoperti:
 class TestDetectEconomato:
     def test_filename_consumi(self, tmp_path):
         f = tmp_path / "CONSUMI_Marzo.xlsx"
-        _write_xlsx_file(f, ["Codice", "Descrizione", "Quantita"], [["P001", "Pasta", 10]])
+        _write_xlsx_file(
+            f, ["Codice", "Descrizione", "Quantita"], [["P001", "Pasta", 10]]
+        )
         result = detect_economato(f)
         assert result is not None
         assert result.category == "economato"
@@ -662,6 +717,120 @@ class TestRouteFile:
         )
         assert route_file(result, tmp_path / "datahub") is None
 
+    def test_banca_mirrors_to_cache(self, tmp_path, monkeypatch):
+        """Banca files must be mirrored to ~/.cache/hotelops/banche_staging/
+        so ingest.banca.ingest (which reads from staging, not the datahub) sees
+        freshly routed files. Regression test for the datahub/cache decouple.
+        """
+        import ingest.classify as cl
+
+        fake_cache = tmp_path / "fake_cache"
+        monkeypatch.setitem(cl.CACHE_MIRRORS, "banca", fake_cache / "banche_staging")
+
+        src = tmp_path / "ORTI_MPS_20260420.xlsx"
+        src.write_text("bank content")
+        result = ClassificationResult(
+            file_path=src,
+            file_type="banca_mps",
+            category="banca",
+            societa="ORTI",
+            banca="MPS",
+            canonical_name="ORTI_MPS_20260420.xlsx",
+            dest_folder="homebanking/ORTI",
+            confidence=0.9,
+        )
+
+        datahub = tmp_path / "datahub"
+        dest = route_file(result, datahub, dry_run=False, use_rclone=False)
+        assert dest is not None
+        # Datahub copy exists
+        assert dest.exists()
+        # Cache mirror exists with the top-level 'homebanking/' stripped,
+        # preserving the societa subfolder (matches fetch_drive.py layout).
+        mirror = fake_cache / "banche_staging" / "ORTI" / "ORTI_MPS_20260420.xlsx"
+        assert mirror.exists()
+        assert mirror.read_text() == "bank content"
+
+    def test_non_banca_skips_cache_mirror(self, tmp_path, monkeypatch):
+        """Non-banca categories must NOT be mirrored to the banca cache."""
+        import ingest.classify as cl
+
+        fake_cache = tmp_path / "fake_cache"
+        monkeypatch.setitem(cl.CACHE_MIRRORS, "banca", fake_cache / "banche_staging")
+
+        src = tmp_path / "master.xlsx"
+        src.write_text("gasparotto content")
+        result = ClassificationResult(
+            file_path=src,
+            file_type="gasparotto_budget",
+            category="gasparotto",
+            canonical_name="master.xlsx",
+            dest_folder="gasparotto",
+            confidence=0.9,
+        )
+        route_file(result, tmp_path / "datahub", dry_run=False, use_rclone=False)
+        # Cache mirror must NOT be populated for non-banca
+        assert not (fake_cache / "banche_staging").exists()
+
+
+# ── run_ingest argv construction ─────────────────────────────────────────────
+
+
+class TestRunIngestArgv:
+    """Bug #1: pipeline invocation must handle spaces in datahub paths."""
+
+    def test_datahub_with_spaces_not_split(self, tmp_path, monkeypatch):
+        captured = {}
+
+        class _FakeProc:
+            returncode = 0
+            stderr = ""
+
+        def _fake_run(argv, **kwargs):
+            captured["argv"] = argv
+            return _FakeProc()
+
+        monkeypatch.setattr("ingest.classify.subprocess.run", _fake_run)
+
+        dest_file = tmp_path / "ORTI_MPS_20260420.xls"
+        dest_file.touch()
+        datahub_with_space = Path("/Users/x/My Drive/00_hotelops_datahub")
+
+        result = ClassificationResult(
+            file_path=dest_file,
+            file_type="banca_mps",
+            category="banca",
+            societa="ORTI",
+            banca="MPS",
+            canonical_name="ORTI_MPS_20260420.xls",
+            dest_folder="homebanking/ORTI/MPS",
+            pipeline_cmd=(
+                "python -m ingest.banca.ingest --datahub {datahub} --source {staging}"
+            ),
+            confidence=0.9,
+        )
+
+        # dry_run=False so subprocess.run is invoked, but we skip rclone by
+        # passing dry_run=True — which also short-circuits subprocess. So we
+        # need a path where subprocess is actually called: dry_run=False and
+        # stub _rclone_sync_to_local to return None (falls back to dest_file).
+        monkeypatch.setattr(
+            "ingest.classify._rclone_sync_to_local", lambda _d, _n: None
+        )
+
+        ok = run_ingest(result, dest_file, datahub_with_space, dry_run=False)
+        assert ok is True
+
+        argv = captured["argv"]
+        # Datahub must be a single argv entry — not split on the space.
+        assert str(datahub_with_space) in argv
+        # argv should be: [python, -m, ingest.banca.ingest, --datahub, <path>, --source, <path>]
+        assert "--datahub" in argv
+        idx = argv.index("--datahub")
+        assert argv[idx + 1] == str(datahub_with_space)
+        # And it must not appear as two tokens like "/Users/x/My" and "Drive/..."
+        assert "Drive/00_hotelops_datahub" not in argv
+
 
 # ── Lifecycle assignments ────────────────────────────────────────────────────
 
@@ -673,7 +842,9 @@ class TestLifecycle:
         """Banca, scheda_contabile, movimenti, accodamenti, coperti, economato = APPEND."""
         # Scheda contabile
         f = tmp_path / "ORTI_scheda.csv"
-        _write_csv_file(f, ["Dare", "Avere", "Saldo in UdC"], [["100", "0", "100"]], delimiter=";")
+        _write_csv_file(
+            f, ["Dare", "Avere", "Saldo in UdC"], [["100", "0", "100"]], delimiter=";"
+        )
         r = detect_scheda_contabile(f)
         assert r is not None
         assert r.lifecycle == LIFECYCLE_APPEND

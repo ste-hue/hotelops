@@ -3,6 +3,7 @@
 Every pipeline that reads files from Drive must import DATAHUB_ROOT and the
 sync helpers from here — do NOT hardcode the path or reimplement rclone.
 """
+
 from __future__ import annotations
 
 import logging
@@ -11,7 +12,7 @@ from pathlib import Path
 
 DATAHUB_ROOT = Path(
     "~/Library/CloudStorage/GoogleDrive-stefano@panoramagroup.it"
-    "/My Drive/hotelops_datahub"
+    "/My Drive/00_hotelops_datahub"
 ).expanduser()
 
 RCLONE_REMOTE = "mywork"
@@ -28,12 +29,16 @@ def _remote(subpath: str) -> str:
     return f"{DATAHUB_REMOTE_ROOT}/{subpath.lstrip('/')}"
 
 
-def _run(cmd: list[str], verb: str, *, dry_run: bool, verbose: bool, timeout: int) -> None:
+def _run(
+    cmd: list[str], verb: str, *, dry_run: bool, verbose: bool, timeout: int
+) -> None:
     if dry_run:
         cmd = cmd + ["--dry-run"]
     if verbose:
         cmd = cmd + ["-v"]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=timeout)
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, check=False, timeout=timeout
+    )
     if result.returncode != 0:
         stderr = result.stderr.strip() if result.stderr else ""
         log.error(f"rclone {verb} failed (exit {result.returncode}): {stderr}")

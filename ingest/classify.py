@@ -749,7 +749,12 @@ def _build_banca_result(
     today = datetime.now().strftime("%Y%m%d")
     ext = path.suffix.lower()
     canonical = f"{soc}_{bnk}_{today}{ext}"
-    dest = f"homebanking/{soc}" if societa else "homebanking"
+    if societa and banca:
+        dest = f"homebanking/{soc}/{bnk}"
+    elif societa:
+        dest = f"homebanking/{soc}"
+    else:
+        dest = "homebanking"
     # Bank ingest uses --source dir, not single file — just indicate pipeline
     pipeline = (
         f"python -m ingest.banca.ingest --datahub {{datahub}} --source {{staging}}"
@@ -993,6 +998,37 @@ def classify_batch(paths: list[Path]) -> list[ClassificationResult]:
 
 # ── Route (copy + rename) ────────────────────────────────────────────────────
 
+# Local cache mirrors for pipelines that read from a staging dir instead of the
+# datahub directly. Keyed by classify category. Structure mirrors dest_folder
+# (e.g. banca → homebanking/{societa}/ → banche_staging/{societa}/).
+_CACHE_BASE = Path.home() / ".cache" / "hotelops"
+CACHE_MIRRORS = {
+    "banca": _CACHE_BASE / "banche_staging",
+}
+
+
+def _mirror_to_cache(result: ClassificationResult) -> Optional[Path]:
+    """Mirror a routed file into the local cache for pipelines that read from
+    a staging dir (e.g. ingest.banca.ingest). Returns the cache path or None
+    if this category has no cache mirror.
+
+    The cache path strips the top-level datahub folder (e.g. 'homebanking/')
+    from dest_folder, preserving only the societa subfolder so the staging
+    layout matches what fetch_drive.py rclone-syncs.
+    """
+    cache_base = CACHE_MIRRORS.get(result.category)
+    if cache_base is None or not result.dest_folder or not result.canonical_name:
+        return None
+    # dest_folder is e.g. "homebanking/ORTI" — we want "ORTI" under cache_base.
+    parts = Path(result.dest_folder).parts
+    subpath = Path(*parts[1:]) if len(parts) > 1 else Path()
+    cache_dir = cache_base / subpath
+    cache_file = cache_dir / result.canonical_name
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(result.file_path, cache_file)
+    log.info(f"Mirrored to cache: {result.file_path.name} → {cache_file}")
+    return cache_file
+
 
 def route_file(
     result: ClassificationResult,
@@ -1005,6 +1041,10 @@ def route_file(
 
     Destination subpath: {INGRESSO_PREFIX}/{dest_folder}/{canonical_name}
     e.g. ingresso/homebanking/ORTI/ORTI_MPS_20260323.xls
+
+    For categories with a CACHE_MIRRORS entry (e.g. banca), also mirrors the
+    file into the local staging cache so downstream ingest pipelines that read
+    from staging (instead of the datahub) can see it.
 
     Returns the destination path (local staging copy), or None if routing not possible.
     """
@@ -1026,6 +1066,11 @@ def route_file(
             f"[DRY-RUN] Would rclone copy {result.file_path.name} "
             f"→ {remote_dest}/{result.canonical_name}"
         )
+        if result.category in CACHE_MIRRORS:
+            log.info(
+                f"[DRY-RUN] Would mirror to cache: "
+                f"{CACHE_MIRRORS[result.category]}/.../{result.canonical_name}"
+            )
         # Return a synthetic local path for downstream compatibility
         return datahub / INGRESSO_PREFIX / result.dest_folder / result.canonical_name
 
@@ -1045,6 +1090,7 @@ def route_file(
             f"Routed (rclone): {result.file_path.name} "
             f"→ {remote_dest}/{result.canonical_name}"
         )
+        _mirror_to_cache(result)
     else:
         # Fallback: local copy (mount locale)
         dest_dir = datahub / INGRESSO_PREFIX / result.dest_folder
@@ -1059,6 +1105,7 @@ def route_file(
                 i += 1
         shutil.copy2(result.file_path, dest_file)
         log.info(f"Routed (local): {result.file_path.name} → {dest_file}")
+        _mirror_to_cache(result)
         return dest_file
 
     return datahub / INGRESSO_PREFIX / result.dest_folder / result.canonical_name
@@ -1112,20 +1159,23 @@ def run_ingest(
     # For banca pipeline: staging dir is parent of the local file
     staging_dir = ingest_file.parent if ingest_file else dest_file.parent
 
-    cmd = result.pipeline_cmd.format(
-        dest_file=str(ingest_file),
-        datahub=str(datahub),
-        staging=str(staging_dir),
-    )
+    substitutions = {
+        "dest_file": str(ingest_file),
+        "datahub": str(datahub),
+        "staging": str(staging_dir),
+    }
+    # Tokenize the template first, then substitute placeholders per-token so
+    # that path values containing spaces don't get split into multiple argv.
+    argv = [tok.format(**substitutions) for tok in shlex.split(result.pipeline_cmd)]
 
     if dry_run:
-        log.info(f"[DRY-RUN] Would run: {cmd}")
+        log.info(f"[DRY-RUN] Would run: {argv}")
         return True
 
-    log.info(f"Running pipeline: {cmd}")
+    log.info(f"Running pipeline: {argv}")
     try:
         proc = subprocess.run(
-            shlex.split(cmd),
+            argv,
             capture_output=True,
             text=True,
             timeout=300,
@@ -1137,7 +1187,7 @@ def run_ingest(
             log.error(f"Pipeline FAILED ({proc.returncode}): {proc.stderr[:500]}")
             return False
     except subprocess.TimeoutExpired:
-        log.error(f"Pipeline TIMEOUT: {cmd}")
+        log.error(f"Pipeline TIMEOUT: {argv}")
         return False
     except Exception as e:
         log.error(f"Pipeline ERROR: {e}")

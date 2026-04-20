@@ -67,7 +67,7 @@ file_types:
 
   banca:
     lifecycle: APPEND
-    dest_folder: "homebanking/{societa}"
+    dest_folder: "homebanking/{societa}/{banca}"
     bq_table: f_banche_movimenti
     pipeline: "ingest.banca.ingest"
     split_by_societa: true
