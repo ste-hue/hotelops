@@ -222,19 +222,29 @@ Derivation: `47*3600 + 92*60 + 1 = 174721` exactly for R18. For R11, the offset 
 - Modify: `ingest/flussi/ingest_gasparotto.py:308-460` (function `parse_gasparotto_budget`)
 - Modify: `tests/test_ingest_gasparotto.py` (add parser tests)
 
-**Why the change:** The Budget sheet is entirely formula-driven (`='Conto Economico'!B10`). openpyxl returns the formula string (`data_only=False`) or `None` cached values (`data_only=True`). We must read the ground-truth `Conto Economico` sheet directly.
+**Why the change:** Fixture inspection (pre-recalc) shows:
+
+| Source | `cod_conto` (col A) | `descrizione` (col B) | `valore 2026` (col H) |
+|---|---|---|---|
+| Budget sheet | **None** (formula refs CE:A; timedelta not cached) | ✅ cached via formula | ✅ cached numeric |
+| Conto Economico sheet | ✅ **direct** (string or timedelta) | ✅ direct | ❌ no 2026 column on CE |
+
+**Strategy:** read `cod_conto` from **CE col A** (direct values, timedelta-decodable), `descrizione` from CE col B or Budget col B (identical), and `valore_2026` from **Budget col H** (the only place with cached numbers). Iterate row-by-row, relying on the Budget↔CE 1:1 formula reference (`Budget!A11 ='Conto Economico'!A11`).
 
 **Conto Economico layout (verified from fixture):**
-- Header row: R4. Columns: A=`Cod. Conto`, B=`Ricavi e Costi`, D=2023, E=`%`, F=`Tipo`, H=2024, I=`%`, J=`Tipo`, L=2025.
-- Data starts at R5 (but first meaningful row is R10).
-- Col A contains either a dotted cod_conto (string like `47.91.01`) OR a timedelta (corruption case).
-- Col L (value 2025) is **empty/None** because it references other cells through formulas; for WI-1 use col L for 2025 when available, otherwise log warning. **Actual budget value for 2026 is not on this sheet.**
+- Header at R4. Columns: A=`Cod. Conto`, B=`Ricavi e Costi`, D=2023, F=`Tipo`, H=2024, L=2025.
+- Data starts at R5, first meaningful row R10.
+- Col A: direct string (e.g. `47.91.01`) or timedelta (corruption).
+- Col L (2025), D (2023), H (2024) are **formulas with no cached values** (2/45 populated in fixture) — don't rely on them.
 
-**Important discovery:** Col L returns `None` without Excel recalc. The spec targets 2025 actual + 2026 previsione. For this ingest, we still need the 2026 value. Given the Budget sheet references CE, and CE col L is blank without recalc, **the only path to 2026 values is**:
+**Budget layout (verified from fixture):**
+- Header at R10. Data starts at R11.
+- Col A: all None (formulas `='Conto Economico'!A{r}` that don't cache timedelta through Excel).
+- Col B: cached text (via formula, reflects CE col B).
+- Col E: cached tipo_costo.
+- Col H: cached 2026 Previsione numeric (38/39 rows populated in fixture).
 
-Either (a) force recalc with LibreOffice before parsing, or (b) find which CE column holds 2026 budget (likely computed via a Previsione formula). Inspection shows the CE sheet has no 2026 column header at R4. **Decision**: the 2026 budget lives only on the Budget sheet after Excel recalc populates the cached values. So the pipeline must force recalc before parsing.
-
-**Revised approach:** The parser's first step is to force recalc on the input XLSX via LibreOffice headless (reusing the WI-3 `force_recalc` helper — see Task 7). After recalc, `data_only=True` returns populated cached values, and the parser reads from Budget sheet's col H (2026) as before, with col A timedelta-decoded via the Task 1 helper.
+**No LibreOffice recalc needed for WI-1.** The fixture already carries the cached values we need. The Task 2 parser can be a pure openpyxl read.
 
 - [ ] **Step 1: Add failing integration test using the fixture**
 
@@ -513,32 +523,40 @@ Either (a) force recalc with LibreOffice before parsing, or (b) find which CE co
   )
   ```
 
-- [ ] **Step 5: Also handle Budget sheet cached values being `None`**
+- [ ] **Step 5: Add sanity check — Budget col H must be cached**
 
-  Because the Budget sheet formulas yield `None` with `data_only=True` unless the workbook was recalculated, the parser must validate that it's reading populated data. Add at the start of `parse_gasparotto_budget` (right after `wb = openpyxl.load_workbook(...)`):
+  The parser needs cached numeric values in Budget col H. Add at the start of `parse_gasparotto_budget` (right after `wb = openpyxl.load_workbook(...)`):
 
   ```python
-      # Sanity: Budget sheet formulas need cached values populated by Excel/LibreOffice
-      # recalc. If col H (2026) is systematically None for the first 30 data rows,
-      # the file hasn't been recalculated.
       ws_check = wb["Budget"]
       sample = [ws_check.cell(row=r, column=8).value for r in range(11, 41)]
-      if all(v is None for v in sample):
+      populated = sum(1 for v in sample if v is not None)
+      if populated < 10:
           wb.close()
           raise RuntimeError(
-              "Budget sheet col H (Previsione 2026) is entirely None — "
-              "the workbook has not been recalculated. Re-save the file in Excel, "
-              "or run: "
-              "`/Applications/LibreOffice.app/Contents/MacOS/soffice --headless "
-              "--calc --convert-to xlsx --outdir <tmpdir> <file>` and retry."
+              f"Budget sheet col H (Previsione 2026) has only {populated}/30 cached "
+              f"values — workbook not recalculated. Open the file in Excel and save, "
+              f"or run: /Applications/LibreOffice.app/Contents/MacOS/soffice "
+              f"--headless --calc --convert-to xlsx --outdir <tmpdir> <file>"
           )
   ```
 
-- [ ] **Step 6: Force recalc before parsing (pre-populate cached values)**
+- [ ] **Step 6: Row iteration reads cod_conto from CE, values from Budget**
 
-  As a quality-of-life addition, call `force_recalc` (to be implemented in Task 7) at the top of `parse_gasparotto_budget` when the sanity check fails — but since `force_recalc` doesn't exist yet, leave the RuntimeError above as the gate for now. WI-3 Task 7 will add a CLI flag `--recalc-first` that pre-processes the input file.
+  The parser currently iterates Budget rows and reads col A from Budget. Change it to iterate by row index, reading col A from CE (direct, timedelta-aware) and values from Budget (cached).
 
-  Leave this step as-is: the parser relies on an already-recalced workbook. Document in the error message.
+  In `parse_gasparotto_budget`, after loading the CE cross-ref (the step we edited in Step 4), introduce a helper `_ce_cod_conto_at` and modify the main loop so that col A comes from CE, not Budget. Replace the `col_a = row[0]` line with:
+
+  ```python
+          # Budget[R].A is None for formula cells; read cod_conto from CE[R].A directly.
+          # The row numbering is 1:1 because Budget formulas are ='Conto Economico'!A{r}.
+          # rows_list was sourced from Budget starting at min_row=11, so row r_index in
+          # rows_list corresponds to CE row (11 + idx).
+          ce_row = 11 + idx
+          col_a = ws_ce.cell(row=ce_row, column=1).value if "Conto Economico" in wb.sheetnames else row[0]
+  ```
+
+  Where `ws_ce = wb["Conto Economico"]` was already loaded in Step 4. Keep the rest of the loop (it uses `col_a` through `_resolve_cod_conto_with_context`).
 
 - [ ] **Step 7: Run tests — all parser tests must now pass**
 
@@ -547,16 +565,6 @@ Either (a) force recalc with LibreOffice before parsing, or (b) find which CE co
   ```
 
   Expected: 6 decoder tests + 6 parser tests = 12 passed.
-
-  If the `test_returns_nonempty` test fails with the RuntimeError from Step 5, run the manual recalc once:
-  ```bash
-  /Applications/LibreOffice.app/Contents/MacOS/soffice --headless --calc \
-    --convert-to xlsx --outdir /tmp/gasparotto-recalc \
-    tests/fixtures/gasparotto_Budget_Indici2025.xlsx
-  cp /tmp/gasparotto-recalc/gasparotto_Budget_Indici2025.xlsx tests/fixtures/
-  ```
-
-  Then re-run pytest. The fixture now holds the recalculated workbook permanently.
 
 - [ ] **Step 8: Commit**
 
