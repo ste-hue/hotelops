@@ -267,8 +267,14 @@ def _v(x) -> float:
 
 
 def _is_conto(val) -> bool:
-    """Check if value looks like a codice_conto (has dots, short string)."""
-    return isinstance(val, str) and "." in val and len(val) < 15
+    """Check if value looks like a codice_conto (has dots, short string).
+
+    Leading/trailing whitespace is tolerated (CE sometimes pads cells).
+    """
+    if not isinstance(val, str):
+        return False
+    v = val.strip()
+    return "." in v and len(v) < 20
 
 
 def decode_timedelta_cod_conto(
@@ -291,6 +297,112 @@ def decode_timedelta_cod_conto(
     if 0 <= s < 100:
         return f"{prefix_h}.{prefix_m:02d}.{s:02d}"
     return None
+
+
+def _prefix_hm(cod: str) -> tuple[int, int] | None:
+    """Extract (h, m) prefix from a dotted cod_conto string."""
+    parts = cod.split(".")
+    if len(parts) < 2:
+        return None
+    try:
+        return int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+
+
+def _resolve_cod_conto_with_context(
+    ce_rows: list[tuple[int, object, str]], ce_idx: int
+) -> str | None:
+    """Resolve cod_conto at ce_rows[ce_idx], decoding timedelta via neighbours.
+
+    ce_rows is a list of (row_num, raw_cell_value, desc) tuples from the
+    Conto Economico sheet. Strategy:
+      1. If raw is already a cod_conto string (possibly whitespace-padded),
+         return it stripped.
+      2. If raw is a timedelta or float (day-fraction), compute total seconds
+         and solve ``s = total_s - h*3600 - m*60`` with ``(h, m)`` drawn
+         from non-corrupted neighbours. Try nearest first; when prev and
+         next minutes differ, prefer next (transition rule).
+      3. When direct neighbour prefixes fail, broaden the search to a ±10
+         window of hours and enumerate m ∈ [0, 99]. Pick the unique valid
+         (h, m, s) candidate; when multiple, prefer the one whose minute
+         appears in nearby non-corrupted rows.
+    """
+    _, raw, _ = ce_rows[ce_idx]
+    if _is_conto(raw):
+        return str(raw).strip()
+
+    if isinstance(raw, timedelta):
+        total_s = int(round(raw.total_seconds()))
+    elif isinstance(raw, float):
+        total_s = int(round(raw * 86400))
+    else:
+        return None
+
+    prev_cod = None
+    for i in range(ce_idx - 1, -1, -1):
+        if _is_conto(ce_rows[i][1]):
+            prev_cod = str(ce_rows[i][1]).strip()
+            break
+    next_cod = None
+    for i in range(ce_idx + 1, len(ce_rows)):
+        if _is_conto(ce_rows[i][1]):
+            next_cod = str(ce_rows[i][1]).strip()
+            break
+
+    prev_hm = _prefix_hm(prev_cod) if prev_cod else None
+    next_hm = _prefix_hm(next_cod) if next_cod else None
+
+    tight: list[tuple[int, int]] = []
+    if prev_hm and next_hm:
+        tight = [prev_hm] if prev_hm == next_hm else [next_hm, prev_hm]
+    elif next_hm:
+        tight = [next_hm]
+    elif prev_hm:
+        tight = [prev_hm]
+
+    for h, m in tight:
+        s = total_s - h * 3600 - m * 60
+        if 0 <= s < 100:
+            return f"{h}.{m:02d}.{s:02d}"
+
+    window = 20
+    h_seen: set[int] = set()
+    h_ordered: list[int] = []
+    for i in range(max(0, ce_idx - window), min(len(ce_rows), ce_idx + window + 1)):
+        if i == ce_idx:
+            continue
+        v = ce_rows[i][1]
+        if _is_conto(v):
+            hm = _prefix_hm(str(v).strip())
+            if hm and hm[0] not in h_seen:
+                h_seen.add(hm[0])
+                h_ordered.append(hm[0])
+
+    for h in h_ordered:
+        remainder = total_s - h * 3600
+        if remainder < 0:
+            continue
+        m, s = divmod(remainder, 60)
+        if 0 <= m <= 99 and 0 <= s <= 99:
+            return f"{h}.{m:02d}.{s:02d}"
+    return None
+
+
+def _build_ce_rows(ws_ce) -> list[tuple[int, object, str]]:
+    """Collect (row_num, raw_col_A, desc) for each non-empty data row in CE.
+
+    Starts at row 10 (first real data row in the Gasparotto 2025 template).
+    Preserves sheet order so duplicate descriptions can be matched by position.
+    """
+    out: list[tuple[int, object, str]] = []
+    for r in range(10, ws_ce.max_row + 1):
+        raw = ws_ce.cell(r, 1).value
+        desc_cell = ws_ce.cell(r, 2).value
+        desc = str(desc_cell).strip() if desc_cell else ""
+        if desc:
+            out.append((r, raw, desc))
+    return out
 
 
 def _detect_section(desc_upper: str, current_section: str) -> str:
@@ -334,35 +446,43 @@ def parse_gasparotto_budget(
 ) -> list[dict]:
     """Parse the Budget sheet of Gasparotto Master XLSX.
 
+    New file format (``gasparotto_Budget_Indici2025.xlsx``): Budget col A
+    is empty — cod_conto lives only in the Conto Economico sheet. Rows are
+    matched by description via a sequential CE pointer (handles duplicate
+    descriptions across Hotel/Residence/CVM blocks). Timedelta-corrupted
+    cod_conto cells in CE are decoded via neighbouring-row prefix.
+
     Returns list of dicts ready for f_budget_mensile.
     """
-    wb = openpyxl.load_workbook(str(filepath), read_only=True, data_only=True)
+    wb = openpyxl.load_workbook(str(filepath), data_only=True)
     now = datetime.now(timezone.utc)
 
     if "Budget" not in wb.sheetnames:
         logger.error(f"Foglio 'Budget' non trovato in {filepath.name}")
         wb.close()
         return []
+    if "Conto Economico" not in wb.sheetnames:
+        logger.error(f"Foglio 'Conto Economico' non trovato in {filepath.name}")
+        wb.close()
+        return []
 
-    # Step 1: Build description → codice_conto from Conto Economico (cross-ref)
-    ce_map: dict[str, str] = {}
-    if "Conto Economico" in wb.sheetnames:
-        ws_ce = wb["Conto Economico"]
-        for row in ws_ce.iter_rows(min_row=5, values_only=True):
-            if (
-                row[0]
-                and isinstance(row[0], str)
-                and "." in row[0]
-                and len(row[0]) < 15
-            ):
-                desc = str(row[1]).strip() if row[1] else ""
-                if desc:
-                    ce_map[desc] = row[0]
-        logger.info(f"  Conto Economico cross-ref: {len(ce_map)} conti trovati")
+    ws_ce = wb["Conto Economico"]
+    ce_rows = _build_ce_rows(ws_ce)
+    logger.info(f"  Conto Economico: {len(ce_rows)} righe dati (row 10+)")
 
-    # Step 2: Parse Budget sheet
     ws = wb["Budget"]
-    rows_raw = list(ws.iter_rows(min_row=11, values_only=True))
+
+    # Sanity check: Budget col H must contain cached numeric values.
+    # If >80% of col H is formula strings (not numbers), the workbook needs recalc.
+    sample_h = [ws.cell(r, 8).value for r in range(11, min(60, ws.max_row + 1))]
+    numeric_h = sum(1 for v in sample_h if isinstance(v, (int, float)))
+    if numeric_h < 10:
+        logger.error(
+            f"  Budget col H non contiene valori cached ({numeric_h} numerici "
+            f"su {len(sample_h)}). Il workbook richiede recalc (LibreOffice headless)."
+        )
+        wb.close()
+        return []
 
     # Fetch seasonality coefficients (company-level weighted average)
     seasonality = fetch_seasonality_coefficients(societa_id, "HQ")
@@ -371,16 +491,14 @@ def parse_gasparotto_budget(
     records: list[dict] = []
     skipped = 0
     unmapped = 0
+    ce_ptr = 0  # sequential pointer into ce_rows
 
-    for row in rows_raw:
-        if not row:
-            continue
-
-        col_a = row[0]  # Piano Dei Conti (codice_conto or None)
-        col_b = row[1]  # Ricavi e Costi (descrizione)
-        col_c = row[2]  # 2025 actual
-        col_e = row[4]  # Tipo (IP/V/F/P/Z)
-        col_h = row[7]  # Previsione Anno 2026
+    for bg_row in range(11, ws.max_row + 1):
+        col_a = ws.cell(bg_row, 1).value
+        col_b = ws.cell(bg_row, 2).value
+        col_c = ws.cell(bg_row, 3).value
+        col_e = ws.cell(bg_row, 5).value
+        col_h = ws.cell(bg_row, 8).value
 
         if not col_b or str(col_b).strip() in ("0", ""):
             continue
@@ -408,27 +526,28 @@ def parse_gasparotto_budget(
         if val_2025 == 0 and val_2026 == 0:
             continue
 
-        # Resolve codice_conto
-        # Priority: 1) col A, 2) MANUAL_COD_MAP (updated for 2026 PDC), 3) CE cross-ref
-        if _is_conto(col_a):
-            codice_conto = col_a.strip()
-        elif desc in MANUAL_COD_MAP:
-            codice_conto = MANUAL_COD_MAP[desc]
-        elif desc in ce_map:
-            codice_conto = MANUAL_COD_MAP[desc]
-        else:
-            # Last resort: try partial match
-            codice_conto = None
-            for manual_desc, manual_cod in MANUAL_COD_MAP.items():
-                if manual_desc.lower() == desc.lower():
-                    codice_conto = manual_cod
-                    break
-            if codice_conto is None:
-                logger.warning(
-                    f'  UNMAPPED: "{desc}" (2026={val_2026:,.0f}) — riga saltata'
-                )
-                unmapped += 1
-                continue
+        # Resolve codice_conto via sequential CE match
+        codice_conto: str | None = None
+        match_idx = None
+        for i in range(ce_ptr, len(ce_rows)):
+            if ce_rows[i][2].strip().upper() == desc_upper:
+                match_idx = i
+                break
+        if match_idx is not None:
+            ce_ptr = match_idx + 1
+            codice_conto = _resolve_cod_conto_with_context(ce_rows, match_idx)
+
+        # Fallbacks: Budget col A (rare) then MANUAL_COD_MAP
+        if not codice_conto and _is_conto(col_a):
+            codice_conto = str(col_a).strip()
+        if not codice_conto:
+            codice_conto = MANUAL_COD_MAP.get(desc)
+        if not codice_conto:
+            logger.warning(
+                f'  UNMAPPED: "{desc}" (2026={val_2026:,.0f}) — riga saltata'
+            )
+            unmapped += 1
+            continue
 
         # Determine tipo_costo from col_e or section default
         tipo_from_sheet = (
