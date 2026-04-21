@@ -50,12 +50,13 @@ cli.py      <- CLI entry point (hotelops command)
 **condges/** -- Vertical #1: Controllo di Gestione (containerizable)
 - `condges/app_cdg.py` -- Streamlit Controllo di Gestione: CE riclassificato, Budget vs Consuntivo, Tesoreria, Indicatori.
 - `condges/cdg_engine.py` -- Pure computation: CE cascade, indicatori (EBITDA, BEP), proiezione anno con stagionalità.
-- `condges/cli_commands.py` -- Extracted CLI handlers (cmd_pf, cmd_health, cmd_chiudi, cmd_saldo, cmd_scadenzario, cmd_help).
+- `condges/cli_commands.py` -- Extracted CLI handlers (cmd_pf, cmd_health, cmd_chiudi, cmd_saldo, cmd_scadenzario, cmd_accodamenti, cmd_help).
 - `condges/genera_excel.py` -- Generate PF Excel from BQ (color-coded: nero=consuntivo, blu=previsione, verde=formula).
 - `condges/update_previsione.py` -- Write forecasts to f_piano_finanziario_input (DELETE-INSERT, parameterized).
 - `condges/reconcile_banca.py` -- Bank vs ledger reconciliation.
 - `condges/scadenzario_excel.py` -- Excel bridge: scadenzario fornitori → voci PF.
 - `condges/app_scadenzario.py` -- Streamlit scadenzario app.
+- `condges/cassa_giornaliera.py` -- Riconciliazione cassa giornaliera da accodamenti HotelCube. Legge TXT pipe-delimited (H_/R_/C_ × Corr/Mov/Fatt), aggrega per giorno × struttura (POS/contanti/caparre) e produce Excel 2 sheet (Riepilogo + Dettaglio strutture). Porting amputato di `reconciliation_dino` (scartati: IMPPN/TeamSystem, fingerprint state, CSV writer).
 
 **reviews/** -- Vertical #2: Guest Reviews (Apify scrape -> Claude NLP -> BQ -> alert + dashboard)
 - `reviews/config.py` -- Apify actor IDs, property URLs, thresholds, email recipients.
@@ -69,7 +70,7 @@ cli.py      <- CLI entry point (hotelops command)
 - `reviews/PROPERTIES.md` -- Reference doc: actors, costs, property URLs, env vars.
 
 **Root**
-- `cli.py` -- CLI entry point (`hotelops` command). 15 subcommands. Large handlers in `condges/cli_commands.py` and `reviews/cli_commands.py`.
+- `cli.py` -- CLI entry point (`hotelops` command). 16 subcommands. Large handlers in `condges/cli_commands.py` and `reviews/cli_commands.py`.
 - `core/registry.yaml` -- Pipeline registry: file types, dest folders, BQ tables, signatures.
 
 ## GCP
@@ -102,6 +103,8 @@ hotelops manifest                              # Generate BQ table catalog (mani
 hotelops manifest --table f_consumi_economato  # Single table
 hotelops classifica file1.xlsx file2.csv       # Classify files (show type + destination)
 hotelops classifica *.xlsx --route --ingest    # Classify + route + ingest
+hotelops accodamenti                           # Sync da Drive + riconciliazione cassa da TXT HotelCube → Excel su Desktop
+hotelops accodamenti --no-sync --input <dir>   # Skip rclone sync, legge da cartella locale
 
 # Reviews vertical
 hotelops reviews                           # Ultime 30 reviews, media, negative

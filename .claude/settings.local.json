@@ -11,7 +11,8 @@
       "Bash(python scripts/check_docs_freshness.py)",
       "Bash(git checkout:*)",
       "Edit(**/*.py)",
-      "Write(**/*.py)"
+      "Write(**/*.py)",
+      "Bash(python3 *)"
     ]
   }
 }
