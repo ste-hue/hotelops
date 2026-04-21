@@ -32,7 +32,7 @@ import argparse
 import csv
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from core.schemas import BudgetMensileRow, validate_batch
@@ -269,6 +269,28 @@ def _v(x) -> float:
 def _is_conto(val) -> bool:
     """Check if value looks like a codice_conto (has dots, short string)."""
     return isinstance(val, str) and "." in val and len(val) < 15
+
+
+def decode_timedelta_cod_conto(
+    td: timedelta, prefix_h: int, prefix_m: int
+) -> str | None:
+    """Reverse-engineer a cod_conto that Excel parsed as time H:M:S.
+
+    Given a timedelta ``td`` (Excel's normalized form) and the section context
+    prefix ``prefix_h.prefix_m`` derived from neighbouring non-corrupted rows,
+    solve for the last segment ``s`` and return ``"HH.MM.SS"``.
+
+    Example: Italian PDC "47.91.03" was parsed by Excel as 47h 91m 3s →
+    normalized to timedelta(days=2, seconds=1863). Given prefix_h=47,
+    prefix_m=91, this function returns "47.91.03".
+
+    Returns None if the prefix does not yield a valid 0-99 seconds segment.
+    """
+    total_s = int(round(td.total_seconds()))
+    s = total_s - prefix_h * 3600 - prefix_m * 60
+    if 0 <= s < 100:
+        return f"{prefix_h}.{prefix_m:02d}.{s:02d}"
+    return None
 
 
 def _detect_section(desc_upper: str, current_section: str) -> str:
