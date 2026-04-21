@@ -75,18 +75,47 @@ Eliminare l'ingest del nuovo file Gasparotto 2025/26: il parser `ingest_gasparot
 
 **Invariante I9 (nuova)**: `f_piano_finanziario_input` è l'unica fonte di verità per il cashflow CASSA. Ogni rendering (Rosa.xlsx, Gasparotto.xlsx Cash-Flow sheet, app_cdg tab Cash-Flow) è derivato. Nessun ingest reverse dei rendering.
 
+### Context lock — ciclo di vita Rosa.xlsx
+
+Rosa.xlsx è uno **snapshot mensile atomico**, non un documento vivo:
+
+- Il 1° di ogni mese, Rosa (amministrazione) genera un nuovo file partendo da:
+  - **Saldi banca end-of-previous-month** (snapshot chiuso)
+  - **Scadenziario fornitori** (sintetica Esolver del mese)
+- Il file NON evolve durante il mese: è un'istantanea chiusa del previsionale del mese di riferimento.
+- Ogni ingest/update durante il mese scrive su BQ su chiave `(societa_id, anno, mese, voce_id, fonte)` con DELETE-INSERT — quindi sovrascrive ma non storicizza: la storicizzazione avviene per `fonte` (PIANO_FINANZIARIO = snapshot 1° del mese, SCADENZIARIO = run-time da app Rosa, APP = edit da app_cdg).
+- Implicazione per WI-2 e WI-3: il tab Cash-Flow e il workbook rigenerato mostrano **stato corrente BQ**, non il "file Rosa di Aprile". Se serve il "Rosa di Aprile" come allegato, lo si esporta via `genera_excel --target rosa --mese 4` dopo il congelamento di fine mese.
+
 ## Scope (4 work items)
 
 ### WI-1 — Ingest adapter al nuovo file Gasparotto
 
 **File:** `ingest/flussi/ingest_gasparotto.py`
 
-- Verificare che il parser `parse_gasparotto_budget()` funzioni sul nuovo `gasparotto_Budget_Indici2025.xlsx` sheet `Budget`. Header a R10 e colonne A/B/C/E/H come prima (da validare).
-- Aggiornare `DEFAULT_FILE` al nuovo path standardizzato in Drive.
-- Estendere MANUAL_COD_MAP se emergono UNMAPPED warnings (run in dry-run e ispezionare log).
-- No tocco allo sheet `Cash - Flow`: **non ingerire**.
+**Cambio di target sheet.** Il sheet `Budget` in `gasparotto_Budget_Indici2025.xlsx` è **interamente formula-driven**: col B = `='Conto Economico'!B10`, col C = `='Conto Economico'!K10`, ecc. Conseguenza:
+- `openpyxl(data_only=False)` → ritorna le stringhe-formula, inutile.
+- `openpyxl(data_only=True)` → ritorna cached values che sono `None` se il workbook non è stato aperto/salvato da Excel con ricalcolo forzato. Pipeline non può dipendere da un human-in-the-loop.
 
-**Deliverable:** dry-run che produce `output/f_budget_gasparotto.csv` con 0 UNMAPPED, totale costi/ricavi coerente con R11–R40 del workbook.
+**Decisione:** il parser legge **direttamente** il sheet `Conto Economico`, che è il ground truth:
+- col A = `cod_conto`
+- col B = descrizione
+- col L = valore 2025
+- col F = tipo
+
+**Gestione cod_conto corrotti (timedelta).** Alcune celle col A sono state interpretate da Excel come date/delta (bug noto: es. `"47.91.02"` → `datetime.timedelta(days=2, seconds=1860)` per R11, R18, R20). Il parser DEVE:
+1. Detectare `isinstance(cell.value, timedelta)` e tentare reverse-engineering da `(days, seconds)` → ricostruire la tripla dotted `XX.YY.ZZ` (days → secondo token, hours/minutes → terzo token).
+2. Se reverse-engineering fallisce: fuzzy match su descrizione (col B) contro `d_piano_conti.descrizione` (ratio > 0.85).
+3. Se anche il fuzzy fallisce: errore hard, NON silent drop.
+
+**Altri cambi:**
+- Aggiornare `DEFAULT_FILE` al nuovo path standardizzato in Drive.
+- MANUAL_COD_MAP si riduce a ~5 mapping (solo intestazioni di sezione non-foglia che non hanno cod_conto neanche su `Conto Economico`).
+- No tocco al sheet `Cash - Flow`: **non ingerire** (I9).
+
+**Deliverable & gate:** dry-run produce `output/f_budget_gasparotto.csv` con:
+- **0 UNMAPPED**
+- **0 righe skipped per cod_conto corrotto** (tutte le timedelta risolte o erroriate, mai silenziate)
+- Totale costi/ricavi coerente con R11–R40 del workbook Excel aperto con ricalcolo.
 
 ### WI-2 — Tab Cash-Flow live in app_cdg
 
@@ -103,6 +132,10 @@ Eliminare l'ingest del nuovo file Gasparotto 2025/26: il parser `ingest_gasparot
   - Sezione 6: Cash Flow netto + Saldo finale
 - Visualizzazione: fonte-badge per ogni riga (PIANO_FINANZIARIO / SCADENZIARIO / APP / BVA_2026) + link "modifica" che apre modal `update_previsione`.
 
+**Granularità — voce-level, non supplier-level.** Il tab Cash-Flow in app_cdg resta a **livello voce** (28 voci aggregate). La granularità supplier-level di Rosa NON viene replicata nell'app: è una divergenza accettata rispetto al workbook Gasparotto per le voci operative (Salari, Fornitori, Utenze, etc.). Chi vuole supplier-drill-down va su `app_scadenzario.py`. Questo mantiene i due strati — strategic (condges) vs operational (Rosa) — disaccoppiati.
+
+**Forward-compatibility `fonte=PROGETTI`.** Il badge fonte deve gestire le fonti attuali (`PIANO_FINANZIARIO`, `SCADENZIARIO`, `APP`, `BVA_2026`, `CLI`) e predisporre un caso per `PROGETTI` (cantieri) che arriverà dal vertical Projects — tracciato nel forward-flow della sessione `2026-04-20-projects-mvp-design.md`. Implementazione: leggere la lista fonti dinamicamente da `SELECT DISTINCT fonte FROM f_piano_finanziario_input` invece di hardcodare l'enum.
+
 **Deliverable:** tab Cash-Flow che mostra esattamente lo stesso layout del sheet omonimo nel workbook Gasparotto, ma live da BQ.
 
 ### WI-3 — Estensione genera_excel per workbook Gasparotto
@@ -117,7 +150,15 @@ Eliminare l'ingest del nuovo file Gasparotto 2025/26: il parser `ingest_gasparot
   - Salva con suffix `_aggiornato_YYYYMMDD.xlsx`.
 - CLI: `python -m condges.genera_excel --target gasparotto --input ~/Downloads/gasparotto_Budget_Indici2025.xlsx`
 
-**Deliverable:** comando che prende il workbook Gasparotto attuale, aggiorna il Cash-Flow sheet da BQ, produce una copia datata.
+**Rischio formule obsolete + mitigazione.** Il workbook Gasparotto ha ~9000 formule, ~48 defined names, macro VBA (nessun chart/pivot — verificato, quindi openpyxl-survivable). Dopo `wb.save()`, openpyxl invalida i cached values di tutte le celle formulate: totali come `C94=C7+C28+C92` e saldi-chaining cross-month (`SaldoMar = SaldoFeb + CashMar`) restano con valori obsoleti finché qualcuno non apre il file in Excel.
+
+Due opzioni, da scegliere e documentare in implementazione:
+- **Opzione A (preservare dinamica Excel):** dopo `wb.save()`, invocare `libreoffice --headless --calc --convert-to xlsx --outdir <tmp> <file>` per forzare il ricalcolo. Richiede LibreOffice installato sulla macchina che rigenera (aggiungere check in CLI + messaggio di setup). Preserva tutte le formule.
+- **Opzione B (scrivere i totali come valori):** computare in Python i totali di riga/colonna e scriverli come numeri plain. Si perde la dinamica "edita una cella → totale si aggiorna", ma il file è auto-contenuto e riproducibile ovunque.
+
+**Raccomandazione:** Opzione A per v1 (LibreOffice è già presente su macOS del team via brew). Fallback documentato a Opzione B se LibreOffice non disponibile — il CLI deve detectare e scegliere, loggando la decisione.
+
+**Deliverable:** comando che prende il workbook Gasparotto attuale, aggiorna il Cash-Flow sheet da BQ, produce una copia datata con totali ricalcolati (Opzione A o B).
 
 ### WI-4 — Documentazione invariante + vault
 
@@ -144,7 +185,7 @@ Questi non fanno parte di questo spec. Vivono in spec successivi se prioritizzat
 | Doppia scrittura in `f_piano_finanziario_input` su stesso `(voce,mese,fonte)` | Già gestito: update_previsione fa DELETE-INSERT per `(societa,anno,mese,voce_id,fonte)` |
 | Nuova voce in `d_voci_piano_finanziario` non rispecchiata nel Cash-Flow sheet | WI-3 legge le voci da BQ, non hardcoded |
 | Budget annuale (COMPETENZA) incongruente con Σ annuo CASSA | Non bloccante; logged warning in WI-3 se delta > 10% |
-| `ingest_gasparotto` UNMAPPED rows silently dropped | Già c'è warning; WI-1 impone 0 UNMAPPED come gate |
+| `ingest_gasparotto` UNMAPPED rows o cod_conto corrotti silently dropped | WI-1 impone gate duplice: 0 UNMAPPED + 0 skipped timedelta; fuzzy-match fallback su descrizione |
 
 ## Testing
 
@@ -158,7 +199,7 @@ Questi non fanno parte di questo spec. Vivono in spec successivi se prioritizzat
 1. ~~Il Cash-Flow sheet di Gasparotto va ingerito?~~ **Risolta**: no (I9).
 2. ~~condges = Rosa + Gasparotto o condges = Gasparotto?~~ **Risolta**: condges = gasparotto, Rosa subset.
 3. Nel WI-2, le "entrate" nel layout Gasparotto sono 4 voci (Hotel/Residence/CVM/Supermercato) mentre `d_voci_piano_finanziario` ha 11 voci entrata. Come gestire le voci extra (es. Caparre, Affitti)? **Proposta**: mostrare tutte, raggruppate per macro-sezione Hotel/Residence/CVM/Supermercato/Altre.
-4. WI-3 preserve-formula: openpyxl in write-mode potrebbe perdere formule Excel. Serve test. Se perse → rigenerare anche quelle programmaticamente.
+4. ~~WI-3 preserve-formula~~ **Risolta** nel blocco WI-3: Opzione A (LibreOffice headless recalc) preferita, Opzione B (scrivere totali come valori) fallback.
 5. Timing di deploy: WI-1 indipendente, WI-2/WI-3 possono essere parallelizzati, WI-4 dopo. Sequenza suggerita: WI-1 → WI-2 → WI-3 → WI-4.
 
 ## Rollout
