@@ -1,30 +1,47 @@
-# Projects MVP — CapEx & Cantiere Control as CONDGES Extension
+# Projects MVP — 4° vertical (project subledger + forward-flow a CONDGES)
 
-**Date:** 2026-04-20
-**Status:** Draft (awaiting user review)
-**Author:** Stefano + Claude (brainstorming session)
-**Scope:** Introdurre il **Progetto** come dimensione di primo livello del controllo di gestione, estendendo CONDGES (non creando un nuovo vertical). MVP popolato con `HPAN25PIANO1` (Camere Primo Piano) su schema multi-progetto da day 1.
+**Date:** 2026-04-20 (reframed 2026-04-21)
+**Status:** Draft v2 (post-walkthrough HPAN25PIANO1)
+**Author:** Stefano + Claude
+**Seed data:** `docs/progetti/HPAN25PIANO1-walkthrough.md`
+
+**Scope:** Introdurre **`progetti/`** come **quarto vertical** HotelOps, project subledger (analogo SAP PS) separato dal general ledger operativo (CONDGES). Il vertical gestisce il ciclo impegno → documento → fattura → pagamento per i progetti capex/cantiere; emette forward-flow verso `f_piano_finanziario_input` con fonte=`PROGETTI`. MVP popolato su `HPAN25PIANO1` (Camere Primo Piano Hotel Panorama).
 
 ---
 
-## 1. Direzione (candidato I9)
+## 1. Direzione
 
-> **Il Progetto è una dimensione obbligatoria del controllo di gestione.**
-> Sub-principio: *"se aspetti che il budget diventi preciso, è troppo tardi"* — la struttura dati esiste prima che i numeri siano stabili; man mano che arrivano documenti (preventivi → contratti → fatture), i numeri si raffinano, ma la forma non cambia.
+### 1.1 I9 (candidato, riformulato)
 
-Non è ancora un invariant applicato retroattivamente a tutti i fatti finanziari (I9 futuro). In MVP il tagging `progetto_id` vive **solo** nelle nuove tabelle (`f_progetto_*`). Le fact table canoniche esistenti (`f_movimenti_contabili`, `f_partite_aperte_fornitori`, `f_banche_movimenti`) **non vengono modificate**: il link progetto↔fattura passa tramite `f_progetto_invoice_link` (thin join), non via colonna aggiunta.
+> **Il Progetto è una dimensione obbligatoria del controllo di gestione; il ciclo impegno–fattura–pagamento vive in un subledger dedicato con forward-flow verso CONDGES.**
 
-Quando I9 maturerà (dopo validazione MVP), si valuterà l'aggiunta di `progetto_id` nullable alle fact canoniche con default `"CORRENTE"` (gestione ordinaria non-CapEx).
+Non è tagging retroattivo delle fact canoniche. È **subledger separato** con contratti di interoperabilità espliciti:
 
-### Posizionamento
+| Direzione | Meccanismo | Rispetto I3 (Canonical Truth Registry) |
+|---|---|---|
+| **Projects → CONDGES** | `PaymentSchedule` delle Commitments attive → righe `f_piano_finanziario_input` con fonte=`PROGETTI` | Aggiunge righe su canonical SoT cashflow; non duplica `f_piano_finanziario_input` |
+| **CONDGES → Projects** | `f_movimenti_contabili` (fatture) → thin join `f_progetto_invoice_link(commitment_id, movimento_row_hash)` | La fattura resta in `f_movimenti_contabili`; il subledger la linka, non la copia |
 
-Non è un vertical a sé: è **un terzo zoom del CdG Gasparotto-unificato**.
+Retroattività sulle fact canoniche (I9 "pieno" = colonna `progetto_id` ovunque) è **H2**, non MVP.
 
-| Zoom | Domanda | Oggi | Dopo |
+### 1.2 I10 — ritirato come invariant
+
+La regola capex/opex → società pagante (capex su immobili → società proprietaria; opex operativi → società operativa) è **business rule gruppo-specifica** di Panorama, non invariant platform-wide.
+
+Documentazione: `vault/ontology/business-rules/capex-opex-allocation.md` (nuovo file in capture alla fine MVP).
+
+Enforcement: **soft** nel vertical `progetti/` — UI Streamlit propone default in base a tipo spesa, warn se override manuale, non blocca il salvataggio.
+
+### 1.3 Posizionamento
+
+Quarto vertical peer a CONDGES / REVIEWS / ECONOMATO. **Non** è un terzo zoom interno a CONDGES.
+
+| Vertical | Audience | Domanda | Confini SoT |
 |---|---|---|---|
-| Aziendale | "Come va ORTI 2026?" | ✅ `v_budget_vs_consuntivo`, `v_piano_finanziario_mensile` | invariato |
-| Mensile | "Questo mese ho rispettato il budget?" | ✅ `hotelops chiudi`, `v_budget_canonical` | invariato |
-| **Progetto** | "HPAN25PIANO1 sta sforando? Quanto devo pagare a STE questo mese?" | ❌ | ✅ questo MVP |
+| CONDGES | Rosa, Gasparotto | "Come va il mese? Cashflow? BvA?" | `f_movimenti_contabili`, `f_banche_movimenti`, `f_piano_finanziario_input`, `v_budget_canonical` |
+| REVIEWS | Antonio | "Come ci vedono gli ospiti?" | `f_reviews`, `f_apify_runs` |
+| ECONOMATO | (Mario, future) | "Quanto consumiamo?" | `f_consumi_economato`, `f_coperti_giornalieri` |
+| **Projects** | Stefano Jr + PM | "HPAN25PIANO1 sta sforando? Quanto pago questo mese per cantiere?" | `d_progetti`, `f_progetto_*` (7 tabelle), emette a `f_piano_finanziario_input` fonte=`PROGETTI` |
 
 ---
 
@@ -32,65 +49,77 @@ Non è un vertical a sé: è **un terzo zoom del CdG Gasparotto-unificato**.
 
 ### 2.1 Audience
 
-Singolo utente: **Stefano Della Pietra Jr** (owner platform).
-Non Antonio (GM, non gestisce cantiere). Non Rosa (tesoreria operativa, non progetti).
-Non serve multi-utente né permessi → rispettato **I7** (audience umana esplicita).
+- **Primaria:** Stefano Della Pietra Jr (owner, decisore capex).
+- **Secondaria H2:** project manager esterni (Hospitality Project, ecc.) con accesso view-only.
+- Non Antonio (non gestisce cantiere). Non Rosa (tesoreria, vede solo forward-flow attraverso CONDGES). Non serve multi-utente **in MVP**.
 
 ### 2.2 MVP scope
 
-- Schema multi-progetto generico da day 1 (`d_progetti` + FK `progetto_id` ovunque).
-- Popolato inizialmente con UN progetto reale: **HPAN25PIANO1 — Camere Primo Piano**.
-  - ~€350K budget
-  - 10 camere, impiantistica + arredi + finiture
-  - Fornitori già noti: STE, SANTELIA, Dierre, Studio Ninni, Atelier Hospitality, Geberit, Frattini, Rocky, Comoda
-  - Team: Amalia Pisacane (DL), Antonio Russo (GM), Marco Pignocchi + Filippo Faggioli (Hospitality Project), Anna Capone (Studio Ninni), Savio Marigliano (architetto)
-  - Contratti firmati 27/02/2026 (STE, SANTELIA, ordine Dierre n.864)
-- Drop + classifica + estrazione LLM documenti.
-- UI Streamlit con 4+1 schermate.
-- Integrazione con canonical sources esistenti (no duplicazione).
+- Schema multi-progetto generico da day 1 (`d_progetti` + FK `progetto_id` ovunque nel vertical).
+- Popolato inizialmente con **UN** progetto: `HPAN25PIANO1 — Camere Primo Piano` (cap 1.2M, seed da walkthrough con ~28 item).
+- Entity model: 7 entità (Project, ScopePackage, Document, Commitment, PaymentSchedule, InvoiceLink, Extraction audit).
+- Ingestion: drop documento + estrazione LLM + classify + fuzzy match fornitore.
+- Forward-flow: solver che proietta Commitment+PaymentSchedule → `f_piano_finanziario_input` fonte=`PROGETTI`.
+- UI: 4 view Streamlit (Register / Documents / Budget evolution / Payment planning).
+- CLI: `hotelops progetti <subcommand>`.
 
-### 2.3 Out of MVP (future roadmap — vedi §8)
+### 2.3 Out of MVP (H2 roadmap)
 
-- Ricorrenti come "progetti permanenti" (stagione Hotel, gestione corrente).
-- `v_previsione_cassa` derivata dai commitment dei progetti.
-- Integrazione dentro `app_cdg.py` (MVP usa app separata).
-- `progetto_id` obbligatorio su tutti i fatti (I9 pieno).
+- Ricorrenti come progetti permanenti (`HPAN_STAGIONE_2026`).
+- `v_previsione_cassa` derivata dai Commitments progetti (richiede I9 pieno).
+- Integrazione UI dentro `app_cdg.py` (MVP usa app separata).
+- `progetto_id` obbligatorio su `f_movimenti_contabili` e `f_banche_movimenti`.
+- Pagamenti automatici (decisione paga/non-paga resta umana).
+- Multi-utente / permessi granulari.
 
 ### 2.4 Success criteria
 
-Su HPAN25PIANO1, Stefano deve poter rispondere in <30 secondi:
+Su HPAN25PIANO1, Stefano deve poter:
 
-1. **Quanto ho impegnato vs budget a oggi?** (view `v_progetto_overview`)
-2. **Quali documenti arrivano questo mese e quanto fanno in cassa?** (view `v_progetto_timeline`)
-3. **Per la commessa arredi, quali preventivi ho e quale ho scelto?** (UI confronti)
-4. **Quale fattura è entrata ma non ho ancora collegato a una commessa?** (UI inbox fatture orfane)
+1. **Register view** — vedere in <10 sec budget vs impegnato vs fatturato vs pagato, per progetto e per ScopePackage, con semaforo overrun.
+2. **Documents view** — drop PDF preventivo/fattura → estrazione LLM + review → append BQ + copia Drive in <60 sec.
+3. **Budget evolution view** — timeline cronologica: da stima orfana → preventivo → contratto → fattura, con tracking delta.
+4. **Payment planning view** — tabella cashflow mensile per (società_pagante × mese), con scenari di ritardo/anticipo rate.
+5. **Forward-flow verificabile** — Rosa/Gasparotto vedono le rate Commitments di `HPAN25PIANO1` in `f_piano_finanziario_input` fonte=`PROGETTI`, voce `INVESTIMENTI_CAPEX` (per INTUR capex) o `CONSULENZE` (per ORTI PM fee).
 
 ---
 
 ## 3. Data model
 
-### 3.1 Entità (4)
+### 3.1 Entità (7)
 
 ```
-Project (1) ──── (N) Commitment ──── (N) Document
-                        │
-                        └──── (N) InvoiceLink ──── (1) f_partite_aperte_fornitori
+Project (1)
+  │
+  ├── (N) ScopePackage ── (N:M) f_progetto_scope_commitment_link ── (M) Commitment (N:1) [societa_pagante, fornitore]
+  │         │                                                           │
+  │         └── (N) Document ← ───── from_document_id (opzionale) ──────┘
+  │                                                                     │
+  │                                                                     ├── (N) PaymentSchedule
+  │                                                                     │
+  │                                                                     └── (N) InvoiceLink ── (1) f_movimenti_contabili
+  │
+  └── forward-flow a f_piano_finanziario_input fonte=PROGETTI
 ```
 
-- **Project** — il progetto (HPAN25PIANO1). Long-lived, raro che cambi.
-- **Commitment** — singolo impegno all'interno del progetto (es. "Impiantistica elettrica STE", "Arredi camere Atelier"). Ha un budget, uno stato lifecycle, un fornitore (o NULL se ancora non scelto).
-- **Document** — polimorfico: preventivo | contratto | ordine | SAL | altro. Appeso al Commitment (o al Project se pre-commit). Storage: Drive + metadata BQ.
-- **InvoiceLink** — tabella *thin* che collega una riga di `f_partite_aperte_fornitori` a un Commitment. Zero duplicazione dell'invoice (rispetta **I8**).
+- **Project** — `d_progetti` row. Long-lived. Budget cap societa-agnostico.
+- **ScopePackage** — WBS node, budget-bearing, può esistere senza vendor. Stati: `IDENTIFICATO → PREVENTIVATO → IMPEGNATO → CHIUSO`.
+- **Document** — Preventivo / Contratto / Ordine / Fattura / SAL / Altro. Fisicamente su Drive, metadata in BQ. FK `scope_package_id`. Per preventivi: `stato_preventivo`.
+- **Commitment** — obbligazione formale verso UN vendor da parte di UNA società pagante. Stati: `FIRMATO → IN_CORSO → CHIUSO (+ ANNULLATO)`. `importo_impegnato_eur` fisso alla firma.
+- **PaymentSchedule** — rate del Commitment: `(data_prevista, importo, voce_pf_target, descrizione)`. Alimenta forward-flow.
+- **InvoiceLink** — thin join Commitment ↔ `f_movimenti_contabili` (fatture fornitori già ingerite).
+- **Extraction audit** — `f_progetto_extractions` log LLM (request, response, parsed, confidence, reviewed_by).
 
-### 3.2 State machine Commitment
+### 3.2 State machines
 
-```
-PREVENTIVO → CONTRATTO_FIRMATO → IN_CORSO → CHIUSO
-                                    │
-                                    └──→ ANNULLATO
-```
+**Commitment:** `FIRMATO → IN_CORSO → CHIUSO`; `ANNULLATO` da qualsiasi stato non-CHIUSO.
+Drop `PREVENTIVO` come stato Commitment: un preventivo non firmato è un `Document(tipo=PREVENTIVO)` attaccato a ScopePackage, senza Commitment.
 
-Transizioni sono fatti audit (APPEND). Nessun UPDATE in BQ.
+**ScopePackage:** `IDENTIFICATO (solo stima) → PREVENTIVATO (≥1 Document) → IMPEGNATO (≥1 Commitment linkato) → CHIUSO (tutti i Commitment linkati chiusi)`.
+
+**Document(tipo=Preventivo):** `stato_preventivo ∈ {RICEVUTO, ACCETTATO, RIFIUTATO, SCADUTO}`.
+
+Tutte le transizioni sono APPEND audit (no UPDATE). Latest state via view `v_*_current` con `ROW_NUMBER() OVER (PARTITION BY <id> ORDER BY data_stato DESC)`.
 
 ### 3.3 Schema Pydantic (`core/schemas.py` additions)
 
@@ -98,90 +127,129 @@ Transizioni sono fatti audit (APPEND). Nessun UPDATE in BQ.
 class Project(BaseModel):
     progetto_id: str                          # HPAN25PIANO1
     nome: str                                 # "Camere Primo Piano - Hotel Panorama"
-    societa_id: Literal["ORTI", "INTUR"]
+    societa_beneficiaria_id: Literal["ORTI", "INTUR"]  # proprietario asset finale
     business_unit_id: str                     # HOTEL
     struttura: str                            # "Hotel Panorama"
     data_inizio: date
     data_fine_prevista: date | None
-    budget_totale_eur: Decimal
+    budget_cap_eur: Decimal                   # 1_200_000 per HPAN25PIANO1
     stato: Literal["PIANIFICATO", "IN_CORSO", "CHIUSO", "ANNULLATO"]
     owner: str                                # "Stefano Della Pietra Jr"
     direzione_lavori: str | None              # "Amalia Pisacane"
 
-class Commitment(BaseModel):
-    commitment_id: str                        # UUID
+class ScopePackage(BaseModel):
+    scope_id: str                             # UUID
     progetto_id: str                          # FK Project
+    codice: str                               # "SP-IMPIANTI-ELETTRICO"
     descrizione: str                          # "Impiantistica elettrica camere 121-130"
-    categoria: Literal["IMPIANTI", "ARREDI", "FINITURE", "CONSULENZE", "ALTRO"]
-    fornitore_id: str | None                  # FK d_anagrafica_fornitori (nullable)
-    fornitore_denorm: str                     # "STE srl" — sempre presente, gestisce candidate
-    importo_impegnato_eur: Decimal
-    stato: Literal["PREVENTIVO", "CONTRATTO_FIRMATO", "IN_CORSO", "CHIUSO", "ANNULLATO"]
+    categoria: Literal["OPERE_MURARIE", "IMPIANTI", "ARREDI", "FINITURE",
+                       "PORTE", "CONSULENZE", "PROGETTAZIONE", "PM", "ALTRO"]
+    importo_stimato_eur: Decimal              # stima manuale, può essere sovrascritta da Document/Commitment linkati
+    stato: Literal["IDENTIFICATO", "PREVENTIVATO", "IMPEGNATO", "CHIUSO"]
     data_stato: datetime
     note: str | None
 
 class Document(BaseModel):
     document_id: str                          # UUID
-    owner_type: Literal["PROJECT", "COMMITMENT"]
-    owner_id: str                             # progetto_id OR commitment_id
-    tipo: Literal["PREVENTIVO", "CONTRATTO", "ORDINE", "SAL", "ALTRO"]
-    fornitore_denorm: str | None
+    scope_package_id: str                     # FK ScopePackage
+    tipo: Literal["PREVENTIVO", "CONTRATTO", "ORDINE", "FATTURA", "SAL", "ALTRO"]
+    fornitore_id: str | None                  # FK d_anagrafica_fornitori (nullable, candidate)
+    fornitore_denorm: str                     # sempre presente
     numero_documento: str | None              # "864" (Dierre)
     data_documento: date | None
     importo_eur: Decimal | None
+    stato_preventivo: Literal["RICEVUTO", "ACCETTATO", "RIFIUTATO", "SCADUTO"] | None
     drive_path: str                           # "investimenti2026/HPAN25PIANO1/..."
     file_hash_md5: str                        # dedup
     estratto_confidence: float                # 0.0-1.0 (LLM quality)
     estratto_reviewed: bool                   # True = umano ha validato
     note: str | None
 
-class DocumentoStato(BaseModel):
-    # APPEND audit log per stato di scelta (usato solo per tipo=PREVENTIVO)
-    stato_id: str                             # UUID
-    document_id: str                          # FK Document
-    stato_scelta: Literal["NEUTRO", "SELEZIONATO", "SCARTATO"]
+class Commitment(BaseModel):
+    commitment_id: str                        # UUID
+    progetto_id: str                          # FK Project (denorm per query)
+    descrizione: str                          # "Contratto STE impiantistica elettrica"
+    fornitore_id: str | None                  # FK d_anagrafica_fornitori
+    fornitore_denorm: str
+    societa_pagante_id: Literal["ORTI", "INTUR"]  # BINDING, obbligatorio
+    tipo_spesa: Literal["CAPEX", "OPEX"]      # guida forward-flow voce PF
+    importo_impegnato_eur: Decimal            # fisso alla firma, immutabile
+    stato: Literal["FIRMATO", "IN_CORSO", "CHIUSO", "ANNULLATO"]
     data_stato: datetime
+    from_document_id: str | None              # Preventivo che è diventato Commitment
+    voce_pf_target: str                       # default: INVESTIMENTI_CAPEX se CAPEX, lookup se OPEX
     note: str | None
+
+class ScopeCommitmentLink(BaseModel):
+    link_id: str                              # UUID
+    scope_package_id: str                     # FK ScopePackage
+    commitment_id: str                        # FK Commitment
+    quota_importo_eur: Decimal                # quota del Commitment su questo Scope (per N:M bundled)
+
+class PaymentSchedule(BaseModel):
+    rate_id: str                              # UUID
+    commitment_id: str                        # FK Commitment
+    seq: int                                  # 1, 2, 3... rata
+    data_prevista: date
+    importo_eur: Decimal
+    descrizione: str                          # "Acconto 30% alla firma"
+    stato: Literal["PIANIFICATA", "EMESSA", "PAGATA", "ANNULLATA"]
+    data_stato: datetime
+    # PK: rate_id
 
 class InvoiceLink(BaseModel):
     link_id: str                              # UUID
     commitment_id: str                        # FK Commitment
-    partite_row_hash: str                     # hash riga f_partite_aperte_fornitori (UNIQUE)
+    movimento_row_hash: str                   # hash riga f_movimenti_contabili (UNIQUE)
+    payment_schedule_rate_id: str | None      # opzionale: quale rata sta coprendo
     note: str | None
-    # PK: link_id. Unique constraint on partite_row_hash (1 fattura → max 1 commitment).
+
+class DocumentExtraction(BaseModel):
+    extraction_id: str                        # UUID
+    document_id: str                          # FK Document
+    model: str                                # "claude-haiku-4-5-20251001"
+    raw_output: str                           # JSON stringified
+    parsed_fields: dict                       # deserialized
+    confidence_per_field: dict                # {"importo": 0.95, "data": 0.72, ...}
+    ts_extraction: datetime
+    reviewed_by: str | None
+    ts_reviewed: datetime | None
 ```
 
 ### 3.4 Schema BigQuery
 
-Sei tabelle nuove:
+**8 tabelle nuove** (prefisso `f_progetto_` + `d_progetti`):
 
 | Tabella | Lifecycle | Note |
 |---|---|---|
-| `d_progetti` | SNAPSHOT per `progetto_id` | Dimensione (bassa mutability) |
-| `f_progetto_commitments` | APPEND audit log | Ogni transizione è una riga; latest-state via view |
-| `f_progetto_documenti` | APPEND | Dedup su `file_hash_md5`. Immutabili (metadata di un file che esiste). |
-| `f_progetto_documento_stato` | APPEND audit log | Storico `stato_scelta` per PREVENTIVO (NEUTRO/SELEZIONATO/SCARTATO); latest via view |
-| `f_progetto_invoice_link` | SNAPSHOT per `link_id` | Può essere rivisto (riattacco fattura a commitment diverso se errore) |
-| `f_progetto_extractions` | APPEND | Audit LLM: `document_id`, `model`, `raw_output`, `parsed_fields`, `ts_extraction` — mai sovrascritto |
+| `d_progetti` | SNAPSHOT per `progetto_id` | Dimensione low-mutability |
+| `f_progetto_scopes` | APPEND audit log | Ogni transizione stato = riga; latest via view |
+| `f_progetto_commitments` | APPEND audit log | Ogni transizione = riga; `importo_impegnato_eur` immutabile |
+| `f_progetto_scope_commitment_link` | SNAPSHOT per `link_id` | N:M link + `quota_importo_eur` |
+| `f_progetto_documenti` | APPEND immutabili | Dedup su `file_hash_md5` |
+| `f_progetto_payment_schedules` | APPEND audit log | Ogni modifica rata = riga; latest via view |
+| `f_progetto_invoice_link` | SNAPSHOT per `link_id` | Può essere rivisto (riattacco fattura a commitment diverso) |
+| `f_progetto_extractions` | APPEND immutabile | Audit LLM round-trip |
 
-Quattro view:
+**6 view nuove** (in `core/bq/views/`):
 
 | View | Scopo |
 |---|---|
-| `v_progetto_commitments_current` | Latest state per `commitment_id` (row-selection centralizzata → **I8**) |
-| `v_progetto_documenti_current` | Latest `stato_scelta` per `document_id` (row-selection in view → **I8**) |
-| `v_progetto_overview` | Per progetto: budget vs impegnato vs fatturato vs pagato |
-| `v_progetto_timeline` | Eventi ordinati: firma contratto, arrivo fattura, pagamento, SAL |
+| `v_progetto_scopes_current` | Latest state per `scope_id` |
+| `v_progetto_commitments_current` | Latest state per `commitment_id` |
+| `v_progetto_payment_schedules_current` | Latest state per `rate_id` |
+| `v_commitment_status` | Per commitment: `importo_impegnato`, `importo_fatturato_cum` (da InvoiceLink+f_movimenti_contabili), `delta_overrun_eur`, `residuo_eur`, `stato_overrun` (`OK`/`WARN >5%`/`ALERT >10%`) |
+| `v_progetto_overview` | Per progetto: budget cap, SUM scope stime, SUM commitments, SUM fatturato, SUM pagato, % avanzamento, semaforo overrun |
+| `v_progetto_timeline` | Eventi cronologici per progetto: scope creato → preventivo → commitment firmato → fattura → pagamento |
 
-**FK su canonicals esistenti** (nessuna duplicazione):
-- `fornitore_id` → `d_anagrafica_fornitori` (nullable per gestire candidate)
-- `partite_row_hash` → hash riga `f_partite_aperte_fornitori` (la fattura vive lì, non duplicata)
+**FK su canonicals esistenti:**
+- `fornitore_id` → `d_anagrafica_fornitori` (nullable per candidate)
+- `movimento_row_hash` → hash riga `f_movimenti_contabili` (la fattura vive lì, non duplicata)
 
-### 3.5 Adattamenti HotelOps-specifici (3)
-
-1. **`fornitore_id` FK nullable + `fornitore_denorm` sempre presente.** Permette di ingestire documenti da fornitori non ancora anagrafati in Esolver, mantenendo tracciabilità. Promozione candidate → `d_anagrafica_fornitori` via `entity_protocol_v1` (CLI comando dedicato).
-2. **No tabella Invoice.** La fattura vive già in `f_partite_aperte_fornitori` (canonical IMPEGNO). `f_progetto_invoice_link` è una tabella *thin* che collega — zero duplicazione (**I8**, Canonical Truth Registry).
-3. **Commitment come APPEND audit.** State transitions = nuove righe, non UPDATE. Lifecycle corrente via `v_progetto_commitments_current` con ROW_NUMBER OVER (PARTITION BY commitment_id ORDER BY data_stato DESC) — row-selection in view canonica (**I8**).
+**Modifiche ai canonicals (minime):**
+- `d_voci_piano_finanziario`: aggiunta voce `INVESTIMENTI_CAPEX` (vedi §1.1 decisione user).
+- `f_piano_finanziario_input`: nuovo valore ammesso `fonte=PROGETTI` (oltre ai 6 esistenti).
+- `d_anagrafica_fornitori`: aggiunta colonna `stato_censimento` (`DA_CENSIRE` / `CENSITO` / `ATTIVO`), default `CENSITO` per righe esistenti.
 
 ---
 
@@ -190,53 +258,85 @@ Quattro view:
 ### 4.1 Flow A — Drop documento con pre-estrazione LLM
 
 ```
-1. UI "Inbox drop zone" (Streamlit): drag PDF/Excel
+1. UI Documents: drag PDF/Excel
 2. Salvataggio temporaneo + computo MD5
-3. Chiamata Claude Haiku con prompt strutturato:
-   → JSON schema {tipo, fornitore, numero_doc, data_doc, importo, descrizione}
-   → + confidence score per field
-4. UI mostra fields pre-compilati + highlight bassa confidence
-5. Stefano review/edit
-6. Submit:
-   - scrive riga in f_progetto_documenti (estratto_reviewed=True)
-   - logga tutto il round-trip in f_progetto_extractions (audit)
-   - copia file su Drive in investimenti2026/<progetto>/<commitment_short>/
+3. Check dedup su f_progetto_documenti.file_hash_md5
+4. Claude Haiku (claude-haiku-4-5-20251001) con prompt strutturato:
+   → JSON {tipo, fornitore_ragione_sociale, numero_doc, data_doc, importo, descrizione, scope_hint}
+   → + confidence_per_field
+5. Fuzzy match fornitore (rapidfuzz) contro d_anagrafica_fornitori.ragione_sociale:
+   - score ≥ 0.9 → auto-link fornitore_id
+   - score 0.7–0.9 → suggest, chiede conferma umana
+   - score < 0.7 → candidate (fornitore_id=NULL, stato_censimento=DA_CENSIRE)
+6. UI mostra fields pre-compilati, highlight bassa confidence, suggested scope_package_id
+7. Stefano review/edit/conferma
+8. Submit in transazione:
+   - insert f_progetto_documenti (estratto_reviewed=True)
+   - insert f_progetto_extractions (audit round-trip completo)
+   - rclone put file → investimenti2026/<progetto>/<scope>/<tipo>/
+   - se tipo=Preventivo e nessun Commitment esiste → stato ScopePackage passa a PREVENTIVATO (append f_progetto_scopes)
 ```
 
-**I5 compatibility note.** L'invariant I5 (classify deterministico) si applica al classify pipeline `ingest/classify.py` che routa file dal datahub alle pipeline BQ. Qui siamo in un'altra lane: **estrazione entità da documento già classificato come "project document"**, con *human in the loop* obbligatorio (`estratto_reviewed`). Non è un bypass I5.
+**I5 compatibility:** l'invariant classify deterministico vale per `ingest/classify.py` datahub pipeline. Qui è **estrazione** (extraction), non classify. Human in the loop obbligatorio (`estratto_reviewed=True` prima di considerare validi i campi per downstream).
 
-**Fornitore matching.** Dopo estrazione, fuzzy match (Levenshtein) contro `d_anagrafica_fornitori.ragione_sociale`:
-- Score ≥ 0.9 → auto-link `fornitore_id`
-- Score 0.7-0.9 → suggest + asking conferma
-- Score < 0.7 → marca come candidate (fornitore_id=NULL, fornitore_denorm=estratto)
+### 4.2 Flow B — Fattura orfana → link a Commitment
 
-### 4.2 Flow B — Fattura orfana → link a commitment
+Una fattura arriva via pipeline standard (`ingest_movimenti_contabili.py`) in `f_movimenti_contabili`. Il vertical progetti mostra "Inbox fatture orfane": righe `f_movimenti_contabili` per cui **non esiste** InvoiceLink.
 
-Una fattura arriva via pipeline standard (`ingest_partite_aperte.py`) in `f_partite_aperte_fornitori`.
-L'app progetti ha una tab "Inbox fatture orfane": tutte le righe di `f_partite_aperte_fornitori` per cui **non esiste** un `InvoiceLink`.
+Stefano seleziona fattura, UI suggerisce Commitment plausibili (match `fornitore_id`, importo ± 5%, data ≥ data_firma Commitment), Stefano conferma → insert `f_progetto_invoice_link`.
 
-Stefano seleziona la fattura, UI suggerisce commitment plausibili (stesso fornitore_id, importo vicino), Stefano conferma → insert in `f_progetto_invoice_link`.
-
-Nessuna duplicazione: la fattura rimane UNA in `f_partite_aperte_fornitori`.
+**Nessuna duplicazione:** la fattura resta UNA in `f_movimenti_contabili`.
 
 ### 4.3 Flow C — Reconcile fornitore candidate → anagrafica
 
 CLI:
-```
-hotelops progetti fornitori candidate       # lista fornitori candidate in commitment/documenti
+```bash
+hotelops progetti fornitori candidate        # lista fornitori con stato_censimento=DA_CENSIRE
 hotelops progetti fornitori promote <denorm> --anagrafica-id <id>
 ```
 
-Promozione segue **entity_protocol_v1** (candidate → approved → active). Scrittura:
-1. Append riga in `ontology/suppliers/` nel vault (**I3**, SSOT)
-2. Sync verso `d_anagrafica_fornitori` via loader esistente (include `alias` array per match futuri)
-3. Riconciliazione in downstream:
-   - **Commitments** (APPEND audit): per ogni commitment con `fornitore_denorm` che matcha, scrivi nuova riga APPEND con `fornitore_id` popolato (state machine = `IN_CORSO` invariato, è un'update di identità non di stato)
-   - **Documenti** (APPEND immutabili): nessuna scrittura. `fornitore_denorm` resta; resolution verso `fornitore_id` avviene via JOIN on-demand a `d_anagrafica_fornitori.alias` nelle view consumer
+Promozione segue `entity_protocol_v1` (candidate → approved → active):
+1. Append riga in `vault/ontology/suppliers/<slug>.md` (I3 SSOT ontologia).
+2. Sync a `d_anagrafica_fornitori` via loader esistente (include `alias` array, `stato_censimento=CENSITO`).
+3. Riconciliazione downstream (APPEND audit):
+   - Commitments con `fornitore_denorm` match → nuova riga APPEND con `fornitore_id` popolato.
+   - Documenti (APPEND immutabili): nessuna scrittura retroattiva. `fornitore_denorm` resta; join on-demand via `d_anagrafica_fornitori.alias`.
 
-### 4.4 Storage Drive
+### 4.4 Flow D — Forward-flow Commitment → f_piano_finanziario_input (NUOVO)
 
-Struttura già esistente: `investimenti2026/` (vedi `ontology/projects/CamerePrimoPiano.md`).
+Scheduler CLI o trigger post-commitment-change:
+```bash
+hotelops progetti forward-flow --progetto HPAN25PIANO1 --dry-run
+hotelops progetti forward-flow --progetto HPAN25PIANO1        # applica
+```
+
+Algoritmo:
+```
+per ciascun Commitment con stato ∈ (FIRMATO, IN_CORSO):
+  per ciascuna PaymentSchedule rata con stato=PIANIFICATA:
+    mese = date_trunc(rata.data_prevista, MONTH)
+    societa = commitment.societa_pagante_id
+    if commitment.tipo_spesa == CAPEX:
+        voce = 'INVESTIMENTI_CAPEX'
+    else:  # OPEX (es. Hospitality Project PM fee ORTI)
+        voce = lookup_opex_voce(commitment.fornitore_id, scope_package.categoria)
+    importo = rata.importo_eur
+    chiave = (societa, voce, mese, fonte='PROGETTI', progetto_id)
+    emit row in f_piano_finanziario_input
+```
+
+**Idempotenza:** Before emit, DELETE `f_piano_finanziario_input` WHERE `fonte='PROGETTI'` AND `progetto_id=<p>`, poi INSERT. Il campo `progetto_id` serve come SNAPSHOT key (SNAPSHOT pattern come altri lifecycle SNAPSHOT del platform). Richiede aggiunta colonna `progetto_id` nullable su `f_piano_finanziario_input` (righe con `fonte=PROGETTI` valorizzate, altre fonti NULL).
+
+**Coord con Session 1 (Gasparotto Cash-Flow):** la nuova voce `INVESTIMENTI_CAPEX` va aggiunta in `core/bq/dimensioni/d_voci_piano_finanziario.csv` prima di qualunque scrittura. Se Session 1 ristruttura `d_voci_piano_finanziario`, il forward-flow resta valido — cambia solo il literal `voce='INVESTIMENTI_CAPEX'` in config.
+
+**Lookup opex voce (OPEX commitments):**
+- Default mapping in config: `{PM: 'CONSULENZE', CONSULENZE: 'CONSULENZE', PROGETTAZIONE: 'CONSULENZE'}`.
+- Fallback: `CONSULENZE` (voce esistente in `d_voci_piano_finanziario`).
+- Override manuale per Commitment via campo `voce_pf_target`.
+
+### 4.5 Storage Drive
+
+Struttura già esistente: `investimenti2026/` (vedi `vault/ontology/projects/CamerePrimoPiano.md`).
 
 MVP convention:
 ```
@@ -245,133 +345,176 @@ investimenti2026/
     ├── preventivi/
     ├── contratti/
     ├── ordini/
+    ├── fatture/
     ├── SAL/
     └── altro/
 ```
 
-Accesso via `core.datahub_sync` (rclone wrapper già centralizzato).
+Accesso via `core.datahub_sync` (rclone wrapper già centralizzato). Upload via rclone put; bidirezionale (read esistente + write per drop documenti).
 
 ---
 
 ## 5. UI — Streamlit app
 
-**Nuova app:** `condges/app_projects.py` (avviabile con `streamlit run condges/app_projects.py`).
+**Nuova app:** `progetti/app_projects.py` (avvio: `streamlit run progetti/app_projects.py`).
 
-Non integrata in `app_cdg.py` (MVP). Integrazione in H2 quando il pattern è validato.
+Non integrata in `app_cdg.py` (MVP). Integrazione è H2.
 
-### 5.1 Schermata 1 — Lista Progetti
+### 5.1 View 1 — Register (Registro dinamico impegni)
 
-Tabella tutti i progetti in `d_progetti` con stato, budget, impegnato, fatturato, % avanzamento.
-Click su riga → Vista Progetto.
+Selettore progetto → tabella unificata:
 
-### 5.2 Schermata 2 — Inbox (docs + fatture orfane)
+| ScopePackage | Categoria | Stato | Fornitore | Importo | Fonte | Δ overrun |
+|---|---|---|---|---:|---|---:|
+| (per ogni scope del progetto) |
 
-Due tab:
-- **Drop documento** (Flow A): drag & drop + LLM pre-extract + review.
-- **Fatture orfane** (Flow B): lista `f_partite_aperte_fornitori` senza `InvoiceLink`.
+Colonne:
+- **Stato**: ScopePackage state (IDENTIFICATO/PREVENTIVATO/IMPEGNATO/CHIUSO).
+- **Fornitore**: vendor del Commitment linkato, o "—" se orfano.
+- **Importo**: cascade `COALESCE(commitment.importo_impegnato, max(preventivo.importo), scope.importo_stimato)`.
+- **Fonte**: badge `STIMA | PREVENTIVO | COMMITTED | FATTURATO`.
+- **Δ overrun**: da `v_commitment_status.delta_overrun_eur` se applicabile, semaforo colorato.
 
-### 5.3 Schermata 3 — Vista Progetto (tab)
+KPI in header: cap, speso, committed, stimato, **buffer residuo con semaforo**.
 
-Sub-tabs:
-- **Overview** — KPI + grafico budget/impegnato/fatturato/pagato nel tempo.
-- **Commesse** — tabella `v_progetto_commitments_current` con stato corrente, filtri per categoria/stato.
-- **Documenti** — tutti i Document del progetto, filtri per tipo/fornitore.
-- **Timeline** — `v_progetto_timeline` eventi cronologici.
-- **Fatture** — fatture linkate via `InvoiceLink`.
+### 5.2 View 2 — Documents (Drop + aggregazione)
 
-### 5.4 Schermata 4 — Confronti preventivi
+Due sub-tab:
+- **Drop documento** (Flow A): drag & drop + LLM pre-extract + review + submit.
+- **Fatture orfane** (Flow B): lista `f_movimenti_contabili` senza InvoiceLink, con suggest Commitment (match fornitore + importo).
 
-Per un Commitment in stato PREVENTIVO con ≥2 preventivi:
-- Side-by-side di tutti i preventivi (importo, fornitore, data, note).
-- Bottone **"Scegli"** per ciascuno. Submit → una transazione scrive:
-  1. Nuova riga in `f_progetto_commitments` (stato → `CONTRATTO_FIRMATO`, `fornitore_id` preso dal Document vincitore)
-  2. Nuova riga in `f_progetto_documento_stato` (`stato_scelta=SELEZIONATO`) per il Document vincitore
-  3. Nuova riga in `f_progetto_documento_stato` (`stato_scelta=SCARTATO`) per ciascun altro Document dello stesso Commitment
-- Tutte APPEND, idempotenti (rerun = nuove righe con `data_stato` più recente, view risolve).
+Filtri: per progetto, per scope, per fornitore, per tipo, per data range.
 
-**Non** è un algoritmo di scoring/ranking automatico. È una vista di confronto per decisione umana.
+Lista documenti: tipo, fornitore, data, importo, stato_preventivo (se PREVENTIVO), confidence, reviewed, link Drive.
 
-### 5.5 Schermata +1 — Admin fornitori candidate
+### 5.3 View 3 — Budget evolution (Timeline budget)
 
-Lista fornitori candidate (`fornitore_id=NULL`, `fornitore_denorm=<nome>`). Bottone "Promuovi" apre flow entity_protocol_v1 (Flow C).
+Per progetto selezionato, linea temporale:
+- Snapshot budget iniziale (cap).
+- Ogni **evento** che modifica budget proiettato: nuovo scope stimato, preventivo ricevuto, commitment firmato, fattura (overrun/underrun).
+- Grafico stacked: Stima / Preventivo / Committed / Fatturato / Pagato nel tempo.
+- Tabella eventi: data, scope, tipo evento, delta, importo proiettato post-evento.
+
+Rollup: `v_progetto_timeline`.
+
+### 5.4 View 4 — Payment planning (Piano pagamenti)
+
+Tabella cashflow mensile da PaymentSchedule:
+
+| Mese | ORTI capex | ORTI opex | INTUR capex | INTUR opex | Totale |
+|---|---:|---:|---:|---:|---:|
+
+Sub-tab scenari:
+- **Baseline**: rate alle date previste.
+- **Ritardo 30gg**: shift rate `PIANIFICATA` di +30gg.
+- **Anticipo 15gg**: shift rate `PIANIFICATA` di −15gg.
+
+Button "Esporta forward-flow" → invoca `hotelops progetti forward-flow` e riporta diff (quali righe cambiano in `f_piano_finanziario_input`).
+
+### 5.5 Schermata admin (extra)
+
+Admin fornitori candidate: `stato_censimento=DA_CENSIRE`. Bottone "Promuovi" → Flow C.
 
 ---
 
 ## 6. Testing
 
-Test posture: TDD dove possibile, coverage target **90%** su moduli nuovi.
+**Posture:** TDD dove possibile, coverage target 90% su moduli nuovi.
 
-### 6.1 Unit tests
+### 6.1 Unit
 
-- `tests/test_projects_models.py` — Pydantic validation (Project, Commitment, Document, InvoiceLink): enum, nullability, edge cases.
-- `tests/test_projects_extract.py` — LLM extraction: mock Claude Haiku response, parsing JSON, confidence scoring, fuzzy supplier matching (Levenshtein boundaries 0.7/0.9).
-- `tests/test_projects_state_machine.py` — state transitions valide/invalide (es. non si può andare da `CHIUSO` a `IN_CORSO`).
+- `tests/test_projects_models.py` — Pydantic validation: enum, nullability, edge cases su 7 entità + ScopeCommitmentLink.
+- `tests/test_projects_extract.py` — LLM extraction: mock Claude Haiku, JSON parsing, confidence, fuzzy supplier matching (rapidfuzz boundaries 0.7/0.9).
+- `tests/test_projects_state_machines.py` — transizioni valide/invalide per Commitment, ScopePackage, Document.stato_preventivo.
+- `tests/test_projects_forward_flow.py` — solver logic: capex→INTUR voce INVESTIMENTI_CAPEX; opex→ORTI voce CONSULENZE; idempotenza DELETE+INSERT; edge rate stato ≠ PIANIFICATA.
+- `tests/test_projects_budget_cascade.py` — budget view: COALESCE impegnato/preventivo/stimato; scope orfano; overrun Commitment.
 
-### 6.2 Integration tests
+### 6.2 Integration (BQ)
 
-- `tests/test_projects_bq.py` — con marker `bq` (fixture `bq_client` esistente):
-  - Insert commitment → verify `v_progetto_commitments_current` returns latest.
-  - Insert InvoiceLink → verify join con `f_partite_aperte_fornitori`.
+Marker `bq` (fixture `bq_client` esistente in `tests/conftest.py`):
+
+- `tests/test_projects_bq.py`:
+  - Insert Commitment → `v_progetto_commitments_current` returns latest.
+  - Insert InvoiceLink → join con `f_movimenti_contabili` popola `v_commitment_status.importo_fatturato_cum_eur`.
   - Overview view: budget vs impegnato vs fatturato matematicamente consistenti.
+  - T1 invariant: no duplicazione `f_piano_finanziario_input` per `(fonte=PROGETTI, progetto_id, societa, voce, mese)`.
 
 ### 6.3 E2E smoke
 
 `tests/test_projects_smoke.py`:
-- Carica dati fixture di HPAN25PIANO1 (3 commitments, 5 documenti).
-- Drop preventivo PDF sintetico → verifica end-to-end extraction → append in BQ.
-- Invoca view → verifica numeri aggregati match atteso.
+- Seed fixture HPAN25PIANO1 (4 scope, 2 commitment, 3 documenti, 4 rate).
+- Drop preventivo PDF sintetico → estrazione → append BQ.
+- Invoca forward-flow → verifica 4 righe in `f_piano_finanziario_input` fonte=PROGETTI.
+- Invoca view → numeri aggregati match atteso.
 
-### 6.4 Non-goal
+### 6.4 Non-goal test
 
-- Test coverage di `app_projects.py` UI components (Streamlit testing è costoso, basso ROI per MVP single-user).
+Streamlit UI components non hanno test automatici (basso ROI single-user MVP).
 
 ---
 
-## 7. Anti-goals (out of scope MVP, esplicito)
+## 7. Anti-goals (esplicito out of MVP)
 
 | Fuori scope | Perché |
 |---|---|
-| **Multi-utente / permessi** | Single user Stefano. Entra se emerge audience (I7). |
-| **Pagamenti automatici** | Decisione paga/non-paga resta umana. Sistema informa, non esegue. |
-| **Bank reconciliation automatica** | `f_banche_movimenti` ↔ `InvoiceLink` è H2. MVP: pagamento = manuale flag. |
-| **LLM in `ingest/classify.py`** | I5: classify pipeline resta deterministico. LLM solo in-app con human review. |
-| **Tagging retroattivo `progetto_id` su tabelle esistenti** | I9 pieno è H2. MVP: nullable, solo nuovi fatti. |
-| **Algoritmi di scoring/ranking preventivi** | Decisione umana. UI è comparativa, non decisionale. |
-| **Refactor di `app_cdg.py`** | App separata `app_projects.py` in MVP. Integrazione H2. |
-| **Mobile / responsive** | Streamlit desktop. |
-| **Scrittura verso Esolver** | Esolver resta sola input. Nessun round-trip. |
-| **Gestione centri di costo interni Esolver** | Già gestiti da `d_categorie_conti`. Progetto è una dimensione parallela, non sostitutiva. |
-| **Workflow approvazioni multi-step** | Single user. Approvazione = "Stefano ha reviewato". |
+| Multi-utente / permessi | Single user. Entra se emerge audience (I7). |
+| Pagamenti automatici | Decisione umana. Sistema informa, non esegue. |
+| Bank reconciliation automatica | `f_banche_movimenti` ↔ InvoiceLink è H2. Pagamento = flag manuale. |
+| LLM in `ingest/classify.py` | I5 invariant. LLM solo in-app con human review. |
+| Tagging retroattivo `progetto_id` su fact canoniche | H2. MVP: forward-flow via `f_piano_finanziario_input`. |
+| Algoritmo scoring/ranking preventivi | Decisione umana. UI comparativa, non decisionale. |
+| Refactor `app_cdg.py` | App separata in MVP. Integrazione H2. |
+| Scrittura verso Esolver | Esolver resta sola input. No round-trip. |
+| Gestione centri di costo Esolver | Già in `d_categorie_conti`. Progetto è dimensione parallela. |
+| Workflow approvazioni multi-step | Single user. Approvazione = "Stefano ha reviewato". |
+| I10 come invariant platform | Ritirato → business rule vertical in `vault/ontology/business-rules/`. |
 
 ---
 
 ## 8. Open questions / H2 roadmap
 
-1. **Ricorrenti come progetti.** La "gestione corrente" (stagione Hotel, costi fissi ORTI) dovrebbe essere un progetto permanente (`HPAN_STAGIONE_2026`)? Potenzialmente sì — rende I9 universale. Decidere dopo 1-2 mesi di MVP.
-2. **`v_previsione_cassa` derivata dai progetti.** Oggi leggi da `f_piano_finanziario_input` + `f_partite_aperte_fornitori`. Se tutti i commitment hanno scadenze previste, la view cash forward potrebbe derivare da lì. Grosso valore ma richiede copertura I9 piena.
-3. **Integrazione `app_cdg.py`.** Quando il pattern projects è validato, la vista Project diventa una tab di `app_cdg.py` (terzo zoom). MVP separato per non rompere `app_cdg.py` in fase instabile.
-4. **Candidato invariant I9 formalizzato.** Dopo 2-3 mesi di MVP operativo, con dati reali, decidere se promuovere in `INVARIANTS.md` con decision stub `vault/decisions/YYYY-MM-DD_I9_Progetto_Dimensione.md`.
-5. **Drive bidirezionale.** Oggi read-only via rclone. Per l'upload di documenti dall'app Streamlit serve Drive API write (OAuth già esistente per Gmail). Decidere MVP: upload diretto, o salvataggio locale + sync manuale?
+1. **Ricorrenti come progetti permanenti** — `HPAN_STAGIONE_2026`? Decidere dopo 1-2 mesi MVP.
+2. **`v_previsione_cassa` derivata dai Commitments** — richiede I9 pieno su fact canoniche.
+3. **Integrazione `app_cdg.py`** — vista Project come tab quando pattern validato.
+4. **I9 promozione a invariant** — dopo 2-3 mesi MVP operativo, decision stub in `vault/decisions/`.
+5. **Drive bidirezionale** — oggi rclone read+write via shell. Valutare switch a Drive API OAuth quando serve atomicità upload.
+6. **Retroattività per fatture ante-MVP** — serve CLI `hotelops progetti retro-link` per linkare fatture HPAN25PIANO1 già presenti in `f_movimenti_contabili` pre-MVP a Commitments nuovi? In MVP: manual via UI orfane.
 
 ---
 
-## 9. Related
+## 9. Coord con Session 1 (Gasparotto Cash-Flow)
 
-- `vault/INVARIANTS.md` — I1–I8 (MVP rispetta tutti; I9 candidato non applicato retroattivamente)
-- `vault/AI_INSTRUCTIONS.md` — Canonical Truth Registry (no duplicazione `f_partite_aperte_fornitori`)
+Punto di contatto: **`d_voci_piano_finanziario`** + **`f_piano_finanziario_input.fonte` enum**.
+
+Questo MVP:
+- Aggiunge voce `INVESTIMENTI_CAPEX` in `core/bq/dimensioni/d_voci_piano_finanziario.csv`.
+- Aggiunge `progetto_id` nullable su `f_piano_finanziario_input`.
+- Aggiunge valore `PROGETTI` al dominio `fonte`.
+
+Se Session 1 ristruttura `d_voci_piano_finanziario` (es. nuova tassonomia o struttura multi-level), serve merge coordinato. Fino a quel momento, MVP procede in parallelo senza conflitti di schema (colonne nuove, valori enum nuovi, no breaking change).
+
+---
+
+## 10. Related
+
+- `docs/progetti/HPAN25PIANO1-walkthrough.md` — seed data + rotture validate
+- `vault/INVARIANTS.md` — I1–I8 (MVP rispetta; I9 candidato forward-flow non retroattivo)
+- `vault/AI_INSTRUCTIONS.md` — Canonical Truth Registry
 - `vault/entity_protocol_v1.md` — promozione fornitori candidate
-- `vault/ontology/projects/CamerePrimoPiano.md` — dati di seed MVP
-- `vault/verticals/CONDGES.md` — vertical in cui si integra
+- `vault/ontology/projects/CamerePrimoPiano.md` — ontologia progetto (da aggiornare in capture)
 - `core/schemas.py` — nuovi modelli Pydantic
-- `core/bq/views/` — quattro nuove view SQL
-- `condges/app_projects.py` — nuova app Streamlit
-- `condges/projects/` — modulo Python (models, extract, cli_commands)
+- `core/bq/views/` — 6 nuove view SQL
+- `core/bq/dimensioni/d_voci_piano_finanziario.csv` — aggiunta `INVESTIMENTI_CAPEX`
+- `progetti/` — nuovo package Python (models, extract, forward_flow, cli_commands, app_projects.py)
+- `vault/ontology/business-rules/capex-opex-allocation.md` — nuovo file (capture post-MVP)
+- `vault/decisions/2026-04-21_Projects_Vertical.md` — decision stub (capture fine-MVP)
 
 ---
 
-## 10. Implementation (post-plan)
-
-*Da popolare con commit hashes durante implementazione. Decision record separato in `vault/decisions/2026-04-20_Projects_MVP.md`.*
+## 11. Implementation (post-plan)
 
 - Branch: `projects-mvp-hpan25piano1`
-- Target: tutti i test verdi + HPAN25PIANO1 popolato + 4 success criteria §2.4 verificati manualmente.
+- Plan TDD: `docs/superpowers/plans/2026-04-20-projects-mvp.md`
+- Target: tutti i test verdi + HPAN25PIANO1 seed caricato + 5 success criteria §2.4 verificati manualmente + forward-flow row in `f_piano_finanziario_input` fonte=PROGETTI visibile a Rosa/Gasparotto.
+
+*Sezione Implementation popolata con commit hashes durante l'esecuzione.*

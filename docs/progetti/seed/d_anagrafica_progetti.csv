@@ -1,0 +1,29 @@
+supplier_id,ragione_sociale,nome_breve,codice_esolver,stato_censimento,tipo,societa_pagante_default,note
+001,AMCN S.r.l.,AMCN,,ATTIVO,servizio_edile,INTUR,Contratto edile HPAN25 - OFFERTA FIRMATA HOTEL PANORAMA.pdf
+002,STE Impianti Elettrici,STE,,ATTIVO,servizio_imp,INTUR,Elettrico - contratto firmato 27/02/2026 - COMPUTO METRICO
+003,SANTELIA Impianti,Santelia,,ATTIVO,servizio_imp,INTUR,Meccanico+idrico+antincendio - contratto firmato 27/02/2026
+004,Metal 2000,Metal 2000,,CENSITO,fornitura_posa,INTUR,Infissi esterni piano 1 - preventivo 07/01/2026
+005,DIERRE S.p.A.,Dierre,,CENSITO,fornitura_posa,INTUR,Porte standard - ordine n.864 confermato 27/02/2026
+006,CSC,CSC,,DA_CENSIRE,fornitura_posa,INTUR,Porte REI antincendio - nessun preventivo ancora
+007,ARCHISAVIO (Savio Marigliano),Archisavio,,DA_CENSIRE,consulenza,INTUR,Architetto progettazione - preventivo pending
+008,Amalia Pisacane,Pisacane,,DA_CENSIRE,consulenza,INTUR,Ingegnere direzione lavori - preventivo pending - CANONICAL NAME Amalia (non Amalisa)
+009,NESE,NESE,,DA_CENSIRE,consulenza,INTUR,Progettazione impianti - preventivo pending - distinto da STE/Santelia (esecuzione)
+010,Hospitality Project,HP,,DA_CENSIRE,consulenza,ORTI,Project Management - SOCIETA PAGANTE=ORTI (eccezione regola capex/opex)
+011,Studio Ninni (ref. Anna Capone),Studio Ninni,,CENSITO,consulenza_fornitura,INTUR,Armadi+cucine+interior design - preventivo vault 21/02/2026 termini 30gg
+012,Atelier Hospitality,Atelier,,CENSITO,fornitura_arredi,INTUR,Arredi camere TACTICAL - preventivo vault acquisito
+013,Rino Cuomo,Cuomo,,DA_CENSIRE,fornitura_custom,INTUR,Falegnameria custom - scope armadi + arredi piano 1
+014,Sicigniano,Sicigniano,,DA_CENSIRE,fornitura_mat,INTUR,Piastrelle materiale - no preventivo - scope distinto dalla posa
+015,Dorelan,Dorelan,,DA_CENSIRE,fornitura,INTUR,Letti e materassi camera
+016,Domus,Domus,,DA_CENSIRE,fornitura,INTUR,Testiere letto imbottite + tende
+017,Floor Design,Floor,,DA_CENSIRE,fornitura_posa,INTUR,Moquette design+posa
+018,Indelb,Indelb,,DA_CENSIRE,fornitura,INTUR,Frigobar camera + cassaforte
+019,CAPONE [DISAMBIGUARE],Capone Elettr.,,DA_CENSIRE,fornitura,INTUR,TV lcd - RAGIONE SOCIALE DA DEFINIRE - distinto da Anna Capone (persona Studio Ninni interior design)
+020,Zara Home,Zara,,DA_CENSIRE,fornitura,INTUR,Comodini camera
+021,Illuxit,Illuxit,,DA_CENSIRE,fornitura,INTUR,Corpi illuminanti camera+bagno
+022,Flab,Flab,,DA_CENSIRE,fornitura,INTUR,Cabine doccia + specchi bagno
+023,VDA Group,VDA,,DA_CENSIRE,fornitura_inst,INTUR,Building automation / domotica camera / parete cablata
+024,Sanitari multi-marchio,Sanitari,,CENSITO,fornitura,INTUR,Geberit+Frattini+Rocky+Comoda - 4 marchi su sanitari e rubinetterie da vault
+900,[placeholder] Piastrellista per posa,Piastrellista,,DA_CENSIRE,servizio_posa,INTUR,NO VENDOR IDENTIFICATO - posa piastrelle stima manuale - cercare sub-appaltatore
+901,[placeholder] Installatore luci balconi,Luci balconi,,DA_CENSIRE,fornitura,INTUR,NO VENDOR IDENTIFICATO - illuminazione balconi stima manuale
+902,[placeholder] Fornitore segnaletica,Segnaletica,,DA_CENSIRE,fornitura,INTUR,NO VENDOR IDENTIFICATO - segnaletica interna stima manuale
+999,[NO VENDOR] Cassa / Imprevisti,Cassa,,ATTIVO,interno,INTUR,Fondo riserva 5% - non vendor-attributable
