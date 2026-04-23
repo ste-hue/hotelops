@@ -44,6 +44,11 @@ DEFAULT_OUTPUT = Path.home() / "Desktop" / "Riconciliazione_accodamenti.xlsx"
 _STRUTTURA_DISPLAY = {"hotel": "HP", "residence": "ANGELINA", "cvm": "CVM", "unknown": "???"}
 _STRUTTURA_FT_SUFFIX = {"hotel": "H", "residence": "R", "cvm": "C", "unknown": ""}
 
+# Tolleranza di quadratura: differenza massima (€) tra incassi e atteso
+# prima di marcare la riga come "non quadra". 1€ copre arrotondamenti centesimi
+# su più movimenti senza nascondere errori reali.
+_QUADRA_TOLERANCE = Decimal("1")
+
 
 # ── Classificazione conti ─────────────────────────────────────────────────────
 
@@ -78,7 +83,10 @@ def classify_payment_account(conto_esolver: str) -> str:
 
 
 def _normalize_date(date_str: str) -> str:
-    """Normalizza a dd/mm/yyyy da ddmmyyyy (Esolver), dd/mm/yyyy, yyyy-mm-dd."""
+    """Normalizza a dd/mm/yyyy da ddmmyyyy (Esolver), dd/mm/yyyy, yyyy-mm-dd.
+
+    Returns "" on unparseable input (callers guard with `if not data: continue`).
+    """
     date_str = date_str.strip() if date_str else ""
     if not date_str:
         return ""
@@ -90,7 +98,8 @@ def _normalize_date(date_str: str) -> str:
             return f"{parts[2]}/{parts[1]}/{parts[0]}"
     if len(date_str) == 8 and date_str.isdigit():
         return f"{date_str[0:2]}/{date_str[2:4]}/{date_str[4:8]}"
-    return date_str
+    logger.warning("Data non parsabile: %r → scartato", date_str)
+    return ""
 
 
 def _sort_key_date(date_str: str) -> tuple:
@@ -126,6 +135,8 @@ def _accumulate(corr_events, mov_events, fatt_events, days, key_fn):
     # Corrispettivi
     for event in corr_events:
         data = _normalize_date(event["tes"]["data_doc"])
+        if not data:
+            continue
         day = days[key_fn(event, data)]
         for gen in event["gens"]:
             importo = gen["importo"]
@@ -149,7 +160,7 @@ def _accumulate(corr_events, mov_events, fatt_events, days, key_fn):
         day = days[key_fn(event, data)]
         event_type = event["type"]
 
-        if event_type in ("incasso_caparra", "movimento_generico"):
+        if event_type == "incasso_caparra":
             for gen in event["gens"]:
                 importo = _gen_importo(gen)
                 if importo <= Decimal("0"):
@@ -176,15 +187,21 @@ def _accumulate(corr_events, mov_events, fatt_events, days, key_fn):
 
     # Fatture
     for event in fatt_events:
-        data = _normalize_date(event["tes"]["data_doc"])
-        day = days[key_fn(event, data)]
-        num_doc = event["tes"].get("num_doc", 0)
         ivas = event.get("ivas", [])
-        totale = (
-            sum(iva["imponibile"] + iva["imposta"] for iva in ivas)
-            if ivas
-            else sum(rig["imponibile"] for rig in event.get("rigs", []))
-        )
+        num_doc = event["tes"].get("num_doc", 0)
+        if not ivas:
+            # Solo le righe IVA portano imposta → totale LORDO affidabile.
+            # Rigs da solo danno NETTO e silenziosamente sottostima fatture_importo.
+            logger.warning(
+                "Fattura senza righe IVA scartata: num=%s data=%s",
+                num_doc, event["tes"].get("data_doc"),
+            )
+            continue
+        data = _normalize_date(event["tes"]["data_doc"])
+        if not data:
+            continue
+        day = days[key_fn(event, data)]
+        totale = sum(iva["imponibile"] + iva["imposta"] for iva in ivas)
         day["fatture_importo"] += totale
         if num_doc:
             suffix = _STRUTTURA_FT_SUFFIX.get(event.get("struttura", ""), "")
@@ -203,7 +220,7 @@ def _day_to_row(day: dict, data: str, struttura: str = "") -> dict:
     totale_incassi = totale_pos + totale_contanti
     totale_atteso = corrispettivi_netti + caparre_incassate
     diff = abs(totale_incassi - totale_atteso)
-    quadra_ok = diff <= Decimal("1")
+    quadra_ok = diff <= _QUADRA_TOLERANCE
 
     notes = []
     if totale_contanti > Decimal("0"):

@@ -1,5 +1,6 @@
 """Tests for condges.cassa_giornaliera — daily cash reconciliation from accodamenti TXT."""
 
+import logging
 from decimal import Decimal
 
 from openpyxl import load_workbook
@@ -271,3 +272,82 @@ def test_write_excel_data_row_populated(tmp_path):
     ws = wb["Riepilogo"]
     assert ws["A4"].value == "01/04/2026"
     assert ws["H4"].value == "✓"  # quadra OK
+
+
+# ── Hardening: date normalization ─────────────────────────────────────────────
+
+
+def test_corrispettivo_with_unparseable_date_is_skipped():
+    """Garbage data_doc → _normalize_date returns "" → event skipped.
+
+    Previously returned raw input, propagating corrupt strings into day keys.
+    """
+    event = _corrispettivo_event(data="not-a-date", gens=[_gen("199001", 100)])
+    rows = build_daily_reconciliation([event], [], [])
+    assert rows == []
+
+
+def test_corrispettivo_with_short_date_is_skipped():
+    """5-digit string does not match any known format → normalized to ""."""
+    event = _corrispettivo_event(data="12345", gens=[_gen("199001", 100)])
+    rows = build_daily_reconciliation([event], [], [])
+    assert rows == []
+
+
+# ── Hardening: fattura net/gross consistency ──────────────────────────────────
+
+
+def test_fattura_without_ivas_is_skipped_with_warning(caplog):
+    """Fattura without IVA records → logged + skipped.
+
+    IVA records carry both imponibile and imposta → produce LORDO total.
+    Rigs alone give only imponibile (NETTO), which would silently understate
+    fatture_importo when invoices span mixed VAT rates. Safer to refuse.
+    """
+    fattura = {
+        "type": "fattura",
+        "struttura": "hotel",
+        "tes": {"data_doc": "12042026", "num_doc": 99},
+        "rigs": [{"imponibile": Decimal("500")}],
+        "ivas": [],
+    }
+    with caplog.at_level(logging.WARNING, logger="condges.cassa_giornaliera"):
+        rows = build_daily_reconciliation([], [], [fattura])
+    assert rows == []
+    assert any("iva" in rec.message.lower() for rec in caplog.records)
+
+
+# ── Hardening: movimento_generico does not inflate caparre ────────────────────
+
+
+def test_movimento_generico_does_not_inflate_caparre_incassate():
+    """movimento_generico never touches caparre_incassate — it has no 39.05.21 leg
+    by definition (parser classifies by caparra account presence, not progressivo).
+    A POS movement without caparra context (e.g., refund) would otherwise leak into
+    caparre_incassate_pos if the aggregator lumped movimento_generico with
+    incasso_caparra.
+    """
+    movimento = {
+        "type": "movimento_generico",
+        "struttura": "hotel",
+        "gens": [
+            {
+                "data_doc": "01042026",
+                "conto_esolver": "199001",  # POS leg, no 390521
+                "importo_dare": Decimal("50"),
+                "importo_avere": Decimal("0"),
+            },
+            {
+                "data_doc": "01042026",
+                "conto_esolver": "790101",  # some non-caparra P&L account
+                "importo_dare": Decimal("0"),
+                "importo_avere": Decimal("50"),
+            },
+        ],
+        "par": None,
+    }
+    rows = build_daily_reconciliation([], [movimento], [])
+    # Event produces no caparra row (no 390521 leg → not a caparra event).
+    # If aggregator still creates a day bucket, caparre_incassate must be 0.
+    for row in rows:
+        assert row["caparre_incassate"] == Decimal("0")

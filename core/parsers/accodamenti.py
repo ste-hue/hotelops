@@ -51,6 +51,10 @@ def _detect_struttura(filepath: str) -> str:
         return "residence"
     elif basename.startswith("C_"):
         return "cvm"
+    logger.warning(
+        "Prefisso filename sconosciuto (atteso H_/R_/C_): %s → struttura=unknown",
+        basename,
+    )
     return "unknown"
 
 
@@ -229,9 +233,12 @@ def parse_movimenti(filepath: str) -> list[dict]:
             group_gens.append(lines_data[j][1])
             j += 1
 
+        # Classify by account codes present in the GEN legs, not by positional
+        # heuristics (progressivo==0). 39.05.21 IS the caparra account — any
+        # event touching it is a caparra event by definition.
         if has_par:
             event_type = "giro_caparra"
-        elif rec["progressivo"] == 0:
+        elif any(g["conto_esolver"].replace(".", "") == "390521" for g in group_gens):
             event_type = "incasso_caparra"
         else:
             event_type = "movimento_generico"
