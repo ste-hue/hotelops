@@ -309,8 +309,17 @@ def events_to_rows(events: list[dict], societa: str) -> list[dict]:
     return rows
 
 
-def parse_and_transform(path: Path, societa: str, logger: logging.Logger) -> list[dict]:
-    """Parsa un file Esolver e restituisce righe f_ledger_movimenti."""
+def parse_and_transform(
+    path: Path,
+    societa: str,
+    logger: logging.Logger,
+    rel_path: str | None = None,
+) -> list[dict]:
+    """Parsa un file Esolver e restituisce righe f_ledger_movimenti.
+
+    Se `rel_path` è fornito, sostituisce `source_file` negli eventi col path
+    relativo al staging (preserva la cartella-data es. `19_04_2026/H_Movimenti.txt`).
+    """
     ftype = _file_type(path.name)
     filepath = str(path)
 
@@ -327,6 +336,10 @@ def parse_and_transform(path: Path, societa: str, logger: logging.Logger) -> lis
     else:
         logger.warning(f"  SKIP {path.name} — tipo non riconosciuto: {ftype}")
         return []
+
+    if rel_path:
+        for e in events:
+            e["source_file"] = rel_path
 
     rows = events_to_rows(events, societa)
     logger.debug(f"  {path.name}: {len(events)} eventi → {len(rows)} righe")
@@ -421,11 +434,18 @@ def process_file(
     societa: str,
     logger: logging.Logger,
     dry_run: bool,
+    rel_path: str | None = None,
 ) -> dict:
-    stats = {"file": path.name, "parsed": 0, "new": 0, "dupes": 0, "errors": 0}
+    stats = {
+        "file": rel_path or path.name,
+        "parsed": 0,
+        "new": 0,
+        "dupes": 0,
+        "errors": 0,
+    }
 
     try:
-        rows = parse_and_transform(path, societa, logger)
+        rows = parse_and_transform(path, societa, logger, rel_path=rel_path)
     except Exception as e:
         logger.error(f"Errore parsing {path.name}: {e}")
         stats["errors"] = 1
@@ -494,7 +514,7 @@ def main():
         if not sync_from_drive(staging, args.dry_run, logger):
             sys.exit(1)
 
-    files = sorted(staging.glob("*.txt")) + sorted(staging.glob("*.TXT"))
+    files = sorted(staging.rglob("*.txt")) + sorted(staging.rglob("*.TXT"))
     logger.info(f"File in staging: {len(files)}")
     if not files:
         logger.warning("Nessun .txt trovato. Esci.")
@@ -509,9 +529,17 @@ def main():
 
     totals: dict[str, int] = {"parsed": 0, "new": 0, "dupes": 0, "errors": 0}
     for filepath in files:
-        logger.info(f"Processo: {filepath.name}")
+        rel_path = str(filepath.relative_to(staging))
+        logger.info(f"Processo: {rel_path}")
         stats = process_file(
-            filepath, bq_client, hashes, datahub, args.societa, logger, args.dry_run
+            filepath,
+            bq_client,
+            hashes,
+            datahub,
+            args.societa,
+            logger,
+            args.dry_run,
+            rel_path=rel_path,
         )
         for k in totals:
             totals[k] += stats.get(k, 0)
