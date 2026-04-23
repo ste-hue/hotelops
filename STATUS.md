@@ -1,4 +1,4 @@
-# Status — 2026-04-21
+# Status — 2026-04-22
 
 ## In corso
 - v_condges_banca_dettaglio: view SQL creata, non ancora materializzata su BQ
@@ -9,6 +9,7 @@
 - **Projects MVP Binario A**: seed committato (`d60e5b7`, HPAN25PIANO1 + 28 vendor), spec S2 authoritative (`docs/superpowers/specs/2026-04-20-projects-mvp-design.md`), plan normalizzato archiviato (`25fa57d`). MVP flat da costruire. Vault: `concepts/PROGETTO.md` + `decisions/2026-04-21_Progetto_First_Class_Dimension.md` + `verticals/CONDGES.md` boundary reconciler/project-engine.
 
 ## Completato di recente
+- 2026-04-22: **accodamenti ingest + fix rglob cartelle-data** — HotelCube ha iniziato a organizzare TXT in sotto-cartelle per data (`ACCODAMENTI HOTEL CUBE/19_04_2026/…`, `/20_04_2026/…`). Il glob non-ricorsivo saltava tutto. Fix `0527594`: `rglob` + `rel_path` param in `parse_and_transform`/`process_file`, `source_file` preserva la sotto-cartella. Ingest reale: parsed=222, new=99, dupes=123. `f_accodamenti` ora 376 righe, `MAX(data_registrazione)` 2026-04-21 (era 2026-03-21). Hash MD5 path-independent → nessuna invalidation righe storiche.
 - 2026-04-21: **audit tech-lead + Projects MVP pivot + vault captures** — audit ha identificato d_voci `390521` duplicate (ENTRATE_CAPARRE + ENTRATE_CAPARRE_INTUR 🔴), CLAUDE.md drift residuo (3 moduli core non documentati), 2 views non materializzate. Projects pivotato a Binario A: plan normalizzato archiviato (`25fa57d`), Binario A seed `d60e5b7`. 3 vault captures: concept PROGETTO + decision Progetto_First_Class_Dimension + CONDGES boundary.
 - 2026-04-21: **condges Rosa→Gasparotto integration** — spec `c69abc1` (CE-sheet parser pivot, libreoffice recalc) + plan `beddc7e` + `2024531` WI-1 Task 2 simplify. Implementazioni iniziali: `19619de` parse Budget_Indici2025 via CE cross-ref, `143f60e` timedelta decoder cod_conto corrotti XLSX Gasparotto.
 - 2026-04-21: **commit untracked + checkpoint** — `692589f` + `6a45183` committano cassa_giornaliera + tests (580+273 LOC, 23 test verdi), `v_economato_costo_unitario.sql`, `scripts/coperti-daily.sh`, `.claude/commands/vault-loop.md`. CLAUDE.md checkpoint 2026-04-21.
@@ -39,6 +40,9 @@
 - 🟡 Crash window tra `send_email` e `mark_alerts_sent` UPDATE — scelta consapevole "alert duplicato > alert perso", da rivedere se succede.
 
 ## Prossimi passi
+- **Test cassa giornaliera su 1 giorno reale** — usare il nuovo stream `f_accodamenti` (post-fix rglob) per validare `condges/cassa_giornaliera.py` su un giorno specifico vs riferimento manuale. Sblocca uso operativo.
+- **Backfill `file_sorgente` sulle 277 righe vecchie** (non urgente) — consistenza con nuovo formato `ACCODAMENTI HOTEL CUBE/DD_MM_YYYY/<file>.txt` vs bare `<file>.txt`. Cosmetico, non blocca query.
+- **Discussione separata `SOCIETA_DEFAULT = "INTUR"`** — le righe da cartella `ingresso/accodamenti/ORTI/…` vengono taggate INTUR via default. Da ragionare se va fixato o se il default era intenzionale per altro motivo.
 - **Verifica d_voci `390521` double-count** — controllare se view filtra per societa, altrimenti fix necessario (audit P0 2026-04-21)
 - **Projects MVP flat build** — implementare Binario A su HPAN25PIANO1 + 28 vendor seed. 2-3 settimane validation prima di rewrite normalizzato.
 - **condges Rosa→Gasparotto plan resume** — continuare esecuzione plan `beddc7e` dopo task iniziali (`19619de`, `143f60e`).
