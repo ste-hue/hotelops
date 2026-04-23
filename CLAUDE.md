@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last checkpoint:** 2026-04-04 | **Version:** 0.5.0
+**Last checkpoint:** 2026-04-21 | **Version:** 0.5.0
 
 > **For AI agents**: before touching code or answering, read the Obsidian vault instructions in this order:
 > 1. `<vault>/hotelops/INVARIANTS.md` — la costituzione (I1–I8, canonical truth per concept).
@@ -19,7 +19,7 @@ hotelops is the financial data platform for Gruppo Panorama hotel operations. It
 ```
 core/       <- schemas, config, BQ views, dimensions, ontology loaders
   bq/
-    views/       <- 14 SQL view definitions
+    views/       <- 16 SQL view definitions
     dimensioni/  <- CSV sources (d_voci, d_fornitori, d_mapping)
     load/        <- dimension loaders (9 scripts -- load rarely-changed tables)
 ingest/     <- continuous data flow pipelines
@@ -37,7 +37,11 @@ cli.py      <- CLI entry point (hotelops command)
 - `core/config.py` -- Table IDs and BQ constants (PROJECT, DATASET). All table refs as `F_*`, `D_*`, `V_*`.
 - `core/contracts.py` -- `SchemaViolationError`, `validate_columns()`.
 - `core/datahub.py` -- Minimal CSV reader for local fact tables.
-- `core/bq/views/` -- BigQuery view SQL definitions (source of truth). 14 SQL files.
+- `core/datahub_sync.py` -- Centralized rclone/Drive sync (7 sites consolidated 2026-04-19).
+- `core/bq/client.py` -- BigQuery client singleton (`get_client()`). 41 call sites consolidated 2026-04-19.
+- `core/parsers/accodamenti.py` -- Shared parser for HotelCube TXT accodamenti (H_/R_/C_ × Corr/Mov/Fatt). Extracted 2026-04-19 from ingest/banca/.
+- `core/pipeline_run.py` -- PipelineRun context manager for pipeline instrumentation.
+- `core/bq/views/` -- BigQuery view SQL definitions (source of truth). 16 SQL files.
 - `core/bq/dimensioni/` -- Dimension CSV sources (d_voci_piano_finanziario.csv, d_fornitori.csv, d_mapping_piano_finanziario.csv).
 - `core/bq/load/` -- Dimension loaders: load_voci_piano_finanziario, load_piano_conti, load_categorie, load_fornitori, load_anagrafica_fornitori, load_budget_costi, load_coefficienti_stagionalita, load_mapping_piano_finanziario, load_ricavi_storici.
 
@@ -213,6 +217,8 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `v_economato_pareto` | Looker: ABC analysis top referenze per reparto. `core/bq/views/` |
 | `v_budget` | Budget consolidato per codice conto. `core/bq/views/` |
 | `v_condges_banca_dettaglio` | Looker: Dettaglio movimenti banca per analisi. `core/bq/views/` |
+| `v_ledger_movimenti` | Bank reconciliation ledger: dedup SCHEDA_190101 vs PNC per day, excludes 'Ripresa saldi'. `core/bq/views/` |
+| `v_economato_costo_unitario` | Looker: costo unitario per pax-notte per reparto × articolo × mese + ABC ranks. `core/bq/views/` |
 
 ### How the views connect
 
@@ -335,13 +341,26 @@ Python >=3.11. Run: `pytest`. Lint: `ruff check .` / `ruff format .`
 
 ```
 tests/
+  test_budget_canonical.py       -- Invariant tests for v_budget_canonical (fonte priority, I8)
+  test_cassa_giornaliera.py      -- Daily cash reconciliation from accodamenti TXT
+  test_cdg_engine.py             -- CDG computation engine (CE cascade, indicatori, proiezione)
   test_classify.py               -- File classifier: 65 tests, all 10 detectors + routing + lifecycle
   test_contracts.py              -- Schema validation tests
-  test_materialize.py            -- Materialization tests
+  test_health_checks.py          -- Watermark + pipeline staleness checks
+  test_ingest_gasparotto.py      -- Gasparotto Budget → f_budget_mensile ingest (timedelta decoder + CE parser)
+  test_ingest_movimenti_xlsx.py  -- Movimenti contabili XLSX ingestion tests
   test_manifest.py               -- BQ manifest generation tests
+  test_materialize.py            -- Materialization tests
+  test_pipeline_run.py           -- PipelineRun context manager
+  test_reviews_alert.py          -- Review alert logic + email rendering
+  test_reviews_classify.py       -- Reviews NLP classification
+  test_reviews_ingest.py         -- Reviews ingest: normalization + dedup
+  test_reviews_schema.py         -- ReviewRow schema validation
+  test_reviews_schema_sync.py    -- Contract: reviews NLP enums in sync across code + schema
+  test_reviews_scrape.py         -- Apify actor input builder
+  test_reviews_watermark.py      -- Watermark-based review filtering
   test_scadenzario.py            -- Scadenzario Excel bridge tests
   test_stagionalita.py           -- Seasonality coefficient tests
-  test_ingest_movimenti_xlsx.py  -- Movimenti contabili XLSX ingestion tests
 ```
 
 Core: `pyyaml`, `openpyxl`, `pandas`, `google-cloud-bigquery`, `pydantic`.

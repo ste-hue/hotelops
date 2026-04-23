@@ -77,15 +77,15 @@ SELECT
   ROUND(c.coeff_per_pax, 6)                          AS coeff_per_pax,
   ROUND(c.costo_per_pax, 4)                          AS costo_per_pax,
 
-  -- ABC ranking per (anno, mese, reparto) — posizione dell'articolo nel reparto di quel mese
+  -- ABC ranking per (societa, anno, mese, reparto) — posizione dell'articolo nel reparto di quel mese
   ROW_NUMBER() OVER (
-    PARTITION BY c.anno, c.mese, c.reparto
+    PARTITION BY c.societa_id, c.anno, c.mese, c.reparto
     ORDER BY c.importo DESC
   )                                                  AS rank_in_reparto_mese,
 
-  -- ABC ranking per (anno, reparto) — posizione dell'articolo nel reparto sull'intero anno
+  -- ABC ranking per (societa, anno, reparto) — posizione dell'articolo nel reparto sull'intero anno
   DENSE_RANK() OVER (
-    PARTITION BY c.anno, c.reparto
+    PARTITION BY c.societa_id, c.anno, c.reparto
     ORDER BY y.importo_anno DESC
   )                                                  AS rank_in_reparto_anno
 
@@ -93,7 +93,7 @@ FROM `hotelops-suite.hotelops.f_coefficienti_consumo` c
 LEFT JOIN mese_labels   ml ON ml.mese = c.mese
 LEFT JOIN reparto_labels rl ON rl.code = c.reparto
 LEFT JOIN (
-  SELECT anno, reparto, descrizione_articolo, SUM(importo) AS importo_anno
+  SELECT societa_id, anno, reparto, descrizione_articolo, SUM(importo) AS importo_anno
   FROM `hotelops-suite.hotelops.f_coefficienti_consumo`
-  GROUP BY 1, 2, 3
-) y ON y.anno = c.anno AND y.reparto = c.reparto AND y.descrizione_articolo = c.descrizione_articolo
+  GROUP BY 1, 2, 3, 4
+) y ON y.societa_id = c.societa_id AND y.anno = c.anno AND y.reparto = c.reparto AND y.descrizione_articolo = c.descrizione_articolo
