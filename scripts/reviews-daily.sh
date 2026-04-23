@@ -21,31 +21,38 @@ LOGFILE="${LOCK_DIR}/reviews-$(date +%Y%m%d).log"
 
 mkdir -p "$LOCK_DIR"
 
-# Already ran successfully today? Skip.
+ts() { date '+%Y-%m-%d %H:%M:%S'; }
+
 if [ -f "$LOCKFILE" ]; then
+    echo "$(ts) Lock present ($LOCKFILE) — already ran today, skipping." >> "$LOGFILE"
     exit 0
 fi
 
-# Load env vars
+if [ ! -x "$PYTHON" ]; then
+    echo "$(ts) ABORT: python not found at $PYTHON. Check venv path." >> "$LOGFILE"
+    exit 1
+fi
+
 if [ -f "$PROJECT_DIR/.env" ]; then
     set -a
     source "$PROJECT_DIR/.env"
     set +a
+else
+    echo "$(ts) WARN: .env missing at $PROJECT_DIR/.env — credenziali potrebbero non essere caricate." >> "$LOGFILE"
 fi
 
 cd "$PROJECT_DIR"
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') Starting reviews scrape..." >> "$LOGFILE"
+echo "$(ts) Starting reviews scrape..." >> "$LOGFILE"
 
-# Run the full pipeline: scrape -> normalize -> classify -> BQ -> alert
 if "$PYTHON" -m cli reviews --scrape >> "$LOGFILE" 2>&1; then
     touch "$LOCKFILE"
-    echo "$(date '+%Y-%m-%d %H:%M:%S') Scrape completed successfully." >> "$LOGFILE"
+    echo "$(ts) Scrape completed successfully." >> "$LOGFILE"
 else
-    echo "$(date '+%Y-%m-%d %H:%M:%S') Scrape FAILED (exit $?). Will retry at next scheduled time." >> "$LOGFILE"
-    exit 1
+    rc=$?
+    echo "$(ts) Scrape FAILED (exit $rc). Will retry at next scheduled time." >> "$LOGFILE"
+    exit "$rc"
 fi
 
-# Clean up lock files older than 7 days
 find "$LOCK_DIR" -name "*.lock" -mtime +7 -delete 2>/dev/null || true
 find "$LOCK_DIR" -name "*.log" -mtime +30 -delete 2>/dev/null || true

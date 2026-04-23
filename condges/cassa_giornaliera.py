@@ -30,6 +30,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from core.parsers.accodamenti import (
+    is_caparra_account,
     parse_corrispettivi,
     parse_fatture,
     parse_movimenti,
@@ -69,13 +70,13 @@ def classify_payment_account(conto_esolver: str) -> str:
     """Classifica un conto Esolver come pos | cash | caparra | ''."""
     if not conto_esolver:
         return ""
+    if is_caparra_account(conto_esolver):
+        return "caparra"
     dotted = esolver_account_to_dotted(conto_esolver)
     if dotted.startswith("19.90"):
         return "pos"
     if dotted == "19.03.03":
         return "cash"
-    if dotted == "39.05.21":
-        return "caparra"
     return ""
 
 
@@ -85,7 +86,7 @@ def classify_payment_account(conto_esolver: str) -> str:
 def _normalize_date(date_str: str) -> str:
     """Normalizza a dd/mm/yyyy da ddmmyyyy (Esolver), dd/mm/yyyy, yyyy-mm-dd.
 
-    Returns "" on unparseable input (callers guard with `if not data: continue`).
+    Returns "" on unparseable input.
     """
     date_str = date_str.strip() if date_str else ""
     if not date_str:

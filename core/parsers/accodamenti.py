@@ -17,6 +17,17 @@ import os
 
 logger = logging.getLogger(__name__)
 
+# Conto Esolver 39.05.21 è *il* conto caparre: ogni evento che lo tocca è
+# caparra per definizione (non euristica). Export Esolver usa la forma compatta.
+CAPARRA_ACCOUNT = "390521"
+
+
+def is_caparra_account(conto_esolver: str) -> bool:
+    """True se il conto Esolver è 39.05.21 (caparre), in forma compatta o puntata."""
+    if not conto_esolver:
+        return False
+    return conto_esolver.replace(".", "") == CAPARRA_ACCOUNT
+
 
 def _parse_decimal(value: str) -> Decimal:
     """Converte importo Esolver (virgola decimale) in Decimal."""
@@ -233,12 +244,9 @@ def parse_movimenti(filepath: str) -> list[dict]:
             group_gens.append(lines_data[j][1])
             j += 1
 
-        # Classify by account codes present in the GEN legs, not by positional
-        # heuristics (progressivo==0). 39.05.21 IS the caparra account — any
-        # event touching it is a caparra event by definition.
         if has_par:
             event_type = "giro_caparra"
-        elif any(g["conto_esolver"].replace(".", "") == "390521" for g in group_gens):
+        elif any(is_caparra_account(g["conto_esolver"]) for g in group_gens):
             event_type = "incasso_caparra"
         else:
             event_type = "movimento_generico"
