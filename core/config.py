@@ -23,6 +23,8 @@ F_REVIEWS                   = _t("f_reviews")
 F_APIFY_RUNS                = _t("f_apify_runs")
 F_PIPELINE_RUNS             = _t("f_pipeline_runs")
 F_BILANCI_ANNUALI           = _t("f_bilanci_annuali")
+F_PROGETTO_VOCI             = _t("f_progetto_voci")
+F_PROGETTO_EVENTI           = _t("f_progetto_eventi")
 
 # Dimension tables
 D_VOCI_PIANO_FINANZIARIO    = _t("d_voci_piano_finanziario")
@@ -32,6 +34,7 @@ D_FORNITORI                 = _t("d_fornitori")
 D_ANAGRAFICA_FORNITORI      = _t("d_anagrafica_fornitori")
 D_MAPPING_PIANO_FINANZIARIO = _t("d_mapping_piano_finanziario")
 D_COEFFICIENTI_STAGIONALITA = _t("d_coefficienti_stagionalita")
+D_PROGETTI                  = _t("d_progetti")
 
 # Views
 V_PIANO_FINANZIARIO_MENSILE = _t("v_piano_finanziario_mensile")
@@ -41,6 +44,7 @@ V_PREVISIONE_CASSA          = _t("v_previsione_cassa")
 V_PL_MOVIMENTI               = _t("v_pl_movimenti")
 V_CASHFLOW_MENSILE           = _t("v_cashflow_mensile")
 V_INCASSI_PER_CANALE         = _t("v_incassi_per_canale")
+V_PROGETTO_VOCI_STATO        = _t("v_progetto_voci_stato")
 
 # Looker Studio views
 V_CONDGES_BUDGET_CONSUNTIVO  = _t("v_condges_budget_consuntivo")
