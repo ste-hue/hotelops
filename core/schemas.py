@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import date
+from decimal import Decimal
 from typing import Literal, Optional
 
 from pydantic import BaseModel, field_validator
@@ -441,6 +442,32 @@ class ApifyRunRow(BaseModel):
         if v < 0:
             raise ValueError(f"n_items negativo: {v}")
         return v
+
+
+# ── projects (event-sourced Step 1) ──────────────────────────────────────────
+
+
+class Rata(BaseModel):
+    """Una rata di pagamento dentro un piano (ImpegnoMeta.rate[])."""
+
+    seq: int
+    data_prevista: date
+    importo_eur: Decimal
+    descrizione: str
+    stato: Literal["PIANIFICATA", "EMESSA", "PAGATA", "ANNULLATA"]
+
+
+class PreventivoMeta(BaseModel):
+    """metadata per evento tipo_evento='PREVENTIVO'."""
+
+    tipo: Literal["PREVENTIVO"] = "PREVENTIVO"
+    numero_preventivo: Optional[str] = None
+    data_preventivo: Optional[date] = None
+    validita_fino_a: Optional[date] = None
+    articolo: str
+    codice_articolo: Optional[str] = None
+    stato_preventivo: Literal["RICEVUTO", "ACCETTATO", "RIFIUTATO", "SCADUTO"]
+    note: Optional[str] = None
 
 
 # ── f_pipeline_runs ──────────────────────────────────────────────────────────
