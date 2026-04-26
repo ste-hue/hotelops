@@ -15,6 +15,7 @@ from core.schemas import (
     PagamentoMeta,
     PreventivoMeta,
     Progetto,
+    ProgettoEvento,
     ProgettoVoce,
     Rata,
 )
@@ -230,3 +231,112 @@ class TestProgettoVoce:
         )
         assert v.societa_pagante_id == "ORTI"
         assert v.fornitore_id is not None
+
+
+class TestProgettoEvento:
+    def test_preventivo_event_validates(self):
+        e = ProgettoEvento(
+            evento_id="evt-001",
+            voce_id="HPAN25PIANO1.001",
+            progetto_id="HPAN25PIANO1",
+            tipo_evento="PREVENTIVO",
+            data_evento=date(2026, 1, 15),
+            data_registrazione="2026-04-26T10:00:00",
+            importo_eur=Decimal("375389.25"),
+            fornitore_id="anag-amcn-001",
+            metadata={
+                "tipo": "PREVENTIVO",
+                "articolo": "Opere murarie strutturali piano 1",
+                "stato_preventivo": "ACCETTATO",
+            },
+        )
+        assert e.metadata.tipo == "PREVENTIVO"
+        assert e.metadata.articolo.startswith("Opere")
+
+    def test_impegno_event_validates_with_rate(self):
+        e = ProgettoEvento(
+            evento_id="evt-002",
+            voce_id="HPAN25PIANO1.001",
+            progetto_id="HPAN25PIANO1",
+            tipo_evento="IMPEGNO",
+            data_evento=date(2026, 2, 27),
+            data_registrazione="2026-04-26T10:00:00",
+            importo_eur=Decimal("375389.25"),
+            fornitore_id="anag-amcn-001",
+            metadata={
+                "tipo": "IMPEGNO",
+                "data_firma": "2026-02-27",
+                "rate": [
+                    {
+                        "seq": 1,
+                        "data_prevista": "2026-03-15",
+                        "importo_eur": "100000.00",
+                        "descrizione": "Acconto",
+                        "stato": "PIANIFICATA",
+                    }
+                ],
+                "stato_commitment": "FIRMATO",
+            },
+        )
+        assert e.metadata.tipo == "IMPEGNO"
+        assert len(e.metadata.rate) == 1
+        assert e.metadata.rate[0].seq == 1
+
+    def test_tipo_mismatch_rejected(self):
+        # tipo_evento=FATTURA but metadata.tipo=PREVENTIVO -> must fail
+        with pytest.raises(ValidationError):
+            ProgettoEvento(
+                evento_id="evt-bad",
+                voce_id="x",
+                progetto_id="x",
+                tipo_evento="FATTURA",
+                data_evento=date(2026, 1, 1),
+                data_registrazione="2026-04-26T10:00:00",
+                metadata={
+                    "tipo": "PREVENTIVO",  # mismatch!
+                    "articolo": "x",
+                    "stato_preventivo": "RICEVUTO",
+                },
+            )
+
+    def test_documento_event_with_correlato(self):
+        e = ProgettoEvento(
+            evento_id="evt-doc",
+            voce_id="SPIAGGIA_LOTTO7.002",
+            progetto_id="SPIAGGIA_LOTTO7",
+            tipo_evento="DOCUMENTO",
+            data_evento=date(2025, 3, 10),
+            data_registrazione="2026-04-26T10:00:00",
+            metadata={
+                "tipo": "DOCUMENTO",
+                "tipo_doc": "PREVENTIVO",
+                "drive_url": "https://drive.google.com/file/d/xyz",
+                "file_name": "Preventivo_Ethimo.pdf",
+                "file_hash_md5": "deadbeef",
+                "correlato_evento_id": "evt-prev-ethimo",
+            },
+        )
+        assert e.metadata.correlato_evento_id == "evt-prev-ethimo"
+
+    def test_serialization_roundtrip(self):
+        """Ensure model_dump → model_validate roundtrip preserves data."""
+        original = ProgettoEvento(
+            evento_id="evt-rt",
+            voce_id="x",
+            progetto_id="x",
+            tipo_evento="PAGAMENTO",
+            data_evento=date(2026, 5, 14),
+            data_registrazione="2026-04-26T10:00:00",
+            importo_eur=Decimal("100.00"),
+            metadata={
+                "tipo": "PAGAMENTO",
+                "data_valuta": "2026-05-14",
+                "metodo": "BONIFICO",
+                "importo_pagato_eur": "100.00",
+                "copre_fatture": ["evt-f-1"],
+            },
+        )
+        dumped = original.model_dump(mode="json")
+        restored = ProgettoEvento.model_validate(dumped)
+        assert restored.metadata.tipo == "PAGAMENTO"
+        assert restored.metadata.metodo == "BONIFICO"

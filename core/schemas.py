@@ -13,9 +13,9 @@ from __future__ import annotations
 import hashlib
 from datetime import date
 from decimal import Decimal
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # ── Shared types ─────────────────────────────────────────────────────────────
@@ -556,6 +556,43 @@ class ProgettoVoce(BaseModel):
     fornitore_id: Optional[str] = None  # FK d_anagrafica_fornitori, popolato alla SCELTA
     societa_pagante_id: SocietaId  # default INTUR, ORTI per opex
     note: Optional[str] = None
+
+
+# Type alias for discriminated metadata (Pydantic v2 union with discriminator on `tipo` field)
+ProgettoEventoMetadata = Annotated[
+    Union[
+        PreventivoMeta,
+        ImpegnoMeta,
+        FatturaMeta,
+        PagamentoMeta,
+        DocumentoMeta,
+    ],
+    Field(discriminator="tipo"),
+]
+
+
+class ProgettoEvento(BaseModel):
+    """Evento immutabile sul thread di una voce. Lifecycle: APPEND."""
+
+    evento_id: str  # UUID
+    voce_id: str  # FK ProgettoVoce
+    progetto_id: str  # denormalized for query speed
+    tipo_evento: Literal["PREVENTIVO", "IMPEGNO", "FATTURA", "PAGAMENTO", "DOCUMENTO"]
+    data_evento: date
+    data_registrazione: str  # ISO datetime
+    importo_eur: Optional[Decimal] = None
+    fornitore_id: Optional[str] = None
+    metadata: ProgettoEventoMetadata
+    file_sorgente: Optional[str] = None  # drive_url del file che ha generato l'evento
+
+    @model_validator(mode="after")
+    def tipo_consistency(self) -> ProgettoEvento:
+        """metadata.tipo deve combaciare con tipo_evento (I1)."""
+        if self.metadata.tipo != self.tipo_evento:
+            raise ValueError(
+                f"tipo_evento={self.tipo_evento!r} but metadata.tipo={self.metadata.tipo!r}"
+            )
+        return self
 
 
 # ── f_pipeline_runs ──────────────────────────────────────────────────────────
