@@ -1,7 +1,7 @@
 # Projects MVP — 4° vertical (project subledger + forward-flow a CONDGES)
 
 **Date:** 2026-04-20 (reframed 2026-04-21)
-**Status:** Draft v2 (post-walkthrough HPAN25PIANO1)
+**Status:** ⚠️ **ARCHIVED 2026-04-26** — superseded by `docs/superpowers/specs/2026-04-22-projects-event-sourced-design.md`. Pivot da 8 entità normalizzate a 3 tabelle event-sourced (`d_progetti`, `f_progetto_voci`, `f_progetto_eventi`). Logica forward-flow + 4 viste manageriali validate, riusate nel nuovo design. Mantenuto come riferimento storico.
 **Author:** Stefano + Claude
 **Seed data:** `docs/progetti/HPAN25PIANO1-walkthrough.md`
 
