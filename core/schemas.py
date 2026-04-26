@@ -496,6 +496,37 @@ class FatturaMeta(BaseModel):
     copre_rate: list[int] = []  # seq rate IMPEGNO che questa fattura sta fatturando
 
 
+class PagamentoMeta(BaseModel):
+    """Metadata per evento tipo_evento='PAGAMENTO'."""
+
+    tipo: Literal["PAGAMENTO"] = "PAGAMENTO"
+    data_valuta: date
+    metodo: Literal["BONIFICO", "SDD", "RID", "ASSEGNO", "CASSA"]
+    importo_pagato_eur: Decimal
+    copre_fatture: list[str]  # evento_id FATTURA coperti
+    banca_movimento_hash: Optional[str] = None  # FK a f_banche_movimenti
+
+
+class DocumentoMeta(BaseModel):
+    """Metadata per evento tipo_evento='DOCUMENTO' (allegato Drive)."""
+
+    tipo: Literal["DOCUMENTO"] = "DOCUMENTO"
+    tipo_doc: Literal[
+        "PREVENTIVO",
+        "CONTRATTO",
+        "ORDINE",
+        "FATTURA",
+        "SAL",
+        "PLANIMETRIA",
+        "EMAIL",
+        "ALTRO",
+    ]
+    drive_url: str
+    file_name: str
+    file_hash_md5: str  # dedup
+    correlato_evento_id: Optional[str] = None
+
+
 # ── f_pipeline_runs ──────────────────────────────────────────────────────────
 
 

@@ -8,7 +8,14 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from core.schemas import FatturaMeta, ImpegnoMeta, PreventivoMeta, Rata
+from core.schemas import (
+    DocumentoMeta,
+    FatturaMeta,
+    ImpegnoMeta,
+    PagamentoMeta,
+    PreventivoMeta,
+    Rata,
+)
 
 
 class TestRata:
@@ -119,3 +126,47 @@ class TestFatturaMeta:
         )
         assert m.tipo_doc == "FT-RC"
         assert m.copre_rate == [1, 2]
+
+
+class TestPagamentoMeta:
+    def test_happy_path(self):
+        m = PagamentoMeta(
+            data_valuta=date(2026, 5, 14),
+            metodo="BONIFICO",
+            importo_pagato_eur=Decimal("2169.16"),
+            copre_fatture=["evt-fattura-001"],
+        )
+        assert m.tipo == "PAGAMENTO"
+        assert m.banca_movimento_hash is None
+
+    def test_multi_fattura_coverage(self):
+        m = PagamentoMeta(
+            data_valuta=date(2026, 5, 14),
+            metodo="BONIFICO",
+            importo_pagato_eur=Decimal("10000.00"),
+            copre_fatture=["evt-f-001", "evt-f-002", "evt-f-003"],
+            banca_movimento_hash="md5xyz",
+        )
+        assert len(m.copre_fatture) == 3
+
+
+class TestDocumentoMeta:
+    def test_minimal(self):
+        m = DocumentoMeta(
+            tipo_doc="PREVENTIVO",
+            drive_url="https://drive.google.com/file/d/abc",
+            file_name="Preventivo_Kompan.pdf",
+            file_hash_md5="abc123",
+        )
+        assert m.tipo == "DOCUMENTO"
+        assert m.correlato_evento_id is None
+
+    def test_correlato_to_event(self):
+        m = DocumentoMeta(
+            tipo_doc="FATTURA",
+            drive_url="https://drive.google.com/...",
+            file_name="ft_03.pdf",
+            file_hash_md5="def456",
+            correlato_evento_id="evt-fattura-uuid",
+        )
+        assert m.correlato_evento_id == "evt-fattura-uuid"
