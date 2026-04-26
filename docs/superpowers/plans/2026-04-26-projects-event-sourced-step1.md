@@ -959,7 +959,7 @@ CREATE TABLE IF NOT EXISTS `{F_PROGETTO_EVENTI}` (
     metadata             JSON NOT NULL,
     file_sorgente        STRING
 )
-PARTITION BY DATE(data_evento)
+PARTITION BY data_evento
 CLUSTER BY progetto_id, voce_id, tipo_evento
 """
 

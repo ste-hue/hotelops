@@ -5,7 +5,7 @@ DDL idempotente per le 3 tabelle Projects (event-sourced Step 1).
 Crea (CREATE TABLE IF NOT EXISTS):
 - d_progetti                (SNAPSHOT)
 - f_progetto_voci           (SNAPSHOT)
-- f_progetto_eventi         (APPEND, PARTITION BY DATE(data_evento))
+- f_progetto_eventi         (APPEND, PARTITION BY data_evento)
 
 Usage:
     python -m core.bq.load.create_progetti_tables
