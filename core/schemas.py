@@ -470,6 +470,32 @@ class PreventivoMeta(BaseModel):
     note: Optional[str] = None
 
 
+class ImpegnoMeta(BaseModel):
+    """Metadata per evento tipo_evento='IMPEGNO' (commitment firmato)."""
+
+    tipo: Literal["IMPEGNO"] = "IMPEGNO"
+    from_preventivo_evento_id: Optional[str] = None
+    numero_contratto: Optional[str] = None
+    data_firma: date
+    rate: list[Rata]
+    stato_commitment: Literal["FIRMATO", "IN_CORSO", "CHIUSO", "ANNULLATO"]
+    motivo_variazione: Optional[str] = None  # popolato solo per impegni successivi
+
+
+class FatturaMeta(BaseModel):
+    """Metadata per evento tipo_evento='FATTURA'."""
+
+    tipo: Literal["FATTURA"] = "FATTURA"
+    numero_fattura: str
+    data_emissione: date
+    data_ricezione: Optional[date] = None
+    tipo_doc: Literal["FT", "FT-RC", "NC"]
+    condizioni_pagamento: str
+    data_scadenza: Optional[date] = None
+    movimento_row_hash: Optional[str] = None  # FK a f_movimenti_contabili
+    copre_rate: list[int] = []  # seq rate IMPEGNO che questa fattura sta fatturando
+
+
 # ── f_pipeline_runs ──────────────────────────────────────────────────────────
 
 
