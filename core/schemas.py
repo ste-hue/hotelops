@@ -527,6 +527,37 @@ class DocumentoMeta(BaseModel):
     correlato_evento_id: Optional[str] = None
 
 
+class Progetto(BaseModel):
+    """Anagrafica progetto. Lifecycle: SNAPSHOT per progetto_id."""
+
+    progetto_id: str  # HPAN25PIANO1, SPIAGGIA_LOTTO7
+    nome: str
+    societa_owner_id: SocietaId  # ORTI o INTUR (riusato da type alias esistente)
+    business_unit_id: BusinessUnitId  # HOTEL/RESIDENCE/CVM/LIDO/HQ (riusato)
+    struttura: Optional[str] = None
+    budget_cap_eur: Decimal
+    data_inizio: date
+    data_fine_prevista: Optional[date] = None
+    stato: Literal["PIANIFICATO", "IN_CORSO", "CHIUSO", "ANNULLATO"]
+    owner: str
+    drive_root_url: Optional[str] = None
+
+
+class ProgettoVoce(BaseModel):
+    """Identità di una riga di scope. Lifecycle: SNAPSHOT per voce_id."""
+
+    voce_id: str  # composito {progetto_id}.{seq}
+    progetto_id: str
+    codice_interno: str  # "001", "002"
+    descrizione: str
+    categoria: str  # stringa libera: EDILE, IMPIANTI_EL, OMBRELLONI, ...
+    qta: Optional[Decimal] = None
+    unita: Optional[str] = None  # pz, mq, cad, set
+    fornitore_id: Optional[str] = None  # FK d_anagrafica_fornitori, popolato alla SCELTA
+    societa_pagante_id: SocietaId  # default INTUR, ORTI per opex
+    note: Optional[str] = None
+
+
 # ── f_pipeline_runs ──────────────────────────────────────────────────────────
 
 

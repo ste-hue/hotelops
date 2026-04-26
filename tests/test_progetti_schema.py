@@ -14,6 +14,8 @@ from core.schemas import (
     ImpegnoMeta,
     PagamentoMeta,
     PreventivoMeta,
+    Progetto,
+    ProgettoVoce,
     Rata,
 )
 
@@ -170,3 +172,61 @@ class TestDocumentoMeta:
             correlato_evento_id="evt-fattura-uuid",
         )
         assert m.correlato_evento_id == "evt-fattura-uuid"
+
+
+class TestProgetto:
+    def test_happy_path(self):
+        p = Progetto(
+            progetto_id="HPAN25PIANO1",
+            nome="Camere Primo Piano - Hotel Panorama",
+            societa_owner_id="INTUR",
+            business_unit_id="HOTEL",
+            struttura="Hotel Panorama",
+            budget_cap_eur=Decimal("1200000.00"),
+            data_inizio=date(2026, 2, 1),
+            stato="IN_CORSO",
+            owner="Stefano Della Pietra Jr",
+        )
+        assert p.progetto_id == "HPAN25PIANO1"
+        assert p.data_fine_prevista is None
+        assert p.drive_root_url is None
+
+    def test_invalid_societa_rejected(self):
+        with pytest.raises(ValidationError):
+            Progetto(
+                progetto_id="X",
+                nome="X",
+                societa_owner_id="UNKNOWN",  # invalid - not ORTI/INTUR
+                business_unit_id="HOTEL",
+                budget_cap_eur=Decimal("1"),
+                data_inizio=date(2026, 1, 1),
+                stato="IN_CORSO",
+                owner="x",
+            )
+
+
+class TestProgettoVoce:
+    def test_minimal(self):
+        v = ProgettoVoce(
+            voce_id="HPAN25PIANO1.001",
+            progetto_id="HPAN25PIANO1",
+            codice_interno="001",
+            descrizione="Opere murarie strutturali piano 1",
+            categoria="EDILE",
+            societa_pagante_id="INTUR",
+        )
+        assert v.fornitore_id is None
+        assert v.qta is None
+
+    def test_with_fornitore_chosen(self):
+        v = ProgettoVoce(
+            voce_id="HPAN25PIANO1.010",
+            progetto_id="HPAN25PIANO1",
+            codice_interno="010",
+            descrizione="Project Management",
+            categoria="CONSULENZA",
+            societa_pagante_id="ORTI",  # opex via ORTI
+            fornitore_id="anag-hospitality-project-001",
+        )
+        assert v.societa_pagante_id == "ORTI"
+        assert v.fornitore_id is not None
