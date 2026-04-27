@@ -14,6 +14,7 @@ Subcomandi:
     hotelops classifica  Classifica, smista e ingerisci file dati
     hotelops ingest      Pipeline ingestione da datahub
     hotelops app         Dashboard Streamlit condges
+    hotelops tesoreria   App Streamlit tesoreria (cashflow, PF, fornitori)
     hotelops reviews     Reviews ospiti: scrape, alert, report, dashboard
     hotelops docs        Check/verify documentazione tecnica
     hotelops accodamenti Accodamenti HotelCube → cassa giornaliera Excel
@@ -378,6 +379,15 @@ def cmd_app(args):
     subprocess.run(["streamlit", "run", str(full_path)], check=True)
 
 
+def cmd_tesoreria(args):
+    """Launch Streamlit tesoreria app."""
+    import subprocess
+
+    app_path = Path(__file__).parent / "condges" / "tesoreria.py"
+    print(f"  Lancio: streamlit run condges/tesoreria.py")
+    subprocess.run(["streamlit", "run", str(app_path)], check=True)
+
+
 # ── Reconcile ──────────────────────────────────────────────────────────────
 
 
@@ -543,6 +553,9 @@ def main():
         help="App da lanciare: pf (default), scadenzario",
     )
 
+    # tesoreria
+    sub.add_parser("tesoreria", help="App Streamlit tesoreria (cashflow, PF, fornitori)")
+
     # reviews
     p_reviews = sub.add_parser("reviews", help="Reviews ospiti: scrape, alert, stats")
     p_reviews.add_argument(
@@ -639,6 +652,7 @@ def main():
         "cls": cmd_classifica,
         "ingest": cmd_ingest,
         "app": cmd_app,
+        "tesoreria": cmd_tesoreria,
         "docs": cmd_docs,
         "reconcile": cmd_reconcile,
         "accodamenti": cmd_accodamenti,
