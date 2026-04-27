@@ -3,7 +3,10 @@
 import os
 from unittest.mock import MagicMock, patch
 
+from google.cloud import bigquery
 import pytest
+
+from core.config import PROJECT
 
 DATAHUB_FOLDERS = [
     "homebanking/ORTI",
@@ -57,5 +60,4 @@ def bq_client():
     """
     if os.environ.get("HOTELOPS_SKIP_BQ") == "1":
         pytest.skip("HOTELOPS_SKIP_BQ=1 — skipping live BigQuery test")
-    from google.cloud import bigquery
-    return bigquery.Client(project="hotelops-suite")
+    return bigquery.Client(project=PROJECT)

@@ -1,52 +1,25 @@
--- v_budget_vs_consuntivo: Budget vs Consuntivo per codice conto
--- Fix: priorità fonti — dove esiste una fonte specifica, vince su GASPAROTTO.
--- Ordine: STRUTTURALI > MAPPATURA > PERSONALE > INCIDENZA > CONS2025_* > GASPAROTTO
+-- v_budget_vs_consuntivo: Budget vs Consuntivo per (societa, cod_conto, mese).
+--
+-- Budget side reads from v_budget_canonical — the single resolved budget truth.
+-- Do NOT re-implement precedence or suppression here. See spec §5 "Rule locality".
+-- Spec: docs/superpowers/specs/2026-04-17-budget-fonte-priority-design.md
 
-WITH budget_ranked AS (
+CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_budget_vs_consuntivo` AS
+
+WITH budget AS (
   SELECT
     societa_id,
     anno,
     mese,
-    REPLACE(codice_conto, '.', '') AS cod_conto_norm,
-    codice_conto,
-    descrizione,
-    tipo_costo,
-    categoria_ce,
-    importo,
-    fonte,
-    ROW_NUMBER() OVER (
-      PARTITION BY societa_id, anno, mese, REPLACE(codice_conto, '.', '')
-      ORDER BY CASE fonte
-        WHEN 'STRUTTURALI' THEN 1
-        WHEN 'MAPPATURA' THEN 2
-        WHEN 'PERSONALE' THEN 3
-        WHEN 'INCIDENZA' THEN 4
-        WHEN 'CONS2025_F' THEN 5
-        WHEN 'CONS2025_V' THEN 5
-        WHEN 'CONS2025_IP' THEN 5
-        WHEN 'CONS2025_X' THEN 5
-        WHEN 'GASPAROTTO' THEN 6
-        ELSE 7
-      END
-    ) AS rn
-  FROM `hotelops-suite.hotelops.f_budget_mensile`
-  WHERE anno = EXTRACT(YEAR FROM CURRENT_DATE())
-),
-
-budget AS (
-  SELECT
-    societa_id,
-    anno,
-    mese,
-    cod_conto_norm,
-    codice_conto,
+    cod_conto,
+    codice_conto_display,
     descrizione AS budget_descrizione,
     tipo_costo,
     categoria_ce,
     importo AS budget_mensile,
     fonte AS budget_fonte
-  FROM budget_ranked
-  WHERE rn = 1
+  FROM `hotelops-suite.hotelops.v_budget_canonical`
+  WHERE anno = EXTRACT(YEAR FROM CURRENT_DATE())
 ),
 
 actuals AS (
@@ -54,7 +27,7 @@ actuals AS (
     societa_id,
     EXTRACT(YEAR FROM data_registrazione) AS anno,
     EXTRACT(MONTH FROM data_registrazione) AS mese,
-    cod_conto AS cod_conto_norm,
+    cod_conto,
     CASE
       WHEN LENGTH(cod_conto) >= 6 THEN
         CONCAT(SUBSTR(cod_conto, 1, 2), '.', SUBSTR(cod_conto, 3, 2), '.', SUBSTR(cod_conto, 5))
@@ -72,7 +45,7 @@ actuals AS (
 
 pdc AS (
   SELECT
-    REPLACE(codice_conto, '.', '') AS cod_conto_norm,
+    REPLACE(codice_conto, '.', '') AS cod_conto,
     codice_conto,
     descrizione,
     tipo_conto,
@@ -84,8 +57,8 @@ SELECT
   COALESCE(b.societa_id, a.societa_id) AS societa_id,
   COALESCE(b.anno, a.anno) AS anno,
   COALESCE(b.mese, a.mese) AS mese,
-  COALESCE(b.cod_conto_norm, a.cod_conto_norm) AS cod_conto,
-  COALESCE(b.codice_conto, a.codice_conto_display) AS codice_conto_display,
+  COALESCE(b.cod_conto, a.cod_conto) AS cod_conto,
+  COALESCE(b.codice_conto_display, a.codice_conto_display) AS codice_conto_display,
   COALESCE(pdc.descrizione, b.budget_descrizione) AS descrizione,
   COALESCE(pdc.tipo_conto, 'CE') AS tipo_conto,
   COALESCE(pdc.sezione, '') AS sezione,
@@ -118,6 +91,6 @@ FULL OUTER JOIN actuals a
   ON b.societa_id = a.societa_id
   AND b.anno = a.anno
   AND b.mese = a.mese
-  AND b.cod_conto_norm = a.cod_conto_norm
+  AND b.cod_conto = a.cod_conto
 LEFT JOIN pdc
-  ON COALESCE(b.cod_conto_norm, a.cod_conto_norm) = pdc.cod_conto_norm
+  ON COALESCE(b.cod_conto, a.cod_conto) = pdc.cod_conto;
