@@ -10,8 +10,14 @@ Subcomandi:
     hotelops health      Health check: freshness dati, gaps, alert
     hotelops previsione  Inserisci/aggiorna previsione budget
     hotelops voci        Lista voci piano finanziario disponibili
+    hotelops manifest    Genera catalogo tabelle BigQuery
     hotelops classifica  Classifica, smista e ingerisci file dati
+    hotelops ingest      Pipeline ingestione da datahub
+    hotelops app         Dashboard Streamlit condges
+    hotelops reviews     Reviews ospiti: scrape, alert, report, dashboard
+    hotelops docs        Check/verify documentazione tecnica
     hotelops accodamenti Accodamenti HotelCube → cassa giornaliera Excel
+    hotelops reconcile   Riconciliazione banca e report Excel
 
 Installazione:
     pip install -e .    (poi: hotelops pf)
@@ -56,30 +62,34 @@ _load_dotenv()
 
 # noqa: E402 — import after _load_dotenv() è intenzionale: i submodule possono
 # leggere env var al toplevel, quindi .env va caricato prima.
-from condges.cli_commands import (  # noqa: E402
-    cmd_accodamenti,
-    cmd_chiudi,
-    cmd_docs,
-    cmd_health,
-    cmd_help,
-    cmd_pf,
-    cmd_saldo,
-)
-from core.bq.client import get_client  # noqa: E402
-from core.config import PROJECT  # noqa: E402
 from core.datahub_sync import DATAHUB_ROOT  # noqa: E402
-from reviews.cli_commands import cmd_reviews  # noqa: E402
 
 # ── Lazy BQ client ──────────────────────────────────────────────────────────
 
 
 def bq():
+    from core.bq.client import get_client
+
     return get_client()
 
 
 def query(sql: str) -> list[dict]:
     rows = bq().query(sql).result()
     return [dict(r) for r in rows]
+
+
+def _run_condges_command(command_name: str, args):
+    """Import condges handlers lazily so `hotelops --help` works with partial deps."""
+    from condges import cli_commands as condges_commands
+
+    handler = getattr(condges_commands, command_name)
+    return handler(args)
+
+
+def _run_reviews_command(args):
+    from reviews.cli_commands import cmd_reviews
+
+    return cmd_reviews(args)
 
 
 def fmt_eur(v) -> str:
@@ -93,6 +103,8 @@ def fmt_eur(v) -> str:
 
 def cmd_bva(args):
     """Budget vs Consuntivo per codice conto."""
+    from core.config import PROJECT
+
     societa = args.societa or "ORTI"
     anno = args.anno or 2026
     mese = args.mese
@@ -615,16 +627,19 @@ def main():
 
     args = parser.parse_args()
 
+    def _show_help(_args):
+        parser.print_help()
+
     if not args.command:
-        cmd_help(args)
+        parser.print_help()
         sys.exit(0)
 
     handlers = {
-        "pf": cmd_pf,
+        "pf": lambda a: _run_condges_command("cmd_pf", a),
         "bva": cmd_bva,
-        "chiudi": cmd_chiudi,
-        "saldo": cmd_saldo,
-        "health": cmd_health,
+        "chiudi": lambda a: _run_condges_command("cmd_chiudi", a),
+        "saldo": lambda a: _run_condges_command("cmd_saldo", a),
+        "health": lambda a: _run_condges_command("cmd_health", a),
         "previsione": cmd_previsione,
         "prev": cmd_previsione,
         "voci": cmd_voci,
@@ -633,12 +648,12 @@ def main():
         "cls": cmd_classifica,
         "ingest": cmd_ingest,
         "app": cmd_app,
-        "docs": cmd_docs,
+        "docs": lambda a: _run_condges_command("cmd_docs", a),
         "reconcile": cmd_reconcile,
-        "accodamenti": cmd_accodamenti,
-        "acc": cmd_accodamenti,
-        "reviews": cmd_reviews,
-        "help": cmd_help,
+        "accodamenti": lambda a: _run_condges_command("cmd_accodamenti", a),
+        "acc": lambda a: _run_condges_command("cmd_accodamenti", a),
+        "reviews": _run_reviews_command,
+        "help": _show_help,
     }
 
     handlers[args.command](args)
