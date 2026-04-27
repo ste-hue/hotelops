@@ -10,8 +10,14 @@ Subcomandi:
     hotelops health      Health check: freshness dati, gaps, alert
     hotelops previsione  Inserisci/aggiorna previsione budget
     hotelops voci        Lista voci piano finanziario disponibili
+    hotelops manifest    Genera catalogo tabelle BigQuery
     hotelops classifica  Classifica, smista e ingerisci file dati
+    hotelops ingest      Pipeline ingestione da datahub
+    hotelops app         Dashboard Streamlit condges
+    hotelops reviews     Reviews ospiti: scrape, alert, report, dashboard
+    hotelops docs        Check/verify documentazione tecnica
     hotelops accodamenti Accodamenti HotelCube → cassa giornaliera Excel
+    hotelops reconcile   Riconciliazione banca e report Excel
 
 Installazione:
     pip install -e .    (poi: hotelops pf)
