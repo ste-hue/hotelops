@@ -32,14 +32,20 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from types import TracebackType
+from typing import Optional
 
 log = logging.getLogger(__name__)
 
 
 STALENESS_THRESHOLD_DAYS = 21
 PIPELINE_STALENESS_HOURS = 36
+
+_current_run: ContextVar[Optional["PipelineRun"]] = ContextVar(
+    "_current_run", default=None
+)
 
 
 class PipelineRun:
@@ -49,12 +55,22 @@ class PipelineRun:
     placeholder, no UPDATE — the streaming buffer makes in-process UPDATE
     unreliable. A crashed process leaves no row at all; the absence is
     detected by check_pipeline_staleness (last OK > threshold).
+
+    Sets a module-level ContextVar on __enter__ so consumers (notably
+    bq_write_validated) can read the active run via PipelineRun.get_current()
+    without explicit plumbing.
     """
 
-    def __init__(self, pipeline_name: str, societa_id: str | None = None):
+    def __init__(
+        self,
+        pipeline_name: str,
+        societa_id: str | None = None,
+        file_sorgente: str | None = None,
+    ):
         self.run_id = str(uuid.uuid4())
         self.pipeline_name = pipeline_name
         self.societa_id = societa_id
+        self.file_sorgente = file_sorgente
         self.started_at: str | None = None
         self.ended_at: str | None = None
         self.status = "OK"
@@ -64,9 +80,11 @@ class PipelineRun:
         self.usage_total_usd: float | None = None
         self.error_message: str | None = None
         self.meta: dict | None = None
+        self._token = None
 
     def __enter__(self) -> "PipelineRun":
         self.started_at = datetime.now(timezone.utc).isoformat()
+        self._token = _current_run.set(self)
         return self
 
     def __exit__(
@@ -75,12 +93,20 @@ class PipelineRun:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> bool:
+        if self._token is not None:
+            _current_run.reset(self._token)
+            self._token = None
         self.ended_at = datetime.now(timezone.utc).isoformat()
         if exc_val is not None:
             self.status = "FAIL"
             self.error_message = str(exc_val)[:500]
         self._insert_final()
         return False  # don't suppress exceptions
+
+    @classmethod
+    def get_current(cls) -> Optional["PipelineRun"]:
+        """Return the active PipelineRun (set by __enter__), or None."""
+        return _current_run.get()
 
     def _to_row(self) -> dict:
         return {
