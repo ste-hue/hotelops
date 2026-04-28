@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 from pydantic import BaseModel
 
@@ -76,3 +78,39 @@ def test_mixed_pydantic_types_raise():
     with pytest.raises(SchemaViolationError) as exc:
         bq_write_validated("hotelops.f_x", rows, mode="append")
     assert "type" in exc.value.failures[0][2].lower()
+
+
+@patch("core.bq.write.get_client")
+def test_append_calls_load_table_from_json_with_write_append(mock_get_client):
+    from google.cloud import bigquery
+
+    mock_client = MagicMock()
+    mock_job = MagicMock()
+    mock_job.result.return_value = None
+    mock_client.load_table_from_json.return_value = mock_job
+    mock_get_client.return_value = mock_client
+
+    rows = [FakeRow(societa_id="ORTI", n=1), FakeRow(societa_id="ORTI", n=2)]
+    bq_write_validated("hotelops.f_x", rows, mode="append")
+
+    mock_client.load_table_from_json.assert_called_once()
+    args, kwargs = mock_client.load_table_from_json.call_args
+    assert args[0] == [{"societa_id": "ORTI", "n": 1}, {"societa_id": "ORTI", "n": 2}]
+    assert args[1] == "hotelops.f_x"
+    job_config = kwargs["job_config"]
+    assert job_config.write_disposition == bigquery.WriteDisposition.WRITE_APPEND
+    assert job_config.source_format == bigquery.SourceFormat.NEWLINE_DELIMITED_JSON
+
+
+@patch("core.bq.write.get_client")
+def test_append_raises_bigquery_insert_error_on_job_errors(mock_get_client):
+    mock_client = MagicMock()
+    mock_job = MagicMock()
+    # Simulate a load job that completed with row errors
+    mock_job.result.side_effect = Exception("row errors: [{...}]")
+    mock_client.load_table_from_json.return_value = mock_job
+    mock_get_client.return_value = mock_client
+
+    rows = [FakeRow(societa_id="ORTI", n=1)]
+    with pytest.raises(BigQueryInsertError):
+        bq_write_validated("hotelops.f_x", rows, mode="append")

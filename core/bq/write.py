@@ -6,12 +6,15 @@ ambient lineage from PipelineRun, and a single observable log line per write.
 
 See: docs/superpowers/specs/2026-04-28-bq-write-validated-design.md
 """
+
 from __future__ import annotations
 
 import logging
 from typing import Any, Literal
 
 from pydantic import BaseModel
+
+from core.bq.client import get_client
 
 log = logging.getLogger(__name__)
 
@@ -96,7 +99,11 @@ def bq_write_validated(
     for idx, row in enumerate(rows):
         if not isinstance(row, BaseModel):
             failures.append(
-                (idx, row, f"Not a Pydantic BaseModel instance (got {type(row).__name__})")
+                (
+                    idx,
+                    row,
+                    f"Not a Pydantic BaseModel instance (got {type(row).__name__})",
+                )
             )
             continue
         if type(row) is not schema_class:
@@ -113,5 +120,72 @@ def bq_write_validated(
     if failures:
         raise SchemaViolationError(table, failures)
 
-    # 4. Lineage + write — implemented in subsequent tasks.
-    raise NotImplementedError("write paths land in Task 4 and Task 5")
+    # 4. Lineage discovery (ambient via ContextVar — log-only fallback).
+    from core.pipeline_run import PipelineRun
+
+    run = PipelineRun.get_current()
+    if run is not None:
+        lineage_meta = {
+            "pipeline_name": run.pipeline_name,
+            "run_id": run.run_id,
+            "file_sorgente": run.file_sorgente,
+        }
+    else:
+        log.warning(
+            "bq_write_validated called outside PipelineRun context for %s. "
+            "Lineage=unknown. Wrap caller with: with PipelineRun('...'):",
+            table,
+        )
+        lineage_meta = {
+            "pipeline_name": "unknown_pipeline",
+            "run_id": None,
+            "file_sorgente": None,
+        }
+
+    # 5. Batch load (no streaming buffer).
+    client = get_client()
+
+    if mode == "append":
+        _append(client, table, rows_dict)
+    elif mode == "snapshot":
+        _snapshot(client, table, rows_dict, natural_key)  # implemented Task 5
+    else:
+        raise ValueError(f"unknown mode: {mode}")
+
+    # 6. Single observable log line per write.
+    extra = {
+        "table": table,
+        "rows_written": len(rows_dict),
+        "mode": mode,
+        **lineage_meta,
+    }
+    if mode == "snapshot":
+        extra["natural_key"] = natural_key
+    log.info(
+        "bq_write_validated: %d rows -> %s [mode=%s]",
+        len(rows_dict),
+        table,
+        mode,
+        extra=extra,
+    )
+
+
+def _append(client, table: str, rows_dict: list[dict]) -> None:
+    """Batch INSERT — no streaming buffer, no DELETE."""
+    from google.cloud import bigquery
+
+    job_config = bigquery.LoadJobConfig(
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+        source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+    )
+    job = client.load_table_from_json(rows_dict, table, job_config=job_config)
+    try:
+        job.result()
+    except Exception as e:  # noqa: BLE001 — propagate as our typed error
+        raise BigQueryInsertError(table, [{"job_error": str(e)}]) from e
+
+
+def _snapshot(
+    client, table: str, rows_dict: list[dict], natural_key: list[str]
+) -> None:
+    raise NotImplementedError("SNAPSHOT lands in Task 5")
