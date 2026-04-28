@@ -98,6 +98,22 @@ class MovimentoContabileRow(BaseModel):
     imp_dare: float
     imp_avere: float
     file_sorgente: str
+    # Additional BQ columns (NULLABLE — populated by parsers when available).
+    id_documento: Optional[int] = None
+    num_progr_riga: Optional[int] = None
+    gruppo_doc: Optional[str] = None
+    anno: Optional[int] = None
+    mese: Optional[int] = None
+    sigla_doc: Optional[str] = None
+    rif_registrazione: Optional[str] = None
+    num_doc_originale: Optional[str] = None
+    data_originale: Optional[str] = None  # ISO date
+    tipo_documento: Optional[str] = None
+    cod_partitario: Optional[str] = None
+    rag_sociale: Optional[str] = None
+    causale_contabile: Optional[str] = None
+    cod_divisione: Optional[str] = None
+    data_ingresso: Optional[str] = None  # ISO date
 
     @field_validator("cod_conto")
     @classmethod
@@ -118,6 +134,27 @@ class BancaMovimentoRow(BaseModel):
     importo_netto: float
     descrizione: Optional[str] = None
     file_sorgente: str
+    # 5D dimensions (societa_id required above; others optional per data model).
+    business_unit_id: Optional[BusinessUnitId] = None
+    funzione_id: Optional[str] = None
+    location_id: Optional[str] = None
+    oggetto_id: Optional[str] = None
+    # Additional BQ columns (NULLABLE — populated by parsers when available).
+    id_movimento: Optional[str] = None
+    data_valuta: Optional[str] = None  # ISO date
+    divisa: Optional[str] = None
+    importo_debito: Optional[float] = None
+    importo_credito: Optional[float] = None
+    categoria_raw: Optional[str] = None
+    sottocategoria_raw: Optional[str] = None
+    categoria_normalizzata: Optional[str] = None
+    sottocategoria_normalizzata: Optional[str] = None
+    tipo_movimento: Optional[str] = None
+    codice_identificativo_banca: Optional[str] = None
+    etichette: Optional[str] = None
+    note: Optional[str] = None
+    data_ingresso: Optional[str] = None  # ISO date
+    riga_sorgente: Optional[int] = None
 
 
 # ── f_chiusura_mensile ────────────────────────────────────────────────────────
