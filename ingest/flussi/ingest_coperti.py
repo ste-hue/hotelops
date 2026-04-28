@@ -5,7 +5,12 @@ Coperti giornalieri → BigQuery f_coperti_giornalieri.
 Legge file CSV/XLSX da datahub/coperti/ oppure direttamente da Google Sheet.
 Ogni riga sorgente = un giorno + tipo_pasto, con colonne per BU/tipo_ospite.
 Trasforma in formato lungo (una riga per data × pasto × tipo_ospite).
-Idempotente via hash_riga.
+
+Strategia: latest-wins per chiave naturale (societa, data, pasto, ospite, BU).
+Submission multiple del Google Form per la stessa chiave vengono collassate
+intra-batch tenendo il timestamp più recente, e il DELETE-INSERT chirurgico
+in BQ sostituisce qualunque versione precedente per le chiavi presenti nel
+batch (lasciando intatti i record fuori dal batch).
 
 Formati supportati:
   - CSV Google Form export:
@@ -22,7 +27,7 @@ Usage:
     python -m ingest.flussi.ingest_coperti \\
         --datahub "/path/to/hotelops_datahub"
 
-Output BQ: f_coperti_giornalieri  (WRITE_APPEND + dedup via hash_riga)
+Output BQ: f_coperti_giornalieri  (DELETE-INSERT chirurgico per hash_riga)
 """
 
 from __future__ import annotations
@@ -163,10 +168,10 @@ def make_hash(
     data_servizio: date,
     tipo_pasto: str,
     tipo_ospite: str,
-    n_coperti: int,
-    seq: int = 0,
+    business_unit_id: str | None = None,
 ) -> str:
-    key = f"{societa_id}|{data_servizio}|{tipo_pasto}|{tipo_ospite}|{n_coperti}|{seq}"
+    bu = business_unit_id or ""
+    key = f"{societa_id}|{data_servizio}|{tipo_pasto}|{tipo_ospite}|{bu}"
     return hashlib.md5(key.encode()).hexdigest()
 
 
@@ -238,6 +243,7 @@ def parse_rows_from_header_data(
         data_servizio = parse_timestamp(row[0])
         if data_servizio is None:
             continue
+        submitted_at = row[0] if isinstance(row[0], datetime) else None
 
         for i, (tipo_ospite, bu_id) in col_map.items():
             if i >= len(row):
@@ -263,9 +269,10 @@ def parse_rows_from_header_data(
                 "n_coperti": n,
                 "fonte": fonte,
                 "hash_riga": make_hash(
-                    societa_id, data_servizio, tipo_pasto, tipo_ospite, n, seq=i
+                    societa_id, data_servizio, tipo_pasto, tipo_ospite, bu_id
                 ),
                 "data_caricamento": ts_now.isoformat(),
+                "_submitted_at": submitted_at,
             }
 
 
@@ -321,6 +328,7 @@ def parse_mensa_dipendenti(
         data_servizio = parse_timestamp(row[0])
         if data_servizio is None:
             continue
+        submitted_at = row[0] if isinstance(row[0], datetime) else None
         tipo_raw = str(row[1]).strip().upper() if row[1] else ""
         pax = row[2] if len(row) > 2 else None
         if pax is None:
@@ -351,9 +359,10 @@ def parse_mensa_dipendenti(
                 "n_coperti": n,
                 "fonte": fonte,
                 "hash_riga": make_hash(
-                    societa_id, data_servizio, tipo_pasto, "DIPENDENTI", n, seq=row_idx
+                    societa_id, data_servizio, tipo_pasto, "DIPENDENTI", "HQ"
                 ),
                 "data_caricamento": ts_now.isoformat(),
+                "_submitted_at": submitted_at,
             }
         )
     return records
@@ -474,6 +483,30 @@ BQ_SCHEMA = (
 )
 
 
+def dedup_latest_wins(rows: list[dict]) -> list[dict]:
+    """Collapse rows sharing the same natural key, keeping the latest Form submission.
+
+    Form submissions can be repeated (corrections, double-clicks). The natural key
+    is encoded in hash_riga (societa, data, pasto, ospite, BU). Among rows with the
+    same hash_riga, keep the one with the most recent _submitted_at; ties broken by
+    higher n_coperti.
+    """
+    by_key: dict[str, dict] = {}
+    for r in rows:
+        k = r["hash_riga"]
+        prev = by_key.get(k)
+        if prev is None:
+            by_key[k] = r
+            continue
+        prev_ts = prev.get("_submitted_at")
+        cur_ts = r.get("_submitted_at")
+        if cur_ts and (prev_ts is None or cur_ts > prev_ts):
+            by_key[k] = r
+        elif cur_ts == prev_ts and r["n_coperti"] > prev["n_coperti"]:
+            by_key[k] = r
+    return list(by_key.values())
+
+
 def get_existing_hashes(client) -> set[str]:
     try:
         q = f"SELECT hash_riga FROM `{BQ_TABLE_FULL}`"
@@ -507,7 +540,6 @@ def load_to_bq(rows: list[dict], dry_run: bool, replace: bool = False) -> None:
     ensure_table(client)
 
     if replace:
-        # DELETE-INSERT: wipe table and load all rows
         if dry_run:
             log.info(
                 "[DRY RUN] Avrei cancellato tutta la tabella e caricato %d righe.",
@@ -519,32 +551,45 @@ def load_to_bq(rows: list[dict], dry_run: bool, replace: bool = False) -> None:
         client.query(delete_q).result()
         new_rows = rows
     else:
-        existing = get_existing_hashes(client)
-        new_rows = [r for r in rows if r["hash_riga"] not in existing]
-
+        # Surgical DELETE-INSERT by natural key: cancello solo i record le cui
+        # chiavi naturali sono presenti nel batch corrente, lasciando intatto
+        # tutto il resto. Sostituzione idempotente — il foglio è source of truth
+        # per le date/pasti/ospiti che tocca.
+        batch_hashes = {r["hash_riga"] for r in rows}
         log.info(
-            "Righe totali: %d | già presenti: %d | nuove: %d",
+            "Righe da caricare: %d (chiavi naturali distinte: %d)",
             len(rows),
-            len(existing & {r["hash_riga"] for r in rows}),
-            len(new_rows),
+            len(batch_hashes),
         )
 
-        if not new_rows:
-            log.info("Niente da caricare.")
+        if dry_run:
+            log.info("[DRY RUN] Avrei sostituito %d record.", len(batch_hashes))
             return
 
-        if dry_run:
-            log.info("[DRY RUN] Avrei caricato %d righe.", len(new_rows))
-            return
+        # DELETE in chunks per evitare query troppo lunghe
+        hash_list = list(batch_hashes)
+        chunk_size = 1000
+        for i in range(0, len(hash_list), chunk_size):
+            chunk = hash_list[i : i + chunk_size]
+            in_clause = ", ".join(f"'{h}'" for h in chunk)
+            delete_q = (
+                f"DELETE FROM `{BQ_TABLE_FULL}` WHERE hash_riga IN ({in_clause})"
+            )
+            client.query(delete_q).result()
+        log.info("Cancellati record con chiavi naturali in batch.")
+        new_rows = rows
+
+    # Strip internal-only fields before insert
+    rows_to_load = [{k: v for k, v in r.items() if not k.startswith("_")} for r in new_rows]
 
     job_config = bigquery.LoadJobConfig(
         schema=BQ_SCHEMA,
         write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
         source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
     )
-    job = client.load_table_from_json(new_rows, BQ_TABLE_FULL, job_config=job_config)
+    job = client.load_table_from_json(rows_to_load, BQ_TABLE_FULL, job_config=job_config)
     job.result()
-    log.info("Caricato: %d righe → %s", len(new_rows), BQ_TABLE_FULL)
+    log.info("Caricato: %d righe → %s", len(rows_to_load), BQ_TABLE_FULL)
 
 
 # ── Quality summary ────────────────────────────────────────────────────────────
@@ -648,6 +693,16 @@ def main():
     if not rows:
         log.warning("Nessuna riga da caricare.")
         sys.exit(0)
+
+    pre_dedup = len(rows)
+    rows = dedup_latest_wins(rows)
+    if len(rows) < pre_dedup:
+        log.info(
+            "Dedup latest-wins: %d → %d righe (%d submission collassate)",
+            pre_dedup,
+            len(rows),
+            pre_dedup - len(rows),
+        )
 
     load_to_bq(rows, dry_run=args.dry_run, replace=args.replace)
     quality_summary(rows)

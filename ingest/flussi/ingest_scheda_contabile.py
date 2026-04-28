@@ -406,7 +406,6 @@ def write_saldi_to_bq(
                 "banca_id": banca_id,
                 "data_snapshot": d.isoformat(),
                 "saldo_finale": saldo,
-                "file_sorgente": "SCHEDA_CONTABILE",
             }
         )
 
@@ -418,18 +417,16 @@ def write_saldi_to_bq(
 
     client = get_client()
 
-    # DELETE existing snapshots for this societa+banca (from SCHEDA_CONTABILE source)
     dates = [r["data_snapshot"] for r in rows_to_write]
     date_list = ", ".join(f"'{d}'" for d in dates)
     delete_sql = f"""
     DELETE FROM `{BQ_TABLE}`
     WHERE societa_id = '{societa_id}'
       AND banca_id = '{banca_id}'
-      AND file_sorgente = 'SCHEDA_CONTABILE'
       AND CAST(data_snapshot AS STRING) IN ({date_list})
     """
     client.query(delete_sql).result()
-    log.info(f"Deleted existing SCHEDA_CONTABILE snapshots for {societa_id}/{banca_id}")
+    log.info(f"Deleted existing snapshots for {societa_id}/{banca_id}")
 
     # INSERT new rows
     errors = client.insert_rows_json(BQ_TABLE, rows_to_write)
