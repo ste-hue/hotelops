@@ -72,9 +72,16 @@ def parse_situazione_partite(
     wb = openpyxl.load_workbook(str(filepath), data_only=True)
     ws = wb.active
 
-    # Extract metadata from first row
-    societa_raw = ws.cell(row=1, column=1).value or ""
-    data_snapshot_raw = ws.cell(row=1, column=3).value
+    # Esolver export ha 2 varianti: con o senza riga di header in cima.
+    # Quando la prima cella è 'Ragione sociale 1' è la versione con header
+    # e i dati partono da row 2; altrimenti i dati iniziano da row 1.
+    first_cell = str(ws.cell(row=1, column=1).value or "").strip().lower()
+    metadata_row = 2 if first_cell == "ragione sociale 1" else 1
+    data_start_row = metadata_row
+
+    # Extract metadata from first data row
+    societa_raw = ws.cell(row=metadata_row, column=1).value or ""
+    data_snapshot_raw = ws.cell(row=metadata_row, column=3).value
 
     # Determine societa_id
     if societa_override:
@@ -94,7 +101,7 @@ def parse_situazione_partite(
     elif isinstance(data_snapshot_raw, date):
         data_snapshot = data_snapshot_raw
     else:
-        raise ValueError(f"Cannot parse snapshot date from C3: {data_snapshot_raw}")
+        raise ValueError(f"Cannot parse snapshot date from C{metadata_row}: {data_snapshot_raw}")
 
     logger.info(f"Parsing: {filepath.name}")
     logger.info(f"  Società: {societa_id}, Snapshot: {data_snapshot}")
@@ -102,7 +109,7 @@ def parse_situazione_partite(
     rows = []
     skipped = 0
 
-    for row_idx in range(1, ws.max_row + 1):
+    for row_idx in range(data_start_row, ws.max_row + 1):
         desc_raw = ws.cell(row=row_idx, column=19).value
         importo_raw = ws.cell(row=row_idx, column=20).value
         scadenza_raw = ws.cell(row=row_idx, column=23).value

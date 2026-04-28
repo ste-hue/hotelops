@@ -336,7 +336,10 @@ def detect_scheda_contabile(path: Path) -> Optional[ClassificationResult]:
         rows, sheet = _read_xlsx_sample(path)
         for row in rows[:5]:
             row_upper = _cols_upper(row)
-            if any("SALDO" in c and "UDC" in c for c in row_upper) or (
+            # La scheda contabile Esolver ha esattamente l'header "Saldo in UdC"
+            # — match più stretto di "SALDO" + "UDC" su celle separate, che
+            # falsamente matchava le partite fornitori ("SALDO SCADENZA IN UDC").
+            if any("SALDO IN UDC" in c for c in row_upper) or (
                 any("DARE" in c for c in row_upper)
                 and any("AVERE" in c for c in row_upper)
                 and any("SALDO" in c for c in row_upper)
@@ -938,8 +941,8 @@ def _build_economato_result(
 DETECTORS = [
     detect_accodamenti,  # TXT pipe-delimited — very specific
     detect_movimenti_contabili,  # XLS LISTAMOVCONT — very specific
+    detect_partite_fornitori,  # XLSX filename PARTIT+FORNI — very specific (must precede scheda)
     detect_scheda_contabile,  # CSV semicolon or XLSX with Saldo in UdC
-    detect_partite_fornitori,  # XLSX with fornitore/scadenza columns
     detect_bilancino,  # XLS with dotted conto + livello "Si"
     detect_gasparotto,  # XLSX with Budget sheet
     detect_piano_finanziario,  # XLSX with Piano Finanziario sheet
