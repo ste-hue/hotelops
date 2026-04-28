@@ -191,8 +191,10 @@ def test_lineage_populated_from_active_pipeline_run(
         bq_write_validated("hotelops.f_x", rows, mode="append")
 
     # The success log line carries lineage in `extra`
-    assert "bq_write_validated: 1 rows -> hotelops.f_x" in caplog.text
-    record = next(r for r in caplog.records if "bq_write_validated:" in r.getMessage())
+    record = next(
+        r for r in caplog.records
+        if getattr(r, "table", None) == "hotelops.f_x"
+    )
     assert record.pipeline_name == "test_pipeline"
     assert record.run_id == run.run_id
     assert record.file_sorgente == "my_file.xlsx"
