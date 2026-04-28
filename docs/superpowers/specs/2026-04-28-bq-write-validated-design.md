@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 date: 2026-04-28
 owner: stefano
 sprint: bq-write-gate
@@ -75,7 +75,7 @@ from core.bq.dedup import filter_new_rows_by_hash
 from core.pipeline_run import PipelineRun
 from core.schemas import MovimentoContabileRow
 
-with PipelineRun("ingest_movimenti_contabili", metadata={"file_sorgente": fname}):
+with PipelineRun("ingest_movimenti_contabili", file_sorgente=fname):
     rows = [MovimentoContabileRow(**r) for r in parsed]
     rows_new = filter_new_rows_by_hash(
         table="hotelops-suite.hotelops.f_movimenti_contabili",
@@ -92,7 +92,7 @@ with PipelineRun("ingest_movimenti_contabili", metadata={"file_sorgente": fname}
 ### Example — SNAPSHOT (chirurgico per periodo × società)
 
 ```python
-with PipelineRun("ingest_partite_aperte", metadata={"file_sorgente": fname}):
+with PipelineRun("ingest_partite_aperte", file_sorgente=fname):
     rows = [PartitaApertaFornitoreRow(**r) for r in parsed]
     bq_write_validated(
         "hotelops-suite.hotelops.f_partite_aperte_fornitori",
@@ -166,9 +166,11 @@ class PipelineRun:
 lineage_meta = {
     "pipeline_name": run.pipeline_name,
     "run_id": run.run_id,
-    "file_sorgente": (run.metadata or {}).get("file_sorgente"),
+    "file_sorgente": run.file_sorgente,
 }
 ```
+
+> **Note**: `PipelineRun.__init__` gains a `file_sorgente: str | None = None` parameter as a first-class attribute. It is additive and backward compatible — existing callers that don't pass it get `run.file_sorgente = None`. The `metadata` dict stays available for genuinely free-form fields (watermarks, custom counters), but identity-shaped fields like `file_sorgente`, `societa_id` are first-class.
 
 If absent: `lineage_meta = {"pipeline_name": "unknown_pipeline", "run_id": None, "file_sorgente": None}` and a `log.warning` fires once per call:
 
@@ -257,7 +259,7 @@ Low frequency, low blast radius — good place to validate the API on dimension-
 - `ingest/flussi/ingest_movimenti_contabili.py`
 - `ingest/banca/ingest_accodamenti.py`
 - `ingest/banca/ingest.py` (5 banche: MPS, MPS_KROSS, SELLA, INTESA, BCP)
-- `reviews/ingest.py` (natural-key dedup `(piattaforma, review_id)` — candidate for snapshot mode if it fits cleanly)
+- `reviews/ingest.py` (APPEND with natural-key dedup `(business_unit_id, piattaforma, review_id)` — reviews have no temporal period, so SNAPSHOT mode is not applicable)
 
 These pipelines compute MD5 hashes upstream; the dedup pattern moves to `filter_new_rows_by_hash` calls explicitly, then the write goes through the gate.
 
