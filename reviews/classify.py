@@ -32,6 +32,28 @@ SCORE_SCALES = {
 }
 
 
+def _empty_classification() -> dict:
+    """Return the default empty classification payload."""
+    return {"categoria_nlp": None, "sentiment_nlp": None, "riassunto_nlp": None}
+
+
+def _normalize_classification_item(item: dict) -> dict:
+    """Normalize a raw model item into canonical NLP classification fields."""
+    categoria = item.get("categoria", "").upper()
+    if categoria not in VALID_CATEGORIE:
+        categoria = "GENERICA"
+
+    sentiment = item.get("sentiment", "").upper()
+    if sentiment not in VALID_SENTIMENTI:
+        sentiment = None
+
+    return {
+        "categoria_nlp": categoria,
+        "sentiment_nlp": sentiment,
+        "riassunto_nlp": item.get("riassunto"),
+    }
+
+
 def build_prompt(reviews: list[dict]) -> str:
     """Build classification prompt for one or more reviews."""
     if len(reviews) == 1:
@@ -79,30 +101,24 @@ def parse_classification(raw_text: str) -> dict:
     json_match = re.search(r"\{[^{}]*\}", text)
     if not json_match:
         log.warning("No JSON found in classification response: %s", text[:200])
-        return {"categoria_nlp": None, "sentiment_nlp": None, "riassunto_nlp": None}
+        return _empty_classification()
 
     try:
         data = json.loads(json_match.group())
     except json.JSONDecodeError:
         log.warning("Invalid JSON in classification response: %s", text[:200])
-        return {"categoria_nlp": None, "sentiment_nlp": None, "riassunto_nlp": None}
+        return _empty_classification()
 
-    categoria = data.get("categoria", "").upper()
-    if categoria not in VALID_CATEGORIE:
-        log.warning("Invalid categoria '%s', falling back to GENERICA", categoria)
-        categoria = "GENERICA"
-
-    sentiment = data.get("sentiment", "").upper()
-    if sentiment not in VALID_SENTIMENTI:
-        sentiment = None
-
-    riassunto = data.get("riassunto")
-
-    return {
-        "categoria_nlp": categoria,
-        "sentiment_nlp": sentiment,
-        "riassunto_nlp": riassunto,
-    }
+    result = _normalize_classification_item(data)
+    if result["categoria_nlp"] == "GENERICA" and data.get("categoria", "").upper() not in {
+        "GENERICA",
+        "",
+    }:
+        log.warning(
+            "Invalid categoria '%s', falling back to GENERICA",
+            data.get("categoria", "").upper(),
+        )
+    return result
 
 
 def parse_batch_classification(raw_text: str, count: int) -> list[dict]:
@@ -118,30 +134,12 @@ def parse_batch_classification(raw_text: str, count: int) -> list[dict]:
         data = json.loads(array_match.group())
     except json.JSONDecodeError:
         log.warning("Invalid JSON array in batch response")
-        return [
-            {"categoria_nlp": None, "sentiment_nlp": None, "riassunto_nlp": None}
-        ] * count
+        return [_empty_classification() for _ in range(count)]
 
-    results = []
-    for item in data:
-        cat = item.get("categoria", "").upper()
-        if cat not in VALID_CATEGORIE:
-            cat = "GENERICA"
-        sent = item.get("sentiment", "").upper()
-        if sent not in VALID_SENTIMENTI:
-            sent = None
-        results.append(
-            {
-                "categoria_nlp": cat,
-                "sentiment_nlp": sent,
-                "riassunto_nlp": item.get("riassunto"),
-            }
-        )
+    results = [_normalize_classification_item(item) for item in data]
 
     while len(results) < count:
-        results.append(
-            {"categoria_nlp": None, "sentiment_nlp": None, "riassunto_nlp": None}
-        )
+        results.append(_empty_classification())
 
     return results[:count]
 
