@@ -213,6 +213,24 @@ def _parse_descrizione(desc: str) -> tuple[str, str, date | None]:
     return tipo, numero, data_doc
 
 
+BQ_SCHEMA = [
+    bigquery.SchemaField("societa_id", "STRING"),
+    bigquery.SchemaField("data_snapshot", "DATE"),
+    bigquery.SchemaField("codice_fornitore", "INTEGER"),
+    bigquery.SchemaField("nome_fornitore", "STRING"),
+    bigquery.SchemaField("tipo_documento", "STRING"),
+    bigquery.SchemaField("numero_documento", "STRING"),
+    bigquery.SchemaField("data_documento", "DATE"),
+    bigquery.SchemaField("data_scadenza", "DATE"),
+    bigquery.SchemaField("importo_residuo", "FLOAT"),
+    bigquery.SchemaField("importo_abs", "FLOAT"),
+    bigquery.SchemaField("codice_pagamento", "STRING"),
+    bigquery.SchemaField("metodo_pagamento", "STRING"),
+    bigquery.SchemaField("is_intercompany", "BOOLEAN"),
+    bigquery.SchemaField("file_sorgente", "STRING"),
+]
+
+
 def create_table_if_needed(client: bigquery.Client):
     """Create f_partite_aperte_fornitori table if it doesn't exist."""
     try:
@@ -221,29 +239,20 @@ def create_table_if_needed(client: bigquery.Client):
     except Exception:
         pass
 
-    schema = [
-        bigquery.SchemaField("societa_id", "STRING"),
-        bigquery.SchemaField("data_snapshot", "DATE"),
-        bigquery.SchemaField("codice_fornitore", "INTEGER"),
-        bigquery.SchemaField("nome_fornitore", "STRING"),
-        bigquery.SchemaField("tipo_documento", "STRING"),
-        bigquery.SchemaField("numero_documento", "STRING"),
-        bigquery.SchemaField("data_documento", "DATE"),
-        bigquery.SchemaField("data_scadenza", "DATE"),
-        bigquery.SchemaField("importo_residuo", "FLOAT"),
-        bigquery.SchemaField("importo_abs", "FLOAT"),
-        bigquery.SchemaField("codice_pagamento", "STRING"),
-        bigquery.SchemaField("metodo_pagamento", "STRING"),
-        bigquery.SchemaField("is_intercompany", "BOOLEAN"),
-        bigquery.SchemaField("file_sorgente", "STRING"),
-    ]
-    table = bigquery.Table(BQ_TABLE, schema=schema)
+    table = bigquery.Table(BQ_TABLE, schema=BQ_SCHEMA)
     client.create_table(table)
     logger.info(f"Created table {BQ_TABLE}")
 
 
 def load_to_bq(client: bigquery.Client, rows: list[dict], dry_run: bool = False):
-    """DELETE-INSERT snapshot into BigQuery."""
+    """DELETE-INSERT snapshot into BigQuery.
+
+    Usa load_table_from_json (batch) invece di insert_rows_json (streaming):
+    i batch load scrivono direttamente nella tabella e non passano dallo
+    streaming buffer, quindi il DELETE-INSERT su run successivi non incappa
+    nel limite "DELETE over rows in streaming buffer" di BigQuery (finestra
+    di 30-90 min).
+    """
     if not rows:
         logger.warning("No rows to load")
         return
@@ -269,11 +278,14 @@ def load_to_bq(client: bigquery.Client, rows: list[dict], dry_run: bool = False)
     client.query(delete_sql).result()
     logger.info(f"  Deleted existing snapshot for {societa_id} @ {data_snapshot}")
 
-    # INSERT new rows
-    errors = client.insert_rows_json(BQ_TABLE, rows)
-    if errors:
-        logger.error(f"  BQ insert errors: {errors[:3]}")
-        raise RuntimeError(f"BQ insert failed: {errors[:3]}")
+    # Batch load (no streaming buffer)
+    job_config = bigquery.LoadJobConfig(
+        schema=BQ_SCHEMA,
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+        source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+    )
+    job = client.load_table_from_json(rows, BQ_TABLE, job_config=job_config)
+    job.result()
 
     logger.info(
         f"  ✓ Loaded {len(rows)} partite aperte for {societa_id} @ {data_snapshot}"
