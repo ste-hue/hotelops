@@ -4,6 +4,7 @@ import pytest
 from pydantic import BaseModel
 
 from core.bq.write import SchemaViolationError, BigQueryInsertError, bq_write_validated
+from core.pipeline_run import PipelineRun
 
 
 def test_schema_violation_error_message_lists_first_5():
@@ -171,3 +172,44 @@ def test_snapshot_natural_key_with_two_columns_uses_struct(mock_get_client):
 
     delete_sql = mock_client.query.call_args.args[0]
     assert "(societa_id, n)" in delete_sql
+
+
+@patch("core.bq.write.get_client")
+@patch("core.pipeline_run.PipelineRun._insert_final")  # avoid real BQ write
+def test_lineage_populated_from_active_pipeline_run(
+    mock_insert, mock_get_client, caplog
+):
+    caplog.set_level("INFO")
+    mock_client = MagicMock()
+    mock_job = MagicMock()
+    mock_job.result.return_value = None
+    mock_client.load_table_from_json.return_value = mock_job
+    mock_get_client.return_value = mock_client
+
+    rows = [FakeRow(societa_id="ORTI", n=1)]
+    with PipelineRun("test_pipeline", file_sorgente="my_file.xlsx") as run:
+        bq_write_validated("hotelops.f_x", rows, mode="append")
+
+    # The success log line carries lineage in `extra`
+    assert "bq_write_validated: 1 rows -> hotelops.f_x" in caplog.text
+    record = next(r for r in caplog.records if "bq_write_validated:" in r.getMessage())
+    assert record.pipeline_name == "test_pipeline"
+    assert record.run_id == run.run_id
+    assert record.file_sorgente == "my_file.xlsx"
+    assert record.mode == "append"
+
+
+def test_lineage_warns_when_no_active_run(caplog):
+    caplog.set_level("WARNING")
+    with patch("core.bq.write.get_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_job = MagicMock()
+        mock_job.result.return_value = None
+        mock_client.load_table_from_json.return_value = mock_job
+        mock_get_client.return_value = mock_client
+
+        rows = [FakeRow(societa_id="ORTI", n=1)]
+        bq_write_validated("hotelops.f_x", rows, mode="append")
+
+    assert "outside PipelineRun context" in caplog.text
+    assert "hotelops.f_x" in caplog.text

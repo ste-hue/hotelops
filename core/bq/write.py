@@ -14,6 +14,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+# Module-level so tests can @patch("core.bq.write.get_client").
+# core.bq.client is a leaf module (no cycle risk).
 from core.bq.client import get_client
 
 log = logging.getLogger(__name__)
@@ -195,6 +197,11 @@ def _snapshot(
     snapshot date) are untouched. The caller is responsible for picking
     a natural_key that matches their notion of "this snapshot's identity"
     — a too-narrow key over-deletes neighbouring partitions.
+
+    If ``rows_dict`` contains two rows with the same ``natural_key`` tuple,
+    both are inserted and the DELETE phase removes only the prior snapshot's
+    matching tuple — the duplicate goes through. Treated as caller error:
+    natural_key is by definition unique within a batch.
     """
     from google.cloud import bigquery
 
@@ -245,6 +252,8 @@ def _bq_type_for(sample: Any) -> str:
         return "INT64"
     if isinstance(sample, float):
         return "FLOAT64"
+    # FIXME: extend to date/datetime/Decimal when migrating non-string-keyed
+    # pipelines (e.g. ingest_movimenti_contabili has datetime fields).
     return "STRING"
 
 
@@ -252,8 +261,16 @@ def _sql_literal(value: Any) -> str:
     """Render a Python value as a safe SQL literal for use inside an IN list.
 
     Strings are escaped (single quotes doubled). Numbers and booleans are
-    rendered directly. None becomes NULL (which never matches in IN, so the
-    caller is expected to filter None keys upstream — but we don't crash).
+    rendered directly. None becomes NULL. **WARNING:** in BigQuery,
+    ``NULL IN (... NULL ...)`` evaluates to NULL (not TRUE), so a row whose
+    natural_key tuple contains NULL will silently *not* be deleted by the
+    DELETE phase, then be re-inserted by the INSERT phase — producing a
+    duplicate. The caller MUST coalesce nullable natural_key columns to a
+    sentinel value upstream (e.g. ``''`` or ``'N/A'``) before calling the
+    gate. Backslashes are not escaped — values containing ``\\n``, ``\\t``,
+    ``\\\\`` etc. will be re-interpreted by BigQuery's lexer; for natural
+    keys that may contain backslashes (none today, but flag for future
+    migrations) the helper must be hardened.
     """
     if value is None:
         return "NULL"
