@@ -1,4 +1,3 @@
-import pytest
 from core.bq.write import SchemaViolationError, BigQueryInsertError
 
 
