@@ -114,3 +114,60 @@ def test_append_raises_bigquery_insert_error_on_job_errors(mock_get_client):
     rows = [FakeRow(societa_id="ORTI", n=1)]
     with pytest.raises(BigQueryInsertError):
         bq_write_validated("hotelops.f_x", rows, mode="append")
+
+
+@patch("core.bq.write.get_client")
+def test_snapshot_runs_delete_then_insert(mock_get_client):
+    mock_client = MagicMock()
+    mock_query_job = MagicMock()
+    mock_query_job.result.return_value = None
+    mock_client.query.return_value = mock_query_job
+
+    mock_load_job = MagicMock()
+    mock_load_job.result.return_value = None
+    mock_client.load_table_from_json.return_value = mock_load_job
+
+    mock_get_client.return_value = mock_client
+
+    rows = [
+        FakeRow(societa_id="ORTI", n=1),
+        FakeRow(societa_id="INTUR", n=2),
+    ]
+    bq_write_validated(
+        "hotelops.f_x",
+        rows,
+        mode="snapshot",
+        natural_key=["societa_id"],
+    )
+
+    # DELETE issued first, then INSERT
+    assert mock_client.query.called
+    delete_sql = mock_client.query.call_args.args[0]
+    assert "DELETE FROM `hotelops.f_x`" in delete_sql
+    assert "(societa_id) IN UNNEST" in delete_sql
+
+    # INSERT happened after delete
+    mock_client.load_table_from_json.assert_called_once()
+
+
+@patch("core.bq.write.get_client")
+def test_snapshot_natural_key_with_two_columns_uses_struct(mock_get_client):
+    mock_client = MagicMock()
+    mock_query_job = MagicMock()
+    mock_query_job.result.return_value = None
+    mock_client.query.return_value = mock_query_job
+    mock_load_job = MagicMock()
+    mock_load_job.result.return_value = None
+    mock_client.load_table_from_json.return_value = mock_load_job
+    mock_get_client.return_value = mock_client
+
+    rows = [FakeRow(societa_id="ORTI", n=1)]
+    bq_write_validated(
+        "hotelops.f_x",
+        rows,
+        mode="snapshot",
+        natural_key=["societa_id", "n"],
+    )
+
+    delete_sql = mock_client.query.call_args.args[0]
+    assert "(societa_id, n)" in delete_sql

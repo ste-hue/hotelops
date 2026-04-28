@@ -188,4 +188,79 @@ def _append(client, table: str, rows_dict: list[dict]) -> None:
 def _snapshot(
     client, table: str, rows_dict: list[dict], natural_key: list[str]
 ) -> None:
-    raise NotImplementedError("SNAPSHOT lands in Task 5")
+    """DELETE rows whose natural_key tuple is in the batch, then INSERT.
+
+    The DELETE is chirurgico: it only touches keys present in the batch.
+    Other rows in the table (e.g. a different societa or a different
+    snapshot date) are untouched. The caller is responsible for picking
+    a natural_key that matches their notion of "this snapshot's identity"
+    — a too-narrow key over-deletes neighbouring partitions.
+    """
+    from google.cloud import bigquery
+
+    if len(natural_key) == 1:
+        col = natural_key[0]
+        # Build (val1, val2, ...) parameter via UNNEST of the value list
+        values = [r[col] for r in rows_dict]
+        delete_sql = f"DELETE FROM `{table}` WHERE ({col}) IN UNNEST(@vals)"
+        # NOTE: we use ARRAY parameter for portability; element type
+        # follows the Python type of values[0].
+        param_type = _bq_type_for(values[0])
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ArrayQueryParameter("vals", param_type, values),
+            ]
+        )
+        client.query(delete_sql, job_config=job_config).result()
+    else:
+        # Multi-column key: emit literal IN list of struct-like tuples.
+        # We escape strings with single quotes and pass numbers as-is.
+        cols = ", ".join(natural_key)
+        tuples = []
+        for r in rows_dict:
+            parts = [_sql_literal(r[c]) for c in natural_key]
+            tuples.append(f"({', '.join(parts)})")
+        # Deduplicate identical key tuples to keep the IN list small.
+        in_list = ",\n  ".join(sorted(set(tuples)))
+        delete_sql = f"DELETE FROM `{table}` WHERE ({cols}) IN (\n  {in_list}\n)"
+        client.query(delete_sql).result()
+
+    # INSERT phase: same batch load as APPEND.
+    job_config = bigquery.LoadJobConfig(
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+        source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+    )
+    job = client.load_table_from_json(rows_dict, table, job_config=job_config)
+    try:
+        job.result()
+    except Exception as e:  # noqa: BLE001
+        raise BigQueryInsertError(table, [{"job_error": str(e)}]) from e
+
+
+def _bq_type_for(sample: Any) -> str:
+    """Map Python type to a BigQuery scalar parameter type."""
+    if isinstance(sample, bool):
+        return "BOOL"
+    if isinstance(sample, int):
+        return "INT64"
+    if isinstance(sample, float):
+        return "FLOAT64"
+    return "STRING"
+
+
+def _sql_literal(value: Any) -> str:
+    """Render a Python value as a safe SQL literal for use inside an IN list.
+
+    Strings are escaped (single quotes doubled). Numbers and booleans are
+    rendered directly. None becomes NULL (which never matches in IN, so the
+    caller is expected to filter None keys upstream — but we don't crash).
+    """
+    if value is None:
+        return "NULL"
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, (int, float)):
+        return str(value)
+    # Treat everything else as string
+    s = str(value).replace("'", "''")
+    return f"'{s}'"
