@@ -1,6 +1,6 @@
 """Tests for reviews NLP classification."""
 
-from reviews.classify import parse_classification, build_prompt
+from reviews.classify import build_prompt, parse_batch_classification, parse_classification
 
 
 def test_parse_valid_json():
@@ -48,3 +48,22 @@ def test_build_prompt_batch():
     prompt = build_prompt(reviews)
     assert "Review 1:" in prompt
     assert "Review 2:" in prompt
+
+
+def test_parse_batch_classification_success():
+    raw = """[
+      {"categoria":"WIFI","sentiment":"NEGATIVO","riassunto":"Connessione lenta."},
+      {"categoria":"PREZZO","sentiment":"POSITIVO","riassunto":"Buon rapporto qualità-prezzo."}
+    ]"""
+    result = parse_batch_classification(raw, count=2)
+    assert len(result) == 2
+    assert result[0]["categoria_nlp"] == "WIFI"
+    assert result[1]["categoria_nlp"] == "PREZZO"
+
+
+def test_parse_batch_classification_pads_missing_items():
+    raw = '[{"categoria":"STAFF","sentiment":"POSITIVO","riassunto":"Gentili."}]'
+    result = parse_batch_classification(raw, count=2)
+    assert len(result) == 2
+    assert result[0]["categoria_nlp"] == "STAFF"
+    assert result[1]["categoria_nlp"] is None
