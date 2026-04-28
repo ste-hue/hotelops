@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-04-10
+last_verified: 2026-04-28
 code_paths:
   - reviews/scrape.py
   - reviews/ingest.py
@@ -16,7 +16,7 @@ owner: stefano
 
 # Reviews pipeline
 
-Guest reviews da Booking / TripAdvisor / Google / Expedia → NLP → alert + dashboard.
+Guest reviews da Booking / TripAdvisor / Google / Expedia / Trip.com → NLP → alert + dashboard.
 
 ## Flow
 
@@ -62,6 +62,7 @@ le pagine Store sono JS-rendered e inaffidabili).
 | TRIPADVISOR | maxcopell/tripadvisor-reviews | 0.99 | `maxItemsPerQuery` | `lastReviewDate` | ✅ `maxItemsPerQuery`, lingua omessa (fix 2026-04-10) |
 | GOOGLE | compass/Google-Maps-Reviews-Scraper | 1.0 | `maxReviews` | `reviewsStartDate` | ✅ corretto |
 | EXPEDIA | memo23/expedia-scraper | 0.0 | `maxItems` | `reviewsFrom` | ✅ `maxItems` (fix 2026-04-10) |
+| TRIP | knagymate/trip-com-reviews-scraper | — | `maxReviewsPerHotel` | (no date filter nativo) | ✅ `hotelUrl` come stringa, ratingMax=10, anonymous reviews ammesse |
 
 Fix applicato in `fix/apify-param-names` (2026-04-10): 6 unit test in
 `tests/test_reviews_scrape.py` verificano l'input emesso per ogni
@@ -83,23 +84,14 @@ Stampa nome + version + modifiedAt + input schema. Il `version` è
 l'ancora: se l'actor bumpa e il param scompare, sai rispetto a quale
 build era scritto il nostro codice.
 
-### Audit costo di una run Apify (futuro — task #15)
+### ✅ Audit costo Apify — implementato
 
-L'endpoint non deprecato `GET /v2/actor-runs/{runId}` ritorna
-`data.usageTotalUsd` (float USD) + `data.usage` (12 dimensioni metered:
-ACTOR_COMPUTE_UNITS, DATASET_READS/WRITES, KEY_VALUE_STORE_*,
-REQUEST_QUEUE_*, DATA_TRANSFER_*, PROXY_*) + `data.usageUsd` (breakdown
-per dimensione). Via SDK:
-```python
-from apify_client import ApifyClient
-client = ApifyClient(token)
-run = client.actor(actor_id).call(run_input=...)  # ritorna già il runId
-cost = client.run(run["id"]).get().get("usageTotalUsd")
-```
-**Richiede token auth** — senza token i campi `usageUsd`/`usageTotalUsd`
-sono nascosti. Da cablare nel pipeline come log post-run + eventuale
-comando `hotelops reviews --cost-audit <runId>` per analisi on-demand.
-Non in scope del watermark branch.
+`reviews/scrape.persist_apify_run()` salva una riga in `f_apify_runs` per
+ogni `actor.call`, con: `run_id`, `actor_id`, `piattaforma`,
+`business_unit_id`, `started_at`, `usage_total_usd`, `items_returned`,
+`status`. Schema Pydantic: `ApifyRunRow` in `core/schemas.py`. La sezione
+"Costi Apify" del weekly report (`hotelops reviews --report`) aggrega
+da questa tabella per piattaforma e per BU.
 
 ## Stato BQ (snapshot 2026-04-09, pre-watermark)
 
@@ -128,7 +120,7 @@ Pipeline `hotelops reviews --scrape`:
 7. **`classify_reviews`** (solo nuove) — risparmio costo Claude Haiku.
 8. **`load_to_bq`** — insert.
 9. **`send_alerts(new_rows, first_run_keys=first_run_keys)`** — filtra `punteggio_norm <= 6.0 AND alert_inviato=false`. Per le chiavi in `first_run_keys` applica anche la grace window 7gg (`data_review >= today - 7`) per evitare mail di massa al seed di una nuova property. NON muta più le righe — ritorna solo la lista degli alertati.
-10. **`mark_alerts_sent([r["review_hash"] for r in alerted])`** — UPDATE parameterized `WHERE review_hash IN UNNEST(@hashes)`. Chiamato DOPO che `send_alerts` ritorna con successo: se l'SMTP crasha mid-loop il flag non viene scritto e al prossimo run ritenta.
+10. **`mark_alerts_sent([r["review_hash"] for r in alerted])`** — UPDATE parameterized `WHERE review_hash IN UNNEST(@hashes)`. Chiamato DOPO che `send_alerts` ritorna con successo. La funzione ha retry/backoff (`_MARK_ALERTS_RETRY_DELAYS = [30, 60, 120]`) per gestire la streaming buffer di BigQuery; se tutti i tentativi falliscono, gli hash pendenti vengono persistiti in `.hotelops_state/pending_alert_flags.json` e riconciliati al run successivo via `flush_pending_alert_flags()` chiamato in apertura di pipeline.
 11. **`send_gap_alert(gap_keys)`** — mail riepilogativa con la lista `(piattaforma, bu)` a cap pieno, suggerisce rilancio manuale con cap più alto.
 
 ### Gap detection
@@ -192,13 +184,15 @@ pay-per-item). Fix in branch `fix/apify-param-names`:
 
 6 unit test in `tests/test_reviews_scrape.py` bloccano regressioni.
 
-### 🔴 Google ha 42 row totali, gap di 5+ settimane (ancora aperto)
-`MAX(data_review)` Google pre-watermark = `2026-03-03`. Booking/Expedia
-a `2026-04-06`. Causa root non identificata (actor timeout? url property
-cambiato? run fallivano silenziosamente?). Con il watermark gate adesso
-il prossimo run su Google pescherà tutto ciò che è `> 2026-03-03` — se il
-gap era dovuto a scraping rotto e non a mancanza di review reali, dovremmo
-vederlo nel prossimo run. Da monitorare.
+### 🟡 Google gap — da monitorare in stagione
+
+`MAX(data_review)` Google pre-watermark era `2026-03-03`. Con il watermark
+gate ora attivo, ogni run pesca tutto ciò che è `> last_watermark`. Se il
+gap pre-aprile era scraping rotto, lo recupero è automatico al run successivo;
+se invece riflette mancanza di review reali (fuori stagione), lo capiremo
+osservando il rate di nuovi insert nei mesi caldi (giu-set 2026). La
+"freshness" per piattaforma è visibile in `hotelops health` sotto la
+sezione `STALE WATERMARKS`.
 
 ### ✅ Format drift `data_review` su Google — RISOLTO 2026-04-10
 42 row Google esistenti avevano `data_review` come timestamp ISO
@@ -295,6 +289,11 @@ Drift schema/code. Controllare `tests/test_reviews_schema_sync.py`, garantisce a
 3. Lock file: `ls /tmp/hotelops-reviews/` (daily lock, si pulisce da solo)
 4. Manuale: `set -a; source .env; set +a; hotelops reviews --scrape`
 
+### Weekly report ad-hoc su finestra arbitraria
+`hotelops reviews --report` di default copre la settimana scorsa (lun-dom).
+Per ispezioni mirate su finestra arbitraria sono disponibili gli override
+`--start YYYY-MM-DD --end YYYY-MM-DD` (entrambi obbligatori se passati).
+
 ### Cost blowout (Apify bill > $25/mese)
 1. Check Apify dashboard → Runs → sort per cost
 2. Log del run: cerca `CAP VIOLATED` → qualche actor ha ignorato il cap
@@ -305,7 +304,7 @@ Drift schema/code. Controllare `tests/test_reviews_schema_sync.py`, garantisce a
 
 1. ✅ ~~Fix `alert.py` → scrivere `alert_inviato=true` dopo invio~~ — risolto 2026-04-10 (watermark gate + `mark_alerts_sent` + regression test).
 2. ✅ ~~Branch `fix/apify-param-names`~~ — risolto 2026-04-10. BOOKING `sortReviewsBy`, TRIPADVISOR `maxItemsPerQuery` (lingua omessa), EXPEDIA `maxItems`. 6 unit test in `tests/test_reviews_scrape.py`.
-3. 🔴 Introdurre `f_pipeline_runs` + PipelineRun context manager (Layer 2 refactor). Sblocca: "il cron è girato ieri?", watermark esplicito come backup, alert "ultimo run OK > 36h fa".
+3. ✅ ~~Introdurre `f_pipeline_runs` + PipelineRun context manager~~ — risolto. `core/pipeline_run.PipelineRun` wrappa l'intero scrape (`reviews/cli_commands.py`), scrive una riga in `f_pipeline_runs` con start/end/status. `hotelops health` rileva freshness dei watermark per piattaforma×BU.
 4. ✅ ~~Backfill `data_review` Google~~ — fatto 2026-04-10, 42 row sistemate, watermarks GOOGLE ora materializzati.
 5. 🟡 Verificare perché Google era rotto prima del 9 aprile (gap 5+ settimane). Il primo run post-watermark ci dirà se era il scraping o se le review reali mancavano.
 6. 🟡 **Cost tracking** via `GET /v2/actor-runs/{runId}` → `usageTotalUsd`. Task #15 nel tracker. Log post-run + comando `hotelops reviews --cost-audit <runId>`.

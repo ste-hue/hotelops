@@ -4,7 +4,7 @@ code_paths:
   - ingest/classify.py
   - core/registry.yaml
   - cli.py
-last_verified: 2026-04-09
+last_verified: 2026-04-28
 source: migrated from Obsidian vault (procedures/classifica_file.md, v1.0 2026-03-22)
 ---
 
@@ -28,15 +28,16 @@ hotelops classifica file.xlsx                    # Solo classifica (mostra tipo)
 hotelops classifica file.xlsx --route            # Classifica + copia nel datahub + rinomina
 hotelops classifica file.xlsx --route --ingest   # Classifica + copia + ingerisci in BQ
 hotelops classifica *.xlsx --dry-run             # Preview senza eseguire
+hotelops cls file.xlsx ...                       # Alias breve di classifica
 ```
 
 Oppure via NanoClaw (WhatsApp): allega file → l'agente chiama `python -m ingest.classify <file> --route --ingest`.
 
 ---
 
-## I 10 tipi riconosciuti
+## I tipi riconosciuti
 
-Il classificatore (`ingest/classify.py`) ispeziona il **contenuto** del file (header, colonne, struttura) — non si fida del nome.
+Il classificatore (`ingest/classify.py`) ispeziona il **contenuto** del file (header, colonne, struttura) — non si fida del nome. Sono presenti 10 detector che producono 11 tipi distinti (`economato` si sdoppia in singolo vs consolidato). Tutte le destinazioni sono relative a `ingresso/` nel datahub (es. `ingresso/homebanking/ORTI/MPS/...`).
 
 ### ♻️ APPEND (accumula nel tempo, MD5 dedup)
 
@@ -44,12 +45,13 @@ Ogni file aggiunge righe nuove. I duplicati si scartano automaticamente. Tutti i
 
 | Tipo | Firma | Destinazione datahub | BQ Table |
 |------|-------|---------------------|----------|
-| Banca (MPS/Sella/Intesa/BCP) | Header: Data+Valuta+Dare+Avere | `banche/{SOC}/` | f_banche_movimenti |
+| Banca (MPS/Sella/Intesa/BCP) | Header: Data+Valuta+Dare+Avere | `homebanking/{SOC}/{BNK}/` | f_banche_movimenti |
 | Movimenti contabili | XLS, LISTAMOVCONT, 26+ colonne | `movimenti_contabili/{SOC}/` | f_movimenti_contabili |
-| Scheda contabile | CSV semicolon "Saldo in UdC" o XLSX | `schede_contabili/{SOC}/` | f_saldi_banca_snapshot |
+| Scheda contabile | CSV semicolon "Saldo in UdC" o XLSX | `registro_banca_esolver/{SOC}/` | f_saldi_banca_snapshot |
 | Accodamenti PMS | TXT pipe-delimited H/R/C_*.txt | `accodamenti/ORTI/` | f_accodamenti |
 | Coperti giornalieri | CSV/XLSX con Breakfast/Lunch/Dinner | `coperti/` | f_coperti_giornalieri |
-| Consumi economato | XLSX con Codice/Quantita/Euro | `economato/` | f_consumi_economato |
+| Consumi economato (singolo) | XLSX con Codice/Quantita/Euro | `economato/` | f_consumi_economato |
+| Consumi economato (consolidato) | Filename `SituazioneConsumi*` o sheet con `REPARTO` | `economato/` | f_consumi_economato (loader consolidato) |
 
 ### 📸 SNAPSHOT (sostituisce il precedente, DELETE-INSERT)
 
@@ -62,19 +64,21 @@ Il file più recente è l'unica verità. In BQ il vecchio viene cancellato e sos
 | Gasparotto budget | XLSX, sheet "Budget"+"Conto Economico" | `gasparotto/` | f_budget_mensile |
 | Piano finanziario | XLSX, sheet "Piano Finanziario" | `piani_finanziari/{SOC}/` | f_piano_finanziario_input |
 
-> **Nota 2026-04-09**: `f_movimenti_contabili` è APPEND di default ma ora supporta modalità SNAPSHOT-by-period via flag `--replace` nella pipeline `ingest_movimenti_contabili`. Vedi [ADR 0002](../adr/0002-snapshot-by-period-movimenti.md).
+> Le destinazioni canoniche sono dichiarate in `core/registry.yaml` (`category.dest_folder`). Aggiornare quel file è il modo corretto per modificare i path — il classifier le riusa.
 
 ---
 
 ## Cosa succede internamente
 
 1. **Apre il file** — CSV, XLS, XLSX, TXT
-2. **Legge header/colonne** — confronta con le firme note dei 10 tipi
+2. **Legge header/colonne** — confronta con le firme note dei 10 detector
 3. **Inferisce società** — cerca ORTI/INTUR nel nome file o nella directory padre
 4. **Inferisce banca** — se applicabile: pattern Cc# Esolver o nome banca nel filename
 5. **Rinomina** — formato canonico: `{SOC}_{TIPO}_{BANCA}_{YYYYMMDD}.{ext}`
-6. **Copia** — nella cartella datahub corretta (con `--route`)
-7. **Ingerisci** — lancia il pipeline specifico per il tipo (con `--ingest`)
+6. **Smista** (con `--route`) — `route_file()` copia il file nella cartella canonica:
+   - default: `rclone copyto` su Google Drive sotto `ingresso/{dest_folder}/{canonical_name}`
+   - per la categoria `banca` (e altre con `CACHE_MIRRORS`) duplica anche in un cache locale `~/.cache/hotelops/banche_staging/{SOC}/` per le pipeline che leggono da staging directory invece che dal datahub remoto
+7. **Ingerisci** (con `--ingest`) — `run_ingest()` ri-sincronizza il file da Drive al cache locale `~/.cache/hotelops/ingest_staging/` e poi lancia la pipeline specifica per il tipo (subprocess, timeout 300s)
 
 ## Rinomina canonica
 
@@ -92,21 +96,21 @@ Il file più recente è l'unica verità. In BQ il vecchio viene cancellato e sos
 
 ## Datahub — struttura target
 
+Tutto il materiale ingerito vive sotto `ingresso/`:
+
 ```
 hotelops_datahub/
-├── banche/{ORTI,INTUR}/                → f_banche_movimenti
-├── movimenti_contabili/{ORTI,INTUR}/   → f_movimenti_contabili
-├── schede_contabili/{ORTI,INTUR}/      → f_saldi_banca_snapshot
-├── partite_fornitori/{ORTI,INTUR}/     → f_partite_aperte_fornitori
-├── piani_finanziari/{ORTI,INTUR}/      → f_piano_finanziario_input
-├── accodamenti/ORTI/                   → f_accodamenti
-├── economato/                          → f_consumi_economato
-├── coperti/                            → f_coperti_giornalieri
-├── bilancino/{ORTI,INTUR}/             → f_bilancino
-├── gasparotto/                         → f_budget_mensile
-├── dimensioni/                         → d_* tables
-├── fatti/                              → Local fact CSV copies
-└── meta/                               → Pipeline manifests
+└── ingresso/
+    ├── homebanking/{ORTI,INTUR}/{MPS,SELLA,INTESA,BCP,MPS_KROSS}/  → f_banche_movimenti
+    ├── movimenti_contabili/{ORTI,INTUR}/                            → f_movimenti_contabili
+    ├── registro_banca_esolver/{ORTI,INTUR}/                         → f_saldi_banca_snapshot
+    ├── partite_fornitori/{ORTI,INTUR}/                              → f_partite_aperte_fornitori
+    ├── piani_finanziari/{ORTI,INTUR}/                               → f_piano_finanziario_input
+    ├── accodamenti/ORTI/                                            → f_accodamenti
+    ├── economato/                                                   → f_consumi_economato
+    ├── coperti/                                                     → f_coperti_giornalieri
+    ├── bilancino/{ORTI,INTUR}/                                      → f_bilancino
+    └── gasparotto/                                                  → f_budget_mensile
 ```
 
 ---
