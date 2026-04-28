@@ -415,6 +415,8 @@ def write_saldi_to_bq(
             log.info(f"  {r['data_snapshot']}: €{r['saldo_finale']:,.2f}")
         return len(rows_to_write)
 
+    from google.cloud import bigquery
+
     client = get_client()
 
     dates = [r["data_snapshot"] for r in rows_to_write]
@@ -428,11 +430,14 @@ def write_saldi_to_bq(
     client.query(delete_sql).result()
     log.info(f"Deleted existing snapshots for {societa_id}/{banca_id}")
 
-    # INSERT new rows
-    errors = client.insert_rows_json(BQ_TABLE, rows_to_write)
-    if errors:
-        log.error(f"BQ insert errors: {errors}")
-        return 0
+    # Batch load (no streaming buffer): evita il lock-out 30-90 min sui DELETE
+    # successivi quando la stessa tabella viene riscritta a breve distanza.
+    job_config = bigquery.LoadJobConfig(
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+        source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+    )
+    job = client.load_table_from_json(rows_to_write, BQ_TABLE, job_config=job_config)
+    job.result()
 
     log.info(f"Wrote {len(rows_to_write)} saldi to {BQ_TABLE}")
     return len(rows_to_write)
