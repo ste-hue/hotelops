@@ -55,14 +55,6 @@ try:
 except ImportError:
     HAS_OPENPYXL = False
 
-try:
-    from google.cloud import bigquery  # noqa: F401 — presence check
-
-    HAS_BQ = True
-except ImportError:
-    HAS_BQ = False
-
-from core.bq.client import get_client
 from core.config import PROJECT
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -389,58 +381,37 @@ def write_saldi_to_bq(
     banca_id: str,
     dry_run: bool = False,
 ) -> int:
-    """Write end-of-day saldi to f_saldi_banca_snapshot."""
+    """Write end-of-day saldi to f_saldi_banca_snapshot via the BQ gate."""
     if not saldi:
         log.warning("No saldi to write")
         return 0
 
-    if not HAS_BQ:
-        log.error("google-cloud-bigquery required")
-        return 0
+    from core.bq.write import bq_write_validated
+    from core.schemas import SaldoBancaSnapshotRow
 
-    rows_to_write = []
-    for d, saldo in sorted(saldi.items()):
-        rows_to_write.append(
-            {
-                "societa_id": societa_id,
-                "banca_id": banca_id,
-                "data_snapshot": d.isoformat(),
-                "saldo_finale": saldo,
-            }
+    rows = [
+        SaldoBancaSnapshotRow(
+            societa_id=societa_id,
+            banca_id=banca_id,
+            data_snapshot=d.isoformat(),
+            saldo_finale=saldo,
         )
+        for d, saldo in sorted(saldi.items())
+    ]
 
     if dry_run:
-        log.info(f"DRY RUN: {len(rows_to_write)} saldi for {societa_id}/{banca_id}")
-        for r in rows_to_write:
-            log.info(f"  {r['data_snapshot']}: €{r['saldo_finale']:,.2f}")
-        return len(rows_to_write)
+        log.info(f"DRY RUN: {len(rows)} saldi for {societa_id}/{banca_id}")
+        for r in rows:
+            log.info(f"  {r.data_snapshot}: €{r.saldo_finale:,.2f}")
+        return len(rows)
 
-    from google.cloud import bigquery
-
-    client = get_client()
-
-    dates = [r["data_snapshot"] for r in rows_to_write]
-    date_list = ", ".join(f"'{d}'" for d in dates)
-    delete_sql = f"""
-    DELETE FROM `{BQ_TABLE}`
-    WHERE societa_id = '{societa_id}'
-      AND banca_id = '{banca_id}'
-      AND CAST(data_snapshot AS STRING) IN ({date_list})
-    """
-    client.query(delete_sql).result()
-    log.info(f"Deleted existing snapshots for {societa_id}/{banca_id}")
-
-    # Batch load (no streaming buffer): evita il lock-out 30-90 min sui DELETE
-    # successivi quando la stessa tabella viene riscritta a breve distanza.
-    job_config = bigquery.LoadJobConfig(
-        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+    bq_write_validated(
+        BQ_TABLE,
+        rows,
+        mode="snapshot",
+        natural_key=["societa_id", "banca_id", "data_snapshot"],
     )
-    job = client.load_table_from_json(rows_to_write, BQ_TABLE, job_config=job_config)
-    job.result()
-
-    log.info(f"Wrote {len(rows_to_write)} saldi to {BQ_TABLE}")
-    return len(rows_to_write)
+    return len(rows)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -453,32 +424,39 @@ def process_file(
     dry_run: bool,
 ) -> int:
     """Process a single scheda contabile file."""
-    log.info(f"Processing: {filepath.name}")
+    from core.pipeline_run import PipelineRun
 
-    # Infer banca if not provided
-    if not banca_id:
-        banca_id = infer_banca_from_filename(filepath.name, societa_id)
+    with PipelineRun(
+        "ingest_scheda_contabile",
+        societa_id=societa_id,
+        file_sorgente=filepath.name,
+    ):
+        log.info(f"Processing: {filepath.name}")
+
+        # Infer banca if not provided
         if not banca_id:
-            log.error(
-                f"Cannot infer banca from filename: {filepath.name}. Use --banca."
-            )
+            banca_id = infer_banca_from_filename(filepath.name, societa_id)
+            if not banca_id:
+                log.error(
+                    f"Cannot infer banca from filename: {filepath.name}. Use --banca."
+                )
+                return 0
+            log.info(f"Inferred banca: {banca_id}")
+
+        rows = parse_scheda_contabile(filepath)
+        if not rows:
+            log.warning(f"No rows parsed from {filepath.name}")
             return 0
-        log.info(f"Inferred banca: {banca_id}")
 
-    rows = parse_scheda_contabile(filepath)
-    if not rows:
-        log.warning(f"No rows parsed from {filepath.name}")
-        return 0
+        log.info(
+            f"Parsed {len(rows)} movements, date range: "
+            f"{rows[0]['data_registrazione']} → {rows[-1]['data_registrazione']}"
+        )
 
-    log.info(
-        f"Parsed {len(rows)} movements, date range: "
-        f"{rows[0]['data_registrazione']} → {rows[-1]['data_registrazione']}"
-    )
+        daily_saldi = extract_daily_saldi(rows)
+        log.info(f"Extracted {len(daily_saldi)} end-of-day saldi")
 
-    daily_saldi = extract_daily_saldi(rows)
-    log.info(f"Extracted {len(daily_saldi)} end-of-day saldi")
-
-    return write_saldi_to_bq(daily_saldi, societa_id, banca_id, dry_run)
+        return write_saldi_to_bq(daily_saldi, societa_id, banca_id, dry_run)
 
 
 def main():
