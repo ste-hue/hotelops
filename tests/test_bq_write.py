@@ -6,7 +6,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import BaseModel
 
-from core.bq.write import SchemaViolationError, BigQueryInsertError, bq_write_validated
+from core.bq.write import (
+    BigQueryInsertError,
+    SchemaViolationError,
+    SerializationBoundaryError,
+    bq_write_validated,
+)
 from core.pipeline_run import PipelineRun
 
 
@@ -253,6 +258,33 @@ def test_model_dump_produces_json_serializable_dict(mock_get_client):
             "importo": "1234.56",
         }
     ]
+
+
+@patch("core.bq.write.get_client")
+def test_serialization_boundary_blocks_unserializable_dict(mock_get_client):
+    """Future regression guard: even if a Pydantic schema's model_dump returns
+    a dict json.dumps cannot handle, the gate raises BEFORE any BQ side-effect.
+
+    Critical for snapshot mode: a partial DELETE landing before the INSERT
+    crashes would leave the table half-wiped. The boundary probe runs after
+    validation, before mode dispatch — so DELETE never fires.
+    """
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+
+    rows = [FakeRow(societa_id="ORTI", n=1)]
+    # Simulate a future drift: model_dump returns a non-JSON-serializable dict
+    with patch.object(FakeRow, "model_dump", return_value={"x": object()}):
+        with pytest.raises(SerializationBoundaryError) as exc:
+            bq_write_validated(
+                "hotelops.f_x", rows, mode="snapshot", natural_key=["societa_id"]
+            )
+
+    assert exc.value.table_id == "hotelops.f_x"
+    assert len(exc.value.failures) == 1
+    # Crucially: no BQ side-effects fired (no DELETE, no INSERT)
+    mock_client.query.assert_not_called()
+    mock_client.load_table_from_json.assert_not_called()
 
 
 def test_lineage_warns_when_no_active_run(caplog):

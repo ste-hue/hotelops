@@ -9,6 +9,7 @@ See: docs/superpowers/specs/2026-04-28-bq-write-validated-design.md
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Literal
 
@@ -49,6 +50,32 @@ class BigQueryInsertError(Exception):
         super().__init__(f"BigQuery insert failed for {table_id}: {errors[:3]}")
 
 
+class SerializationBoundaryError(Exception):
+    """Raised when a Pydantic-validated row is not JSON-serializable.
+
+    Encodes the system invariant: every Canonical→External write must round-trip
+    through ``json.dumps(row, ensure_ascii=False)`` — exactly what
+    ``bigquery.Client.load_table_from_json`` does internally, with no default
+    handler. We probe per-row BEFORE the load call so a future regression
+    surfaces here with a row-level message instead of an opaque client crash
+    after a partial DELETE has already executed (snapshot mode).
+
+    Carries the table id and a list of (row_index, row_repr, error_message)
+    triples, identical shape to SchemaViolationError.
+    """
+
+    def __init__(self, table_id: str, failures: list[tuple[int, Any, str]]):
+        self.table_id = table_id
+        self.failures = failures
+        n = len(failures)
+        head = "\n".join(f"  row {idx}: {err}" for idx, _row, err in failures[:5])
+        tail = f"\n  ... and {n - 5} more" if n > 5 else ""
+        super().__init__(
+            f"Serialization boundary check failed for {n} rows in {table_id}\n"
+            f"{head}{tail}"
+        )
+
+
 WriteMode = Literal["append", "snapshot"]
 
 
@@ -75,9 +102,18 @@ def bq_write_validated(
     run is present, the function logs a warning and writes anyway with
     lineage=unknown.
 
+    Boundary invariant: every row in the batch must be json-serializable
+    via ``json.dumps(row, ensure_ascii=False)`` — the same call
+    ``load_table_from_json`` makes internally. The gate probes this BEFORE
+    any BQ side-effect; a row that survives Pydantic validation but breaks
+    json serialization raises SerializationBoundaryError, not a partial
+    DELETE on the snapshot path.
+
     Raises:
         ValueError: mode="snapshot" but natural_key is None or empty.
-        SchemaViolationError: validation failed on at least one row.
+        SchemaViolationError: Pydantic validation failed on at least one row.
+        SerializationBoundaryError: a row's model_dump output is not
+                                    json-serializable.
         BigQueryInsertError: BQ load job returned row-level errors.
     """
     # 1. Empty batch is a documented no-op — pipelines fuori stagione,
@@ -125,6 +161,23 @@ def bq_write_validated(
 
     if failures:
         raise SchemaViolationError(table, failures)
+
+    # 3.5. Serialization boundary check (system invariant).
+    # All Canonical→External writes must round-trip through json.dumps with NO
+    # default handler — the same call load_table_from_json makes internally.
+    # We probe here, BEFORE any BQ side-effect, so a future regression surfaces
+    # as SerializationBoundaryError with row-level context instead of:
+    #   (a) an opaque TypeError from deep in the BQ client lib, or
+    #   (b) — worse — a snapshot DELETE landing before the INSERT crashes,
+    #         leaving the table half-wiped.
+    serialization_failures: list[tuple[int, Any, str]] = []
+    for idx, row_dict in enumerate(rows_dict):
+        try:
+            json.dumps(row_dict, ensure_ascii=False)
+        except (TypeError, ValueError) as e:
+            serialization_failures.append((idx, row_dict, str(e)))
+    if serialization_failures:
+        raise SerializationBoundaryError(table, serialization_failures)
 
     # 4. Lineage discovery (ambient via ContextVar — log-only fallback).
     from core.pipeline_run import PipelineRun
