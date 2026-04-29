@@ -29,7 +29,7 @@ from google.cloud import bigquery
 
 from core.bq.client import get_client
 from core.config import PROJECT
-from core.schemas import PartitaApertaFornitoreRow, validate_batch
+from core.schemas import PartitaApertaFornitoreRow
 
 BQ_TABLE = f"{PROJECT}.hotelops.f_partite_aperte_fornitori"
 
@@ -101,7 +101,9 @@ def parse_situazione_partite(
     elif isinstance(data_snapshot_raw, date):
         data_snapshot = data_snapshot_raw
     else:
-        raise ValueError(f"Cannot parse snapshot date from C{metadata_row}: {data_snapshot_raw}")
+        raise ValueError(
+            f"Cannot parse snapshot date from C{metadata_row}: {data_snapshot_raw}"
+        )
 
     logger.info(f"Parsing: {filepath.name}")
     logger.info(f"  Società: {societa_id}, Snapshot: {data_snapshot}")
@@ -245,50 +247,36 @@ def create_table_if_needed(client: bigquery.Client):
 
 
 def load_to_bq(client: bigquery.Client, rows: list[dict], dry_run: bool = False):
-    """DELETE-INSERT snapshot into BigQuery.
+    """Snapshot insert into BigQuery via the gate.
 
-    Usa load_table_from_json (batch) invece di insert_rows_json (streaming):
-    i batch load scrivono direttamente nella tabella e non passano dallo
-    streaming buffer, quindi il DELETE-INSERT su run successivi non incappa
-    nel limite "DELETE over rows in streaming buffer" di BigQuery (finestra
-    di 30-90 min).
+    The natural_key (societa_id, data_snapshot) preserves snapshots from
+    the other società on the same day, and snapshots of this società on
+    other days.
     """
     if not rows:
         logger.warning("No rows to load")
         return
 
+    from core.bq.write import bq_write_validated
+
     societa_id = rows[0]["societa_id"]
     data_snapshot = rows[0]["data_snapshot"]
+    pydantic_rows = [PartitaApertaFornitoreRow(**r) for r in rows]
 
     if dry_run:
         logger.info(
-            f"DRY RUN: would load {len(rows)} rows for {societa_id} @ {data_snapshot}"
+            f"DRY RUN: would load {len(pydantic_rows)} rows for "
+            f"{societa_id} @ {data_snapshot}"
         )
         _print_summary(rows)
         return
 
     create_table_if_needed(client)
-
-    # DELETE existing snapshot for this societa + date
-    delete_sql = f"""
-    DELETE FROM `{BQ_TABLE}`
-    WHERE societa_id = '{societa_id}'
-      AND data_snapshot = DATE('{data_snapshot}')
-    """
-    client.query(delete_sql).result()
-    logger.info(f"  Deleted existing snapshot for {societa_id} @ {data_snapshot}")
-
-    # Batch load (no streaming buffer)
-    job_config = bigquery.LoadJobConfig(
-        schema=BQ_SCHEMA,
-        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
-    )
-    job = client.load_table_from_json(rows, BQ_TABLE, job_config=job_config)
-    job.result()
-
-    logger.info(
-        f"  ✓ Loaded {len(rows)} partite aperte for {societa_id} @ {data_snapshot}"
+    bq_write_validated(
+        BQ_TABLE,
+        pydantic_rows,
+        mode="snapshot",
+        natural_key=["societa_id", "data_snapshot"],
     )
     _print_summary(rows)
 
@@ -339,23 +327,26 @@ def main():
         logger.error(f"File not found: {filepath}")
         sys.exit(1)
 
-    # Parse
-    rows = parse_situazione_partite(filepath, societa_override=args.societa)
+    from core.pipeline_run import PipelineRun
 
-    if not rows:
-        logger.warning("No partite found in file")
-        sys.exit(0)
+    with PipelineRun(
+        "ingest_partite_aperte",
+        societa_id=args.societa.upper() if args.societa else None,
+        file_sorgente=filepath.name,
+    ):
+        # Parse
+        rows = parse_situazione_partite(filepath, societa_override=args.societa)
 
-    # Validate
-    validate_batch(rows, PartitaApertaFornitoreRow, context="Partite Aperte Fornitori")
-    logger.info(f"  ✓ {len(rows)} rows validated")
+        if not rows:
+            logger.warning("No partite found in file")
+            sys.exit(0)
 
-    # Load
-    if args.dry_run:
-        load_to_bq(None, rows, dry_run=True)
-    else:
-        client = get_client()
-        load_to_bq(client, rows)
+        # Load (gate validates via PartitaApertaFornitoreRow)
+        if args.dry_run:
+            load_to_bq(None, rows, dry_run=True)
+        else:
+            client = get_client()
+            load_to_bq(client, rows)
 
 
 if __name__ == "__main__":
