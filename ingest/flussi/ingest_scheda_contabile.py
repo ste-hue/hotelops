@@ -393,7 +393,7 @@ def write_saldi_to_bq(
         SaldoBancaSnapshotRow(
             societa_id=societa_id,
             banca_id=banca_id,
-            data_snapshot=d.isoformat(),
+            data_snapshot=d,
             saldo_finale=saldo,
         )
         for d, saldo in sorted(saldi.items())

@@ -177,7 +177,7 @@ class SaldoBancaSnapshotRow(BaseModel):
 
     societa_id: SocietaId
     banca_id: str
-    data_snapshot: str  # ISO date
+    data_snapshot: date
     saldo_finale: float
 
 
