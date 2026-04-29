@@ -43,10 +43,12 @@ def filter_new_rows_by_hash(
 
     new_rows = [r for r in rows if getattr(r, hash_column) not in existing]
     log.info(
-        "filter_new_rows_by_hash: %s — %d input, %d existing, %d new",
+        "filter_new_rows_by_hash: %s — %d input, %d existing in table, "
+        "%d already-present, %d new",
         table,
         len(rows),
-        len(existing & {getattr(r, hash_column) for r in rows}),
+        len(existing),
+        len(rows) - len(new_rows),
         len(new_rows),
     )
     return new_rows
