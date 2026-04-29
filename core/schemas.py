@@ -11,7 +11,7 @@ Usage:
 from __future__ import annotations
 
 import hashlib
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal, Optional, Union
 
@@ -528,6 +528,31 @@ class ApifyRunRow(BaseModel):
         if v < 0:
             raise ValueError(f"n_items negativo: {v}")
         return v
+
+
+# ── f_coperti_giornalieri ────────────────────────────────────────────────────
+
+
+class CopertoGiornalieroRow(BaseModel):
+    """Schema for f_coperti_giornalieri.
+
+    natural_key for SNAPSHOT writes is hash_riga (computed from societa,
+    data_servizio, tipo_pasto, tipo_ospite, business_unit_id by the
+    pipeline). Stored as a column rather than reconstructed at write time
+    so back-fill / debug is possible.
+    """
+
+    societa_id: SocietaId
+    anno: int
+    mese: int
+    data_servizio: date
+    tipo_pasto: str
+    tipo_ospite: str
+    business_unit_id: str | None = None
+    n_coperti: int
+    fonte: str | None = None
+    hash_riga: str
+    data_caricamento: datetime
 
 
 # ── projects (event-sourced Step 1) ──────────────────────────────────────────

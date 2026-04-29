@@ -546,50 +546,49 @@ def load_to_bq(rows: list[dict], dry_run: bool, replace: bool = False) -> None:
                 len(rows),
             )
             return
+        # Full wipe + reload — bypass the gate, the pipeline owns this case.
+        # WRITE_TRUNCATE is intentionally out of bq_write_validated's scope.
         delete_q = f"DELETE FROM `{BQ_TABLE_FULL}` WHERE TRUE"
         log.info("DELETE-INSERT: cancello tutti i dati esistenti…")
         client.query(delete_q).result()
-        new_rows = rows
-    else:
-        # Surgical DELETE-INSERT by natural key: cancello solo i record le cui
-        # chiavi naturali sono presenti nel batch corrente, lasciando intatto
-        # tutto il resto. Sostituzione idempotente — il foglio è source of truth
-        # per le date/pasti/ospiti che tocca.
-        batch_hashes = {r["hash_riga"] for r in rows}
-        log.info(
-            "Righe da caricare: %d (chiavi naturali distinte: %d)",
-            len(rows),
-            len(batch_hashes),
+
+        rows_to_load = [
+            {k: v for k, v in r.items() if not k.startswith("_")} for r in rows
+        ]
+        job_config = bigquery.LoadJobConfig(
+            schema=BQ_SCHEMA,
+            write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+            source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
         )
+        job = client.load_table_from_json(
+            rows_to_load, BQ_TABLE_FULL, job_config=job_config
+        )
+        job.result()
+        log.info("Caricato: %d righe → %s", len(rows_to_load), BQ_TABLE_FULL)
+        return
 
-        if dry_run:
-            log.info("[DRY RUN] Avrei sostituito %d record.", len(batch_hashes))
-            return
-
-        # DELETE in chunks per evitare query troppo lunghe
-        hash_list = list(batch_hashes)
-        chunk_size = 1000
-        for i in range(0, len(hash_list), chunk_size):
-            chunk = hash_list[i : i + chunk_size]
-            in_clause = ", ".join(f"'{h}'" for h in chunk)
-            delete_q = (
-                f"DELETE FROM `{BQ_TABLE_FULL}` WHERE hash_riga IN ({in_clause})"
-            )
-            client.query(delete_q).result()
-        log.info("Cancellati record con chiavi naturali in batch.")
-        new_rows = rows
-
-    # Strip internal-only fields before insert
-    rows_to_load = [{k: v for k, v in r.items() if not k.startswith("_")} for r in new_rows]
-
-    job_config = bigquery.LoadJobConfig(
-        schema=BQ_SCHEMA,
-        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+    # Non-replace: surgical write through the gate.
+    batch_hashes = {r["hash_riga"] for r in rows}
+    log.info(
+        "Righe da caricare: %d (chiavi naturali distinte: %d)",
+        len(rows),
+        len(batch_hashes),
     )
-    job = client.load_table_from_json(rows_to_load, BQ_TABLE_FULL, job_config=job_config)
-    job.result()
-    log.info("Caricato: %d righe → %s", len(rows_to_load), BQ_TABLE_FULL)
+
+    if dry_run:
+        log.info("[DRY RUN] Avrei sostituito %d record.", len(batch_hashes))
+        return
+
+    from core.bq.write import bq_write_validated
+    from core.schemas import CopertoGiornalieroRow
+
+    pydantic_rows = [CopertoGiornalieroRow(**r) for r in rows]
+    bq_write_validated(
+        BQ_TABLE_FULL,
+        pydantic_rows,
+        mode="snapshot",
+        natural_key=["hash_riga"],
+    )
 
 
 # ── Quality summary ────────────────────────────────────────────────────────────
@@ -667,45 +666,53 @@ def main():
 
     setup_logging("ingest_coperti", Path(__file__).parent / "logs")
 
-    ts_now = datetime.now(timezone.utc)
+    file_label = args.file or args.gsheet or "datahub_coperti"
+    from core.pipeline_run import PipelineRun
 
-    if args.gsheet:
-        # Download from Google Sheet via rclone
-        try:
-            xlsx_path = fetch_gsheet(args.gsheet)
-        except RuntimeError as e:
-            log.error("%s", e)
-            sys.exit(1)
-        rows = parse_xlsx_file(xlsx_path, args.societa, ts_now)
-    elif args.file:
-        xlsx_path = Path(args.file)
-        if not xlsx_path.exists():
-            log.error("File non trovato: %s", xlsx_path)
-            sys.exit(1)
-        rows = parse_xlsx_file(xlsx_path, args.societa, ts_now)
-    else:
-        source_dir = (
-            Path(args.source) if args.source else Path(args.datahub) / "coperti"
-        )
-        log.info("Sorgente: %s", source_dir)
-        rows = collect_all_rows(source_dir, args.societa)
+    with PipelineRun(
+        "ingest_coperti",
+        societa_id=args.societa,
+        file_sorgente=file_label,
+    ):
+        ts_now = datetime.now(timezone.utc)
 
-    if not rows:
-        log.warning("Nessuna riga da caricare.")
-        sys.exit(0)
+        if args.gsheet:
+            # Download from Google Sheet via rclone
+            try:
+                xlsx_path = fetch_gsheet(args.gsheet)
+            except RuntimeError as e:
+                log.error("%s", e)
+                sys.exit(1)
+            rows = parse_xlsx_file(xlsx_path, args.societa, ts_now)
+        elif args.file:
+            xlsx_path = Path(args.file)
+            if not xlsx_path.exists():
+                log.error("File non trovato: %s", xlsx_path)
+                sys.exit(1)
+            rows = parse_xlsx_file(xlsx_path, args.societa, ts_now)
+        else:
+            source_dir = (
+                Path(args.source) if args.source else Path(args.datahub) / "coperti"
+            )
+            log.info("Sorgente: %s", source_dir)
+            rows = collect_all_rows(source_dir, args.societa)
 
-    pre_dedup = len(rows)
-    rows = dedup_latest_wins(rows)
-    if len(rows) < pre_dedup:
-        log.info(
-            "Dedup latest-wins: %d → %d righe (%d submission collassate)",
-            pre_dedup,
-            len(rows),
-            pre_dedup - len(rows),
-        )
+        if not rows:
+            log.warning("Nessuna riga da caricare.")
+            sys.exit(0)
 
-    load_to_bq(rows, dry_run=args.dry_run, replace=args.replace)
-    quality_summary(rows)
+        pre_dedup = len(rows)
+        rows = dedup_latest_wins(rows)
+        if len(rows) < pre_dedup:
+            log.info(
+                "Dedup latest-wins: %d → %d righe (%d submission collassate)",
+                pre_dedup,
+                len(rows),
+                pre_dedup - len(rows),
+            )
+
+        load_to_bq(rows, dry_run=args.dry_run, replace=args.replace)
+        quality_summary(rows)
 
 
 if __name__ == "__main__":
