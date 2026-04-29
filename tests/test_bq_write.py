@@ -1,3 +1,6 @@
+import json
+from datetime import date, datetime
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -199,6 +202,57 @@ def test_lineage_populated_from_active_pipeline_run(
     assert record.run_id == run.run_id
     assert record.file_sorgente == "my_file.xlsx"
     assert record.mode == "append"
+
+
+class RowWithDate(BaseModel):
+    societa_id: str
+    data_snapshot: date
+    creato_il: datetime
+    importo: Decimal
+
+
+@patch("core.bq.write.get_client")
+def test_model_dump_produces_json_serializable_dict(mock_get_client):
+    """Regression: load_table_from_json calls json.dumps WITHOUT a default
+    handler, so model_dump() must coerce date/datetime/Decimal to JSON
+    primitives upstream. Default mode='python' would crash with
+    'Object of type date is not JSON serializable'.
+    """
+    captured: list[dict] = []
+
+    def fake_load(rows_dict, table, job_config=None):
+        # Mirror google.cloud.bigquery.Client.load_table_from_json:
+        # it serializes each row with json.dumps(item, ensure_ascii=False)
+        # — no default handler — and would crash on raw date objects.
+        for item in rows_dict:
+            json.dumps(item, ensure_ascii=False)
+        captured.extend(rows_dict)
+        job = MagicMock()
+        job.result.return_value = None
+        return job
+
+    mock_client = MagicMock()
+    mock_client.load_table_from_json.side_effect = fake_load
+    mock_get_client.return_value = mock_client
+
+    rows = [
+        RowWithDate(
+            societa_id="ORTI",
+            data_snapshot=date(2026, 4, 28),
+            creato_il=datetime(2026, 4, 28, 14, 30, 0),
+            importo=Decimal("1234.56"),
+        )
+    ]
+    bq_write_validated("hotelops.f_x", rows, mode="append")
+
+    assert captured == [
+        {
+            "societa_id": "ORTI",
+            "data_snapshot": "2026-04-28",
+            "creato_il": "2026-04-28T14:30:00",
+            "importo": "1234.56",
+        }
+    ]
 
 
 def test_lineage_warns_when_no_active_run(caplog):

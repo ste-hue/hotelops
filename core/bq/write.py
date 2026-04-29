@@ -117,7 +117,11 @@ def bq_write_validated(
                 )
             )
             continue
-        rows_dict.append(row.model_dump())
+        # mode="json" coerces date/datetime/Decimal/UUID to JSON-serializable
+        # primitives (ISO strings, floats). Critical: load_table_from_json calls
+        # json.dumps WITHOUT a default handler, so default mode="python" would
+        # crash on any schema with a `date` field (e.g. PartitaApertaFornitoreRow).
+        rows_dict.append(row.model_dump(mode="json"))
 
     if failures:
         raise SchemaViolationError(table, failures)
