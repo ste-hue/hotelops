@@ -12,11 +12,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > - Parking lot Sprint 3: file `Stampa Consumi` (giornaliero), file `Ristocube (1)` (consumi giornalieri €), file `Ristocube (4)` (menu engineering: food cost per piatto). `d_prezzi_pensione` da definire (TBD se serve, dato che File 3 ha già segmento `ZRISTINT/EST/RES` per pensione).
 > - Per il rollout dei codici Segmento Cliente: glossario interno richiesto (vuoto, INLE, INTUI, GRLE, GRBU, GRWE, GRSE, FERR25, ZRISTINT, ZRISTEST, ZRISRES). Decodifica downstream nelle views/dashboard.
 
-> **For AI agents**: before touching code or answering, read the Obsidian vault instructions in this order:
-> 1. `<vault>/hotelops/INVARIANTS.md` — la costituzione (I1–I8, canonical truth per concept).
-> 2. `<vault>/hotelops/AI_INSTRUCTIONS.md` — layer model, canonical truth registry, operational loop, anti-goals.
+> **For AI agents**: ground truth = repo + BigQuery schema. Read in this order before non-trivial work:
+> 1. `docs/architecture/INVARIANTS.md` — la costituzione (I1–I8, canonical per concept). [migrato dal vault il 2026-04-30]
+> 2. `docs/architecture/AI_INSTRUCTIONS.md` — layer model, canonical truth registry, operational loop, anti-goals.
+> 3. `docs/architecture/LE_3_DIMENSIONI.md` — il concetto temporale più importante del sistema.
+> 4. `CLAUDE.md` (this file) — repo mechanics: commands, schemas, pipeline internals.
 >
-> `CLAUDE.md` (this file) covers **repo mechanics**: commands, schemas, pipeline internals. Vocabulary, invariants, and the operational loop live in the vault.
+> **Goal di lungo termine**: HotelOps è un **digital twin** delle vere operazioni del business. 3 layer:
+> - **Code** (`core/`, `ingest/`, `condges/`, `reviews/`): come opera il twin.
+> - **BigQuery**: cosa il twin osserva.
+> - **Vault `<vault>/HotelOps/`**: meta-knowledge umano della realtà operativa che il twin riflette (people, companies, banks, loans, departments, stories). **Non canonical per fatti tecnici** — può essere stale. Verifica sempre con repo + BQ + utente.
 
 ## Project Overview
 
