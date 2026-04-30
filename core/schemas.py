@@ -239,6 +239,48 @@ class PartitaApertaFornitoreRow(BaseModel):
     file_sorgente: str
 
 
+# ── f_vendite_fb ──────────────────────────────────────────────────────────────
+
+
+class VenditaFbRow(BaseModel):
+    """Schema for f_vendite_fb — POS F&B sales at article × day × sala level.
+
+    Source: HotelCube/POS export (XLSX), columns Sala/Cod Articolo/Tipo Piatto/
+    Qtà/Importo/Sconto/Netto. Granularità giorno × sala × articolo.
+
+    Pattern: APPEND + hash_riga dedup. Idempotent re-ingest of same export
+    via filter_new_rows_by_hash.
+
+    Lato ricavo del food cost. Si incrocia con f_consumi_economato (lato
+    costo) tramite mese × sala/reparto o mese × tipo_piatto/categoria.
+    """
+
+    hash_riga: str
+    societa_id: SocietaId
+    business_unit_id: BusinessUnitId
+    anno: int
+    mese: int
+    data_servizio: date
+    sala: str  # BAR / RISTO_LUNCH / RISTO_DINNER (normalizzato)
+    codice_articolo: str
+    descrizione: str
+    tipo_piatto: str  # BIRRE, COCKTAIL, VINI, CAFFETTERIA, ...
+    sub_tipo_piatto: Optional[str] = None
+    quantita: float
+    importo_lordo: float
+    sconto: Optional[float] = None
+    importo_netto: float  # ← metric for food cost ratio
+    file_sorgente: str
+    data_caricamento: datetime
+
+    @field_validator("mese")
+    @classmethod
+    def mese_range(cls, v: int) -> int:
+        if not 1 <= v <= 12:
+            raise ValueError(f"mese fuori range: {v}")
+        return v
+
+
 # ── f_ricavi_storici ─────────────────────────────────────────────────────────
 
 
