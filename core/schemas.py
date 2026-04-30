@@ -11,7 +11,7 @@ Usage:
 from __future__ import annotations
 
 import hashlib
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal, Optional, Union
 
@@ -28,8 +28,10 @@ Sezione = Literal["ENTRATE", "USCITE"]
 
 # ── f_budget_mensile ─────────────────────────────────────────────────────────
 
+
 class BudgetMensileRow(BaseModel):
     """Schema for f_budget_mensile rows."""
+
     societa_id: SocietaId
     anno: int
     mese: int
@@ -59,8 +61,10 @@ class BudgetMensileRow(BaseModel):
 
 # ── f_piano_finanziario_input ────────────────────────────────────────────────
 
+
 class PianoFinanziarioInputRow(BaseModel):
     """Schema for f_piano_finanziario_input rows."""
+
     hash_riga: str
     societa_id: SocietaId
     voce_id: str
@@ -89,8 +93,10 @@ class PianoFinanziarioInputRow(BaseModel):
 
 # ── f_movimenti_contabili ────────────────────────────────────────────────────
 
+
 class MovimentoContabileRow(BaseModel):
     """Schema for f_movimenti_contabili rows."""
+
     hash_riga: str
     societa_id: SocietaId
     cod_conto: str
@@ -125,8 +131,10 @@ class MovimentoContabileRow(BaseModel):
 
 # ── f_banche_movimenti ───────────────────────────────────────────────────────
 
+
 class BancaMovimentoRow(BaseModel):
     """Schema for f_banche_movimenti rows."""
+
     hash_riga: str
     societa_id: SocietaId
     banca_id: str
@@ -157,7 +165,24 @@ class BancaMovimentoRow(BaseModel):
     riga_sorgente: Optional[int] = None
 
 
+# ── f_saldi_banca_snapshot ───────────────────────────────────────────────────
+
+
+class SaldoBancaSnapshotRow(BaseModel):
+    """Schema for f_saldi_banca_snapshot — daily running balance per banca.
+
+    Sourced from Esolver scheda contabile (running saldo for the fiscal year,
+    not absolute bank balance). One row per (societa, banca, day).
+    """
+
+    societa_id: SocietaId
+    banca_id: str
+    data_snapshot: date
+    saldo_finale: float
+
+
 # ── f_chiusura_mensile ────────────────────────────────────────────────────────
+
 
 class ChiusuraMensileRow(BaseModel):
     """Schema for f_chiusura_mensile — monthly close snapshot.
@@ -165,6 +190,7 @@ class ChiusuraMensileRow(BaseModel):
     Saves the forecast vs actual delta at close time, so prediction
     accuracy can be tracked over time. Once written, never overwritten.
     """
+
     societa_id: SocietaId
     anno: int
     mese: int
@@ -188,6 +214,7 @@ class ChiusuraMensileRow(BaseModel):
 
 # ── f_partite_aperte_fornitori ────────────────────────────────────────────────
 
+
 class PartitaApertaFornitoreRow(BaseModel):
     """Schema for f_partite_aperte_fornitori — snapshot of open payables.
 
@@ -195,6 +222,7 @@ class PartitaApertaFornitoreRow(BaseModel):
     "Situazione partite sintetica per fornitori".
     Pattern: DELETE-INSERT per societa_id + data_snapshot.
     """
+
     societa_id: SocietaId
     data_snapshot: date
     codice_fornitore: int
@@ -213,12 +241,14 @@ class PartitaApertaFornitoreRow(BaseModel):
 
 # ── f_ricavi_storici ─────────────────────────────────────────────────────────
 
+
 class RicaviStoriciRow(BaseModel):
     """Schema for f_ricavi_storici — historical revenue by BU and month.
 
     Source: Riepilogo Entrate XLSX from Antonio (2023-2025).
     Pattern: APPEND + hash_riga dedup.
     """
+
     societa_id: SocietaId
     business_unit_id: BusinessUnitId
     anno: int
@@ -238,6 +268,7 @@ class RicaviStoriciRow(BaseModel):
 
 # ── d_coefficienti_stagionalita ──────────────────────────────────────────────
 
+
 class CoefficienteStagionalitaRow(BaseModel):
     """Schema for d_coefficienti_stagionalita — monthly seasonality weights.
 
@@ -245,6 +276,7 @@ class CoefficienteStagionalitaRow(BaseModel):
     Sum of 12 months' coefficients per BU = 12.0.
     Source: computed from f_ricavi_storici (2023-2025 weighted average).
     """
+
     societa_id: SocietaId
     business_unit_id: BusinessUnitId
     mese: int
@@ -270,12 +302,14 @@ class CoefficienteStagionalitaRow(BaseModel):
 
 # ── d_anagrafica_fornitori ──────────────────────────────────────────────────
 
+
 class AnagraficaFornitoreRow(BaseModel):
     """Schema for d_anagrafica_fornitori — Esolver supplier master data.
 
     Source of truth for supplier identity. Loaded from Esolver anagrafica export.
     Pattern: WRITE_TRUNCATE (full reload).
     """
+
     codice_fornitore: int
     ragione_sociale: str
     partita_iva: Optional[str] = None
@@ -291,6 +325,7 @@ class AnagraficaFornitoreRow(BaseModel):
 
 TipoMapping = Literal["FORNITORE", "CATEGORIA"]
 
+
 class MappingPianoFinanziarioRow(BaseModel):
     """Schema for d_mapping_piano_finanziario — maps PF sub-items to Esolver codes.
 
@@ -301,6 +336,7 @@ class MappingPianoFinanziarioRow(BaseModel):
     Per-società: ORTI and INTUR have different suppliers and sub-items.
     Pattern: WRITE_TRUNCATE (full reload from CSV).
     """
+
     societa_id: SocietaId
     voce_id: str
     sotto_voce: str
@@ -319,6 +355,7 @@ class MappingPianoFinanziarioRow(BaseModel):
 
 # ── Validation helper ────────────────────────────────────────────────────────
 
+
 class SchemaViolationError(Exception):
     """Raised when batch validation fails."""
 
@@ -329,6 +366,7 @@ class PmsStatisticheRow(BaseModel):
     Source: HotelCube PMS Dashboard Manager (daily export per BU).
     Daily granularity. BU detected from Camere Totali signature.
     """
+
     societa_id: SocietaId
     business_unit_id: str
     data: str  # YYYY-MM-DD
@@ -361,6 +399,7 @@ class CoefficienteConsumoRow(BaseModel):
     Source: Consumption Coefficients 2025.xlsx (from economato data + pernottamenti).
     One row per product × department × month.
     """
+
     societa_id: SocietaId
     anno: int
     mese: int
@@ -389,8 +428,15 @@ class CoefficienteConsumoRow(BaseModel):
 
 PiattaformaReview = Literal["BOOKING", "TRIPADVISOR", "GOOGLE", "EXPEDIA", "TRIP"]
 CategoriaNlp = Literal[
-    "PULIZIA", "CIBO", "STAFF", "STRUTTURA", "POSIZIONE",
-    "RUMORE", "PREZZO", "WIFI", "GENERICA",
+    "PULIZIA",
+    "CIBO",
+    "STAFF",
+    "STRUTTURA",
+    "POSIZIONE",
+    "RUMORE",
+    "PREZZO",
+    "WIFI",
+    "GENERICA",
 ]
 SentimentNlp = Literal["POSITIVO", "NEGATIVO", "MISTO"]
 TipoViaggio = Literal["COPPIA", "FAMIGLIA", "BUSINESS", "SOLO", "AMICI"]
@@ -402,6 +448,7 @@ class ReviewRow(BaseModel):
     Source: Apify scrapers (Booking, TripAdvisor, Google, Expedia).
     Pattern: APPEND + review_hash dedup.
     """
+
     review_hash: str
     piattaforma: PiattaformaReview
     review_id: str
@@ -451,12 +498,14 @@ class ReviewRow(BaseModel):
 
 # ── f_apify_runs ─────────────────────────────────────────────────────────────
 
+
 class ApifyRunRow(BaseModel):
     """Schema for f_apify_runs — one row per Apify actor run (cost observability).
 
     Source: reviews/scrape.py after each client.actor().call().
     Pattern: APPEND (no dedup — run_id is unique per Apify invocation).
     """
+
     run_id: str
     piattaforma: PiattaformaReview
     business_unit_id: BusinessUnitId
@@ -479,6 +528,31 @@ class ApifyRunRow(BaseModel):
         if v < 0:
             raise ValueError(f"n_items negativo: {v}")
         return v
+
+
+# ── f_coperti_giornalieri ────────────────────────────────────────────────────
+
+
+class CopertoGiornalieroRow(BaseModel):
+    """Schema for f_coperti_giornalieri.
+
+    natural_key for SNAPSHOT writes is hash_riga (computed from societa,
+    data_servizio, tipo_pasto, tipo_ospite, business_unit_id by the
+    pipeline). Stored as a column rather than reconstructed at write time
+    so back-fill / debug is possible.
+    """
+
+    societa_id: SocietaId
+    anno: int
+    mese: int
+    data_servizio: date
+    tipo_pasto: str
+    tipo_ospite: str
+    business_unit_id: str | None = None
+    n_coperti: int
+    fonte: str | None = None
+    hash_riga: str
+    data_caricamento: datetime
 
 
 # ── projects (event-sourced Step 1) ──────────────────────────────────────────
@@ -590,7 +664,9 @@ class ProgettoVoce(BaseModel):
     categoria: str  # stringa libera: EDILE, IMPIANTI_EL, OMBRELLONI, ...
     qta: Optional[Decimal] = None
     unita: Optional[str] = None  # pz, mq, cad, set
-    fornitore_id: Optional[str] = None  # FK d_anagrafica_fornitori, popolato alla SCELTA
+    fornitore_id: Optional[str] = (
+        None  # FK d_anagrafica_fornitori, popolato alla SCELTA
+    )
     societa_pagante_id: SocietaId  # default INTUR, ORTI per opex
     note: Optional[str] = None
 
@@ -642,6 +718,7 @@ class PipelineRunRow(BaseModel):
     "is any pipeline silently dead?". Complementary to f_apify_runs
     (one row per actor.call() — cost observability).
     """
+
     run_id: str
     pipeline_name: str
     started_at: str  # ISO timestamp
@@ -681,9 +758,7 @@ def validate_batch(
         try:
             model(**row)
         except Exception as e:
-            raise SchemaViolationError(
-                f"{context} riga {i}: {e}"
-            ) from e
+            raise SchemaViolationError(f"{context} riga {i}: {e}") from e
     return rows
 
 

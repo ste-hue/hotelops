@@ -178,3 +178,43 @@ class TestPipelineRun:
 
         run = pipeline_with_early_return()
         assert run.status == "OK"
+
+
+def test_pipeline_run_file_sorgente_attribute():
+    from core.pipeline_run import PipelineRun
+
+    run = PipelineRun("p", file_sorgente="ORTI_x.xlsx")
+    assert run.file_sorgente == "ORTI_x.xlsx"
+
+
+def test_pipeline_run_file_sorgente_default_none():
+    from core.pipeline_run import PipelineRun
+
+    run = PipelineRun("p")
+    assert run.file_sorgente is None
+
+
+def test_get_current_returns_none_outside_context():
+    from core.pipeline_run import PipelineRun
+
+    assert PipelineRun.get_current() is None
+
+
+def test_get_current_returns_active_run_inside_context():
+    from core.pipeline_run import PipelineRun
+
+    with patch.object(PipelineRun, "_insert_final"):
+        with PipelineRun("p1") as r1:
+            assert PipelineRun.get_current() is r1
+
+
+def test_get_current_handles_nested_contexts():
+    from core.pipeline_run import PipelineRun
+
+    with patch.object(PipelineRun, "_insert_final"):
+        with PipelineRun("outer") as outer:
+            assert PipelineRun.get_current() is outer
+            with PipelineRun("inner") as inner:
+                assert PipelineRun.get_current() is inner
+            assert PipelineRun.get_current() is outer
+        assert PipelineRun.get_current() is None

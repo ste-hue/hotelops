@@ -287,3 +287,49 @@ Before Sprint 2 starts, the pilot is considered green only if all of the followi
   - one `bq_write_validated` log line per write with non-null `lineage_meta`
 - Zero `unknown_pipeline` warnings in the pilot logs.
 - One concrete bug or design tension surfaced by the pilot must be either resolved or explicitly deferred with rationale before Sprint 2 starts.
+
+## Pilot result (2026-04-30)
+
+All 3 pilots validated end-to-end on production BigQuery (`hotelops-suite.hotelops`). Each pipeline run twice with the same canonical input; idempotency verified by row-count diff between mid-state and post-state, scope of DELETE chirurgico verified by counts on neighboring keys.
+
+**T8 — `ingest_scheda_contabile` (SNAPSHOT, key `[societa_id, banca_id, data_snapshot]`)**
+
+Input: `archivio/INTUR/2026-01-01__SALDI_BANCARI__INTUR__SELLA_2026.xlsx` → 30 saldi rows.
+
+| State | INTUR/SELLA pre-2026 | 2026-jan-may | 2026-jun+ | total |
+|---|---|---|---|---|
+| pre | 295 | 54 | 0 | 349 |
+| post run #1 | 295 | 55 | 1 | 351 (+2 new dates) |
+| post run #2 | 295 | 55 | 1 | **351** |
+
+Other (societa, banca) groups (INTUR/INTESA=38, INTUR/MPS=40, ORTI/INTESA=14, ORTI/MPS=84, ORTI/MPS_KROSS=45) untouched both runs — DELETE scope chirurgico confirmed.
+
+**T9 — `ingest_partite_aperte` (SNAPSHOT, key `[societa_id, data_snapshot]`)**
+
+Input: `partite_fornitori/INTUR/INTUR_PARTITE_FORNITORI_20260428.xlsx` → 114 partite rows.
+
+| State | INTUR @ 2026-04-28 | total € | ORTI @ 2026-03-20 |
+|---|---|---|---|
+| pre | 114 | 962,355 | 176 |
+| post run #1 | 114 | 962,355 | 176 |
+| post run #2 | 114 | 962,355 | **176** |
+
+Total €962,355 and 63 distinct fornitori invariant across both runs. ORTI snapshot untouched (different societa_id namespace).
+
+**T10 — `ingest_coperti` (SNAPSHOT, key `[hash_riga]`)**
+
+Input: live Google Sheet via rclone → 1496 coperti rows.
+
+| State | BRK | DINNER | LUNCH | total |
+|---|---|---|---|---|
+| pre | 522 | 437 | 385 | 1344 (+147 in 2026-Q2 = 1491) |
+| post run #1 | 570 | 492 | 434 | 1496 (+5 net new keys) |
+| post run #2 | 570 | 492 | 434 | **1496** |
+
+Genuine DELETE+INSERT verified by `data_caricamento` collapsing to a single timestamp matching run #2 (09:17:18) — i.e. run #2 wiped run #1's timestamps and re-inserted, not a no-op.
+
+**Lineage** (`f_pipeline_runs`): all 6 runs landed with `status=OK`, correct `pipeline_name`, correct `societa_id`. Duration 27s (coperti) to 7s (partite). Zero `unknown_pipeline` warnings.
+
+**Bug surfaced + resolved**: `model_dump()` default mode returns native `date`/`datetime`/`Decimal` objects, which crash `json.dumps` inside `load_table_from_json` (no default handler). Fixed at line 120 of `core/bq/write.py` with `model_dump(mode="json")`. Encoded as a permanent invariant: `SerializationBoundaryError` raised by per-row `json.dumps` probe **before** any BQ side-effect, preventing snapshot half-wipe scenarios. See commits `b7961e4` (fix) and `76bb066` (boundary guard).
+
+**Sprint 2 unlocked**: SNAPSHOT migration pattern proven in production. APPEND + dimension loaders next.
