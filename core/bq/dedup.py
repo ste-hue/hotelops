@@ -10,7 +10,7 @@ validation + lineage. Pipelines that need MD5/key-based dedup compose:
 from __future__ import annotations
 
 import logging
-from typing import TypeVar
+from typing import Any, TypeVar, Union
 
 from pydantic import BaseModel
 
@@ -19,7 +19,14 @@ from core.bq.client import get_client
 
 log = logging.getLogger(__name__)
 
-T = TypeVar("T", bound=BaseModel)
+T = TypeVar("T", bound=Union[BaseModel, dict])
+
+
+def _hash_of(row: Any, col: str) -> Any:
+    """Read hash_column from a row that may be a dict or a Pydantic model."""
+    if isinstance(row, dict):
+        return row[col]
+    return getattr(row, col)
 
 
 def filter_new_rows_by_hash(
@@ -28,6 +35,11 @@ def filter_new_rows_by_hash(
     hash_column: str,
 ) -> list[T]:
     """Return rows whose hash_column is not yet present in the BQ table.
+
+    Accepts both ``list[dict]`` (pre-validation) and ``list[BaseModel]``
+    (post-validation). The natural callsite is dict-in / dict-out, with the
+    gate performing validation downstream — avoids paying Pydantic cost for
+    rows that will be discarded as duplicates.
 
     Reads existing hashes once via a single SELECT, then filters in-memory.
     Empty input is a no-op (no query). Race conditions: if two pipelines
@@ -41,7 +53,7 @@ def filter_new_rows_by_hash(
     sql = f"SELECT {hash_column} FROM `{table}`"
     existing = {getattr(r, hash_column) for r in client.query(sql).result()}
 
-    new_rows = [r for r in rows if getattr(r, hash_column) not in existing]
+    new_rows = [r for r in rows if _hash_of(r, hash_column) not in existing]
     log.info(
         "filter_new_rows_by_hash: %s — %d input, %d existing in table, "
         "%d already-present, %d new",
