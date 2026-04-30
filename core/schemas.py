@@ -270,6 +270,7 @@ class VenditaFbRow(BaseModel):
     importo_lordo: float
     sconto: Optional[float] = None
     importo_netto: float  # ← metric for food cost ratio
+    segmento_cliente: Optional[str] = None  # da Ristocube: ZRISTINT/ZRISTEST/INLE/...
     file_sorgente: str
     data_caricamento: datetime
 

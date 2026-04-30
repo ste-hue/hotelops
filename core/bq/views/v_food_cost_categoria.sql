@@ -26,11 +26,13 @@ ricavi_cat AS (
     mese,
     sala,
     tipo_piatto,
+    -- segmento esposto: NULL diventa '(vuoto)' per il group
+    COALESCE(segmento_cliente, '(vuoto)') AS segmento_cliente,
     COUNT(*)            AS n_vendite,
     SUM(quantita)       AS qta_venduta,
     SUM(importo_netto)  AS ricavi_categoria
   FROM `hotelops-suite.hotelops.f_vendite_fb`
-  GROUP BY 1, 2, 3, 4
+  GROUP BY 1, 2, 3, 4, 5
 ),
 coperti_per_pasto AS (
   SELECT
@@ -50,6 +52,7 @@ SELECT
   DATE(r.anno, r.mese, 1) AS periodo,
   r.sala,
   r.tipo_piatto,
+  r.segmento_cliente,
   r.n_vendite,
   r.qta_venduta,
   r.ricavi_categoria,
@@ -70,19 +73,19 @@ SELECT
       END, 0
     )
   ) AS euro_per_coperto,
-  -- YoY su stessa (mese, sala, tipo_piatto)
+  -- YoY su stessa (mese, sala, tipo_piatto, segmento)
   LAG(r.ricavi_categoria) OVER (
-    PARTITION BY r.mese, r.sala, r.tipo_piatto ORDER BY r.anno
+    PARTITION BY r.mese, r.sala, r.tipo_piatto, r.segmento_cliente ORDER BY r.anno
   ) AS ricavi_categoria_stly,
   LAG(r.qta_venduta) OVER (
-    PARTITION BY r.mese, r.sala, r.tipo_piatto ORDER BY r.anno
+    PARTITION BY r.mese, r.sala, r.tipo_piatto, r.segmento_cliente ORDER BY r.anno
   ) AS qta_venduta_stly,
   SAFE_DIVIDE(
     r.ricavi_categoria - LAG(r.ricavi_categoria) OVER (
-      PARTITION BY r.mese, r.sala, r.tipo_piatto ORDER BY r.anno
+      PARTITION BY r.mese, r.sala, r.tipo_piatto, r.segmento_cliente ORDER BY r.anno
     ),
     NULLIF(LAG(r.ricavi_categoria) OVER (
-      PARTITION BY r.mese, r.sala, r.tipo_piatto ORDER BY r.anno
+      PARTITION BY r.mese, r.sala, r.tipo_piatto, r.segmento_cliente ORDER BY r.anno
     ), 0)
   ) AS ricavi_yoy_pct
 FROM ricavi_cat r

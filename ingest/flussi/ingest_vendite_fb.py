@@ -134,6 +134,12 @@ def parse_xlsx(filepath: Path) -> list[dict]:
         lordo = row[9]
         sconto = row[10]
         netto = row[11]
+        # row[12] = Menu (non usato), row[13] = Segmento Cliente (Ristocube)
+        segmento = (
+            str(row[13]).strip()
+            if len(row) > 13 and row[13] is not None and str(row[13]).strip()
+            else None
+        )
 
         # Skip rows without sala
         if not sala_raw:
@@ -186,6 +192,7 @@ def parse_xlsx(filepath: Path) -> list[dict]:
                 "importo_lordo": imp_lordo,
                 "sconto": imp_sconto,
                 "importo_netto": imp_netto,
+                "segmento_cliente": segmento,
                 "file_sorgente": filepath.name,
                 "data_caricamento": now,
             }
@@ -234,6 +241,7 @@ def ensure_table(client) -> None:
         bigquery.SchemaField("importo_lordo", "FLOAT"),
         bigquery.SchemaField("sconto", "FLOAT"),
         bigquery.SchemaField("importo_netto", "FLOAT"),
+        bigquery.SchemaField("segmento_cliente", "STRING"),
         bigquery.SchemaField("file_sorgente", "STRING"),
         bigquery.SchemaField("data_caricamento", "TIMESTAMP"),
     ]
