@@ -2,7 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last checkpoint:** 2026-04-21 | **Version:** 0.5.0
+**Last checkpoint:** 2026-04-30 | **Version:** 0.6.0
+
+> **2026-04-30 session save:**
+> - Sprint 1 chiuso e mergiato su `main`: `bq_write_validated` gate centralizzato (Pydantic + boundary check + lineage), 3 pilot SNAPSHOT validati su BQ produzione (scheda, partite, coperti).
+> - Sprint 2 Phase 1: `f_vendite_fb` (vendite POS Ristocube, 19,806 righe, range 2024-03..2026-04, con `segmento_cliente`). Primo APPEND pilot via gate.
+> - Magazzino aggiornato fino a 2026-03 (+5 file ECO_*). Aspetta APRILE 2026.
+> - Nuove views: `v_food_cost_mensile`, `v_food_cost_categoria` (con segmento esposto). YoY 2024 vs 2025 sbloccato.
+> - Parking lot Sprint 3: file `Stampa Consumi` (giornaliero), file `Ristocube (1)` (consumi giornalieri €), file `Ristocube (4)` (menu engineering: food cost per piatto). `d_prezzi_pensione` da definire (TBD se serve, dato che File 3 ha già segmento `ZRISTINT/EST/RES` per pensione).
+> - Per il rollout dei codici Segmento Cliente: glossario interno richiesto (vuoto, INLE, INTUI, GRLE, GRBU, GRWE, GRSE, FERR25, ZRISTINT, ZRISTEST, ZRISRES). Decodifica downstream nelle views/dashboard.
 
 > **For AI agents**: before touching code or answering, read the Obsidian vault instructions in this order:
 > 1. `<vault>/hotelops/INVARIANTS.md` — la costituzione (I1–I8, canonical truth per concept).
@@ -183,6 +191,7 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `f_mastrino_consolidato` | Mastrino consolidato da "Costi Ricavi 2025-2026 Budget.xlsx" (APPEND) |
 | `f_affidamenti` | Affidamenti bancari (linee di credito) -- schema TBD |
 | `f_reviews` | Guest reviews da OTA (Booking, TripAdvisor, Google, Expedia). NLP classified. (APPEND) |
+| `f_vendite_fb` | Vendite F&B POS (giorno × sala × articolo) da Ristocube. Include `segmento_cliente`. (APPEND, dedup hash_riga) |
 
 ### Dimension tables
 
@@ -219,6 +228,8 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `v_condges_banca_dettaglio` | Looker: Dettaglio movimenti banca per analisi. `core/bq/views/` |
 | `v_ledger_movimenti` | Bank reconciliation ledger: dedup SCHEDA_190101 vs PNC per day, excludes 'Ripresa saldi'. `core/bq/views/` |
 | `v_economato_costo_unitario` | Looker: costo unitario per pax-notte per reparto × articolo × mese + ABC ranks. `core/bq/views/` |
+| `v_food_cost_mensile` | Food cost macro mensile: costi CUCINA+CANTINA + ricavi POS + coperti hotel + YoY (LAG su anno). `core/bq/views/` |
+| `v_food_cost_categoria` | Food cost granulare per (anno, mese, sala, tipo_piatto, segmento_cliente) + €/coperto + YoY. `core/bq/views/` |
 
 ### How the views connect
 
