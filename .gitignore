@@ -13,6 +13,9 @@ logs/
 # Worktrees
 .claude/worktrees/
 
+# Local Claude Code settings (rigenerato ad ogni sessione)
+.claude/settings.local.json
+
 # Artifacts
 *.docx
 *.html
