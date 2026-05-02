@@ -81,7 +81,8 @@ Mai calcolare saldo da movimenti contabili. Mai budget da view downstream divers
 - **Gruppo**: `Gruppo Panorama` (non formale, consolidato economico). DSCR e debt coverage si valutano **sempre a livello gruppo**.
 - **Dimensioni**: `CASSA` (💰), `COMPETENZA` (📊), `IMPEGNO` (📅).
 - **Lifecycle**: `APPEND` (♻️), `SNAPSHOT` (📸).
-- **Personas**: Rosa (tesoreria), Gasparotto (budget/CdG), Antonio Russo (GM/reputation), Mario (economato), Stefano Della Pietra Jr (owner platform — distinto da Stefano Sr, AU ORTI).
+- **Personas**: Rosa (amministrazione + tesoreria), Roberto Romita (consulente CdG), Antonio Russo (GM/reputation), Mario (economato), Stefano Della Pietra Jr (owner platform — distinto da Stefano Sr, AU ORTI).
+- **File ≠ persona**: "Gasparotto" è il **nome del file Master Excel di Roberto Romita** (legacy come label di persona — da retire nel parlato; resta valido come nome di file/fonte, es. `f_budget_mensile.fonte=GASPAROTTO`, `ingest_gasparotto.py`). Rosa ha invece il suo file scadenziario fornitori in Drive (letto da `condges/scadenzario_excel.py`). I due Excel convergono in `app_cdg.py` via codici Esolver + mapping fornitori.
 - **Verticals attivi**: `CONDGES`, `REVIEWS`. `ECONOMATO` è **dati-only** (in arrivo, owner: Mario) — oggi non è vertical per **I7**, è infrastruttura in attesa di audience.
 - **Gotcha conti**: `codice_conto` ha doppio formato (`570913` vs `57.09.13`). Sempre `REPLACE(codice_conto, '.', '')` in JOIN cross-fonte.
 
