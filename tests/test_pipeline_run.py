@@ -179,6 +179,34 @@ class TestPipelineRun:
         run = pipeline_with_early_return()
         assert run.status == "OK"
 
+    def test_sys_exit_zero_is_a_trap_records_fail(self):
+        """Regression bug_004 (ultrareview 2026-05-02): documenta perché i
+        callsite usano `return` invece di `sys.exit(0)`.
+
+        `sys.exit(0)` raises `SystemExit(0)`, un BaseException che propaga come
+        `exc_val` non-None in __exit__ → `status='FAIL'`, `error_message='0'`.
+        Pollute `f_pipeline_runs` e trippa `check_pipeline_staleness`
+        (filtra `WHERE status='OK'`) per pipeline che esce legittimamente
+        su input vuoto (es. file stagionali fuori stagione).
+
+        Use `return` per early-exit pulito (test sopra).
+        """
+        import sys
+
+        from core.pipeline_run import PipelineRun
+
+        with patch("google.cloud.bigquery.Client") as mock_client:
+            mock_client.return_value = MagicMock()
+            run_ref = None
+            try:
+                with PipelineRun("test") as run:
+                    run_ref = run
+                    sys.exit(0)
+            except SystemExit:
+                pass
+            assert run_ref.status == "FAIL"
+            assert run_ref.error_message == "0"
+
 
 def test_pipeline_run_file_sorgente_attribute():
     from core.pipeline_run import PipelineRun

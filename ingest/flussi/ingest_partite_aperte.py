@@ -339,7 +339,7 @@ def main():
 
         if not rows:
             logger.warning("No partite found in file")
-            sys.exit(0)
+            return  # not sys.exit(0): SystemExit propagates as exc_val to PipelineRun.__exit__ → status=FAIL
 
         # Load (gate validates via PartitaApertaFornitoreRow)
         if args.dry_run:

@@ -343,7 +343,7 @@ def main() -> None:
         records = parse_xlsx(filepath)
         if not records:
             log.warning("Nessuna riga estratta")
-            sys.exit(0)
+            return  # not sys.exit(0): SystemExit propagates as exc_val to PipelineRun.__exit__ → status=FAIL
         load_to_bq(records, dry_run=args.dry_run)
 
 

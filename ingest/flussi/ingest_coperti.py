@@ -699,7 +699,7 @@ def main():
 
         if not rows:
             log.warning("Nessuna riga da caricare.")
-            sys.exit(0)
+            return  # not sys.exit(0): SystemExit propagates as exc_val to PipelineRun.__exit__ → status=FAIL
 
         pre_dedup = len(rows)
         rows = dedup_latest_wins(rows)
