@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -197,7 +198,7 @@ def bq_write_validated(
         )
         lineage_meta = {
             "pipeline_name": "unknown_pipeline",
-            "run_id": None,
+            "run_id": str(uuid.uuid4()),
             "file_sorgente": None,
         }
 

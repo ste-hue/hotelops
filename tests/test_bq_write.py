@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
@@ -288,7 +289,7 @@ def test_serialization_boundary_blocks_unserializable_dict(mock_get_client):
 
 
 def test_lineage_warns_when_no_active_run(caplog):
-    caplog.set_level("WARNING")
+    caplog.set_level("INFO")
     with patch("core.bq.write.get_client") as mock_get_client:
         mock_client = MagicMock()
         mock_job = MagicMock()
@@ -301,3 +302,13 @@ def test_lineage_warns_when_no_active_run(caplog):
 
     assert "outside PipelineRun context" in caplog.text
     assert "hotelops.f_x" in caplog.text
+
+    # Out-of-PipelineRun: gate generates a standalone UUID and tags
+    # pipeline_name='unknown_pipeline' (DATA_ENGINEERING_RULES.md §3).
+    record = next(
+        r for r in caplog.records
+        if getattr(r, "table", None) == "hotelops.f_x"
+    )
+    assert record.pipeline_name == "unknown_pipeline"
+    assert record.run_id is not None
+    uuid.UUID(record.run_id)  # raises ValueError if not a valid UUID string
