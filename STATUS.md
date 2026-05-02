@@ -1,63 +1,79 @@
-# Status — 2026-04-26
+# Status — 2026-05-02
 
 ## In corso
 - v_condges_banca_dettaglio: view SQL creata, non ancora materializzata su BQ
 - v_ledger_movimenti: view SQL creata (`core/bq/views/v_ledger_movimenti.sql`), non ancora materializzata su BQ
 - xlsx-movimenti-parser: piano scritto (`docs/superpowers/plans/2026-03-30-xlsx-movimenti-parser.md`), non eseguito
-- **revman vertical**: mappatura completa 5 fonti HotelCube (rates+availability forward, pickup operativo, produzione giornaliera, dettaglio fiscale, prenotazioni). **Bozza email a Lara pronta** (non ancora inviata) con richiesta doc API RMS esistenti + proposta call. Punto 5 (prenotazioni) potenzialmente già coperto da API RMS Proxima.
-- **condges Rosa→Gasparotto integration**: spec + plan scritti (`c69abc1`, `beddc7e`). 2 task iniziali implementati (`19619de` parse Budget_Indici2025 via CE cross-ref, `143f60e` timedelta decoder cod_conto corrotti). Plan in esecuzione.
-- **Projects event-sourced Step 1**: spec scritta `docs/superpowers/specs/2026-04-22-projects-event-sourced-design.md`. Pivot da S2 (8 tabelle normalizzate, archiviata) a **3 tabelle event-sourced** (`d_progetti`, `f_progetto_voci`, `f_progetto_eventi`) con 5 tipi evento (PREVENTIVO/IMPEGNO/FATTURA/PAGAMENTO/DOCUMENTO). Validation seed su 2 progetti reali (HPAN25PIANO1 maturo + SPIAGGIA_LOTTO7 early-stage), 10 voci, 19 eventi. Vault aggiornato: `concepts/PROGETTO.md` §thread (event-log), ADR `2026-04-21_Progetto_First_Class_Dimension.md` amended (3 tab event-sourced). **Plan TDD da generare** via `superpowers:writing-plans` skill, poi implementazione Step 1.
-- **Vault loops restructure**: 2/12 loop specs scritti (`daily_reconciliation`, `cash_control`). Next candidate: `monthly_close` (Gasparotto, COMPETENZA) per completare trilogia base.
+- **revman vertical**: mappatura completa 5 fonti HotelCube; Power BI Z_DataSet espone 12 report downstream (AndamentoPrenotazioni, CamereTree, Clienti, ConsumazioniF&B, Cruscotto, CruscottoMP, CurveCumulative, Prenotazioni, StoricoPrevisione*3) — solo Cruscotto/CruscottoMP ha loop dichiarato (mail produzione). **Bozza email a Lara pronta** (non inviata).
+- **condges Rosa→Gasparotto integration**: spec + plan scritti (`c69abc1`, `beddc7e`). 2 task iniziali implementati. Plan in esecuzione.
+- **Projects event-sourced Step 1**: spec scritta `docs/superpowers/specs/2026-04-22-projects-event-sourced-design.md`. **Plan TDD da generare**, defer a Doc Refresh + cassa loop chiusi.
+- **Vault loops restructure**: 2/12 loop specs scritti (`daily_reconciliation`, `cash_control`). Next candidate: `monthly_close` (Gasparotto file, COMPETENZA mensile).
+- **Doc Refresh Sprint** (`docs/superpowers/plans/2026-05-01-doc-refresh-sprint.md`): Step 1+2+2.5 chiusi in working tree (da committare). Step 3 (README rewrite) — diff proposto in chat, in attesa OK. Step 4-9 in coda.
 
 ## Completato di recente
-- 2026-04-26: **Projects event-sourced design** — spec `docs/superpowers/specs/2026-04-22-projects-event-sourced-design.md` (~390 righe, 12 sezioni: TL;DR, why event log, schema 3 tab, 5 tipi evento + Pydantic metadata, 4 view derivate per COSA/CHI/QUANTO/QUANDO, seed 2 progetti, multi-progetto generalization, Step 1 IN/OUT, roadmap 3 fasi forward-only→reversed→agent-loop, Excel→eventi mapping, anti-goals, related, implementation gate). Spec S2 archiviata in `docs/superpowers/specs/archive/2026-04-20-projects-mvp-design.md`. Vault captures: `concepts/PROGETTO.md` §thread aggiornato (event-log scelto, status candidate→active, domande 4-5 chiuse) + ADR `2026-04-21_Progetto_First_Class_Dimension.md` amended (Implementation approach: 3 tab event-sourced, domande 2-3-5 chiuse). User approval esplicita.
-- 2026-04-23: **vault foundation + primi loop specs** — commit vault `48e594d`: IDENTITY.md (statement canonico "company operating system per hospitality: loops, oggetti tipizzati, azioni auditable, agents narrow"), loops/_INDEX.md (registry 12 loops in 3 categorie con status 🟢/🟡/⚪ + template 10 sezioni), loops/daily_reconciliation.md (backoffice, CASSA giornaliera), loops/cash_control.md (Rosa, CASSA settimanale), INDEX.md aggiornato (Foundation + nuova sezione 🔁 Loops).
-- 2026-04-23: **parser account-based + hardening cassa + shell scripts** — commit `c72e66a`: classificazione event_type via conto 39.05.21 (definizionale, non euristica progressivo=0), risolve caparre mis-classificate; no-lumping aggregatore; `_normalize_date` return-empty+warning; fattura senza IVA scartata con warning; `_QUADRA_TOLERANCE` estratta; struttura unknown su prefisso filename fuori {H,R,C}. 7 test parser + 3 test cassa, 34 test verdi. Commit `966542d`: shell scripts — preflight venv, log lock-held, .env warning non-fatale, `rc=$?` + `exit "$rc"` preserva exit code reale.
-- 2026-04-23: **CLAUDE.md drift + v_economato ABC per società** — commit `8bd8d00`: CLAUDE.md checkpoint 2026-04-21, 3 moduli core documentati (datahub_sync, bq/client, parsers/accodamenti, pipeline_run), views 14→16, tests list ri-allineata. v_economato_costo_unitario.sql ora partiziona ABC su (societa, anno, mese, reparto) — prima mischiava ORTI e INTUR.
-- 2026-04-22: **accodamenti ingest + fix rglob cartelle-data** — HotelCube ha iniziato a organizzare TXT in sotto-cartelle per data (`ACCODAMENTI HOTEL CUBE/19_04_2026/…`). Il glob non-ricorsivo saltava tutto. Fix `0527594`: `rglob` + `rel_path` param. Ingest reale: parsed=222, new=99, dupes=123. `f_accodamenti` ora 376 righe, `MAX(data_registrazione)` 2026-04-21 (era 2026-03-21). Hash MD5 path-independent → nessuna invalidation storiche.
-- 2026-04-21: **audit tech-lead + Projects MVP pivot + vault captures** — audit ha identificato d_voci `390521` duplicate (ENTRATE_CAPARRE + ENTRATE_CAPARRE_INTUR 🔴), CLAUDE.md drift residuo (3 moduli core non documentati), 2 views non materializzate. Projects pivotato a Binario A: plan normalizzato archiviato (`25fa57d`), Binario A seed `d60e5b7`. 3 vault captures: concept PROGETTO + decision Progetto_First_Class_Dimension + CONDGES boundary.
-- 2026-04-21: **condges Rosa→Gasparotto integration** — spec `c69abc1` (CE-sheet parser pivot, libreoffice recalc) + plan `beddc7e` + `2024531` WI-1 Task 2 simplify. Implementazioni iniziali: `19619de` parse Budget_Indici2025 via CE cross-ref, `143f60e` timedelta decoder cod_conto corrotti XLSX Gasparotto.
-- 2026-04-21: **commit untracked + checkpoint** — `692589f` + `6a45183` committano cassa_giornaliera + tests (580+273 LOC, 23 test verdi), `v_economato_costo_unitario.sql`, `scripts/coperti-daily.sh`, `.claude/commands/vault-loop.md`. CLAUDE.md checkpoint 2026-04-21.
-- 2026-04-20: **bank routing + spec iniziali** — `f825ccf` route bank files a `{banca}` subfolder + cache mirror. `1cc4201` projects MVP spec iniziale. `caad836` spec condges Rosa→Gasparotto iniziale.
-- 2026-04-19: refactor **coupling audit** — L1: accodamenti parser promosso a `core/parsers/accodamenti.py` (`d19144c`), `condges/` non importa più da `ingest/`. L2: BQ client singleton `core/bq/client.py::get_client()` (44 siti consolidati). L3: rclone/Drive sync centralizzato in `core/datahub_sync.py` (7 siti). Commit `e9d43a3` + `d19144c`. Tutti i test verdi.
-- 2026-04-18: revman **discovery API HotelCube** — inventariati 5 export xlsx manuali (Dashboard Manager, Stampa Cassa, Availability Search, Rates Dashboard, Pickup). Analizzato PDF AccodamentoIntegration v2.2 (Proxima = HotelCube, stessa azienda). Identificate API RMS esistenti da richiedere prima di ragionare su custom. Bozza email a Lara pronta.
-- 2026-04-17: condges **`cassa_giornaliera.py`** — porting da `reconciliation_dino`: parser TXT accodamenti HotelCube + aggregazione giornaliera POS/contanti/caparre → Excel 2 sheet. Nuovo CLI `hotelops accodamenti` (con rclone sync da Drive). 23 test TDD passati.
+- 2026-05-02: **bug fix ultrareview** — `bug_001` `hash_riga` in `ingest_vendite_fb` ora include `segmento_cliente` (era 470 hash con collisioni cross-segmento → 0); `bug_004` `sys.exit(0)` → `return` in `ingest_vendite_fb`/`ingest_coperti`/`ingest_partite_aperte` (PipelineRun status FAIL→OK); 4 nuovi test in `tests/test_ingest_vendite_fb.py` + 1 regression in `test_pipeline_run.py`. **Backfill `f_vendite_fb` eseguito** (TRUNCATE + ri-ingest da `Ristocube Data (3).xlsx`, 19.806 righe, 19.806 hash distinti, 0 collisioni cross-segmento, €315.407,40 invariati). 373/373 test verdi.
+- 2026-05-01: **Doc Refresh Sprint Step 1-2.5** — vocab fix `AI_INSTRUCTIONS.md` (Gasparotto = file Master di Roberto Romita, Rosa = persona reale, Romita = persona); nuovo `docs/architecture/DATA_ENGINEERING_RULES.md` (lineage contract, naming, write gate, lifecycle, plan-first per dominio finanziario); riga reading list in `CLAUDE.md`; Step 2.5 fix gate UUID — `core/bq/write.py` ora genera UUID standalone fuori da PipelineRun invece di `run_id=None`, conforme a Rules §3.
+- 2026-04-30: **Sprint 1 closure + Sprint 2 Phase 1 + INVARIANTS migration** — `bq_write_validated` gate centralizzato (Pydantic + boundary check + lineage), 3 pilot SNAPSHOT validati su BQ produzione (scheda contabile, partite aperte, coperti). `f_vendite_fb` con `segmento_cliente` (19.806 righe, 2024-03..2026-04). Views `v_food_cost_mensile` + `v_food_cost_categoria` (YoY 2024 vs 2025 sbloccato). INVARIANTS migrati al repo (`docs/architecture/INVARIANTS.md`, e12bc59). CLAUDE.md v0.6.0 checkpoint.
+- 2026-04-26: **Projects event-sourced design** — spec `2026-04-22-projects-event-sourced-design.md` (3 tab event-sourced: `d_progetti`/`f_progetto_voci`/`f_progetto_eventi`, 5 tipi evento, validation seed 2 progetti reali). Spec S2 archiviata. Vault captures: PROGETTO event-log, ADR amended.
+- 2026-04-23: **vault foundation + primi loop specs** — IDENTITY.md ("company operating system per hospitality"), loops/_INDEX.md (12 loop in 3 categorie), daily_reconciliation, cash_control.
+- 2026-04-23: **parser account-based + hardening cassa + shell scripts** — c72e66a/966542d, 34 test verdi.
+- 2026-04-23: **CLAUDE.md drift + v_economato ABC per società** — 8bd8d00, views 14→16, ABC partizionato su (società, anno, mese, reparto).
+- 2026-04-22: **accodamenti ingest + fix rglob cartelle-data** — 0527594, parsed 222 / new 99 / dupes 123. `f_accodamenti` aggiornata fino al 2026-04-21.
+- 2026-04-21: **audit tech-lead + Projects MVP pivot + vault captures** — Binario A seed d60e5b7. 3 vault captures.
+- 2026-04-21: **condges Rosa→Gasparotto integration** — c69abc1 + beddc7e + 2024531. Implementazioni iniziali 19619de + 143f60e.
 
 ## Decisioni aperte
 - Budget Apify: **$25/mese** hard limit (deciso 2026-04-09)
-- Doc tecniche (runbook, protocolli) → `docs/` nel repo. Business/ontology → Obsidian vault. Deciso 2026-04-09.
-- Refactoring cleanup: spec esiste (`docs/superpowers/specs/2026-03-27-refactoring-cleanup-design.md`), non prioritizzato
-- Manifest/shadow OS: spec esiste, parking lot
-- Reviews GENERICA al 39% — monitorare se servono categorie aggiuntive
-- Gap detection euristica (`len(kept)==cap`): da rivedere dopo 2-4 settimane di dati reali — oggi falsi positivi su property piccole a first-run
-- **revman come verticale #3**: confermato. Scope dipende da risposta API HotelCube. Se API disponibili → ingest automatico. Se no → export manuali periodici + pipeline parse.
-- **Pattern integrazione API HotelCube**: client diretto da hotelops CLI (non via Esolver), auth apiKey dedicata + IP whitelist. Deciso 2026-04-18.
-- **Projects come dimensione di primo livello (CapEx)**: deciso 2026-04-21, refined 2026-04-26 con scelta **event-sourcing su 3 tabelle** (`d_progetti`, `f_progetto_voci`, `f_progetto_eventi` con 5 tipi evento). Naming risolto: italiano `progetto_*`. Spec attiva `2026-04-22-projects-event-sourced-design.md`. Aperta: vertical #4 vs CONDGES extension (decisione rinviata a fine Step 1).
-- **Fonti CLI/APP in `f_piano_finanziario_input` cieche a `v_previsione_cassa`**: la view filtra solo `fonte='PIANO_FINANZIARIO'`, quindi `hotelops previsione` e save da app Streamlit non si riflettono nella proiezione. Emerso scrivendo loop `cash_control` (2026-04-23). Decidere: promuovere fonti a canonical o consolidare. Richiede decision esplicita prima di toccare la view.
-- **Drift `bank_reconciliation` vs `bank_ledger_reconciliation`** nel vault loops: `_INDEX.md` linka `[[bank_reconciliation]]` (backoffice, mensile, via `condges/reconcile_banca.py`); file creato oggi 2026-04-23 è `bank_ledger_reconciliation.md` (Rosa, giornaliero, CASSA vs COMPETENZA su conti 57*). Semanticamente sono due loop diversi — decidere se coesistono o si unificano. File non committato ancora.
+- Doc tecniche → `docs/`. Business/ontology → vault. Deciso 2026-04-09.
+- Refactoring cleanup: spec esiste, non prioritizzato.
+- Manifest/shadow OS: spec esiste, parking lot.
+- Reviews GENERICA al 39% — monitorare se servono categorie aggiuntive.
+- Gap detection euristica `len(kept)==cap` da rivedere dopo 2-4 settimane di dati reali.
+- **revman come verticale #3**: confermato. Scope dipende da risposta API HotelCube.
+- **Pattern integrazione API HotelCube**: client diretto da hotelops CLI, auth apiKey + IP whitelist (deciso 2026-04-18).
+- **Projects come dimensione di primo livello (CapEx)**: deciso 2026-04-21, refined 2026-04-26 con event-sourcing 3 tab. Aperta: vertical #4 vs CONDGES extension (rinviata a fine Step 1).
+- **Fonti CLI/APP in `f_piano_finanziario_input` cieche a `v_previsione_cassa`** (emerso 2026-04-23): decidere se promuovere fonti a canonical o consolidare. Richiede decision esplicita prima di toccare la view.
+- **Drift `bank_reconciliation` vs `bank_ledger_reconciliation`** in vault loops: due loop semanticamente distinti — decidere se coesistono o si unificano.
+- **Frame canonico HotelOps = Company OS** (non "digital twin") — articolato 2026-05-02 in manifesto. Vault `IDENTITY.md` già allineato; CLAUDE.md linea "digital twin" è debito da risolvere in Doc Refresh Step 4.
+- **GCS come Raw layer immutabile** (deciso 2026-05-02): bucket `hotelops-raw` con Object Versioning + Autoclass terminal=ARCHIVE diventa il Raw layer per **TUTTO il contenuto Drive datahub** (non solo accodamenti — scope esteso rispetto alla prima formulazione narrow). Drive datahub è esso stesso uno staging transiente che GCS sostituisce. Pipeline leggono da GCS, Drive resta come spazio umano editabile (workspaces vivi). La regola discrimination-need resta: GCS sostituisce la *funzione staging*, non lo *scope di cosa entra in BQ*. ADR `vault/decisions/2026-05-02_GCS_as_Raw_Layer.md` da scrivere; implementazione pendente (no refactor `core/datahub_sync.py` finché loop non lo richiede).
+- **Primo loop vivo deciso = cassa giornaliera quadra y/n** — verdetto persistito (richiede tabella `f_decisioni` o equivalente). Sblocca pattern decision-record per loop futuri. Spec da scrivere dopo Doc Refresh.
+- **Regola operativa ingest** (articolata 2026-05-02): lo scope dell'ingest è settato dal *discrimination need del loop*, non dalla disponibilità del dato. Si estende quando il loop fallisce *cieco* (non sa nominare il gap). Backlog tipo "x dato esiste, lo prendo" è parking lot finché un loop non lo nomina.
+- **Glossario `segmento_cliente` parziale** (Ristocube): INLE=individuali leisure, INTUI=individuali TUI, GRLE=gruppi leisure, GRBU=gruppi business, GRSE=gruppi in serie, ZRIST*=roof restaurant interno/esterno (NON pensione camere). TBD: vuoto, GRWE, FERR25, ZRISRES. Capture in `vault/concepts/SEGMENTO_CLIENTE.md` da fare.
 
 ## Rotto / da fixare
-- ✅ ~~**`extract_saldo_mps2026` date parsing**~~ — fixato 2026-04-16: aggiunto parse_date per testo + future-date guard.
-- ✅ ~~**d_voci pattern duplicate `390521`**~~ — verificato 2026-04-23: non causa double-count, le righe sono per società distinte (ORTI vs INTUR).
-- 🟡 **Gap residuo crash totale** `send_email` → `mark_alerts_sent` — il fix `af685b2` cattura il caso streaming buffer (retry + pending file), ma se il processo muore completamente tra send_email e persist_pending non c'è traccia locale. Scelta consapevole "alert duplicato > alert perso" ancora in piedi, ora blast radius molto ridotto.
-- ✅ ~~Google rotto 5+ settimane prima del 9 aprile~~ — risolto. Test manuale 2026-04-24 (`hotelops reviews --scrape --only google`): actor ok (SUCCEEDED 3/3 BU, 45 raw). HOTEL fresh `MAX(data_review)=2026-04-18`; RESIDENCE+CVM ferme a 2025-09-13 ma = ipotesi "niente review nuove fuori stagione" (l'actor prende nuove quando esistono, dimostrato da HOTEL). Da confermare con check manuale su Google Maps per RESIDENCE/CVM.
-- 🟡 Crash window tra `send_email` e `mark_alerts_sent` UPDATE — scelta consapevole "alert duplicato > alert perso", da rivedere se succede.
+- ✅ ~~`extract_saldo_mps2026` date parsing~~ — fixato 2026-04-16.
+- ✅ ~~d_voci pattern duplicate `390521`~~ — verificato 2026-04-23.
+- ✅ ~~Google rotto 5+ settimane~~ — risolto 2026-04-24.
+- ✅ ~~bug_001 `hash_riga` ingest_vendite_fb omette `segmento_cliente`~~ — fixato 2026-05-02 + backfill (TRUNCATE + ri-ingest, 19.806 righe, 0 collisioni).
+- ✅ ~~bug_004 `sys.exit(0)` in `with PipelineRun(...)` registra FAIL invece di OK~~ — fixato 2026-05-02 nei 3 callsite + regression test che documenta il trap.
+- 🔴 **Schema drift `f_chiusura_mensile`**: `hotelops health` riporta tabella NON FOUND su BQ. View/pipeline `chiudi` la cita ma la tabella non esiste — chiusura mese non scrivibile.
+- 🟡 **Pipelines stale >36h**: `ingest_scheda_contabile` + `ingest_partite_aperte` ultimo OK run 2026-04-30 (54h ago).
+- 🟡 **f_pms_statistiche freshness**: dati fermi al 2026-04-11 (21gg indietro). Da estrarre 60 file Cruscotto giornalieri (20gg × 3 BU) da Power BI per coprire 2026-04-12 → 2026-05-01. Solo `Cruscotto/CruscottoMP` ha loop dichiarato (mail produzione giornaliera).
+- 🟡 **Banche stale**: INTUR/INTESA 53gg, ORTI/INTESA 32gg, INTUR/MPS 31gg, ORTI/MPS+MPS_KROSS 15gg. Solo INTUR/SELLA fresh.
+- 🟡 Gap residuo crash totale `send_email` → `mark_alerts_sent` — fix `af685b2` cattura streaming buffer; processo morto tra send_email e persist_pending non lascia traccia locale. Scelta consapevole "alert duplicato > alert perso", blast radius ridotto.
 
 ## Prossimi passi
-- **Loop spec `monthly_close`** — Gasparotto, COMPETENZA mensile, tocca `hotelops chiudi` + `v_budget_canonical` + `f_chiusura_mensile`. Completa trilogia base (daily/weekly/monthly) e introduce dimensione COMPETENZA dopo le 2 CASSA già scritte.
-- **Risolvere drift bank_reconciliation vs bank_ledger_reconciliation** — decidere se sono due loop distinti (mensile backoffice + giornaliero Rosa) o uno solo. Il file `bank_ledger_reconciliation.md` è stato creato da agente parallelo oggi, non ancora committato.
-- **Test cassa giornaliera su 1 giorno reale** — usare il nuovo stream `f_accodamenti` (post-fix rglob) per validare `condges/cassa_giornaliera.py` su un giorno specifico vs riferimento manuale. Sblocca uso operativo.
-- **Backfill `file_sorgente` sulle 277 righe vecchie** (non urgente) — consistenza con nuovo formato `ACCODAMENTI HOTEL CUBE/DD_MM_YYYY/<file>.txt` vs bare `<file>.txt`. Cosmetico, non blocca query.
-- **Discussione separata `SOCIETA_DEFAULT = "INTUR"`** — le righe da cartella `ingresso/accodamenti/ORTI/…` vengono taggate INTUR via default. Da ragionare se va fixato o se il default era intenzionale per altro motivo.
-- **Projects Step 1 plan TDD** — generare plan eseguibile via `superpowers:writing-plans` skill su spec `2026-04-22-projects-event-sourced-design.md`. Target: 3 CREATE TABLE + Pydantic discriminated union + seed loader (10 voci HPAN25PIANO1 + SPIAGGIA_LOTTO7) + view `v_progetto_voci_stato` + tests. No UI, CLI, LLM in Step 1.
-- **condges Rosa→Gasparotto plan resume** — continuare esecuzione plan `beddc7e` dopo task iniziali (`19619de`, `143f60e`).
-- **Inviare email a Lara Durisotti** (bozza pronta) — sblocca tutto su revman
-- **Documento interno `docs/hotelcube-api-extension.md`** — mappatura 5 export → campi → uso BQ (reference per confronto con doc API RMS)
-- Materializzare v_ledger_movimenti + v_condges_banca_dettaglio su BQ
-- **Mail produzione giornaliera** — email semplice con occupazione + revenue per BU dal dato in `f_pms_statistiche`
-- **Struttura `revman/`** — creare verticale con dashboard occupazione/ADR/RevPAR (dopo risposta HotelCube)
-- Investigare CVM Trip.com avg 4.57 (sotto threshold alert 6.0) — capire se review reali o parsing
-- Instrumentare banca/flussi pipeline con `PipelineRun` (context manager è già generico)
-- Valutare email alert per `check_watermark_staleness` dopo 2-3 settimane di dati (oggi solo display CLI)
-- Verifica manuale su Google Maps se RESIDENCE + CVM hanno review post-2025-09-13 (se sì: bug ordering; se no: fuori stagione come ipotizzato)
-- Valutare esecuzione xlsx-movimenti-parser
+- **Doc Refresh Sprint Step 3-9** — README rewrite (diff proposto, OK pendente) → CLAUDE.md Project Overview + Architecture (Step 4) → CLAUDE.md sezioni mancanti (Step 5) → counts + tests refresh (Step 6) → Cutover decision in vault (Step 7) → TODO markers in `ingest/banca/ingest.py` (Step 8) → Agent Epistemology promotion in AI_INSTRUCTIONS (Step 9). Plan-First per ogni step.
+- **ADR `vault/decisions/2026-05-02_GCS_as_Raw_Layer.md`** — scope esteso a **TUTTO il contenuto Drive datahub** (non solo accodamenti), Object Versioning + Autoclass terminal=ARCHIVE, NO refactor immediato di `core/datahub_sync.py` (resta loop-driven).
+- **Spec loop cassa giornaliera quadra y/n** (post-Doc-Refresh) — primo verdetto operativo del sistema (NON_QUADRA con discrepanza nominabile), input GCS narrow, recipient Rosa solo se non quadra. Stefano fornirà schema minimo input + query riconciliazione una volta chiuso Doc Refresh.
+- **Capture `vault/concepts/SEGMENTO_CLIENTE.md`** — glossario codici Ristocube (5/11 noti), TBD su GRWE/FERR25/vuoto/ZRISRES.
+- **Loop spec `monthly_close`** — Gasparotto file, COMPETENZA mensile, completa trilogia base (daily/weekly/monthly).
+- **bug_013 (nit)** — `--dry-run` skippa Pydantic in `ingest_coperti.py:580`, valida in `ingest_partite_aperte` (incoerenza tra sister-pipeline). Hoist Pydantic sopra `if dry_run: return` al prossimo touch (~3 righe).
+- **Estrazione produzione PMS** — 60 file Cruscotto giornalieri (20gg × HOTEL/CVM/RESIDENCE) per il gap 2026-04-12 → 2026-05-01. Stefano export manuale da Power BI; ingest via `python -m ingest.flussi.ingest_pms_statistiche /path/to/cartella`.
+- **Risolvere drift bank_reconciliation vs bank_ledger_reconciliation** — decidere se due loop o uno (file `bank_ledger_reconciliation.md` non committato).
+- **Test cassa giornaliera su 1 giorno reale** — usare nuovo stream `f_accodamenti` per validare `condges/cassa_giornaliera.py` vs riferimento manuale.
+- **Materializzare** v_ledger_movimenti + v_condges_banca_dettaglio su BQ.
+- **Schema fix `f_chiusura_mensile`** — creare tabella o rimuovere riferimenti dalle pipeline (drift schema 🔴).
+- **Inviare email a Lara Durisotti** (bozza pronta) — sblocca revman.
+- **Documento interno `docs/hotelcube-api-extension.md`** — mappatura 5 export + 12 report Power BI Z_DataSet.
+- **Discussione `SOCIETA_DEFAULT = "INTUR"`** — righe `ingresso/accodamenti/ORTI/…` taggate INTUR via default.
+- **Backfill `file_sorgente` 277 righe vecchie** (cosmetico, non blocca query).
+- **Projects Step 1 plan TDD** — defer a Doc Refresh + cassa loop chiusi.
+- **condges Rosa→Gasparotto plan resume** — continuare esecuzione plan `beddc7e`.
+- **Mail produzione giornaliera** — email occupazione + revenue per BU da `f_pms_statistiche` (richiede freshness fix sopra).
+- **Struttura `revman/`** dopo risposta HotelCube.
+- Investigare CVM Trip.com avg 4.57 (sotto threshold alert 6.0).
+- Instrumentare banca/flussi pipeline con `PipelineRun` (context manager generico).
+- Valutare email alert per `check_watermark_staleness` dopo 2-3 settimane.
+- Verifica manuale Google Maps RESIDENCE+CVM post-2025-09-13.
+- Valutare esecuzione xlsx-movimenti-parser.
