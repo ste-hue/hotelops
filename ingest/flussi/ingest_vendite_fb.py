@@ -63,15 +63,24 @@ MESE_IT: dict[str, int] = {
 
 def _make_hash(
     societa: str, data_serv: date, sala: str, codice: str,
-    quantita: float, netto: float
+    segmento: str | None, quantita: float, netto: float,
 ) -> str:
-    """Hash naturale: una riga = una vendita di articolo X in sala Y a giorno Z.
+    """Hash naturale: una riga = una vendita di articolo X in sala Y a giorno Z
+    a un segmento_cliente Z'.
 
     NOTA: include quantita+netto perché lo stesso articolo può essere venduto
     più volte nello stesso giorno/sala con quantità/prezzi diversi (sconti,
     happy hour, etc.). Senza questi due campi le righe collasserebbero.
+
+    Include `segmento_cliente` perché Ristocube esporta righe distinte per
+    segmento (INLE / INTUI / GRLE / GRBU / GRSE / ZRISTINT / ZRISTEST / …) sulla
+    stessa tupla (articolo × giorno × sala × qty × netto). `v_food_cost_categoria`
+    partiziona su segmento_cliente; senza segmento nel hash, righe distinte
+    collassano e righe nuove vengono droppate da `filter_new_rows_by_hash` su
+    re-ingest. None è normalizzato a "" per idempotenza.
     """
-    key = f"{societa}|{data_serv}|{sala}|{codice}|{quantita}|{netto}"
+    seg = segmento or ""
+    key = f"{societa}|{data_serv}|{sala}|{codice}|{seg}|{quantita}|{netto}"
     return hashlib.md5(key.encode()).hexdigest()
 
 
@@ -176,7 +185,7 @@ def parse_xlsx(filepath: Path) -> list[dict]:
             {
                 "hash_riga": _make_hash(
                     SOCIETA_ID, data_serv, sala_norm,
-                    str(codice or ""), qta, imp_netto,
+                    str(codice or ""), segmento, qta, imp_netto,
                 ),
                 "societa_id": SOCIETA_ID,
                 "business_unit_id": bu,
