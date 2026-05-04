@@ -13,9 +13,12 @@ Usage:
     python -m ingest.classify ~/Desktop/*.xls* --route       # Batch mode
 
 Designed to be called by:
-  - CLI:       hotelops classifica <file>
+  - CLI:       hotelops classifica <file> | hotelops drop <file> (smooth: route+ingest+audit)
   - NanoClaw:  agent receives file via WhatsApp, calls classify → route → ingest
   - Humans:    drop files anywhere, let the system sort them out
+
+Dedup: tabelle APPEND usano hash/MD5 lato pipeline BQ; SNAPSHOT sostituisce per chiave naturale.
+Audit operativo: ``hotelops drop`` append su ``ingresso/_audit/drops.jsonl`` sul datahub.
 """
 
 from __future__ import annotations
@@ -23,7 +26,6 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
-import io
 import json
 import logging
 import re

@@ -392,6 +392,15 @@ def cmd_drop(args):
         else:
             print("    ❌ smistamento fallito")
 
+        if not route_ok:
+            drop_status = "FAIL_ROUTE"
+        elif args.dry_run:
+            drop_status = "DRY_RUN"
+        elif ingest_ok:
+            drop_status = "OK"
+        else:
+            drop_status = "FAIL_INGEST"
+
         append_drop_audit(
             datahub,
             {
@@ -400,9 +409,7 @@ def cmd_drop(args):
                 "category": r.category,
                 "canonical": r.canonical_name,
                 "dest_folder": r.dest_folder,
-                "status": "OK"
-                if (route_ok and (args.dry_run or ingest_ok))
-                else ("PARTIAL" if route_ok else "FAIL_ROUTE"),
+                "status": drop_status,
                 "route_ok": route_ok,
                 "ingest_ok": ingest_ok if route_ok else False,
                 "md5": md5,

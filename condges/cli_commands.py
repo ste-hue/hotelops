@@ -932,6 +932,11 @@ def cmd_help(args):
     (alias: cls)    hotelops classifica file1.xlsx file2.csv
                     hotelops cls *.xlsx --route --ingest
                     hotelops cls report.xlsx --dry-run
+                    hotelops cls file.xlsx --locale --route  # solo mount locale
+
+  drop            Stesso flusso in un comando: smista + ingest + audit JSONL
+                    hotelops drop ~/Desktop/export.xls
+                    hotelops drop *.csv --locale --dry-run
 
   scadenzario     Excel ponte: scadenzario fornitori → voci PF
     (alias: scad)   hotelops scad --file sintetica.xlsx
