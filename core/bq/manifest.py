@@ -34,6 +34,7 @@ TABLES = [
     "f_bilancino",
     "f_partite_aperte_fornitori",
     "f_saldi_banca_snapshot",
+    "f_saldi_banca_chiusura_mensile",
     "f_accodamenti",
     "f_ricavi_storici",
     "f_chiusura_mensile",

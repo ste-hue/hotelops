@@ -26,7 +26,7 @@ business:
       nome: "ORTI S.r.l."
       ruolo: operativa
       business_units: [HOTEL, RESIDENCE, CVM, HQ]
-      banche: {Cc1: INTESA, Cc2: MPS_KROSS, Cc3: MPS}
+      banche: {Cc1: INTESA, Cc2: MPS, Cc3: MPS_KROSS}
       note: "Gestione operativa hotel. Non genera cash autonomamente — paga fitto a INTUR."
     INTUR:
       nome: "INTUR S.r.l."
@@ -299,6 +299,16 @@ facts:
     registry_key: scheda_contabile
     source_drive: ingresso/registro_banca_esolver/{societa}/
     consumed_by: [v_previsione_cassa]
+
+  f_saldi_banca_chiusura_mensile:
+    bq_table: f_saldi_banca_chiusura_mensile
+    lifecycle: SNAPSHOT
+    asse: CASSA
+    descrizione: "Saldi banca certificati a fine mese (manuale); prevalgono su snapshot+movimenti in chiudi"
+    pipeline: core.bq.load.load_saldi_banca_chiusura_mensile
+    registry_key: null
+    source_drive: null
+    consumed_by: []
 
   f_partite_aperte_fornitori:
     bq_table: f_partite_aperte_fornitori

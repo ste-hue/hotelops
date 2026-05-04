@@ -1,0 +1,6 @@
+societa_id,data_riferimento,banca_id,saldo_eur,note
+ORTI,2026-03-31,MPS,52799.65,manuale verificato fine mese
+ORTI,2026-03-31,INTESA,63061.22,manuale verificato fine mese
+ORTI,2026-04-30,MPS,251897.54,Rosa 30/04/2026
+ORTI,2026-04-30,MPS_KROSS,33915.06,Rosa 30/04/2026 (non Intesa)
+ORTI,2026-04-30,INTESA,87439.92,Rosa 30/04/2026 Intesa ORTI

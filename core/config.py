@@ -7,6 +7,7 @@ def _t(name: str) -> str:
 # Fact tables
 F_BANCHE_MOVIMENTI          = _t("f_banche_movimenti")
 F_SALDI_BANCA_SNAPSHOT      = _t("f_saldi_banca_snapshot")
+F_SALDI_BANCA_CHIUSURA_MENSILE = _t("f_saldi_banca_chiusura_mensile")
 F_MOVIMENTI_CONTABILI       = _t("f_movimenti_contabili")
 F_BUDGET_MENSILE            = _t("f_budget_mensile")
 F_PIANO_FINANZIARIO_INPUT   = _t("f_piano_finanziario_input")

@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-from core.config import V_PIANO_FINANZIARIO_MENSILE
+from core.config import F_SALDI_BANCA_CHIUSURA_MENSILE, PROJECT, V_PIANO_FINANZIARIO_MENSILE
 from core.schemas import ChiusuraMensileRow, validate_batch
+
+# Banche attese per società (Esolver Cc#) — usato per saldo banca in `chiudi` / `saldo`
+SOCIETA_BANCHE: dict[str, tuple[str, ...]] = {
+    "ORTI": ("INTESA", "MPS", "MPS_KROSS"),
+    "INTUR": ("SELLA", "MPS", "INTESA", "BCP"),
+}
 
 
 # ── PF: Piano Finanziario mensile ───────────────────────────────────────────
@@ -262,61 +268,170 @@ def cmd_docs(args):
 # ── Saldo banca helper ────────────────────────────────────────────────────
 
 
-def _compute_saldo_banca(societa: str, as_of_date: str) -> tuple[float, list[dict]]:
-    """Real bank balance at end of as_of_date via nearest snapshot + movement delta.
-
-    For each bank with a snapshot >= as_of_date: saldo = anchor_saldo - sum(movements
-    between as_of_date+1 and anchor_date).  Falls back to cumulative sum if no snapshots.
-
-    Returns (total, [{banca_id, saldo, anchor_date, note}]).
-    """
-    from cli import query, BQ_PROJECT
+def _saldo_banca_fallback_single(
+    societa: str, as_of_date: str, banca_id: str
+) -> tuple[float, object | None, str]:
+    """Nessuno snapshot <= as_of: prova primo snapshot successivo e indietreggia, altrimenti cumsum."""
+    from cli import query
 
     try:
         rows = query(f"""
         WITH anchors AS (
-          SELECT banca_id, data_snapshot AS anchor_date, saldo_finale AS anchor_saldo
+          SELECT data_snapshot AS anchor_date, saldo_finale AS anchor_saldo
           FROM (
-            SELECT banca_id, data_snapshot, saldo_finale,
-              ROW_NUMBER() OVER (PARTITION BY banca_id ORDER BY data_snapshot ASC) AS rn
-            FROM `{BQ_PROJECT}.hotelops.f_saldi_banca_snapshot`
-            WHERE societa_id = '{societa}'
+            SELECT data_snapshot, saldo_finale,
+              ROW_NUMBER() OVER (ORDER BY data_snapshot ASC) AS rn
+            FROM `{PROJECT}.hotelops.f_saldi_banca_snapshot`
+            WHERE societa_id = '{societa}' AND banca_id = '{banca_id}'
               AND data_snapshot >= DATE('{as_of_date}')
           )
           WHERE rn = 1
         ),
         deltas AS (
-          SELECT m.banca_id,
-            ROUND(SUM(m.importo_netto), 2) AS delta
-          FROM `{BQ_PROJECT}.hotelops.f_banche_movimenti` m
-          JOIN anchors a USING (banca_id)
-          WHERE m.societa_id = '{societa}'
+          SELECT ROUND(SUM(m.importo_netto), 2) AS delta
+          FROM `{PROJECT}.hotelops.f_banche_movimenti` m
+          CROSS JOIN anchors a
+          WHERE m.societa_id = '{societa}' AND m.banca_id = '{banca_id}'
             AND m.data_operazione > DATE('{as_of_date}')
             AND m.data_operazione <= a.anchor_date
-          GROUP BY m.banca_id
         )
-        SELECT a.banca_id, a.anchor_date,
-          ROUND(a.anchor_saldo - COALESCE(d.delta, 0), 0) AS saldo,
-          'ANCHOR' AS note
+        SELECT a.anchor_date,
+          ROUND(a.anchor_saldo - COALESCE(d.delta, 0), 0) AS saldo
         FROM anchors a
-        LEFT JOIN deltas d USING (banca_id)
+        LEFT JOIN deltas d ON TRUE
         """)
-        if rows:
-            return sum(r["saldo"] for r in rows), rows
+        if rows and rows[0].get("saldo") is not None:
+            r = rows[0]
+            return float(r["saldo"]), r.get("anchor_date"), "ANCHOR"
     except Exception:
         pass
-    # Fallback: cumulative sum (no opening balance -- inaccurate)
     rows = query(f"""
-    SELECT banca_id,
-      ROUND(SUM(importo_netto), 0) AS saldo,
-      MAX(data_operazione) AS anchor_date,
-      'CUMSUM' AS note
-    FROM `{BQ_PROJECT}.hotelops.f_banche_movimenti`
-    WHERE societa_id = '{societa}'
+    SELECT ROUND(SUM(importo_netto), 0) AS saldo,
+      MAX(data_operazione) AS anchor_date
+    FROM `{PROJECT}.hotelops.f_banche_movimenti`
+    WHERE societa_id = '{societa}' AND banca_id = '{banca_id}'
       AND data_operazione <= DATE('{as_of_date}')
-    GROUP BY banca_id
     """)
-    return sum(r["saldo"] for r in rows), rows
+    r = rows[0] if rows else {}
+    return float(r.get("saldo") or 0), r.get("anchor_date"), "CUMSUM"
+
+
+def _manual_saldi_chiusura_mensile(societa: str, as_of_date: str) -> dict[str, float]:
+    """Saldi certificati fine mese da ``f_saldi_banca_chiusura_mensile`` (CSV → BQ)."""
+    from cli import query
+
+    try:
+        rows = query(f"""
+        SELECT banca_id, saldo_eur
+        FROM `{F_SALDI_BANCA_CHIUSURA_MENSILE}`
+        WHERE societa_id = '{societa}' AND data_riferimento = DATE('{as_of_date}')
+        """)
+        return {r["banca_id"]: float(r["saldo_eur"]) for r in rows}
+    except Exception:
+        return {}
+
+
+def _compute_saldo_banca(societa: str, as_of_date: str) -> tuple[float, list[dict]]:
+    """Saldo per banca alla data as_of (fine giornata contabile).
+
+    Se esiste una riga in ``f_saldi_banca_chiusura_mensile`` per (società, data),
+    quel saldo **prevale** (fonte manuale certificata).
+
+    Altrimenti: ultimo ``f_saldi_banca_snapshot`` con ``data_snapshot <= as_of``,
+    più movimenti ``f_banche_movimenti`` fino a ``as_of``; fallback snapshot futuro
+    o cumsum.
+
+    Returns (total, [{banca_id, saldo, anchor_date, note}]).
+    """
+    from cli import query
+
+    manual = _manual_saldi_chiusura_mensile(societa, as_of_date)
+
+    banks = SOCIETA_BANCHE.get(societa)
+    if not banks:
+        dist = query(f"""
+        SELECT DISTINCT banca_id FROM `{PROJECT}.hotelops.f_saldi_banca_snapshot`
+        WHERE societa_id = '{societa}'
+        UNION DISTINCT
+        SELECT DISTINCT banca_id FROM `{PROJECT}.hotelops.f_banche_movimenti`
+        WHERE societa_id = '{societa}'
+        """)
+        banks = tuple(sorted(r["banca_id"] for r in dist)) if dist else ()
+
+    if not banks:
+        return 0.0, []
+
+    arr_sql = ", ".join(repr(b) for b in banks)
+    rows = query(f"""
+    WITH banks AS (
+      SELECT * FROM UNNEST([{arr_sql}]) AS banca_id
+    ),
+    snaps_rn AS (
+      SELECT s.banca_id, s.data_snapshot, s.saldo_finale,
+        ROW_NUMBER() OVER (PARTITION BY s.banca_id ORDER BY s.data_snapshot DESC) AS rn
+      FROM `{PROJECT}.hotelops.f_saldi_banca_snapshot` s
+      INNER JOIN banks b ON b.banca_id = s.banca_id
+      WHERE s.societa_id = '{societa}' AND s.data_snapshot <= DATE('{as_of_date}')
+    ),
+    last_snap AS (
+      SELECT banca_id, data_snapshot AS snap_d, saldo_finale
+      FROM snaps_rn WHERE rn = 1
+    ),
+    all_banks AS (
+      SELECT b.banca_id, ls.snap_d, ls.saldo_finale
+      FROM banks b
+      LEFT JOIN last_snap ls ON ls.banca_id = b.banca_id
+    )
+    SELECT
+      ab.banca_id,
+      ab.snap_d,
+      ab.saldo_finale,
+      CASE WHEN ab.snap_d IS NOT NULL THEN (
+        SELECT COALESCE(SUM(m.importo_netto), 0)
+        FROM `{PROJECT}.hotelops.f_banche_movimenti` m
+        WHERE m.societa_id = '{societa}' AND m.banca_id = ab.banca_id
+          AND m.data_operazione > ab.snap_d
+          AND m.data_operazione <= DATE('{as_of_date}')
+      ) ELSE 0 END AS mov_fwd
+    FROM all_banks ab
+    ORDER BY ab.banca_id
+    """)
+
+    out: list[dict] = []
+    for r in rows:
+        banca_id = r["banca_id"]
+        snap_d = r["snap_d"]
+        saldo_finale = r["saldo_finale"]
+        mov_fwd = float(r["mov_fwd"] or 0)
+
+        if snap_d is not None and saldo_finale is not None:
+            saldo = round(float(saldo_finale) + mov_fwd, 0)
+            note = "ANCHOR"
+            anchor_date = snap_d
+        else:
+            saldo, anchor_date, note = _saldo_banca_fallback_single(
+                societa, as_of_date, banca_id
+            )
+            saldo = round(saldo, 0)
+
+        out.append(
+            {
+                "banca_id": banca_id,
+                "saldo": saldo,
+                "anchor_date": anchor_date,
+                "note": note,
+            }
+        )
+
+    for row in out:
+        mid = row["banca_id"]
+        if mid in manual:
+            row["saldo"] = round(manual[mid], 0)
+            row["note"] = "MANUALE"
+            row["anchor_date"] = as_of_date
+
+    total = sum(float(r["saldo"]) for r in out)
+    return total, out
 
 
 # ── Chiudi: chiusura mensile ────────────────────────────────────────────────
@@ -431,7 +546,9 @@ def cmd_chiudi(args):
     print(f"\n  ── SALDO BANCA al {last_day:02d}/{mese_chiuso:02d}/{anno} ──")
     totale_banca, saldo_detail = _compute_saldo_banca(societa, as_of_date)
     for r in saldo_detail:
-        method = "" if r.get("note") == "ANCHOR" else " (stima)"
+        method = (
+            "" if r.get("note") in ("ANCHOR", "MANUALE") else " (stima)"
+        )
         print(f"    {r['banca_id']:<12s} {fmt_eur(r['saldo'])}{method}")
     print(f"    {'TOTALE':<12s} {fmt_eur(totale_banca)}")
 
@@ -490,10 +607,10 @@ def cmd_chiudi(args):
 
 def _save_chiusura_snapshot(societa: str, anno: int, mese: int, rows: list[dict]):
     """Save monthly close snapshot to f_chiusura_mensile (DELETE-INSERT)."""
-    from cli import bq, BQ_PROJECT
+    from cli import bq
     from google.cloud import bigquery as bq_lib
 
-    table_id = f"{BQ_PROJECT}.hotelops.f_chiusura_mensile"
+    table_id = f"{PROJECT}.hotelops.f_chiusura_mensile"
     client = bq()
 
     # Ensure table exists
@@ -542,7 +659,7 @@ def _save_chiusura_snapshot(societa: str, anno: int, mese: int, rows: list[dict]
 
 def cmd_saldo(args):
     """Saldo banca reale (da snapshot) + proiezione cash forward via v_previsione_cassa."""
-    from cli import query, fmt_eur, BQ_PROJECT
+    from cli import query, fmt_eur
 
     societa = args.societa or "ORTI"
 
@@ -550,7 +667,7 @@ def cmd_saldo(args):
     SELECT periodo, tipo_periodo, saldo_ancora, data_ancora,
            entrate, uscite_pf, uscite_scad, n_fatture_scad,
            netto_pf, saldo_proiettato, stato_liquidita
-    FROM `{BQ_PROJECT}.hotelops.v_previsione_cassa`
+    FROM `{PROJECT}.hotelops.v_previsione_cassa`
     WHERE societa_id = '{societa}'
     ORDER BY anno, mese
     """)

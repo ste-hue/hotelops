@@ -251,6 +251,15 @@ def _stagionalita_args(ctx: dict) -> list[str]:
     return args
 
 
+def _dim_saldi_chiusura_args(ctx: dict) -> list[str]:
+    """Repo CSV → f_saldi_banca_chiusura_mensile (saldi fine mese certificati)."""
+    csv_path = HOTELOPS_ROOT / "core" / "bq" / "dimensioni" / "d_saldi_banca_chiusura_mensile.csv"
+    args = ["--file", str(csv_path)]
+    if ctx["dry_run"]:
+        args.append("--dry-run")
+    return args
+
+
 def _partite_discover(ctx: dict) -> list[list[str]]:
     """Discover partite fornitori files in partite_fornitori/{ORTI,INTUR}/."""
     pt_dir = ctx["datahub"] / "partite_fornitori"
@@ -377,6 +386,13 @@ PIPELINES = [
         module="core.bq.load.load_coefficienti_stagionalita",
         args_fn=_stagionalita_args,
         description="Seasonality coefficients → d_coefficienti_stagionalita",
+    ),
+    Pipeline(
+        name="saldi_banca_chiusura",
+        group="dimensioni",
+        module="core.bq.load.load_saldi_banca_chiusura_mensile",
+        args_fn=_dim_saldi_chiusura_args,
+        description="Saldi banca fine mese (manuali) → f_saldi_banca_chiusura_mensile",
     ),
 ]
 

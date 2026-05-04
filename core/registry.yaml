@@ -41,11 +41,12 @@ banche:
     societa: [INTUR]
 
 # ── Esolver Cc# mapping ─────────────────────────────────────────────
+# Allineato a Esolver "Elenco banche" / LISTAMOVCONT (stesso ordine di classify.py + ingest_scheda_contabile).
 esolver_cc_map:
   ORTI:
     "1": INTESA
-    "2": MPS_KROSS
-    "3": MPS
+    "2": MPS
+    "3": MPS_KROSS
   INTUR:
     "1": SELLA
     "2": MPS
