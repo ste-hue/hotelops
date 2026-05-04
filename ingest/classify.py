@@ -22,16 +22,18 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import io
+import json
 import logging
 import re
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from core.datahub_sync import (
     DATAHUB_ROOT,
@@ -48,6 +50,32 @@ DEFAULT_DATAHUB = DATAHUB_ROOT
 
 # All datahub input files live under ingresso/
 INGRESSO_PREFIX = "ingresso"
+AUDIT_DROP_FILE = "drops.jsonl"
+
+
+def file_md5_hex(path: Path) -> str:
+    """Fingerprint file (MD5) per audit drop — streaming, file grandi ok."""
+    h = hashlib.md5()
+    with path.open("rb") as f:
+        while True:
+            block = f.read(1048576)
+            if not block:
+                break
+            h.update(block)
+    return h.hexdigest()
+
+
+def append_drop_audit(datahub: Path, record: dict[str, Any]) -> None:
+    """Append una riga JSON su ``ingresso/_audit/drops.jsonl`` (Drive mount / datahub)."""
+    try:
+        audit_dir = datahub / INGRESSO_PREFIX / "_audit"
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        rec = {"ts": datetime.now(timezone.utc).isoformat(), **record}
+        with (audit_dir / AUDIT_DROP_FILE).open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError as e:
+        log.warning("Audit drop non scritto: %s", e)
+
 
 # ── Classification result ─────────────────────────────────────────────────────
 
@@ -142,6 +170,16 @@ for (soc, cc), bnk in ESOLVER_CC_MAP.items():
         _CC_BANCA_TO_SOCIETA[key] = ""  # empty = ambiguous
     else:
         _CC_BANCA_TO_SOCIETA[key] = soc
+
+# Banks owned by a single societa: when we know the bank, we know the societa.
+# Built from ESOLVER_CC_MAP. MPS_KROSS→ORTI, SELLA→INTUR, BCP→INTUR.
+_BANCA_UNIQUE_OWNER: dict[str, str] = {}
+_banca_owners: dict[str, set[str]] = {}
+for (soc, _cc), bnk in ESOLVER_CC_MAP.items():
+    _banca_owners.setdefault(bnk, set()).add(soc)
+for bnk, owners in _banca_owners.items():
+    if len(owners) == 1:
+        _BANCA_UNIQUE_OWNER[bnk] = next(iter(owners))
 
 
 def infer_societa(filename: str, path: Optional[Path] = None) -> Optional[str]:
@@ -265,6 +303,9 @@ def _read_xlsx_sample(
         else:
             ws = wb.active
             sheet_name = ws.title
+        # Some Excel exports write dimension=A1:A1 even with data, which makes
+        # read_only mode stop after row 1. Force a full scan.
+        ws.reset_dimensions()
         rows = []
         for i, row in enumerate(ws.iter_rows(values_only=True)):
             if i >= max_rows:
@@ -695,6 +736,12 @@ def detect_banca(path: Path) -> Optional[ClassificationResult]:
 
     societa = infer_societa(path.name, path)
     banca = infer_banca(path.name, societa)
+    # If banca is known but societa is not, infer from unique owner (KROSS→ORTI, SELLA/BCP→INTUR).
+    if banca and not societa:
+        societa = _BANCA_UNIQUE_OWNER.get(banca)
+    # Last resort: read content (e.g. "Ragione sociale: ORTI SRL" header in INTESA exports).
+    if not societa and ext in (".xlsx",):
+        societa = _infer_societa_from_content(path)
 
     if ext == ".csv":
         header, rows = _read_csv_sample(path)
@@ -724,15 +771,19 @@ def detect_banca(path: Path) -> Optional[ClassificationResult]:
         rows, sheet = _read_xlsx_sample(path, max_rows=15)
         for row in rows[:10]:
             row_upper = _cols_upper(row)
-            # MPS 2026: DATA CONT. + DATA VAL. + DESCRIZIONE + IMPORTO(€)
-            if _has_columns(row_upper, ["DATA CONT", "DATA VAL", "IMPORTO"]):
-                banca = banca or "MPS"
-                return _build_banca_result(path, societa, banca, confidence=0.90)
-            # Intesa: Data Contabile + Data Valuta + Dare + Avere
+            # Intesa (check before MPS: DARE+AVERE is more specific than IMPORTO,
+            # and Intesa exports include "Importo Origine/Regolato" columns that
+            # would otherwise match the MPS pattern).
             if _has_columns(
                 row_upper, ["DATA CONTABILE", "DATA VALUTA", "DARE", "AVERE"]
             ):
                 banca = banca or "INTESA"
+                return _build_banca_result(path, societa, banca, confidence=0.90)
+            # MPS 2026: DATA CONT. + DATA VAL. + DESCRIZIONE + IMPORTO(€), no DARE/AVERE
+            if _has_columns(
+                row_upper, ["DATA CONT", "DATA VAL", "IMPORTO"]
+            ) and not _has_columns(row_upper, ["DARE", "AVERE"]):
+                banca = banca or "MPS"
                 return _build_banca_result(path, societa, banca, confidence=0.90)
             # Generic bank: DATA + DARE + AVERE
             if _has_columns(row_upper, ["DATA", "DARE", "AVERE"]):
@@ -1232,6 +1283,11 @@ Examples:
     parser.add_argument(
         "--dry-run", action="store_true", help="Show plan without executing"
     )
+    parser.add_argument(
+        "--locale",
+        action="store_true",
+        help="Smista sul mount locale del datahub (niente rclone verso Drive remoto)",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
     args = parser.parse_args()
@@ -1284,7 +1340,12 @@ Examples:
 
         dest_file = None
         if args.route:
-            dest_file = route_file(r, args.datahub, dry_run=args.dry_run)
+            dest_file = route_file(
+                r,
+                args.datahub,
+                dry_run=args.dry_run,
+                use_rclone=not args.locale,
+            )
             if dest_file:
                 routed_count += 1
                 prefix = "[DRY-RUN] " if args.dry_run else ""

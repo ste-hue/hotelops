@@ -12,6 +12,7 @@ Subcomandi:
     hotelops voci        Lista voci piano finanziario disponibili
     hotelops manifest    Genera catalogo tabelle BigQuery
     hotelops classifica  Classifica, smista e ingerisci file dati
+    hotelops drop        Stesso flusso smooth: smista + ingest (audit su Drive)
     hotelops ingest      Pipeline ingestione da datahub
     hotelops app         Dashboard Streamlit condges
     hotelops tesoreria   App Streamlit tesoreria (cashflow, PF, fornitori)
@@ -285,7 +286,12 @@ def cmd_classifica(args):
         print(r.summary())
 
         if args.route or args.ingest:
-            dest = route_file(r, datahub, dry_run=args.dry_run)
+            dest = route_file(
+                r,
+                datahub,
+                dry_run=args.dry_run,
+                use_rclone=not getattr(args, "locale", False),
+            )
             if dest:
                 prefix = "[DRY-RUN] " if args.dry_run else ""
                 print(f"  {prefix}→ {dest}")
@@ -298,6 +304,119 @@ def cmd_classifica(args):
 
     print(f"{'─' * 70}")
     print(f"  Riconosciuti: {ok}/{len(results)}")
+    print(f"{'─' * 70}\n")
+
+
+def cmd_drop(args):
+    """Un solo passaggio: classifica → smista → ingest + audit JSONL (dedup resta in BQ)."""
+    from pathlib import Path
+
+    from ingest.classify import (
+        DEFAULT_DATAHUB,
+        append_drop_audit,
+        classify_batch,
+        file_md5_hex,
+        route_file,
+        run_ingest,
+    )
+
+    datahub = Path(args.datahub) if args.datahub else DEFAULT_DATAHUB
+    use_rclone = not args.locale
+
+    files = [Path(f) for f in args.files]
+    expanded: list[Path] = []
+    for f in files:
+        if "*" in str(f) or "?" in str(f):
+            import glob
+
+            expanded.extend(Path(p) for p in glob.glob(str(f)))
+        else:
+            expanded.append(f)
+
+    if not expanded:
+        print("Nessun file trovato.")
+        return
+
+    print(f"\n{'═' * 70}")
+    print("  DROP → classifica + smista + ingest  (BQ: APPEND dedup / SNAPSHOT)")
+    print(f"  Datahub: {datahub}  |  rclone: {'no (--locale)' if args.locale else 'sì'}")
+    print(f"{'═' * 70}\n")
+
+    results = classify_batch(expanded)
+    ok = unk = routed = ingested = 0
+
+    for r in results:
+        md5 = None
+        if r.file_path.is_file():
+            try:
+                md5 = file_md5_hex(r.file_path)
+            except OSError:
+                pass
+
+        if r.category in ("unknown", "error"):
+            unk += 1
+            print(f"❓ {r.file_path.name} — non riconosciuto")
+            append_drop_audit(
+                datahub,
+                {
+                    "file": str(r.file_path),
+                    "file_type": r.file_type,
+                    "status": "UNKNOWN",
+                    "md5": md5,
+                    "dry_run": args.dry_run,
+                },
+            )
+            print()
+            continue
+
+        ok += 1
+        emoji = "✅" if r.confidence >= 0.8 else "⚠️"
+        print(f"{emoji} {r.file_path.name}  →  {r.file_type} / {r.category}")
+        print(f"    {r.summary().strip()}")
+
+        dest = route_file(r, datahub, dry_run=args.dry_run, use_rclone=use_rclone)
+        route_ok = dest is not None
+        ingest_ok = False
+        if route_ok:
+            routed += 1
+            prefix = "[DRY-RUN] " if args.dry_run else ""
+            print(f"    {prefix}smistato → {dest}")
+            if not args.dry_run:
+                ingest_ok = run_ingest(r, dest, datahub, dry_run=False)
+                if ingest_ok:
+                    ingested += 1
+                print(f"    ingest: {'✅ OK' if ingest_ok else '❌ ERRORE'}")
+            else:
+                ingest_ok = run_ingest(r, dest, datahub, dry_run=True)
+                print("    ingest: [DRY-RUN]")
+        else:
+            print("    ❌ smistamento fallito")
+
+        append_drop_audit(
+            datahub,
+            {
+                "file": str(r.file_path),
+                "file_type": r.file_type,
+                "category": r.category,
+                "canonical": r.canonical_name,
+                "dest_folder": r.dest_folder,
+                "status": "OK"
+                if (route_ok and (args.dry_run or ingest_ok))
+                else ("PARTIAL" if route_ok else "FAIL_ROUTE"),
+                "route_ok": route_ok,
+                "ingest_ok": ingest_ok if route_ok else False,
+                "md5": md5,
+                "dry_run": args.dry_run,
+            },
+        )
+        print()
+
+    print(f"{'─' * 70}")
+    print(
+        f"  Riconosciuti {ok}/{len(results)}  |  sconosciuti {unk}  |  "
+        f"smistati {routed}  |  ingest OK {ingested}"
+    )
+    print(f"  Audit: {datahub / 'ingresso' / '_audit' / 'drops.jsonl'}")
     print(f"{'─' * 70}\n")
 
 
@@ -515,6 +634,26 @@ def main():
     p_class.add_argument(
         "--dry-run", action="store_true", help="Mostra il piano senza eseguire"
     )
+    p_class.add_argument(
+        "--locale",
+        action="store_true",
+        help="Smista sul mount locale del datahub (senza rclone verso Drive remoto)",
+    )
+
+    p_drop = sub.add_parser(
+        "drop",
+        help="Flusso smooth: classifica + smista + ingest (audit in ingresso/_audit/)",
+    )
+    p_drop.add_argument("files", nargs="+", help="File da elaborare (anche glob)")
+    p_drop.add_argument("--datahub", help="Root datahub (default: mount Google Drive)")
+    p_drop.add_argument(
+        "--locale",
+        action="store_true",
+        help="Solo copia locale sul datahub mount (niente upload rclone)",
+    )
+    p_drop.add_argument(
+        "--dry-run", action="store_true", help="Piano senza scrittura Drive/BQ"
+    )
 
     # ingest
     p_ingest = sub.add_parser("ingest", help="Pipeline di ingestione dati")
@@ -650,6 +789,7 @@ def main():
         "manifest": cmd_manifest,
         "classifica": cmd_classifica,
         "cls": cmd_classifica,
+        "drop": cmd_drop,
         "ingest": cmd_ingest,
         "app": cmd_app,
         "tesoreria": cmd_tesoreria,
