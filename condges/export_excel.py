@@ -94,7 +94,6 @@ def _build_cashflow_sheet(
     # Col A = label, B+ = months
     # Determine which months appear in data
     months = sorted({r.mese for r in cashflow_rows})
-    n_months = len(months)
 
     ws.column_dimensions["A"].width = 22
     row = 4

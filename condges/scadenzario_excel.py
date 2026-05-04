@@ -11,20 +11,27 @@ import csv
 import re
 from datetime import date
 from pathlib import Path
+from typing import BinaryIO
 
 import openpyxl
 from openpyxl.styles import Font, PatternFill
 
 
-def parse_sintetica_scadenze(filepath: Path) -> tuple[list[dict], list[int]]:
+def parse_sintetica_scadenze(source: Path | BinaryIO) -> tuple[list[dict], list[int]]:
     """Parse Esolver 'Situazione sintetica scadenze' Excel.
+
+    Args:
+        source: Path on disk or binary stream (e.g. ``BytesIO`` from an upload).
 
     Returns:
         (suppliers, bucket_months) where suppliers is list of dicts
         {codice_fornitore, nome, totale, scaduto, buckets: {month_int: amount}}
         and bucket_months is the ordered list of month ints from headers.
     """
-    wb = openpyxl.load_workbook(str(filepath), data_only=True)
+    if isinstance(source, Path):
+        wb = openpyxl.load_workbook(str(source), data_only=True)
+    else:
+        wb = openpyxl.load_workbook(source, data_only=True)
     ws = wb.active
 
     bucket_months = {}

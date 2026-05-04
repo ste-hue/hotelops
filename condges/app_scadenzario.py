@@ -21,6 +21,8 @@ import openpyxl
 import pandas as pd
 import streamlit as st
 
+from condges.scadenze_parse import parse_scadenze
+
 # -- Config --------------------------------------------------------------------
 
 FORNITORI_CSV = Path(__file__).parent.parent / "core" / "bq" / "dimensioni" / "d_fornitori.csv"
@@ -89,109 +91,6 @@ def load_fornitori_map() -> dict[int, dict]:
                 "nome_pf": row.get("nome_pf", "").strip(),
             }
     return result
-
-
-# -- Parse scadenze ------------------------------------------------------------
-
-
-def parse_scadenze(file_bytes: BytesIO) -> tuple[pd.DataFrame, list[int]]:
-    """Parse Esolver 'Situazione partite sintetica per fornitori'.
-
-    Each row is an individual invoice with:
-      col 11: codice_fornitore, col 12: nome, col 20: importo, col 23: data_scadenza.
-
-    Returns (df, bucket_months) where df has one row per supplier with columns:
-      codice_fornitore, nome, totale, scaduto, mese_4, mese_5, ...
-    Invoices with scadenza before current month are aggregated into 'scaduto'.
-    """
-    wb = openpyxl.load_workbook(file_bytes, data_only=True)
-    ws = wb.active
-
-    current_month = date.today().month
-    current_year = date.today().year
-
-    # Read all invoices — supports two Esolver formats:
-    # Format A: C11=codice(int), C12=nome, C20=importo, C23=data_scadenza
-    # Format B: C14="codice nome", C13=data_scadenza, C20=importo
-    invoices: list[dict] = []
-    for row_idx in range(1, ws.max_row + 1):
-        codice = None
-        nome = ""
-        scad = None
-
-        # Try Format A first: codice in C11
-        c11 = ws.cell(row=row_idx, column=11).value
-        if c11 and isinstance(c11, (int, float)):
-            codice = int(c11)
-            nome = str(ws.cell(row=row_idx, column=12).value or "").strip()
-            scad = ws.cell(row=row_idx, column=23).value
-
-        # Try Format B: "codice nome" in C14, date in C13
-        if codice is None:
-            c14 = ws.cell(row=row_idx, column=14).value
-            if c14:
-                m = re.match(r"^(\d+)\s+(.+)", str(c14).strip())
-                if m:
-                    codice = int(m.group(1))
-                    nome = m.group(2).strip()
-                    scad = ws.cell(row=row_idx, column=13).value
-
-        if codice is None or scad is None:
-            continue
-        # scad could be datetime or skip if it's a string flag like "S"
-        if not hasattr(scad, "month"):
-            continue
-
-        importo = ws.cell(row=row_idx, column=20).value or 0
-        invoices.append({
-            "codice": int(codice),
-            "nome": nome,
-            "importo": float(importo),
-            "scad_month": scad.month,
-            "scad_year": scad.year,
-        })
-
-    if not invoices:
-        return pd.DataFrame(columns=["codice_fornitore", "nome", "totale", "scaduto"]), []
-
-    # Aggregate by supplier + month
-    supplier_data: dict[int, dict] = {}  # codice -> {nome, scaduto, mese_X, totale}
-    all_months: set[int] = set()
-
-    for inv in invoices:
-        cod = inv["codice"]
-        if cod not in supplier_data:
-            supplier_data[cod] = {"nome": inv["nome"], "scaduto": 0.0, "totale": 0.0}
-        amt = inv["importo"]  # negative = debt
-        supplier_data[cod]["totale"] += amt
-
-        # Past due (before current month) → scaduto
-        if inv["scad_year"] < current_year or (
-            inv["scad_year"] == current_year and inv["scad_month"] < current_month
-        ):
-            supplier_data[cod]["scaduto"] += amt
-        else:
-            m = inv["scad_month"]
-            all_months.add(m)
-            key = f"mese_{m}"
-            supplier_data[cod][key] = supplier_data[cod].get(key, 0.0) + amt
-
-    # Build DataFrame
-    rows = []
-    for cod, data in supplier_data.items():
-        row = {
-            "codice_fornitore": cod,
-            "nome": data["nome"],
-            "totale": data["totale"],
-            "scaduto": data["scaduto"],
-        }
-        for m in all_months:
-            row[f"mese_{m}"] = data.get(f"mese_{m}", 0.0)
-        rows.append(row)
-
-    df = pd.DataFrame(rows)
-    bucket_months = sorted(all_months)
-    return df, bucket_months
 
 
 # -- Read PF sheet -------------------------------------------------------------

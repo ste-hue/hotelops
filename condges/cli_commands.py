@@ -604,11 +604,11 @@ def cmd_scadenzario(args):
     from datetime import date
     from io import BytesIO
     from condges.app_scadenzario import (
-        parse_scadenze,
         load_fornitori_map,
         write_pf,
         MESI_NOMI,
     )
+    from condges.scadenze_parse import parse_scadenze
 
     if not args.pf:
         print("  Uso: hotelops scad --pf <PF.xlsx> --file <scadenzario.xlsx>")

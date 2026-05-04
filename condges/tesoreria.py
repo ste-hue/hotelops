@@ -6,9 +6,9 @@ Run:
 
 from __future__ import annotations
 
-import re
 import sys
 from datetime import date, timedelta
+from io import BytesIO
 from pathlib import Path
 
 # Ensure project root is on sys.path when run via `streamlit run condges/tesoreria.py`
@@ -22,6 +22,12 @@ from condges.bq_data import load_bva, load_consuntivo, load_voci
 from condges.cashflow import project_cashflow
 from condges.export_excel import generate_tesoreria_excel
 from condges.parse_pf import PFData, ScadenzarioData, parse_pf, parse_scadenzario
+from condges.scadenze_parse import (
+    parse_scadenze,
+    partite_df_to_scadenzario_data,
+    sintetica_list_to_scadenzario_data,
+)
+from condges.scadenzario_excel import parse_sintetica_scadenze
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -37,6 +43,13 @@ MESI_NOMI = [
 BANKS_BY_SOCIETA: dict[str, list[str]] = {
     "ORTI": ["MPS", "Intesa", "MPS_KROSS"],
     "INTUR": ["Sella", "MPS", "Intesa", "BCP"],
+}
+
+# Scadenzario upload: same helpers as app_scadenzario / parse_pf / scadenzario_excel
+SCAD_TIPO_LABELS: dict[str, str] = {
+    "riepilogo": "Riepilogo (tabella con intestazioni mese)",
+    "partite": "Esolver — partite (righe fattura / colonne fisse)",
+    "sintetica": "Esolver — sintetica (col. A: codice + ragione sociale)",
 }
 
 
@@ -253,7 +266,26 @@ def render_sidebar() -> tuple[int, PFData | None, str, date, dict[str, float], S
 
         st.divider()
         st.subheader("Saldi Banca")
-        data_saldo = st.date_input("Data saldo", value=_last_day_prev_month())
+        # Date + saldi amounts on the PF sheet refer to the same cut-over (e.g. file
+        # "… aprile …" often carries saldi al 31/03). Reset picker when a different PF is uploaded.
+        _pf_stable_key = "none"
+        if pf_file is not None:
+            _pf_stable_key = f"{pf_file.name}_{pf_file.size}"
+        _default_data_saldo = _last_day_prev_month()
+        if pf_data and pf_data.data_saldo:
+            _default_data_saldo = pf_data.data_saldo
+        data_saldo = st.date_input(
+            "Data saldo (riferimento saldi banca)",
+            value=_default_data_saldo,
+            key=f"data_saldo_{_pf_stable_key}",
+            help="Di norma è la data letta dal foglio Piano Finanziario (cut-off dei saldi). "
+            "Il nome del file (es. lavorazione aprile) può essere sul mese dopo quella data.",
+        )
+        if pf_data and pf_data.data_saldo and data_saldo != pf_data.data_saldo:
+            st.caption(
+                f"Nel PF il parser ha trovato **{pf_data.data_saldo.strftime('%d/%m/%Y')}** — "
+                "puoi allineare il selettore se serve."
+            )
 
         banks = BANKS_BY_SOCIETA[societa]
         saldi_banca: dict[str, float] = {}
@@ -273,12 +305,27 @@ def render_sidebar() -> tuple[int, PFData | None, str, date, dict[str, float], S
 
         st.divider()
         st.subheader("Scadenzario Fornitori")
+        scad_tipo = st.radio(
+            "Formato file",
+            options=list(SCAD_TIPO_LABELS.keys()),
+            format_func=lambda k: SCAD_TIPO_LABELS[k],
+            horizontal=True,
+            key="scad_tipo",
+        )
         scad_file = st.file_uploader("Carica Scadenzario (opzionale)", type=["xlsx"], key="scad_uploader")
 
         scad_data: ScadenzarioData | None = None
         if scad_file is not None:
+            raw = scad_file.getvalue()
             try:
-                scad_data = parse_scadenzario(scad_file.read())
+                if scad_tipo == "riepilogo":
+                    scad_data = parse_scadenzario(raw)
+                elif scad_tipo == "partite":
+                    df_scad, bucket_months = parse_scadenze(BytesIO(raw))
+                    scad_data = partite_df_to_scadenzario_data(df_scad, bucket_months)
+                else:
+                    suppliers, bucket_months = parse_sintetica_scadenze(BytesIO(raw))
+                    scad_data = sintetica_list_to_scadenzario_data(suppliers, bucket_months)
                 st.success(f"✅ {len(scad_data.fornitori)} fornitori")
             except Exception as exc:
                 st.error(f"Errore parsing Scadenzario: {exc}")
@@ -383,7 +430,6 @@ def render_voci_section(
         voce_id = voce_row["voce_id"]
         voce_label = voce_row.get("voce_label", voce_id)
         sezione = voce_row.get("sezione", "")
-        ord_val = voce_row.get("ord", 0)
 
         # Section subheader on change
         if sezione != current_sezione:
