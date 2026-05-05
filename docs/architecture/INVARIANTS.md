@@ -32,6 +32,10 @@ Ogni riga che entra in BQ passa da `core.bq.write.bq_write_validated`, che appli
 - Lineage automatica via `core/pipeline_run.PipelineRun.get_current()` (ContextVar)
 - Single observable log line per write
 
+Hard rule collegata al layer Raw: nessun write diretto nel Canonical è valido
+senza intake Raw tracciato (identità + provenienza verificabile). Eccezioni solo
+via decisione esplicita e verificabile.
+
 Mai bypass, mai "solo stavolta". Violare questo invariant significa perdere la garanzia di consistenza dei fatti → tutto il motore a valle diventa inaffidabile.
 
 Spec: `docs/superpowers/specs/2026-04-28-bq-write-validated-design.md`
