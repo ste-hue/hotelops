@@ -23,6 +23,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > - **BigQuery**: cosa il twin osserva.
 > - **Vault `<vault>/HotelOps/`**: meta-knowledge umano della realtà operativa che il twin riflette (people, companies, banks, loans, departments, stories). **Non canonical per fatti tecnici** — può essere stale. Verifica sempre con repo + BQ + utente.
 
+## Behavioral guidelines
+
+**Vedi anche:** `~/.claude/CLAUDE.md` per "surface ambiguity" e "verify before claiming done". Le due regole qui sotto sono complementari, da Karpathy guidelines.
+
+### Simplicity first
+
+Codice minimo che risolve il problema. Niente di speculativo.
+
+- Nessuna feature oltre a quello che è stato chiesto.
+- Nessuna astrazione per codice usato una sola volta.
+- Nessuna "flessibilità" o "configurabilità" non richiesta.
+- Nessun error handling per scenari impossibili.
+- Se scrivi 200 righe e potevano essere 50, riscrivile.
+
+Test: "Un senior engineer direbbe che è overcomplicated?" Se sì, semplifica.
+
+### Surgical changes
+
+Tocca solo quello che devi. Pulisci solo il casino che hai fatto tu.
+
+Quando modifichi codice esistente:
+
+- Non "migliorare" codice, commenti o formatting adiacenti.
+- Non refactor di cose che non sono rotte.
+- Match dello stile esistente, anche se faresti diverso.
+- Se noti dead code non correlato, segnalalo — non cancellarlo.
+
+Quando le tue modifiche creano orfani:
+
+- Rimuovi import/variabili/funzioni che le TUE modifiche hanno reso unused.
+- Non rimuovere dead code preesistente se non richiesto.
+
+Test: ogni riga modificata deve essere riconducibile direttamente alla richiesta dell'utente.
+
 ## Project Overview
 
 hotelops is the financial data platform for Gruppo Panorama hotel operations. It ingests data from banks, ERP (Esolver), PMS (HotelCube), and manual budgets into BigQuery, then serves the **condges** (Controllo di Gestione) vertical through two complementary lenses: **Rosa (CASSA)** for cash flow forecasts ("quando il soldo entra/esce?") and **Gasparotto (COMPETENZA)** for budget vs actuals ("quanto consumo/genero?"). Every financial event has three temporal dimensions: COMPETENZA, CASSA, IMPEGNO. BigQuery is the source of truth.
