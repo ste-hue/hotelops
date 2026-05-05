@@ -205,11 +205,23 @@ Ogni nuova pipeline deve:
 
 ---
 
-## 10) Stato di transizione (oggi)
+## 10) Stato di transizione (oggi 2026-05-05)
 
-- Architettura target: GCS-first (decisa)
-- Implementazione: in corso, progressiva
-- Legacy datahub: ancora presente come staging operativo
+- Architettura target: GCS-first (decisa, in materializzazione)
+- **Phase 4 landed**: `gs://hotelops-raw` operativo (Versioning ON +
+  Autoclass→ARCHIVE), `core/lineage/raw_storage.py` con `LocalBackend` +
+  `GCSBackend`, schema `f_raw_objects.gcs_generation` aggiunto, parser
+  invocation supporta `gs://` via download-to-temp.
+- **Pilot source attivo**: `MPS_BANCA_ORTI_APPEND` (`backend: gcs`,
+  lifecycle APPEND con content_hash dedup — esercita il caso d'uso pieno
+  di GCS+versioning).
+- **Bulk flip pendente**: altre 12 sources restano `backend: drive` finché
+  un PR dedicato le sposta in batch (separato da Phase 4 per limitare blast
+  radius del pilot).
+- **Backfill rows storiche**: NON eseguito — `f_raw_objects` esistenti
+  restano `file://`. Backfill è opzionale e separato.
+- Legacy datahub Drive: ancora workspace umano editabile; non sostituito.
 
-Fino al cutover completo, i nuovi lavori devono privilegiare pattern GCS+Manifest
-quando toccano ingressi o lineage.
+I nuovi lavori che toccano lineage devono usare `intake_file` (che dispatcha
+backend automaticamente via `source_def`). Non scrivere mai direttamente in
+`f_raw_objects`.

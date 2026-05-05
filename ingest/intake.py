@@ -9,11 +9,17 @@ import argparse
 import hashlib
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from core.lineage.policy_gate import enforce_loop_target_gate_consistency
-from core.lineage.raw_manifest import emit_event, register_raw_object
+from core.lineage.raw_manifest import (
+    _lookup_existing_by_hash,
+    emit_event,
+    register_raw_object,
+)
+from core.lineage.raw_storage import GCSBackend, LocalBackend
 from core.lineage.source_resolver import load_registry
 from core.pipeline_run import PipelineRun
 
@@ -43,34 +49,70 @@ def intake_file(
     path: Path,
     source_name: Optional[str] = None,
     actor: str = "cli",
-    raw_backend: str = "local",
-    raw_uri: Optional[str] = None,
 ) -> IntakeResult:
     """Register a file in the lineage layer.
 
-    If source_name is provided, it must exist in the registry; the source_def
-    is propagated to the RawObject row (societa, detector_category, etc.).
-    If source_name is None, the row is registered as RAW_ONLY without source binding.
-
-    Phase 1: blob storage is the file's existing path (raw_backend='local' or 'drive').
-    Phase 4: blob is written to GCS first, then registered.
+    Backend is selected from source_def.raw_storage.backend:
+      - drive | local → file kept on local disk, raw_uri = file://...
+      - gcs → file uploaded to gs://<bucket>/<source>/<YYYY>/<MM>/<filename>,
+              raw_uri = gs://..., gcs_generation populated
+    Sourceless intake (source_name=None) is always treated as local.
     """
     if not path.exists():
         raise FileNotFoundError(path)
 
     content_hash = _file_md5(path)
     bytes_size = path.stat().st_size
-    raw_uri_final = raw_uri or path.resolve().as_uri()
 
-    # Resolve source if provided
     source_def = None
     if source_name is not None:
         reg = load_registry()
         source_def = reg.get(source_name)
         if source_def is None:
             raise KeyError(f"source_name not in registry: {source_name}")
-        # Boot-time check for the resolved source
         enforce_loop_target_gate_consistency(source_def)
+
+    # Dedup-before-upload (spec §3 D8 paragraph 1).
+    # Probe content_hash on f_raw_objects BEFORE invoking the storage backend:
+    # a hit means we'd otherwise (a) waste a GCS upload that creates an orphan
+    # generation under Object Versioning, and (b) emit a duplicate RAW_INGESTED
+    # into f_lineage_events. Both were observed in the Phase 4 smoke test.
+    existing_id = _lookup_existing_by_hash(content_hash)
+    if existing_id is not None:
+        log.info(
+            "intake_file: dedup hit on %s — returning existing raw_object_id %s "
+            "(no upload, no event)",
+            content_hash[:12],
+            existing_id,
+        )
+        return IntakeResult(
+            raw_object_id=existing_id,
+            content_hash=content_hash,
+            source_name=source_name,
+            deduped=True,
+        )
+
+    backend_kind = (
+        source_def.raw_storage.backend
+        if source_def and source_def.raw_storage
+        else "local"
+    )
+    intake_at = datetime.now(timezone.utc)
+
+    if backend_kind == "gcs":
+        bucket = source_def.raw_storage.bucket or "hotelops-raw"
+        backend = GCSBackend(bucket=bucket)
+        upload_result = backend.upload(
+            local_path=path, source_name=source_name, intake_at=intake_at
+        )
+    else:
+        # drive | local: passthrough
+        backend = LocalBackend()
+        upload_result = backend.upload(
+            local_path=path,
+            source_name=source_name or "_unclassified",
+            intake_at=intake_at,
+        )
 
     with PipelineRun(
         "ingest_intake",
@@ -79,8 +121,8 @@ def intake_file(
     ):
         raw_object_id = register_raw_object(
             content_hash=content_hash,
-            raw_uri=raw_uri_final,
-            raw_backend=raw_backend,
+            raw_uri=upload_result.raw_uri,
+            raw_backend=backend_kind,
             file_name_original=path.name,
             bytes_size=bytes_size,
             intake_actor=actor,
@@ -89,12 +131,9 @@ def intake_file(
             societa_id=source_def.societa if source_def else None,
             business_unit_id=source_def.business_unit if source_def else None,
             file_sorgente=str(path),
+            gcs_generation=upload_result.generation,
         )
 
-        # Always emit RAW_INGESTED for new objects. (register_raw_object dedups
-        # internally; if dedup hit, we skip the event to keep log idempotent.)
-        # Heuristic: dedup ⇒ raw_object_id was already in BQ ⇒ check via lookup.
-        # Phase 1 simplification: emit always; phase 2 add dedup check before emit.
         emit_event(
             raw_object_id=raw_object_id,
             event_type="RAW_INGESTED",
@@ -104,7 +143,8 @@ def intake_file(
             payload={
                 "file_name": path.name,
                 "bytes_size": bytes_size,
-                "raw_backend": raw_backend,
+                "raw_backend": backend_kind,
+                "gcs_generation": upload_result.generation,
             },
         )
 
@@ -112,7 +152,7 @@ def intake_file(
         raw_object_id=raw_object_id,
         content_hash=content_hash,
         source_name=source_name,
-        deduped=False,  # Phase 1 placeholder
+        deduped=False,
     )
 
 

@@ -128,3 +128,44 @@ def test_RawStorage_round_trip() -> None:
     revived = RawStorage(**rs.model_dump(mode="json"))
     assert revived.backend == "drive"
     assert revived.path_template == "ingresso/x/{societa}"
+
+
+def test_raw_object_accepts_gcs_generation():
+    from core.lineage.schemas import RawObject
+    from datetime import datetime, timezone
+
+    row = RawObject(
+        raw_object_id="r1",
+        content_hash="h",
+        raw_uri="gs://hotelops-raw/k/v.xlsx",
+        raw_backend="gcs",
+        file_name_original="v.xlsx",
+        bytes_size=1,
+        intake_at=datetime.now(timezone.utc),
+        intake_actor="x",
+        pipeline_run_id="run",
+        pipeline_name="ingest_intake",
+        ingestion_ts=datetime.now(timezone.utc),
+        gcs_generation=1715000000123456,
+    )
+    assert row.gcs_generation == 1715000000123456
+
+
+def test_raw_object_gcs_generation_optional_default_none():
+    from core.lineage.schemas import RawObject
+    from datetime import datetime, timezone
+
+    row = RawObject(
+        raw_object_id="r2",
+        content_hash="h2",
+        raw_uri="file:///tmp/x.xlsx",
+        raw_backend="local",
+        file_name_original="x.xlsx",
+        bytes_size=1,
+        intake_at=datetime.now(timezone.utc),
+        intake_actor="x",
+        pipeline_run_id="run",
+        pipeline_name="ingest_intake",
+        ingestion_ts=datetime.now(timezone.utc),
+    )
+    assert row.gcs_generation is None

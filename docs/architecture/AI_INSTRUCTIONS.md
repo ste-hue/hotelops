@@ -24,6 +24,8 @@ Non è: query tool, BI layer, raccolta di script. Ogni azione deve rinforzare qu
 3. **Una canonical truth per concetto** (vedi §Canonical Registry). Multipli = sistema rotto.
 4. **La logica vive in un posto solo**: deduplicazione, precedenza, classificazione, mapping. Duplicazione = drift garantito.
 5. **Preserva raw, risolvi upstream**: raw è immutabile. Conflitti si risolvono in canonical, con regole esplicite.
+   Hard rule: nessun write diretto nel Canonical è valido senza intake Raw tracciato
+   (identità + provenienza verificabile). Eccezioni solo con decisione esplicita.
 6. **Ogni numero deve essere spiegabile**: fonte, regole applicate, cosa è stato escluso. Altrimenti il numero è invalido.
 7. **Il significato lo definiscono gli umani, non i dati**: budget, voci PF, categorie → versionate, possedute da Rosa/Gasparotto/Mario/Antonio.
 8. **Il drift si espone, non si nasconde**: pipeline stale, schema drift, fonti sovrapposte → alert visibili.

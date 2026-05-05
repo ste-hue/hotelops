@@ -20,8 +20,9 @@ sources:
     promotion_policy: AUTO
     detector_category: banca
     raw_storage:
-      backend: drive
-      path_template: "homebanking/ORTI/MPS"
+      backend: gcs                          # was: drive (Phase 4 pilot)
+      bucket: hotelops-raw                   # NEW (only required for backend=gcs)
+      path_template: "homebanking/ORTI/MPS"  # retained for Drive-side workspace
 
   MPS_BANCA_INTUR_APPEND:
     system: MPS

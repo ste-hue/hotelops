@@ -79,7 +79,8 @@ def validate_source_name(name: str) -> tuple[str, str, str, str]:
 
 class RawStorage(BaseModel):
     backend: RawBackend
-    path_template: str
+    path_template: Optional[str] = None
+    bucket: Optional[str] = None
 
 
 class SourceDefinition(BaseModel):
@@ -116,6 +117,7 @@ class RawObject(BaseModel):
     content_hash: str
     raw_uri: str
     raw_backend: RawBackend
+    gcs_generation: Optional[int] = None
     file_name_original: str
     file_name_canonical: Optional[str] = None
     bytes_size: int
