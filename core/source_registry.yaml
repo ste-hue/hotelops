@@ -1,0 +1,237 @@
+# Single source of truth for source policy (NOT detector signatures).
+# Detector signatures live in core/registry.yaml.
+# Spec: docs/superpowers/specs/2026-05-05-ingest-lineage-gcs-design.md §4.1
+version: 1
+
+sources:
+
+  # ── Banca homebanking — APPEND, MD5 dedup ────────────────────────────────
+  MPS_BANCA_ORTI_APPEND:
+    system: MPS
+    dataset: BANCA
+    dataset_label: "Movimenti homebanking MPS"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_banche_movimenti
+    parser_module: ingest.banca.ingest
+    hash_basis: hash_riga
+    loop_targets: [daily_reconciliation, cash_control, monthly_close]
+    promotion_policy: AUTO
+    detector_category: banca
+    raw_storage:
+      backend: drive
+      path_template: "homebanking/ORTI/MPS"
+
+  MPS_BANCA_INTUR_APPEND:
+    system: MPS
+    dataset: BANCA
+    societa: INTUR
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_banche_movimenti
+    parser_module: ingest.banca.ingest
+    hash_basis: hash_riga
+    loop_targets: [daily_reconciliation, cash_control, monthly_close]
+    promotion_policy: AUTO
+    detector_category: banca
+    raw_storage:
+      backend: drive
+      path_template: "homebanking/INTUR/MPS"
+
+  # (additional banca sources MPSKROSS/SELLA/INTESA/BCP follow the same pattern;
+  #  add them per societa as the migration proceeds — see spec Appendice B)
+
+  # ── Esolver flussi — APPEND ───────────────────────────────────────────────
+  ESOLVER_MOVIMENTI_ORTI_APPEND:
+    system: ESOLVER
+    dataset: MOVIMENTI
+    dataset_label: "Prima nota Esolver (LISTAMOVCONT)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_movimenti_contabili
+    parser_module: ingest.flussi.ingest_movimenti_contabili
+    hash_basis: hash_riga
+    loop_targets: [monthly_close, budget_canonical]
+    promotion_policy: AUTO
+    detector_category: movimenti_contabili
+    raw_storage:
+      backend: drive
+      path_template: "movimenti_contabili/ORTI"
+
+  # ── Esolver scheda contabile — APPEND ─────────────────────────────────────
+  ESOLVER_SCHEDA_ORTI_APPEND:
+    system: ESOLVER
+    dataset: SCHEDA
+    dataset_label: "Scheda contabile / saldi banca da Esolver"
+    societa: ORTI
+    lifecycle: APPEND
+    canonical_table: f_saldi_banca_snapshot
+    parser_module: ingest.flussi.ingest_scheda_contabile
+    hash_basis: hash_riga
+    loop_targets: [bank_ledger_reconciliation, cash_control]
+    promotion_policy: AUTO
+    detector_category: scheda_contabile
+    raw_storage:
+      backend: drive
+      path_template: "registro_banca_esolver/ORTI"
+
+  # ── Partite aperte — SNAPSHOT ─────────────────────────────────────────────
+  ESOLVER_PARTITE_ORTI_SNAPSHOT:
+    system: ESOLVER
+    dataset: PARTITE
+    dataset_label: "Partite aperte fornitori"
+    societa: ORTI
+    lifecycle: SNAPSHOT
+    canonical_table: f_partite_aperte_fornitori
+    parser_module: ingest.flussi.ingest_partite_aperte
+    natural_key: [data_snapshot, societa_id]
+    loop_targets: [cash_control, monthly_close]
+    promotion_policy: AUTO
+    detector_category: partite_fornitori
+    raw_storage:
+      backend: drive
+      path_template: "partite_fornitori/ORTI"
+
+  ESOLVER_PARTITE_INTUR_SNAPSHOT:
+    system: ESOLVER
+    dataset: PARTITE
+    societa: INTUR
+    lifecycle: SNAPSHOT
+    canonical_table: f_partite_aperte_fornitori
+    parser_module: ingest.flussi.ingest_partite_aperte
+    natural_key: [data_snapshot, societa_id]
+    loop_targets: [cash_control, monthly_close]
+    promotion_policy: AUTO
+    detector_category: partite_fornitori
+    raw_storage:
+      backend: drive
+      path_template: "partite_fornitori/INTUR"
+
+  # ── Bilancino — SNAPSHOT ──────────────────────────────────────────────────
+  ESOLVER_BILANCINO_ORTI_SNAPSHOT:
+    system: ESOLVER
+    dataset: BILANCINO
+    societa: ORTI
+    lifecycle: SNAPSHOT
+    canonical_table: f_bilancino
+    parser_module: ingest.flussi.ingest_bilancino
+    natural_key: [data_snapshot, societa_id, codice_conto]
+    loop_targets: [monthly_close, budget_canonical]
+    promotion_policy: AUTO
+    detector_category: bilancino
+    raw_storage:
+      backend: drive
+      path_template: "bilancino/ORTI"
+
+  # ── Gasparotto budget — SNAPSHOT ──────────────────────────────────────────
+  ESOLVER_BUDGET_ORTI_SNAPSHOT:
+    system: ESOLVER
+    dataset: BUDGET
+    dataset_label: "Master Completo (Romita) — sezione Budget"
+    societa: ORTI
+    lifecycle: SNAPSHOT
+    canonical_table: f_budget_mensile
+    parser_module: ingest.flussi.ingest_gasparotto
+    natural_key: [societa_id, anno, mese, codice_conto, fonte]
+    loop_targets: [budget_canonical, monthly_close]
+    promotion_policy: AUTO
+    detector_category: gasparotto
+    raw_storage:
+      backend: drive
+      path_template: "gasparotto"
+    notes: |
+      Q7 chiusa: system=ESOLVER (la fonte primaria dei dati è l'ERP).
+      Il file Master è curato da Romita ma i dati nascono in Esolver.
+
+  # ── Piano finanziario — SNAPSHOT ──────────────────────────────────────────
+  ESOLVER_PF_ORTI_SNAPSHOT:
+    system: ESOLVER
+    dataset: PF
+    dataset_label: "Piano Finanziario (cash flow voci)"
+    societa: ORTI
+    lifecycle: SNAPSHOT
+    canonical_table: f_piano_finanziario_input
+    parser_module: ingest.flussi.ingest_piano_finanziario_xlsx
+    natural_key: [societa_id, voce_id, anno, mese, fonte]
+    loop_targets: [cash_control, budget_canonical]
+    promotion_policy: AUTO
+    detector_category: piano_finanziario
+    raw_storage:
+      backend: drive
+      path_template: "piani_finanziari/ORTI"
+
+  # ── HotelCube accodamenti — APPEND, BU per-file ───────────────────────────
+  HOTELCUBE_ACCODAMENTI_ORTI_APPEND:
+    system: HOTELCUBE
+    dataset: ACCODAMENTI
+    dataset_label: "Accodamenti PMS (corrispettivi/fatture/movimenti)"
+    societa: ORTI
+    business_unit: null   # H_/R_/C_ prefix → HOTEL/RESIDENCE/CVM, popolato per-file
+    lifecycle: APPEND
+    canonical_table: f_accodamenti
+    parser_module: ingest.banca.ingest_accodamenti
+    hash_basis: hash_riga
+    loop_targets: [daily_reconciliation, cash_control]
+    promotion_policy: AUTO
+    detector_category: accodamenti
+    raw_storage:
+      backend: drive
+      path_template: "accodamenti/ORTI"
+
+  # ── Coperti — APPEND ──────────────────────────────────────────────────────
+  ORTI_COPERTI_ORTI_APPEND:
+    system: ORTI
+    dataset: COPERTI
+    dataset_label: "Coperti giornalieri (Google Sheet o XLSX)"
+    societa: ORTI
+    lifecycle: APPEND
+    canonical_table: f_coperti_giornalieri
+    parser_module: ingest.flussi.ingest_coperti
+    hash_basis: hash_riga
+    loop_targets: [food_cost, monthly_close]
+    promotion_policy: AUTO
+    detector_category: coperti
+    raw_storage:
+      backend: drive
+      path_template: "coperti"
+
+  # ── Economato consumi — APPEND ────────────────────────────────────────────
+  ORTI_ECONOMATO_ORTI_APPEND:
+    system: ORTI
+    dataset: ECONOMATO
+    dataset_label: "Consumi economato per reparto"
+    societa: ORTI
+    lifecycle: APPEND
+    canonical_table: f_consumi_economato
+    parser_module: ingest.flussi.ingest_consumi_economato
+    hash_basis: hash_riga
+    loop_targets: [food_cost, monthly_close]
+    promotion_policy: AUTO
+    detector_category: economato
+    raw_storage:
+      backend: drive
+      path_template: "economato"
+
+  # ── PMS statistiche — RAW_ONLY (esempio hard gate) ────────────────────────
+  POWERBI_CRUSCOTTO_ORTI_APPEND:
+    system: POWERBI
+    dataset: CRUSCOTTO
+    dataset_label: "Cruscotto produzione PMS (export Power BI)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_pms_statistiche
+    parser_module: ingest.flussi.ingest_pms_statistiche
+    hash_basis: hash_riga
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: pms_statistiche
+    raw_storage:
+      backend: drive
+      path_template: "ingresso/pms_statistiche/ORTI"
+    notes: |
+      Esempio hard gate: dati interessanti, nessun loop dichiarato. Resta
+      in raw, no canonical promotion. Flip a AUTO + dichiara loop_target
+      quando il consumer sarà pronto.

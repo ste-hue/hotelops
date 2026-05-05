@@ -77,6 +77,11 @@ def validate_source_name(name: str) -> tuple[str, str, str, str]:
 # ── Source definition (yaml row) ──────────────────────────────────────────────
 
 
+class RawStorage(BaseModel):
+    backend: RawBackend
+    path_template: str
+
+
 class SourceDefinition(BaseModel):
     source_name: str
     system: str
@@ -93,7 +98,7 @@ class SourceDefinition(BaseModel):
     loop_targets: list[str] = Field(default_factory=list)
     promotion_policy: PromotionPolicy
     detector_category: str
-    raw_storage: dict
+    raw_storage: RawStorage
     notes: Optional[str] = None
 
     @field_validator("source_name")

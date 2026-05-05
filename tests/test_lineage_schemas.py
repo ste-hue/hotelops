@@ -8,6 +8,7 @@ from core.lineage.schemas import (
     InvalidSourceName,
     LineageEvent,
     RawObject,
+    RawStorage,
     SourceDefinition,
     validate_source_name,
 )
@@ -118,5 +119,12 @@ def test_SourceDefinition_invalid_name_rejected() -> None:
             parser_module="ingest.flussi.x",
             promotion_policy="AUTO",
             detector_category="x",
-            raw_storage={},
+            raw_storage={"backend": "local", "path_template": "x"},
         )
+
+
+def test_RawStorage_round_trip() -> None:
+    rs = RawStorage(backend="drive", path_template="ingresso/x/{societa}")
+    revived = RawStorage(**rs.model_dump(mode="json"))
+    assert revived.backend == "drive"
+    assert revived.path_template == "ingresso/x/{societa}"
