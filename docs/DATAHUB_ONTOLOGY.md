@@ -1,269 +1,215 @@
-# HotelOPS — Ontologia Operativa
+# HotelOps — Datahub Ontology (GCS-first)
 
-Ultimo aggiornamento: 2026-03-03
-
----
-
-## Architettura a 4 livelli
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  AGENTE  (NanoClaw)                                             │
-│  Container Linux con Claude Agent SDK                           │
-│  Riceve eventi WhatsApp, gestisce entità, lancia pipeline       │
-│  groups/hotelops/CLAUDE.md = istruzioni + schema DB             │
-│  groups/hotelops/hotelops.db = SQLite (entità, eventi, audit)   │
-└──────────┬──────────────────────────┬───────────────────────────┘
-           │ monta read-write         │ monta read-only
-           ▼                          ▼
-┌──────────────────────┐   ┌──────────────────────────────────────┐
-│  ONTOLOGIA (Obsidian) │   │  CODICE (hotelops repo)              │
-│  Entità promosse ad   │   │  Pipeline ETL + Riconciliazione      │
-│  "active" diventano   │   │  pipelines/banca/ingest.py           │
-│  note Obsidian        │   │  pipelines/banca/ingest_mastrino.py  │
-│                       │   │  actions/reconcile_banca.py          │
-│  companies/           │   │  services/reconcile_api.py           │
-│  people/              │   │  lib/contracts.py                    │
-│  banks/               │   │  lib/datahub.py                     │
-│  loans/               │   └──────────┬───────────────────────────┘
-│  departments/         │              │ legge/scrive
-│  advisors/            │              ▼
-│  projects/            │   ┌──────────────────────────────────────┐
-│  financial/           │   │  DATI (Google Drive datahub)          │
-│  relationships/       │   │  Database a file — append-only        │
-└───────────────────────┘   │  ingresso/ → fatti/ + dimensioni/     │
-                            │  meta/ = log, run, decisioni          │
-                            └──────────────────────────────────────┘
-```
-
-| Livello | Path | Ruolo |
-|---------|------|-------|
-| Agente | `nanoclaw/groups/hotelops/` | Riceve eventi, gestisce entità (10 tipi fissi), lancia pipeline |
-| Ontologia | `Obsidian Vault/Work/HotelOps/` | Note strutturate per entità promosse ad active |
-| Codice | `~/dev/Projects/hotelops/` | Pipeline Python (ingestion, riconciliazione, API) |
-| Dati | `Google Drive/hotelops_datahub/` | File CSV immutabili (fatti, dimensioni, mapping, meta) |
+Ultimo aggiornamento: 2026-05-05
 
 ---
 
-## 1. Modello a 5 Dimensioni
+## Scopo
 
-Ogni riga in `fatti/*.csv` porta 5 etichette. Se non applicabile → `N_A`.
+Questo documento definisce il modello operativo attuale del layer dati di HotelOps.
 
-| # | Dimensione | Campo | Valori reali nel datahub |
-|---|-----------|-------|--------------------------|
-| 1 | **Legale** | `societa_id` | ORTI (Operativa), INTUR (Immobiliare) |
-| 2 | **Business Unit** | `business_unit_id` | HOTEL, RESIDENCE, CVM, LIDO, HQ |
-| 3 | **Funzione** | `funzione_id` | ROOMS, F&B, BEACH_OPS, FINANZA, LOGISTICA, AMM, MAN |
-| 4 | **Location** | `location_id` | TERRAZZA, SALA_INT, CHIOSCO, ARENILE, CVM_APT, RES_APT, UFFICI, MAGAZZINO, N_A |
-| 5 | **Oggetto** | `oggetto_id` | GENERICO (unico seed); pipeline genera CONTO_{societa}_{banca} |
+Principio base:
+- **GCS** = dump ordinato, immutabile, tracciato del mondo reale (Raw layer)
+- **BigQuery** = solo dati resi interrogabili da HotelOps (Canonical/Semantic layer)
 
-**Nota**: `dim_oggetto.csv` ha solo il seed GENERICO. I valori reali (CONTO_INTUR_SELLA, CONTO_ORTI_MPS) sono generati dalle pipeline ma non ancora registrati nella dimensione. Da allineare.
+HotelOps non deve ingerire tutto in BQ. Deve poter conservare tutto in Raw,
+classificare progressivamente, e promuovere in Canonical solo cio che supera
+regole esplicite.
 
 ---
 
-## 2. Struttura Datahub (stato reale)
+## Architettura a 4 layer
 
 ```
-hotelops_datahub/                        Google Drive
-├── RULES.md                             Governance (7 regole)
-├── ingresso/
-│   └── banca/
-│       ├── banca_grezza/                Estratti conto Sella CSV, MPS Excel
-│       └── mastrino_grezzo/             Mastrini ERP Excel
-├── fatti/
-│   ├── f_banche_movimenti.csv           3.623 righe — movimenti bancari
-│   └── f_ledger_movimenti.csv           2.233 righe — registrazioni contabili
-├── dimensioni/
-│   ├── dim_societa.csv                  2 valori: ORTI, INTUR
-│   ├── dim_business_unit.csv            5 valori: HOTEL, RESIDENCE, CVM, LIDO, HQ
-│   ├── dim_funzione.csv                 7 valori: ROOMS, F&B, BEACH_OPS, FINANZA, LOGISTICA, AMM, MAN
-│   ├── dim_location.csv                 9 valori: TERRAZZA...N_A
-│   ├── dim_oggetto.csv                  1 valore: GENERICO (sparse — da popolare)
-│   └── mappature/
-│       └── dim_mapping_banca.csv        26 regole (INTUR_SELLA + MPS + DEFAULT)
-├── indice_documenti/
-│   └── grezzi/                          Documenti indicizzati (es. CondGes)
-└── meta/
-    ├── pipeline/
-    │   ├── ingest_banca.py              Script legacy (deprecato — ora nel repo)
-    │   ├── README_INGEST_BANCA.md       Documentazione legacy
-    │   └── logs/                         6 log di ingestion
-    ├── schemas/
-    │   ├── ingest_banca.yaml            Schema YAML
-    │   └── schema_banche.txt            Schema testuale
-    ├── actions/
-    │   └── reconcile_banca/
-    │       ├── runs.csv                 Registro run (1 run: fba3e11cdd71)
-    │       └── runs/fba3e11cdd71/       Ultimo run
-    │           ├── metrics.json
-    │           ├── matches_auto.csv
-    │           ├── matches_review.csv
-    │           └── no_match.csv
-    └── laboratorio/                     File di lavoro/esplorazione
+Raw (GCS immutable)
+  -> Manifest (BQ control plane)
+  -> Canonical (BQ facts/dimensions, validated)
+  -> Semantic/Operational (views, CLI, app, agent)
 ```
+
+| Layer | Sistema | Ruolo |
+|---|---|---|
+| Raw | `gs://hotelops-raw` | Oggetti originali, versionati, append-only logico |
+| Manifest | BigQuery (`f_raw_manifest`, `f_raw_events`) | Stato pipeline per file e decisioni di promozione |
+| Canonical | BigQuery (`f_*`, `d_*`) | Dati validati, dedup, lifecycle APPEND/SNAPSHOT |
+| Semantic/Operational | BigQuery `v_*`, CLI, Streamlit, agent | Lenti business e workflow umani |
 
 ---
 
-## 3. Agente (NanoClaw HotelOps)
+## Regola d'oro
 
-Container Linux isolato, invocato da messaggi WhatsApp.
+Flusso obbligatorio:
 
-**Database**: `hotelops.db` (SQLite, WAL mode) con 10 tipi entità fissi:
-Societa, Struttura, Reparto, Persona, Fornitore, Banca, Progetto, Contratto, Strumento_Finanziario, Consulente
+`dump raw -> manifesto -> classificazione -> validazione -> BigQuery`
 
-**Macchina a stati**: candidate → approved → active → inactive (mai saltare)
-
-**Trigger di promozione**: soldi (>5k EUR), obbligo, passività, ripetizione (≥2 eventi)
-
-**Mount nel container**:
-
-| Host | Container | Mode |
-|------|-----------|------|
-| `groups/hotelops/` | `/workspace/group` | rw |
-| Obsidian `Work/HotelOps/` | `/workspace/extra/obsidian-hotelops` | rw |
-| Google Drive `hotelops_datahub/` | `/workspace/extra/datahub` | rw |
-| `~/dev/Projects/hotelops` | `/workspace/extra/hotelops-repo` | ro |
-
-Quando un'entità diventa `active`, l'agente crea una nota Obsidian nella cartella appropriata.
+Conseguenza pratica:
+- un file puo restare **solo Raw** per settimane/mesi senza sporcare il Canonical
+- ingest in BQ avviene solo quando esiste una regola utile per un loop reale
 
 ---
 
-## 4. Pipeline attive
+## 1) Raw layer (GCS)
 
-### Banca — Ingestion
+### 1.1 Bucket
 
-Legge estratti conto grezzi → appende a `f_banche_movimenti.csv`.
+- Bucket target: `hotelops-raw`
+- Richiesto: Object Versioning ON
+- Lifecycle storage: Autoclass con terminal class archivio
 
-- **Sorgenti**: Sella (CSV), MPS (Excel)
-- **Deduplicazione**: MD5(`societa|banca|data|importo_netto|descrizione`)
-- **Lineage**: `file_sorgente` + `riga_sorgente` su ogni riga
-- **Mapping**: 26 regole in `dim_mapping_banca.csv` (keyword → categoria normalizzata)
-- **Contratti dati**: `validate_columns()` — fail-fast se mancano colonne
+### 1.2 Oggetti raw accettati
 
-```bash
-python -m pipelines.banca.ingest --datahub /path --all
-```
+Esempi non esaustivi:
+- export banca
+- csv/xlsx PMS e Power BI
+- file budget, partite aperte, bilancino, scheda
+- allegati email fornitori
+- pdf contratti/documenti amministrativi
 
-### Mastrino — Ingestion
+### 1.3 Contract minimo metadata oggetto
 
-Legge mastrini ERP (Excel) → appende a `f_ledger_movimenti.csv`.
-
-```bash
-python -m pipelines.banca.ingest_mastrino --datahub /path --societa ORTI --banca MPS --all
-```
-
-### Riconciliazione Banca ↔ Contabilità
-
-Abbina movimenti bancari con registrazioni contabili. Scoring cascata (data 0.8, testo 0.2).
-
-- **Run ID deterministico**: SHA256(`societa|conto|from|to`)[:12]
-- **Output**: matches_auto, matches_review, no_match + metrics.json
-- **Registro**: append-only `runs.csv`
-
-```bash
-python -m actions.reconcile_banca --datahub /path --societa INTUR --conto SELLA --from 2025-01-01 --to 2025-01-31
-```
-
-### API W3C Reconciliation
-
-Espone il ledger come target di riconciliazione per OpenRefine (W3C v0.2). Supporta decisioni umane persistite.
-
-```bash
-python -m services.reconcile_api --datahub /path --societa ORTI --banca MPS --port 8000
-```
+Ogni oggetto Raw deve avere almeno:
+- `source_system` (es. MPS, Sella, Esolver, HotelCube, Email)
+- `source_channel` (Drive, WhatsApp, manual upload, mail)
+- `received_at` (UTC)
+- `sha256`
+- `original_filename`
+- `uploader` (utente o processo)
 
 ---
 
-## 5. Convenzione nomi file
+## 2) Manifest layer (control plane)
 
-```
-YYYY-MM-DD__FUNZIONE__SOCIETA_BANCA__DETTAGLIO.ext
-```
+Manifesto in BigQuery (nome tabella definitivo da confermare; consigliato
+`f_raw_manifest`). Una riga per oggetto raw versionato.
 
-Esempi reali:
-```
-2025-12-09__FINANZA__INTUR_SELLA__LISTA_MOVIMENTI_010125_091225.csv
-2025_MPS_cc2_19-01-01_EC_saldo-85983-93.xlsx  ← mastrino (convenzione diversa)
-```
+Campi minimi consigliati:
+- `raw_object_id` (id interno stabile)
+- `gcs_uri`
+- `generation` (GCS object generation)
+- `sha256`
+- `size_bytes`
+- `mime_type`
+- `received_at`
+- `source_system`
+- `source_channel`
+- `societa_hint` (nullable)
+- `status`
+- `classifier_rule_id` (nullable)
+- `target_table` (nullable)
+- `pipeline_name` (nullable)
+- `pipeline_run_id` (nullable)
 
----
-
-## 6. Schema fatti
-
-### f_banche_movimenti.csv (26 colonne)
-
-```
-id_movimento, societa_id, business_unit_id, funzione_id, location_id,
-oggetto_id, banca_id, data_operazione, data_valuta, descrizione,
-divisa, importo_debito, importo_credito, importo_netto,
-categoria_raw, sottocategoria_raw, categoria_normalizzata,
-sottocategoria_normalizzata, tipo_movimento, codice_identificativo_banca,
-etichette, note, data_ingresso, file_sorgente, riga_sorgente, hash_riga
-```
-
-### f_ledger_movimenti.csv (21 colonne)
-
-```
-id_registrazione, societa_id, business_unit_id, funzione_id,
-location_id, oggetto_id, banca_id, data_registrazione,
-descrizione, importo, importo_dare, importo_avere, divisa,
-riferimento_registrazione, documento, riferimenti_iva,
-centro_imputazione, data_ingresso, file_sorgente, riga_sorgente, hash_riga
-```
+Stati consigliati:
+- `RAW_ONLY`
+- `CLASSIFIED`
+- `VALIDATED`
+- `INGESTED`
+- `REJECTED`
 
 ---
 
-## 7. Meccanismi di qualità
+## 3) Classificazione
 
-| Meccanismo | Dove | Cosa fa |
-|-----------|------|---------|
-| **Data Contracts** | `lib/contracts.py` | Valida colonne obbligatorie prima dell'elaborazione |
-| **Lineage** | Ogni riga in fatti/ | `file_sorgente` + `riga_sorgente` tracciano l'origine |
-| **Deduplicazione** | Hash MD5 per riga | Impedisce duplicati su re-ingestion |
-| **Run Lifecycle** | `metrics.json` | Stato running → completed/failed con timing e conteggi |
-| **Run Registry** | `runs.csv` | Registro append-only di tutte le esecuzioni |
-| **Decisioni umane** | `decisions.csv` | Confirm/reject per API di riconciliazione |
-| **RULES.md** | Root datahub | 7 regole di governance immutabili |
+La classificazione deve essere **deterministica** e basata su regole
+(`ingest/classify.py`, `core/registry.yaml`).
 
----
+Domande canoniche per ogni oggetto:
+- Serve a un loop CASSA/COMPETENZA/IMPEGNO attivo?
+- Schema riconosciuto?
+- Lifecycle target `APPEND` o `SNAPSHOT`?
+- Destinazione canonical (`f_*`/`d_*`) o resta Raw?
 
-## 8. Debito tecnico e lacune note
-
-| Cosa | Dettaglio |
-|------|-----------|
-| `dim_oggetto.csv` sparse | Solo GENERICO; le pipeline generano CONTO_* ma non li registrano nella dimensione |
-| `validate_columns` su fatti vuoti | Salta validazione se il file è vuoto |
-| `runs.csv` single-writer | Nessun locking; problematico se più agenti scrivono in parallelo |
-| `meta/pipeline/ingest_banca.py` | Script legacy nel datahub — il codice autoritativo è nel repo |
-| Naming mastrini | Non segue la convenzione standard (manca `__`) |
-| `business_unit_id` sempre HQ | Le pipeline bancarie non assegnano mai HOTEL/RESIDENCE/CVM |
+Se non classificabile o non utile ora:
+- resta in `RAW_ONLY`
+- non e un errore di sistema
 
 ---
 
-## 9. Prossimi passi (non ancora costruiti)
+## 4) Promozione a Canonical (BigQuery)
 
-| Pipeline | Sorgente | Fatto target | Priorità |
-|----------|----------|-------------|----------|
-| PMS | Produzione giornaliera | `f_ricavi_pms.csv` | Alta |
-| POS | Terminali pagamento | `f_corrispettivi_pos.csv` | Media |
-| Fornitori | Fatture | `f_costi_generali.csv` | Media |
-| Payroll | Consulente lavoro (LUL) | `f_payroll.csv` | Media |
-| Economato | Gestionale | `f_economato.csv` | Bassa |
-| Mutui | Piani ammortamento | `f_mutui.csv` | Bassa |
-| Spiaggia | Gestionale spiaggia | `f_spiaggia_occupancy.csv` | Bassa |
+Un oggetto puo essere promosso a Canonical solo se:
+1. classificato
+2. parser disponibile
+3. validation contract superato (Pydantic)
+4. lifecycle applicato correttamente (APPEND/SNAPSHOT)
+5. write effettuato via gate unico (`bq_write_validated`)
+
+Canonical non e un dump: e una scelta esplicita del sistema.
 
 ---
 
-## 10. Regole per gli script
+## 5) Lineage end-to-end
 
-Ogni pipeline deve:
+Obiettivo: ogni numero Canonical deve essere spiegabile con origine e regole.
 
-1. Leggere dimensioni da `dimensioni/`
-2. Leggere mapping da `dimensioni/mappature/`
-3. Validare schema con `validate_columns()` prima di elaborare
-4. Garantire le 5 dimensioni su ogni riga di output
-5. Tracciare lineage (`file_sorgente`, `riga_sorgente`)
-6. Deduplicare via hash MD5
-7. Scrivere in `fatti/` in modalità append-only
-8. Scrivere metriche in `meta/` con lifecycle strutturato
-9. Se una dimensione non è determinabile → `N_A`, mai lasciare vuoto
+Minimo richiesto sulle righe canonical nuove (o a livello batch dove necessario):
+- `pipeline_run_id`
+- `pipeline_name`
+- `source_gcs_uri` oppure `raw_object_id`
+- `source_sha256`
+- `ingestion_ts`
+
+Frase audit attesa:
+"questo valore in BQ viene da questo oggetto raw (GCS generation X),
+acquisito in data Y, processato da pipeline Z, con regole R".
+
+---
+
+## 6) Relazione con Drive datahub
+
+Drive resta workspace umano/editabile, non sorgente canonica immutabile.
+
+Regola operativa:
+- Drive puo essere punto di ingresso
+- ma la provenienza ufficiale e il blob in GCS
+
+In altre parole: si processa da deposito raw tracciato, non da cartelle umane.
+
+---
+
+## 7) 5 dimensioni (business contract)
+
+Il modello a 5 dimensioni resta valido per i fatti canonical:
+- `societa_id`
+- `business_unit_id`
+- `funzione_id`
+- `location_id`
+- `oggetto_id`
+
+Se non derivabile in ingest:
+- usare campo nullable dove consentito dallo schema
+- tracciare il debito in STATUS/plan dedicato
+- evitare scorciatoie che forzano valori non reali
+
+---
+
+## 8) Governance ingest
+
+Ogni nuova pipeline deve:
+1. leggere da Raw/Manifest (non da path ad hoc hardcoded)
+2. dichiarare lifecycle (`APPEND` o `SNAPSHOT`)
+3. validare schema prima del write
+4. scrivere via gate unico BQ
+5. aggiornare stato manifesto (`RAW_ONLY` -> ... -> `INGESTED`)
+6. emettere metriche run (conteggi parse/valid/reject)
+
+---
+
+## 9) Anti-pattern da evitare
+
+- scrivere in BQ direttamente da export locale senza passare Raw+Manifest
+- derivare canonical da cartelle Drive non versionate
+- ingestare tutto "perche c'e" senza discrimination need
+- duplicare regole di classificazione o dedup in piu consumer
+- perdere il legame tra record canonical e file origine
+
+---
+
+## 10) Stato di transizione (oggi)
+
+- Architettura target: GCS-first (decisa)
+- Implementazione: in corso, progressiva
+- Legacy datahub: ancora presente come staging operativo
+
+Fino al cutover completo, i nuovi lavori devono privilegiare pattern GCS+Manifest
+quando toccano ingressi o lineage.
