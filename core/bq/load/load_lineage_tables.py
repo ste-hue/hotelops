@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS `{PROJECT}.{DATASET}.f_raw_objects` (
   content_hash         STRING NOT NULL,
   raw_uri              STRING NOT NULL,
   raw_backend          STRING NOT NULL,
+  gcs_generation       INT64 OPTIONS(description="GCS object generation when raw_backend='gcs'; NULL otherwise"),
   file_name_original   STRING NOT NULL,
   file_name_canonical  STRING,
   bytes_size           INT64 NOT NULL,
