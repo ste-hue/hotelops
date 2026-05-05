@@ -79,7 +79,8 @@ def validate_source_name(name: str) -> tuple[str, str, str, str]:
 
 class RawStorage(BaseModel):
     backend: RawBackend
-    path_template: str
+    path_template: Optional[str] = None
+    bucket: Optional[str] = None
 
 
 class SourceDefinition(BaseModel):

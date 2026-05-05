@@ -138,3 +138,62 @@ sources:
     reg = load_registry(path=good)
     assert "POWERBI_OK_ORTI_APPEND" in reg.sources
     assert reg.sources["POWERBI_OK_ORTI_APPEND"].promotion_policy == "RAW_ONLY"
+
+
+# ── raw_storage.backend ∈ {drive, local, gcs} (Phase 4) ──────────────────────
+
+
+def test_load_registry_rejects_unknown_backend(tmp_path: Path) -> None:
+    """raw_storage.backend not in {drive, local, gcs} must be rejected at boot."""
+    yaml_text = """
+version: 1
+sources:
+  X_Y_ORTI_APPEND:
+    system: X
+    dataset: Y
+    societa: ORTI
+    lifecycle: APPEND
+    canonical_table: f_x
+    parser_module: ingest.fake
+    hash_basis: hash_riga
+    loop_targets: [some_loop]
+    promotion_policy: AUTO
+    detector_category: x
+    raw_storage:
+      backend: floppy_disk
+      path_template: "x"
+"""
+    p = tmp_path / "registry.yaml"
+    p.write_text(yaml_text)
+
+    with pytest.raises(InvalidRegistry, match="backend"):
+        load_registry(p)
+
+
+def test_load_registry_accepts_gcs_backend(tmp_path: Path) -> None:
+    """raw_storage.backend=gcs (with bucket) is a valid configuration."""
+    yaml_text = """
+version: 1
+sources:
+  X_Y_ORTI_APPEND:
+    system: X
+    dataset: Y
+    societa: ORTI
+    lifecycle: APPEND
+    canonical_table: f_x
+    parser_module: ingest.fake
+    hash_basis: hash_riga
+    loop_targets: [some_loop]
+    promotion_policy: AUTO
+    detector_category: x
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "x"
+"""
+    p = tmp_path / "registry.yaml"
+    p.write_text(yaml_text)
+
+    reg = load_registry(p)
+    assert reg.get("X_Y_ORTI_APPEND").raw_storage.backend == "gcs"
+    assert reg.get("X_Y_ORTI_APPEND").raw_storage.bucket == "hotelops-raw"
