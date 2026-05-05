@@ -21,6 +21,7 @@ from core.lineage.raw_manifest import (
     emit_event,
     latest_status,
 )
+from core.lineage.raw_storage import GCSBackend
 from core.lineage.source_resolver import load_registry
 from core.pipeline_run import PipelineRun
 
@@ -52,36 +53,54 @@ def _fetch_raw_object(raw_object_id: str):
     return rows[0]
 
 
-def _invoke_parser(parser_module: str, raw_uri: str, source_def) -> dict:
-    """Invoke the parser via subprocess (preserves PipelineRun isolation per parser).
+def _invoke_parser(
+    parser_module: str,
+    raw_uri: str,
+    source_def,
+    gcs_generation: Optional[int] = None,
+) -> dict:
+    """Invoke the parser via subprocess.
 
-    Phase 1: parsers expect --file <path> and optionally --societa. We translate
-    raw_uri (file:// or gs://) to a local path. For drive backend in Phase 1,
-    raw_uri is already file://.
-
-    Returns: {"rows_written": int} (best-effort; parser may not report).
+    file:// → pass parsed path directly.
+    gs://   → download to temp, pass temp path, cleanup on exit.
     """
     from urllib.parse import urlparse
 
     parsed = urlparse(raw_uri)
-    if parsed.scheme not in ("file", ""):
+    backend = None
+    cleanup_path: Optional[str] = None
+
+    if parsed.scheme == "gs":
+        bucket = parsed.netloc
+        backend = GCSBackend(bucket=bucket)
+        local_path = backend.download_to_temp(raw_uri, generation=gcs_generation)
+        cleanup_path = local_path
+    elif parsed.scheme in ("file", ""):
+        local_path = parsed.path
+    else:
         raise NotImplementedError(
-            f"Phase 1 only supports file:// raw_uri, got {parsed.scheme}"
+            f"Unsupported raw_uri scheme {parsed.scheme!r}: {raw_uri}"
         )
-    local_path = parsed.path
 
     cmd = [sys.executable, "-m", parser_module, "--file", local_path]
     if source_def.societa in ("ORTI", "INTUR"):
         cmd += ["--societa", source_def.societa]
 
     log.info("Invoking parser: %s", " ".join(cmd))
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"Parser {parser_module} failed (exit {proc.returncode}): "
-            f"{proc.stderr.strip()[:500]}"
-        )
-    return {"rows_written": -1}  # parsers don't report; -1 = unknown
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"Parser {parser_module} failed (exit {proc.returncode}): "
+                f"{proc.stderr.strip()[:500]}"
+            )
+        return {"rows_written": -1}
+    finally:
+        if backend is not None and cleanup_path is not None:
+            try:
+                backend.cleanup(cleanup_path)
+            except Exception as e:
+                log.warning("Cleanup of temp %s failed: %s", cleanup_path, e)
 
 
 def promote_raw_object(raw_object_id: str, actor: str = "cli") -> PromotionResult:
@@ -147,7 +166,10 @@ def promote_raw_object(raw_object_id: str, actor: str = "cli") -> PromotionResul
 
         try:
             parser_result = _invoke_parser(
-                source_def.parser_module, raw.raw_uri, source_def
+                source_def.parser_module,
+                raw.raw_uri,
+                source_def,
+                gcs_generation=getattr(raw, "gcs_generation", None),
             )
         except Exception as e:
             emit_event(

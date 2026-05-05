@@ -112,3 +112,88 @@ def test_promote_already_promoted_is_noop(
     assert result.noop is True
     fake_parser.assert_not_called()
     assert captured_events == []
+
+
+def test_invoke_parser_downloads_gs_uri_to_temp(monkeypatch, tmp_path) -> None:
+    """gs:// raw_uri → download to temp → subprocess gets a local path."""
+    from unittest.mock import MagicMock
+    from ingest import promotion
+
+    # Stub backend
+    download_calls = []
+    cleanup_calls = []
+    fake_local = str(tmp_path / "downloaded.xlsx")
+    (tmp_path / "downloaded.xlsx").write_bytes(b"x")
+
+    class FakeGCSBackend:
+        def __init__(self, bucket):
+            self.bucket = bucket
+
+        def download_to_temp(self, raw_uri, generation):
+            download_calls.append((raw_uri, generation))
+            return fake_local
+
+        def cleanup(self, p):
+            cleanup_calls.append(p)
+            return True
+
+    monkeypatch.setattr(promotion, "GCSBackend", FakeGCSBackend)
+
+    # Stub subprocess
+    captured = []
+
+    def fake_run(cmd, **kw):
+        captured.append(cmd)
+        result = MagicMock()
+        result.returncode = 0
+        result.stderr = ""
+        return result
+
+    monkeypatch.setattr("ingest.promotion.subprocess.run", fake_run)
+
+    fake_source = MagicMock(societa="ORTI")
+    promotion._invoke_parser(
+        parser_module="ingest.flussi.ingest_partite_aperte",
+        raw_uri="gs://hotelops-raw/X_Y_ORTI_SNAPSHOT/2026/05/file.xlsx",
+        source_def=fake_source,
+        gcs_generation=1715000000123456,
+    )
+
+    assert download_calls == [
+        ("gs://hotelops-raw/X_Y_ORTI_SNAPSHOT/2026/05/file.xlsx", 1715000000123456)
+    ]
+    assert len(captured) == 1
+    assert captured[0][1:5] == [
+        "-m",
+        "ingest.flussi.ingest_partite_aperte",
+        "--file",
+        fake_local,
+    ]
+    assert cleanup_calls == [fake_local]
+
+
+def test_invoke_parser_file_uri_unchanged(monkeypatch, tmp_path) -> None:
+    """file:// path: no download, no cleanup, parser receives the path directly."""
+    from unittest.mock import MagicMock
+    from ingest import promotion
+
+    captured = []
+
+    def fake_run(cmd, **kw):
+        captured.append(cmd)
+        result = MagicMock()
+        result.returncode = 0
+        result.stderr = ""
+        return result
+
+    monkeypatch.setattr("ingest.promotion.subprocess.run", fake_run)
+
+    fake_source = MagicMock(societa="ORTI")
+    promotion._invoke_parser(
+        parser_module="ingest.flussi.ingest_x",
+        raw_uri="file:///tmp/x.xlsx",
+        source_def=fake_source,
+        gcs_generation=None,
+    )
+
+    assert captured[0][1:5] == ["-m", "ingest.flussi.ingest_x", "--file", "/tmp/x.xlsx"]
