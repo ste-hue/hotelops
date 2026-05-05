@@ -58,6 +58,16 @@ cli.py      <- CLI entry point (hotelops command)
 - `core/bq/dimensioni/` -- Dimension CSV sources (d_voci_piano_finanziario.csv, d_fornitori.csv, d_mapping_piano_finanziario.csv).
 - `core/bq/load/` -- Dimension loaders: load_voci_piano_finanziario, load_piano_conti, load_categorie, load_fornitori, load_anagrafica_fornitori, load_budget_costi, load_coefficienti_stagionalita, load_mapping_piano_finanziario, load_ricavi_storici.
 
+**core/lineage/** -- Per-raw-object lineage layer (Phase 1, additive)
+- `core/lineage/schemas.py` -- Pydantic: SourceDefinition, RawObject, LineageEvent + naming grammar (`<SYSTEM>_<DATASET>_<SOCIETA>_<LIFECYCLE>` strict 4 parts)
+- `core/lineage/source_resolver.py` -- Loads `core/source_registry.yaml` (SSOT policy per source), validates invariant `loop_targets == [] ⇔ promotion_policy == RAW_ONLY` at boot
+- `core/lineage/state_machine.py` -- Pure transitions (RAW_ONLY → CLASSIFIED → PROMOTABLE → PROMOTED, REJECTED side-state)
+- `core/lineage/policy_gate.py` -- Hard gate: no loop target ⇒ no canonical promotion
+- `core/lineage/raw_manifest.py` -- API: register_raw_object + emit_event (always via `bq_write_validated(append)` — I1 strict)
+
+Tabelle: `f_raw_objects` (identity, write-once), `f_lineage_events` (state log, append-only), view `v_raw_objects_current`.
+Spec: `docs/superpowers/specs/2026-05-05-ingest-lineage-gcs-design.md`.
+
 **ingest/** -- Reality Capture (Drive/Excel/CSV -> BigQuery)
 - `ingest/classify.py` -- File classifier + router: 10 file type detectors, infers societa+banca, renames and routes to datahub.
 - `ingest/orchestrate.py` -- Unified pipeline runner. Sync -> classify -> ingest -> manifest. Groups: banca, flussi, dimensioni.
@@ -122,6 +132,11 @@ hotelops classifica file1.xlsx file2.csv       # Classify files (show type + des
 hotelops classifica *.xlsx --route --ingest    # Classify + route + ingest
 hotelops accodamenti                           # Sync da Drive + riconciliazione cassa da TXT HotelCube → Excel su Desktop
 hotelops accodamenti --no-sync --input <dir>   # Skip rclone sync, legge da cartella locale
+
+# Lineage (Phase 1)
+hotelops intake <file> --source-name X      # Register a file (RAW_INGESTED event)
+hotelops promote --raw-object-id Y          # Promote PROMOTABLE → PROMOTED
+hotelops lineage Y                          # Inspect raw_object identity + event history
 
 # Reviews vertical
 hotelops reviews                           # Ultime 30 reviews, media, negative

@@ -252,3 +252,4 @@ passano dal gate workflow.
 - `core/bq/dedup.py` — dedup helper APPEND
 - `core/pipeline_run.py` — PipelineRun ContextVar (lineage source)
 - `STATUS.md` (root) — session memory, debiti aperti, prossimi passi
+- `docs/superpowers/specs/2026-05-05-ingest-lineage-gcs-design.md` — lineage layer Phase 1 design (raw object lifecycle, source_registry, hard gate)
