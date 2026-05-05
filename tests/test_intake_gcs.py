@@ -16,8 +16,16 @@ def fixture_file(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def patch_intake_deps(monkeypatch):
-    """Stub register_raw_object + emit_event; capture calls."""
+    """Stub register_raw_object + emit_event + dedup probe; capture calls.
+
+    Default _lookup_existing_by_hash returns None (no dedup hit). Tests that
+    want to exercise the dedup path override this monkeypatch.
+    """
     captured = {"register": [], "events": []}
+    monkeypatch.setattr(
+        "ingest.intake._lookup_existing_by_hash",
+        lambda content_hash: None,
+    )
     monkeypatch.setattr(
         "ingest.intake.register_raw_object",
         lambda **kw: captured["register"].append(kw) or "raw-id-123",
@@ -142,3 +150,59 @@ def test_intake_without_source_name_stays_local(
     reg_call = patch_intake_deps["register"][0]
     assert reg_call["raw_backend"] == "local"
     assert reg_call["raw_uri"].startswith("file://")
+
+
+def test_intake_dedup_hit_skips_upload_and_event(
+    monkeypatch, fixture_file: Path, patch_intake_deps
+) -> None:
+    """Spec §3 D8 paragraph 1: re-intake of a known content_hash must NOT
+    upload to GCS and must NOT emit a duplicate RAW_INGESTED event.
+
+    Regression guard for the gap discovered in the Phase 4 smoke test
+    (orphan GCS generation + duplicate lineage event).
+    """
+    # Override the default fixture stub: dedup hit returns existing id.
+    monkeypatch.setattr(
+        "ingest.intake._lookup_existing_by_hash",
+        lambda content_hash: "raw-id-existing-7",
+    )
+
+    fake_source = MagicMock()
+    fake_source.source_name = "MPS_BANCA_ORTI_APPEND"
+    fake_source.societa = "ORTI"
+    fake_source.business_unit = None
+    fake_source.detector_category = "banca"
+    fake_source.raw_storage = MagicMock(backend="gcs", bucket="hotelops-raw")
+    fake_source.loop_targets = ["daily_reconciliation"]
+    fake_source.promotion_policy = "AUTO"
+
+    fake_reg = MagicMock()
+    fake_reg.get = lambda name: fake_source if name == fake_source.source_name else None
+    monkeypatch.setattr("ingest.intake.load_registry", lambda: fake_reg)
+
+    upload_calls: list = []
+
+    class FakeGCSBackend:
+        def __init__(self, bucket):
+            self.bucket = bucket
+
+        def upload(self, **kw):
+            upload_calls.append(kw)
+            raise AssertionError("upload must NOT be called on dedup hit")
+
+    monkeypatch.setattr("ingest.intake.GCSBackend", FakeGCSBackend)
+
+    from ingest.intake import intake_file
+
+    result = intake_file(
+        path=fixture_file,
+        source_name="MPS_BANCA_ORTI_APPEND",
+        actor="test",
+    )
+
+    # Behavioural contract on dedup hit:
+    assert result.raw_object_id == "raw-id-existing-7"
+    assert result.deduped is True
+    assert upload_calls == [], "no GCS upload"
+    assert patch_intake_deps["register"] == [], "no register_raw_object call"
+    assert patch_intake_deps["events"] == [], "no RAW_INGESTED emit"

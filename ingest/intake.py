@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import Optional
 
 from core.lineage.policy_gate import enforce_loop_target_gate_consistency
-from core.lineage.raw_manifest import emit_event, register_raw_object
+from core.lineage.raw_manifest import (
+    _lookup_existing_by_hash,
+    emit_event,
+    register_raw_object,
+)
 from core.lineage.raw_storage import GCSBackend, LocalBackend
 from core.lineage.source_resolver import load_registry
 from core.pipeline_run import PipelineRun
@@ -67,6 +71,26 @@ def intake_file(
         if source_def is None:
             raise KeyError(f"source_name not in registry: {source_name}")
         enforce_loop_target_gate_consistency(source_def)
+
+    # Dedup-before-upload (spec §3 D8 paragraph 1).
+    # Probe content_hash on f_raw_objects BEFORE invoking the storage backend:
+    # a hit means we'd otherwise (a) waste a GCS upload that creates an orphan
+    # generation under Object Versioning, and (b) emit a duplicate RAW_INGESTED
+    # into f_lineage_events. Both were observed in the Phase 4 smoke test.
+    existing_id = _lookup_existing_by_hash(content_hash)
+    if existing_id is not None:
+        log.info(
+            "intake_file: dedup hit on %s — returning existing raw_object_id %s "
+            "(no upload, no event)",
+            content_hash[:12],
+            existing_id,
+        )
+        return IntakeResult(
+            raw_object_id=existing_id,
+            content_hash=content_hash,
+            source_name=source_name,
+            deduped=True,
+        )
 
     backend_kind = (
         source_def.raw_storage.backend
@@ -128,7 +152,7 @@ def intake_file(
         raw_object_id=raw_object_id,
         content_hash=content_hash,
         source_name=source_name,
-        deduped=False,  # Phase 1 placeholder
+        deduped=False,
     )
 
 

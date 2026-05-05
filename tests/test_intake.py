@@ -24,6 +24,7 @@ def test_intake_basic(monkeypatch, tmp_path) -> None:
         captured.setdefault("events", []).append(kwargs)
         return f"ev-{len(captured['events'])}"
 
+    monkeypatch.setattr("ingest.intake._lookup_existing_by_hash", lambda h: None)
     monkeypatch.setattr("ingest.intake.register_raw_object", fake_register)
     monkeypatch.setattr("ingest.intake.emit_event", fake_emit)
 
@@ -44,6 +45,7 @@ def test_intake_basic(monkeypatch, tmp_path) -> None:
 
 
 def test_intake_unknown_source_raises(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("ingest.intake._lookup_existing_by_hash", lambda h: None)
     monkeypatch.setattr("ingest.intake.register_raw_object", lambda **kw: "x")
     monkeypatch.setattr("ingest.intake.emit_event", lambda **kw: "x")
     f = _fixture_xlsx(tmp_path)
@@ -53,6 +55,7 @@ def test_intake_unknown_source_raises(monkeypatch, tmp_path) -> None:
 
 def test_intake_no_source_skips_classification_event(monkeypatch, tmp_path) -> None:
     captured = {"events": []}
+    monkeypatch.setattr("ingest.intake._lookup_existing_by_hash", lambda h: None)
     monkeypatch.setattr("ingest.intake.register_raw_object", lambda **kw: "raw-id")
     monkeypatch.setattr(
         "ingest.intake.emit_event",
