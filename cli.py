@@ -322,6 +322,7 @@ def cmd_drop(args):
 
     datahub = Path(args.datahub) if args.datahub else DEFAULT_DATAHUB
     use_rclone = not args.locale
+    lineage_enabled = bool(getattr(args, "lineage", False))
 
     files = [Path(f) for f in args.files]
     expanded: list[Path] = []
@@ -339,6 +340,8 @@ def cmd_drop(args):
 
     print(f"\n{'═' * 70}")
     print("  DROP → classifica + smista + ingest  (BQ: APPEND dedup / SNAPSHOT)")
+    if lineage_enabled:
+        print("  Lineage: shadow ON (--lineage) — best-effort, non blocca")
     print(
         f"  Datahub: {datahub}  |  rclone: {'no (--locale)' if args.locale else 'sì'}"
     )
@@ -358,16 +361,18 @@ def cmd_drop(args):
         if r.category in ("unknown", "error"):
             unk += 1
             print(f"❓ {r.file_path.name} — non riconosciuto")
-            append_drop_audit(
-                datahub,
-                {
-                    "file": str(r.file_path),
-                    "file_type": r.file_type,
-                    "status": "UNKNOWN",
-                    "md5": md5,
-                    "dry_run": args.dry_run,
-                },
-            )
+            unk_record = {
+                "file": str(r.file_path),
+                "file_type": r.file_type,
+                "status": "UNKNOWN",
+                "md5": md5,
+                "dry_run": args.dry_run,
+            }
+            if lineage_enabled:
+                unk_record["lineage_enabled"] = True
+                unk_record["lineage_raw_object_id"] = None
+                unk_record["lineage_error"] = None
+            append_drop_audit(datahub, unk_record)
             print()
             continue
 
@@ -379,10 +384,43 @@ def cmd_drop(args):
         dest = route_file(r, datahub, dry_run=args.dry_run, use_rclone=use_rclone)
         route_ok = dest is not None
         ingest_ok = False
+        lineage_raw_object_id: str | None = None
+        lineage_error: str | None = None
+
         if route_ok:
             routed += 1
             prefix = "[DRY-RUN] " if args.dry_run else ""
             print(f"    {prefix}smistato → {dest}")
+
+            # Phase 2 shadow lineage — best-effort, runs BEFORE legacy ingest.
+            # Failures here NEVER block run_ingest; they're logged into audit only.
+            if lineage_enabled and not args.dry_run:
+                try:
+                    from ingest.intake import intake_file
+                    from core.lineage.source_resolver import load_registry
+
+                    source_name: str | None = None
+                    try:
+                        reg = load_registry()
+                        if r.societa:
+                            match = reg.resolve(r.category, r.societa)
+                            if match is not None:
+                                source_name = match.source_name
+                    except Exception:
+                        # Resolver failure → fall back to source_name=None (RAW_ONLY).
+                        source_name = None
+
+                    intake_result = intake_file(
+                        r.file_path,
+                        source_name=source_name,
+                        actor="drop_shadow",
+                    )
+                    lineage_raw_object_id = intake_result.raw_object_id
+                    print(f"    lineage: ✓ raw_object_id={lineage_raw_object_id[:8]}…")
+                except Exception as e:
+                    lineage_error = str(e)[:300]
+                    print(f"    lineage: ⚠ failed (best-effort): {lineage_error[:120]}")
+
             if not args.dry_run:
                 ingest_ok = run_ingest(r, dest, datahub, dry_run=False)
                 if ingest_ok:
@@ -403,21 +441,23 @@ def cmd_drop(args):
         else:
             drop_status = "FAIL_INGEST"
 
-        append_drop_audit(
-            datahub,
-            {
-                "file": str(r.file_path),
-                "file_type": r.file_type,
-                "category": r.category,
-                "canonical": r.canonical_name,
-                "dest_folder": r.dest_folder,
-                "status": drop_status,
-                "route_ok": route_ok,
-                "ingest_ok": ingest_ok if route_ok else False,
-                "md5": md5,
-                "dry_run": args.dry_run,
-            },
-        )
+        audit_record = {
+            "file": str(r.file_path),
+            "file_type": r.file_type,
+            "category": r.category,
+            "canonical": r.canonical_name,
+            "dest_folder": r.dest_folder,
+            "status": drop_status,
+            "route_ok": route_ok,
+            "ingest_ok": ingest_ok if route_ok else False,
+            "md5": md5,
+            "dry_run": args.dry_run,
+        }
+        if lineage_enabled:
+            audit_record["lineage_enabled"] = True
+            audit_record["lineage_raw_object_id"] = lineage_raw_object_id
+            audit_record["lineage_error"] = lineage_error
+        append_drop_audit(datahub, audit_record)
         print()
 
     print(f"{'─' * 70}")
@@ -762,6 +802,11 @@ def main():
     )
     p_drop.add_argument(
         "--dry-run", action="store_true", help="Piano senza scrittura Drive/BQ"
+    )
+    p_drop.add_argument(
+        "--lineage",
+        action="store_true",
+        help="Phase 2 shadow: emette lineage in parallelo (best-effort, non blocca drop)",
     )
 
     # ingest
