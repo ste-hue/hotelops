@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Land GCS as the immutable Raw layer for one pilot source (`ESOLVER_PARTITE_ORTI_SNAPSHOT`), closing the doc-vs-implementation drift on `DATAHUB_ONTOLOGY.md`. Other 12 sources stay on Drive backend until a separate bulk-flip PR.
+**Goal:** Land GCS as the immutable Raw layer for one pilot source (`MPS_BANCA_ORTI_APPEND`), closing the doc-vs-implementation drift on `DATAHUB_ONTOLOGY.md`. Other 12 sources stay on Drive backend until a separate bulk-flip PR. Pilot revisited on 2026-05-05: APPEND chosen over SNAPSHOT to exercise content_hash dedup (the technical novelty); see spec §3 D9.
 
 **Architecture:** Add a `RawStorageBackend` ABC with `LocalBackend` (passthrough; Phase 1 behavior) and `GCSBackend` (uploads to `gs://hotelops-raw`, returns URI + generation). `intake_file` selects backend via `source_def.raw_storage.backend`. `_invoke_parser` downloads `gs://` URIs to temp before subprocess dispatch. Add nullable `gcs_generation INT64` to `f_raw_objects` (additive, non-breaking). Phase 1+2 tests must remain green.
 
@@ -1546,17 +1546,22 @@ git commit -m "feat(promotion): _invoke_parser supports gs:// via download-to-te
 Create `tests/test_source_registry_pilot.py`:
 
 ```python
-"""Pilot source ESOLVER_PARTITE_ORTI_SNAPSHOT must be on backend=gcs."""
+"""Pilot source MPS_BANCA_ORTI_APPEND must be on backend=gcs."""
 
 from core.lineage.source_resolver import load_registry
 
+PILOT_SOURCE = "MPS_BANCA_ORTI_APPEND"
 
-def test_pilot_partite_orti_uses_gcs_backend() -> None:
+
+def test_pilot_mps_banca_orti_uses_gcs_backend() -> None:
     reg = load_registry()
-    src = reg.get("ESOLVER_PARTITE_ORTI_SNAPSHOT")
+    src = reg.get(PILOT_SOURCE)
     assert src is not None
     assert src.raw_storage.backend == "gcs"
     assert src.raw_storage.bucket == "hotelops-raw"
+    # Sanity: pilot is APPEND lifecycle (the whole point of switching from
+    # the original SNAPSHOT proposal — exercises content_hash dedup).
+    assert src.lifecycle == "APPEND"
 
 
 def test_other_sources_remain_drive() -> None:
@@ -1564,7 +1569,7 @@ def test_other_sources_remain_drive() -> None:
     reg = load_registry()
     not_pilot_gcs = []
     for name, src in reg._sources.items():
-        if name == "ESOLVER_PARTITE_ORTI_SNAPSHOT":
+        if name == PILOT_SOURCE:
             continue
         if src.raw_storage and src.raw_storage.backend == "gcs":
             not_pilot_gcs.append(name)
@@ -1583,25 +1588,26 @@ pytest tests/test_source_registry_pilot.py -v
 
 - [ ] **Step 3: Edit `core/source_registry.yaml`**
 
-Locate `ESOLVER_PARTITE_ORTI_SNAPSHOT`. Change `raw_storage`:
+Locate `MPS_BANCA_ORTI_APPEND`. Change ONLY the `raw_storage` block:
 
 ```yaml
-  ESOLVER_PARTITE_ORTI_SNAPSHOT:
-    system: ESOLVER
-    dataset: PARTITE
-    dataset_label: "Partite aperte fornitori"
+  MPS_BANCA_ORTI_APPEND:
+    system: MPS
+    dataset: BANCA
+    dataset_label: "Movimenti homebanking MPS"
     societa: ORTI
-    lifecycle: SNAPSHOT
-    canonical_table: f_partite_aperte_fornitori
-    parser_module: ingest.flussi.ingest_partite_aperte
-    natural_key: [data_snapshot, societa_id]
-    loop_targets: [cash_control, monthly_close]
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_banche_movimenti
+    parser_module: ingest.banca.ingest
+    hash_basis: hash_riga
+    loop_targets: [daily_reconciliation, cash_control, monthly_close]
     promotion_policy: AUTO
-    detector_category: partite_fornitori
+    detector_category: banca
     raw_storage:
-      backend: gcs
-      bucket: hotelops-raw
-      path_template: "partite_fornitori/ORTI"
+      backend: gcs                          # was: drive
+      bucket: hotelops-raw                   # NEW (only required for backend=gcs)
+      path_template: "homebanking/ORTI/MPS"  # retained for Drive-side workspace
 ```
 
 - [ ] **Step 4: Run tests — must pass**
@@ -1620,7 +1626,7 @@ pytest -q
 
 ```bash
 git add core/source_registry.yaml tests/test_source_registry_pilot.py
-git commit -m "feat(registry): pilot ESOLVER_PARTITE_ORTI_SNAPSHOT → backend=gcs (task 8)"
+git commit -m "feat(registry): pilot MPS_BANCA_ORTI_APPEND → backend=gcs (task 8)"
 ```
 
 ---
@@ -1644,7 +1650,9 @@ Replace section 10 with:
   Autoclass→ARCHIVE), `core/lineage/raw_storage.py` con `LocalBackend` +
   `GCSBackend`, schema `f_raw_objects.gcs_generation` aggiunto, parser
   invocation supporta `gs://` via download-to-temp.
-- **Pilot source attivo**: `ESOLVER_PARTITE_ORTI_SNAPSHOT` (`backend: gcs`).
+- **Pilot source attivo**: `MPS_BANCA_ORTI_APPEND` (`backend: gcs`,
+  lifecycle APPEND con content_hash dedup — esercita il caso d'uso pieno
+  di GCS+versioning).
 - **Bulk flip pendente**: altre 12 sources restano `backend: drive` finché
   un PR dedicato le sposta in batch (separato da Phase 4 per limitare blast
   radius del pilot).
@@ -1685,7 +1693,7 @@ Find Commands section. Optional: nota su provisioning script:
 Key entries to add under "Completato di recente" (top):
 
 ```markdown
-- 2026-05-05: **GCS Raw Staging Phase 4** — `gs://hotelops-raw` provisioned (Versioning ON + Autoclass→ARCHIVE). `core/lineage/raw_storage.py` (`LocalBackend` + `GCSBackend`). Schema migration `f_raw_objects.gcs_generation INT64`. Pilot `ESOLVER_PARTITE_ORTI_SNAPSHOT` su `backend: gcs`. `_invoke_parser` supporta `gs://` via download-to-temp. Phase 1+2 tests verdi (no regression). Smoke test su file partite aperte produzione: PASS.
+- 2026-05-05: **GCS Raw Staging Phase 4** — `gs://hotelops-raw` provisioned (Versioning ON + Autoclass→ARCHIVE). `core/lineage/raw_storage.py` (`LocalBackend` + `GCSBackend`). Schema migration `f_raw_objects.gcs_generation INT64`. Pilot `MPS_BANCA_ORTI_APPEND` su `backend: gcs` (APPEND lifecycle scelta over SNAPSHOT per esercitare content_hash dedup). `_invoke_parser` supporta `gs://` via download-to-temp. Phase 1+2 tests verdi (no regression). Smoke test su file MPS homebanking produzione: PASS, dedup re-upload short-circuit verificato.
 ```
 
 Move the "GCS come Raw layer immutabile" entry from "Decisioni aperte" to the implementation note above. Add new "Decisioni aperte":
@@ -1714,17 +1722,17 @@ git commit -m "docs(gcs): Phase 4 landed — GCS pilot live, doc-vs-impl drift c
 
 This step touches production GCS + BQ. Controller executes manually after CI passes.
 
-- [ ] **Step 1: Pick a real partite aperte file**
+- [ ] **Step 1: Pick a real MPS homebanking file**
 
 ```bash
-ls -lat ~/path/to/datahub/partite_fornitori/ORTI/*.xlsx | head -3
+ls -lat ~/path/to/datahub/homebanking/ORTI/MPS/*.xlsx ~/path/to/datahub/homebanking/ORTI/MPS/*.csv 2>/dev/null | head -3
 ```
 
 - [ ] **Step 2: Run intake**
 
 ```bash
-hotelops intake /path/to/situazione_partite_2026-XX-XX.xlsx \
-  --source-name ESOLVER_PARTITE_ORTI_SNAPSHOT \
+hotelops intake /path/to/<mps_file>.xlsx \
+  --source-name MPS_BANCA_ORTI_APPEND \
   --actor smoke_test_phase4
 ```
 
@@ -1733,13 +1741,13 @@ Expected output:
 ```
 raw_object_id=<uuid>
 content_hash=<md5>
-source_name=ESOLVER_PARTITE_ORTI_SNAPSHOT
+source_name=MPS_BANCA_ORTI_APPEND
 ```
 
 - [ ] **Step 3: Verify GCS object**
 
 ```bash
-gsutil ls -l "gs://hotelops-raw/ESOLVER_PARTITE_ORTI_SNAPSHOT/2026/05/"
+gsutil ls -l "gs://hotelops-raw/MPS_BANCA_ORTI_APPEND/2026/05/"
 ```
 
 Expected: shows the uploaded file with non-zero size.
@@ -1766,17 +1774,32 @@ hotelops lineage <raw_object_id>
 
 Expected: shows RAW_INGESTED event with `raw_backend=gcs` in payload.
 
-- [ ] **Step 6 (optional): End-to-end via promote**
+- [ ] **Step 6: Dedup re-upload short-circuit (APPEND-pilot's distinctive value)**
+
+```bash
+hotelops intake /path/to/<same_mps_file>.xlsx \
+  --source-name MPS_BANCA_ORTI_APPEND \
+  --actor smoke_test_phase4_dedup
+```
+
+Expected:
+- Returned `raw_object_id` is **the same** as Step 2 output
+- `gsutil ls gs://hotelops-raw/MPS_BANCA_ORTI_APPEND/2026/05/` still shows
+  exactly **1** object (no second upload)
+- `bq query "SELECT COUNT(*) FROM hotelops.f_raw_objects WHERE intake_actor IN ('smoke_test_phase4','smoke_test_phase4_dedup')"` returns **1** (no second row)
+- `bq query "SELECT COUNT(*) FROM hotelops.f_lineage_events WHERE raw_object_id = '<uuid>'"` should still be **1** RAW_INGESTED event (intake should skip emit on dedup hit; if it emits anyway, that's an open gap to flag)
+
+- [ ] **Step 7 (optional): End-to-end via promote**
 
 ```bash
 hotelops promote --raw-object-id <raw_object_id>
 ```
 
-Expected: parser ran from temp download; status moves to PROMOTED; canonical write happened in `f_partite_aperte_fornitori`.
+Expected: parser ran from temp download; status moves to PROMOTED; canonical write appended rows to `f_banche_movimenti`.
 
-- [ ] **Step 7: Document smoke test result**
+- [ ] **Step 8: Document smoke test result**
 
-Append note to PR description with `raw_object_id` + `gs://` URI of the test object. The object stays in GCS (immutable, not deleted).
+Append note to PR description with `raw_object_id` + `gs://` URI of the test object + dedup verification result. The object stays in GCS (immutable, not deleted).
 
 ---
 
@@ -1790,7 +1813,7 @@ git push -u origin refactor/gcs-raw-staging
 
 - [ ] **Step 2: Open PR against main**
 
-Title: `Phase 4: GCS Raw Staging — pilot ESOLVER_PARTITE_ORTI_SNAPSHOT live`
+Title: `Phase 4: GCS Raw Staging — pilot MPS_BANCA_ORTI_APPEND live`
 
 Body:
 
@@ -1802,7 +1825,7 @@ Body:
 - `intake_file` dispatches backend via `source_def.raw_storage.backend`
 - `_invoke_parser` supports `gs://` via download-to-temp + cleanup
 - Schema: `f_raw_objects` gains nullable `gcs_generation INT64`
-- Pilot source: `ESOLVER_PARTITE_ORTI_SNAPSHOT` flipped to `backend: gcs`
+- Pilot source: `MPS_BANCA_ORTI_APPEND` flipped to `backend: gcs` (APPEND chosen over SNAPSHOT to exercise content_hash dedup path)
 - Other 12 sources unchanged (separate bulk-flip PR)
 - Closes doc-vs-implementation drift on `DATAHUB_ONTOLOGY.md`
 
@@ -1815,7 +1838,8 @@ Body:
 
 ## Smoke test
 
-- Real `situazione_partite_*.xlsx` ingested → GCS object exists, BQ row references it with non-null generation
+- Real MPS homebanking file ingested → GCS object exists, BQ row references it with non-null generation
+- Re-upload of the same file dedup-short-circuited (no second GCS object, no second f_raw_objects row) — APPEND-pilot's distinctive value verified
 - `raw_object_id`: `<uuid from Task 10>`
 - GCS URI: `<gs://... from Task 10>`
 

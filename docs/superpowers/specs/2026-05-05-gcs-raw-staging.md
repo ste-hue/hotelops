@@ -45,9 +45,10 @@ drift earns:
 4. Schema migration: add nullable `gcs_generation INT64` to `f_raw_objects`
 5. `_invoke_parser` (promotion.py) supports `gs://` URIs by downloading to
    temp file before subprocess dispatch
-6. Pilot one source flipped to `backend: gcs` (`ESOLVER_PARTITE_ORTI_SNAPSHOT`)
-7. Smoke test: real intake of a partite_aperte file → GCS object exists +
-   `f_raw_objects` row carries `gs://` URI + `gcs_generation` populated
+6. Pilot one source flipped to `backend: gcs` (`MPS_BANCA_ORTI_APPEND`)
+7. Smoke test: real intake of an MPS homebanking file → GCS object exists +
+   `f_raw_objects` row carries `gs://` URI + `gcs_generation` populated +
+   content_hash dedup short-circuits a repeat upload
 8. `hotelops lineage` displays GCS URI + generation correctly
 
 ### Out of scope (explicit)
@@ -81,7 +82,7 @@ drift earns:
 
 **Format:** `<source_name>/<intake_yyyy>/<intake_mm>/<original_filename>`
 
-Example: `ESOLVER_PARTITE_ORTI_SNAPSHOT/2026/05/situazione_partite_2026-05-05.xlsx`
+Example: `MPS_BANCA_ORTI_APPEND/2026/05/movimenti_mps_orti_2026-05-05.xlsx`
 
 Rationale:
 - **Human-readable** in GCS console — operators can browse like a folder tree
@@ -150,12 +151,27 @@ Rationale:
   harmless (immutable history is the point).
 - **No cleanup of orphan generations** in this scope
 
-### D9 — Pilot source: `ESOLVER_PARTITE_ORTI_SNAPSHOT`
-Why:
-- Already exercised in Phase 2 shadow mode demo (proven path through `drop --lineage`)
-- SNAPSHOT lifecycle = small, recurring, low-volume (low risk)
-- Real production file available for smoke test
-- If pilot succeeds → bulk flip in a separate PR (out of scope here)
+### D9 — Pilot source: `MPS_BANCA_ORTI_APPEND`
+
+Why **APPEND** instead of SNAPSHOT (revisited 2026-05-05):
+- **APPEND lifecycle** is where content_hash dedup matters — re-uploading the same
+  bank file would otherwise duplicate rows in `f_banche_movimenti`. The whole
+  GCS+versioning+dedup substrate is designed for this case.
+- A SNAPSHOT pilot (e.g. `ESOLVER_PARTITE_ORTI_SNAPSHOT`) would NOT exercise
+  the dedup path: SNAPSHOT semantics are "latest replaces previous via
+  DELETE+INSERT", so re-uploading the same file is already idempotent at the
+  canonical layer regardless of what GCS does. The pilot would validate
+  upload mechanics but skip the technical novelty (forensic immutability +
+  dedup short-circuit).
+- `MPS_BANCA_ORTI_APPEND` is the canonical reference flow in the project
+  (banca homebanking is mentioned across STATUS, vault, and onboarding docs
+  as the prototypical case).
+- 3 declared `loop_targets` (`daily_reconciliation`, `cash_control`,
+  `monthly_close`) → high consumer visibility if the pilot regresses.
+- Parser `ingest.banca.ingest` is mature and recently exercised.
+- Real production files exist (note: banche stale 15-32gg per STATUS, but
+  the file format and parser are not affected by recency).
+- If pilot succeeds → bulk flip in a separate PR (out of scope here).
 
 ---
 
@@ -185,7 +201,7 @@ scripts/
 ### Sequence — intake with GCS backend
 
 ```
-hotelops intake file.xlsx --source-name ESOLVER_PARTITE_ORTI_SNAPSHOT
+hotelops intake file.xlsx --source-name MPS_BANCA_ORTI_APPEND
   │
   ├─► intake_file()
   │     ├─► compute MD5
@@ -196,7 +212,7 @@ hotelops intake file.xlsx --source-name ESOLVER_PARTITE_ORTI_SNAPSHOT
   │     │     └─► miss → continue
   │     ├─► backend = GCSBackend(bucket="hotelops-raw")
   │     ├─► key = backend.compute_key(source_name, intake_at, filename)
-  │     │       = "ESOLVER_PARTITE_ORTI_SNAPSHOT/2026/05/situazione_partite.xlsx"
+  │     │       = "MPS_BANCA_ORTI_APPEND/2026/05/movimenti_mps_orti.xlsx"
   │     ├─► [GCS] backend.upload(local_path, key) → (gs_uri, generation)
   │     ├─► [BQ] register_raw_object(
   │     │         raw_uri=gs_uri,
@@ -252,12 +268,12 @@ class RawObject(BaseModel):
 ### `core/source_registry.yaml`
 
 ```yaml
-ESOLVER_PARTITE_ORTI_SNAPSHOT:
+MPS_BANCA_ORTI_APPEND:
   # ... unchanged ...
   raw_storage:
-    backend: gcs                              # was: drive
-    path_template: "partite_fornitori/ORTI"   # retained for Drive-side workspace
-    bucket: hotelops-raw                       # NEW (only for backend=gcs)
+    backend: gcs                          # was: drive
+    bucket: hotelops-raw                   # NEW (only for backend=gcs)
+    path_template: "homebanking/ORTI/MPS"  # retained for Drive-side workspace
 ```
 
 (Other 12 sources stay `backend: drive` until bulk-flip PR.)
@@ -299,13 +315,18 @@ ESOLVER_PARTITE_ORTI_SNAPSHOT:
 (Detailed in plan doc; not duplicated here.)
 
 ### Step 8 — Pilot smoke test
-- Take a real `situazione_partite_*.xlsx` file
-- `hotelops intake <file> --source-name ESOLVER_PARTITE_ORTI_SNAPSHOT --actor smoke_test`
+- Take a real MPS homebanking export (xlsx/csv) from the Drive datahub
+  (`homebanking/ORTI/MPS/`)
+- `hotelops intake <file> --source-name MPS_BANCA_ORTI_APPEND --actor smoke_test`
 - Verify:
-  - `gsutil ls gs://hotelops-raw/ESOLVER_PARTITE_ORTI_SNAPSHOT/2026/05/` shows the object
+  - `gsutil ls gs://hotelops-raw/MPS_BANCA_ORTI_APPEND/2026/05/` shows the object
   - `bq query "SELECT raw_uri, raw_backend, gcs_generation FROM hotelops.f_raw_objects WHERE intake_actor='smoke_test'"` shows `gs://...` URI and non-null generation
   - `hotelops lineage <raw_object_id>` displays correctly
-- Optional: `hotelops promote --raw-object-id <id>` → confirm parser ran from temp download
+- **Dedup check** (this is the APPEND-pilot's distinctive value):
+  - Re-run `hotelops intake <same_file> --source-name MPS_BANCA_ORTI_APPEND --actor smoke_test_dedup`
+  - Verify: NO new GCS object uploaded (gsutil ls shows same single object),
+    NO new f_raw_objects row, returned `raw_object_id` matches the first run
+- Optional: `hotelops promote --raw-object-id <id>` → confirm parser ran from temp download, rows landed in `f_banche_movimenti`
 
 ### Step 9 — PR + merge
 
@@ -328,8 +349,8 @@ A reviewer agrees the spec is satisfied iff:
    `LocalBackend` path produces identical behavior to today (regression-safe)
 5. ✅ `_invoke_parser` downloads `gs://` URIs to temp + cleans up; `file://`
    path unchanged
-6. ✅ Source registry has `ESOLVER_PARTITE_ORTI_SNAPSHOT.raw_storage.backend
-   = gcs`; `load_registry` accepts it; other 12 unchanged
+6. ✅ Source registry has `MPS_BANCA_ORTI_APPEND.raw_storage.backend = gcs`;
+   `load_registry` accepts it; other 12 unchanged
 7. ✅ All Phase 1+2 tests still pass (no regression)
 8. ✅ Smoke test produces a real GCS object + a real BQ row referencing it
    with non-null generation
@@ -348,11 +369,12 @@ Proposed: `<source_name>/<YYYY>/<MM>/<original_filename>` (D2).
 **Recommendation:** stick with proposal (decoupled from Drive).
 **Need answer:** confirm or override.
 
-### Q2 — Pilot source
-Proposed: `ESOLVER_PARTITE_ORTI_SNAPSHOT` (D9).
-**Alternative:** any other source you'd prefer to flip first.
-**Recommendation:** stick with proposal (already exercised in Phase 2).
-**Need answer:** confirm or override.
+### Q2 — Pilot source [CLOSED 2026-05-05]
+
+**Resolved**: switched to `MPS_BANCA_ORTI_APPEND` (see D9 for full rationale).
+The original SNAPSHOT proposal was rejected because SNAPSHOT lifecycle does
+not exercise the content_hash dedup path that GCS+versioning is designed for.
+APPEND on a banca source is the canonical case.
 
 ### Q3 — Bucket lifecycle
 Proposed: Autoclass terminal=ARCHIVE, no explicit deletion rule, no
