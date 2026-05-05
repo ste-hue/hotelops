@@ -1,3 +1,5 @@
+> **⚠️ SUPERSEDED by `2026-05-05-ingest-lineage-gcs-design.md`** (2026-05-05) — il modello dati è stato semplificato (append-only via gate, view per latest state), il name "manifest" è disambiguato (catalog vs lineage), e lo scope è ora chiaramente Phase-driven.
+
 # Manifest & Budget Architecture — Design Spec
 
 **Date:** 2026-04-02

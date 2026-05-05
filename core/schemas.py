@@ -181,6 +181,23 @@ class SaldoBancaSnapshotRow(BaseModel):
     saldo_finale: float
 
 
+# ── f_saldi_banca_chiusura_mensile ────────────────────────────────────────────
+
+
+class SaldoBancaChiusuraMensileRow(BaseModel):
+    """Saldo banca certificato a fine mese (fonte manuale / tesoreria).
+
+    Se presente per (societa_id, data_riferimento, banca_id), ha priorità su
+    snapshot Esolver + movimenti in ``hotelops chiudi`` e nel calcolo saldi CLI.
+    """
+
+    societa_id: SocietaId
+    data_riferimento: date
+    banca_id: str
+    saldo_eur: float
+    note: Optional[str] = None
+
+
 # ── f_chiusura_mensile ────────────────────────────────────────────────────────
 
 

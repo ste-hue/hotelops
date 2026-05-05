@@ -12,6 +12,7 @@ Subcomandi:
     hotelops voci        Lista voci piano finanziario disponibili
     hotelops manifest    Genera catalogo tabelle BigQuery
     hotelops classifica  Classifica, smista e ingerisci file dati
+    hotelops drop        Stesso flusso smooth: smista + ingest (audit su Drive)
     hotelops ingest      Pipeline ingestione da datahub
     hotelops app         Dashboard Streamlit condges
     hotelops tesoreria   App Streamlit tesoreria (cashflow, PF, fornitori)
@@ -285,7 +286,12 @@ def cmd_classifica(args):
         print(r.summary())
 
         if args.route or args.ingest:
-            dest = route_file(r, datahub, dry_run=args.dry_run)
+            dest = route_file(
+                r,
+                datahub,
+                dry_run=args.dry_run,
+                use_rclone=not getattr(args, "locale", False),
+            )
             if dest:
                 prefix = "[DRY-RUN] " if args.dry_run else ""
                 print(f"  {prefix}→ {dest}")
@@ -299,6 +305,228 @@ def cmd_classifica(args):
     print(f"{'─' * 70}")
     print(f"  Riconosciuti: {ok}/{len(results)}")
     print(f"{'─' * 70}\n")
+
+
+def cmd_drop(args):
+    """Un solo passaggio: classifica → smista → ingest + audit JSONL (dedup resta in BQ)."""
+    from pathlib import Path
+
+    from ingest.classify import (
+        DEFAULT_DATAHUB,
+        append_drop_audit,
+        classify_batch,
+        file_md5_hex,
+        route_file,
+        run_ingest,
+    )
+
+    datahub = Path(args.datahub) if args.datahub else DEFAULT_DATAHUB
+    use_rclone = not args.locale
+
+    files = [Path(f) for f in args.files]
+    expanded: list[Path] = []
+    for f in files:
+        if "*" in str(f) or "?" in str(f):
+            import glob
+
+            expanded.extend(Path(p) for p in glob.glob(str(f)))
+        else:
+            expanded.append(f)
+
+    if not expanded:
+        print("Nessun file trovato.")
+        return
+
+    print(f"\n{'═' * 70}")
+    print("  DROP → classifica + smista + ingest  (BQ: APPEND dedup / SNAPSHOT)")
+    print(
+        f"  Datahub: {datahub}  |  rclone: {'no (--locale)' if args.locale else 'sì'}"
+    )
+    print(f"{'═' * 70}\n")
+
+    results = classify_batch(expanded)
+    ok = unk = routed = ingested = 0
+
+    for r in results:
+        md5 = None
+        if r.file_path.is_file():
+            try:
+                md5 = file_md5_hex(r.file_path)
+            except OSError:
+                pass
+
+        if r.category in ("unknown", "error"):
+            unk += 1
+            print(f"❓ {r.file_path.name} — non riconosciuto")
+            append_drop_audit(
+                datahub,
+                {
+                    "file": str(r.file_path),
+                    "file_type": r.file_type,
+                    "status": "UNKNOWN",
+                    "md5": md5,
+                    "dry_run": args.dry_run,
+                },
+            )
+            print()
+            continue
+
+        ok += 1
+        emoji = "✅" if r.confidence >= 0.8 else "⚠️"
+        print(f"{emoji} {r.file_path.name}  →  {r.file_type} / {r.category}")
+        print(f"    {r.summary().strip()}")
+
+        dest = route_file(r, datahub, dry_run=args.dry_run, use_rclone=use_rclone)
+        route_ok = dest is not None
+        ingest_ok = False
+        if route_ok:
+            routed += 1
+            prefix = "[DRY-RUN] " if args.dry_run else ""
+            print(f"    {prefix}smistato → {dest}")
+            if not args.dry_run:
+                ingest_ok = run_ingest(r, dest, datahub, dry_run=False)
+                if ingest_ok:
+                    ingested += 1
+                print(f"    ingest: {'✅ OK' if ingest_ok else '❌ ERRORE'}")
+            else:
+                ingest_ok = run_ingest(r, dest, datahub, dry_run=True)
+                print("    ingest: [DRY-RUN]")
+        else:
+            print("    ❌ smistamento fallito")
+
+        if not route_ok:
+            drop_status = "FAIL_ROUTE"
+        elif args.dry_run:
+            drop_status = "DRY_RUN"
+        elif ingest_ok:
+            drop_status = "OK"
+        else:
+            drop_status = "FAIL_INGEST"
+
+        append_drop_audit(
+            datahub,
+            {
+                "file": str(r.file_path),
+                "file_type": r.file_type,
+                "category": r.category,
+                "canonical": r.canonical_name,
+                "dest_folder": r.dest_folder,
+                "status": drop_status,
+                "route_ok": route_ok,
+                "ingest_ok": ingest_ok if route_ok else False,
+                "md5": md5,
+                "dry_run": args.dry_run,
+            },
+        )
+        print()
+
+    print(f"{'─' * 70}")
+    print(
+        f"  Riconosciuti {ok}/{len(results)}  |  sconosciuti {unk}  |  "
+        f"smistati {routed}  |  ingest OK {ingested}"
+    )
+    print(f"  Audit: {datahub / 'ingresso' / '_audit' / 'drops.jsonl'}")
+    print(f"{'─' * 70}\n")
+
+
+# ── Lineage subcommands (Phase 1 — additive) ──────────────────────────────────
+
+
+def cmd_intake(args):
+    """Register a file in the lineage layer (no canonical write)."""
+    from pathlib import Path
+
+    from ingest.intake import intake_file
+
+    result = intake_file(
+        Path(args.file),
+        source_name=args.source_name,
+        actor="cli",
+    )
+    print(f"raw_object_id: {result.raw_object_id}")
+    print(f"content_hash:  {result.content_hash}")
+    print(f"source_name:   {result.source_name or '(none)'}")
+
+
+def cmd_promote(args):
+    """Promote a PROMOTABLE raw_object to canonical via its source policy."""
+    from ingest.promotion import promote_raw_object
+
+    if args.raw_object_id:
+        r = promote_raw_object(args.raw_object_id, actor="cli")
+        print(
+            f"status={r.status} reason={r.reason or '-'} rows={r.rows_written} noop={r.noop}"
+        )
+        if r.status == "REJECTED":
+            sys.exit(2)
+        return
+
+    print("--all-promotable not yet implemented in Phase 1 (use --raw-object-id)")
+    sys.exit(1)
+
+
+def cmd_lineage(args):
+    """Inspect a raw_object: identity + event history + current status."""
+    from core.bq.client import get_client
+    from core.lineage.raw_manifest import (
+        F_LINEAGE_EVENTS,
+        F_RAW_OBJECTS,
+        V_RAW_OBJECTS_CURRENT,
+    )
+    from google.cloud import bigquery
+
+    client = get_client()
+    p = bigquery.ScalarQueryParameter("id", "STRING", args.raw_object_id)
+    qc = bigquery.QueryJobConfig(query_parameters=[p])
+
+    print("\n  Identity:")
+    rows = list(
+        client.query(
+            f"SELECT * FROM `{F_RAW_OBJECTS}` WHERE raw_object_id = @id",
+            job_config=qc,
+        ).result()
+    )
+    if not rows:
+        print(f"  ❌ raw_object_id not found: {args.raw_object_id}")
+        sys.exit(1)
+    r = rows[0]
+    for k in (
+        "source_name",
+        "societa_id",
+        "file_name_original",
+        "intake_at",
+        "raw_uri",
+    ):
+        print(f"    {k}: {getattr(r, k, '-')}")
+
+    print("\n  Current status:")
+    cur = list(
+        client.query(
+            f"SELECT current_status, last_event_at FROM `{V_RAW_OBJECTS_CURRENT}` "
+            f"WHERE raw_object_id = @id",
+            job_config=qc,
+        ).result()
+    )
+    if cur:
+        print(f"    {cur[0].current_status}  (last event: {cur[0].last_event_at})")
+
+    print("\n  Event history:")
+    events = list(
+        client.query(
+            f"SELECT event_type, event_at, actor, from_status, to_status, reason "
+            f"FROM `{F_LINEAGE_EVENTS}` WHERE raw_object_id = @id ORDER BY event_at",
+            job_config=qc,
+        ).result()
+    )
+    for ev in events:
+        transition = (
+            f"{ev.from_status or '∅'} → {ev.to_status}"
+            if ev.to_status
+            else "(no transition)"
+        )
+        reason = f"  [{ev.reason}]" if ev.reason else ""
+        print(f"    {ev.event_at}  {ev.event_type:<22s} {transition}{reason}")
+    print()
 
 
 # ── Ingest ─────────────────────────────────────────────────────────────────
@@ -384,7 +612,7 @@ def cmd_tesoreria(args):
     import subprocess
 
     app_path = Path(__file__).parent / "condges" / "tesoreria.py"
-    print(f"  Lancio: streamlit run condges/tesoreria.py")
+    print("  Lancio: streamlit run condges/tesoreria.py")
     subprocess.run(["streamlit", "run", str(app_path)], check=True)
 
 
@@ -515,6 +743,26 @@ def main():
     p_class.add_argument(
         "--dry-run", action="store_true", help="Mostra il piano senza eseguire"
     )
+    p_class.add_argument(
+        "--locale",
+        action="store_true",
+        help="Smista sul mount locale del datahub (senza rclone verso Drive remoto)",
+    )
+
+    p_drop = sub.add_parser(
+        "drop",
+        help="Flusso smooth: classifica + smista + ingest (audit in ingresso/_audit/)",
+    )
+    p_drop.add_argument("files", nargs="+", help="File da elaborare (anche glob)")
+    p_drop.add_argument("--datahub", help="Root datahub (default: mount Google Drive)")
+    p_drop.add_argument(
+        "--locale",
+        action="store_true",
+        help="Solo copia locale sul datahub mount (niente upload rclone)",
+    )
+    p_drop.add_argument(
+        "--dry-run", action="store_true", help="Piano senza scrittura Drive/BQ"
+    )
 
     # ingest
     p_ingest = sub.add_parser("ingest", help="Pipeline di ingestione dati")
@@ -554,7 +802,9 @@ def main():
     )
 
     # tesoreria
-    sub.add_parser("tesoreria", help="App Streamlit tesoreria (cashflow, PF, fornitori)")
+    sub.add_parser(
+        "tesoreria", help="App Streamlit tesoreria (cashflow, PF, fornitori)"
+    )
 
     # reviews
     p_reviews = sub.add_parser("reviews", help="Reviews ospiti: scrape, alert, stats")
@@ -632,6 +882,29 @@ def main():
         "--min-score", type=float, default=0.0, help="Score minimo per match (0.0–1.0)"
     )
 
+    # ── Lineage subcommands (Phase 1) ──────────────────────────────────────
+    p_intake = sub.add_parser(
+        "intake",
+        help="Lineage: registra un file (raw blob + RAW_INGESTED event)",
+    )
+    p_intake.add_argument("file", help="Path al file")
+    p_intake.add_argument(
+        "--source-name",
+        default=None,
+        help="source_name del registry (es. ESOLVER_BILANCINO_ORTI_SNAPSHOT)",
+    )
+
+    p_promote = sub.add_parser(
+        "promote",
+        help="Lineage: promuovi raw_object a canonical (parser + bq_write_validated)",
+    )
+    p_promote.add_argument("--raw-object-id", required=True)
+
+    p_lin = sub.add_parser(
+        "lineage", help="Lineage: ispeziona raw_object + storia eventi"
+    )
+    p_lin.add_argument("raw_object_id")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -650,6 +923,7 @@ def main():
         "manifest": cmd_manifest,
         "classifica": cmd_classifica,
         "cls": cmd_classifica,
+        "drop": cmd_drop,
         "ingest": cmd_ingest,
         "app": cmd_app,
         "tesoreria": cmd_tesoreria,
@@ -659,6 +933,9 @@ def main():
         "acc": cmd_accodamenti,
         "reviews": cmd_reviews,
         "help": cmd_help,
+        "intake": cmd_intake,
+        "promote": cmd_promote,
+        "lineage": cmd_lineage,
     }
 
     handlers[args.command](args)

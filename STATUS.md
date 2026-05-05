@@ -1,6 +1,7 @@
 # Status — 2026-05-02
 
 ## In corso
+- **Ingest lineage Phase 1** (`refactor/ingest-lineage-gcs`): spec + plan committati. 10 task TDD additive-only — moduli `core/lineage/`, tabelle `f_raw_objects` + `f_lineage_events` + view `v_raw_objects_current`, CLI `hotelops intake/promote/lineage`. Zero modifica a parser esistenti, zero shadow su `cmd_drop`. Phase 1 = foundation; Phase 2 = shadow opt-in; Phase 3 = cutover.
 - v_condges_banca_dettaglio: view SQL creata, non ancora materializzata su BQ
 - v_ledger_movimenti: view SQL creata (`core/bq/views/v_ledger_movimenti.sql`), non ancora materializzata su BQ
 - xlsx-movimenti-parser: piano scritto (`docs/superpowers/plans/2026-03-30-xlsx-movimenti-parser.md`), non eseguito
