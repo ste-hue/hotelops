@@ -17,7 +17,9 @@ SOCIETA_VALUES = ("ORTI", "INTUR", "GROUP")
 LIFECYCLE_VALUES = ("APPEND", "SNAPSHOT")
 TOKEN_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*$")
 
-RawObjectStatus = Literal["RAW_ONLY", "CLASSIFIED", "PROMOTABLE", "PROMOTED", "REJECTED"]
+RawObjectStatus = Literal[
+    "RAW_ONLY", "CLASSIFIED", "PROMOTABLE", "PROMOTED", "REJECTED"
+]
 
 LineageEventType = Literal[
     "RAW_INGESTED",
@@ -31,7 +33,9 @@ LineageEventType = Literal[
     "RECLASSIFIED",
 ]
 
-RejectionReason = Literal["NO_LOOP_TARGET", "DETECT_FAIL", "VALIDATE_FAIL", "WRITE_FAIL"]
+RejectionReason = Literal[
+    "NO_LOOP_TARGET", "DETECT_FAIL", "VALIDATE_FAIL", "WRITE_FAIL"
+]
 PromotionPolicy = Literal["AUTO", "MANUAL", "RAW_ONLY"]
 RawBackend = Literal["drive", "gcs", "local"]
 

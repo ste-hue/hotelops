@@ -106,6 +106,7 @@ def test_LineageEvent_with_reason() -> None:
 
 def test_SourceDefinition_invalid_name_rejected() -> None:
     import pytest as _pytest
+
     with _pytest.raises(Exception):  # Pydantic ValidationError wraps InvalidSourceName
         SourceDefinition(
             source_name="bad_name",
