@@ -67,6 +67,7 @@ def register_raw_object(
     business_unit_id: Optional[str] = None,
     banca_id: Optional[str] = None,
     file_sorgente: Optional[str] = None,
+    gcs_generation: Optional[int] = None,
 ) -> str:
     """Write a new row to f_raw_objects (or return existing id on dedup).
 
@@ -98,6 +99,7 @@ def register_raw_object(
         content_hash=content_hash,
         raw_uri=raw_uri,
         raw_backend=raw_backend,
+        gcs_generation=gcs_generation,
         file_name_original=file_name_original,
         file_name_canonical=file_name_canonical,
         bytes_size=bytes_size,
