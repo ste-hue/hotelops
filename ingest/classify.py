@@ -627,7 +627,7 @@ def _build_bilancino_result(
 
 
 def detect_gasparotto(path: Path) -> Optional[ClassificationResult]:
-    """Gasparotto Master Completo — XLSX with 'Budget' sheet."""
+    """Gasparotto Master (Budget+CE) or ORTI monthly export (Ricavi+Fissi, no Budget)."""
     ext = path.suffix.lower()
     if ext != ".xlsx":
         return None
@@ -637,16 +637,24 @@ def detect_gasparotto(path: Path) -> Optional[ClassificationResult]:
         societa = infer_societa(path.name, path) or "ORTI"  # Default ORTI
         return _build_gasparotto_result(path, societa, confidence=0.95)
 
-    # Check for Budget sheet
+    # Inspect sheets: Gasparotto Master (Budget+CE) or ORTI monthly export (Ricavi+Fissi, no Budget)
     try:
         from openpyxl import load_workbook
 
+        from ingest.flussi.budget_orti_xlsx import sniff_budget_orti_monthly_format
+
         wb = load_workbook(path, read_only=True)
-        sheets = [s.upper() for s in wb.sheetnames]
-        wb.close()
+        try:
+            snames = list(wb.sheetnames)
+            sheets = [s.upper() for s in snames]
+        finally:
+            wb.close()
         if "BUDGET" in sheets and ("CONTO ECONOMICO" in sheets or "CE" in sheets):
             societa = infer_societa(path.name, path) or "ORTI"
             return _build_gasparotto_result(path, societa, confidence=0.85)
+        if sniff_budget_orti_monthly_format(snames):
+            societa = infer_societa(path.name, path) or "ORTI"
+            return _build_gasparotto_result(path, societa, confidence=0.88)
     except Exception:
         pass
 

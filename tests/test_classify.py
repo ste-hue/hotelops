@@ -361,6 +361,38 @@ class TestDetectGasparotto:
         assert result.category == "gasparotto"
         assert result.confidence >= 0.80
 
+    def test_budget_orti_monthly_export_sheets(self, tmp_path):
+        f = tmp_path / "Budget_ORTI_2026.xlsx"
+        months = [
+            "Gen",
+            "Feb",
+            "Mar",
+            "Apr",
+            "Mag",
+            "Giu",
+            "Lug",
+            "Ago",
+            "Set",
+            "Ott",
+            "Nov",
+            "Dic",
+        ]
+        hdr = ["codice_conto", "descrizione", "BU"] + months
+        _write_xlsx_multi_sheet(
+            f,
+            {
+                "Ricavi": (
+                    hdr,
+                    [["47.91.01", "Test ricavo", "HOTEL"] + [0] * 12],
+                ),
+                "Fissi": (hdr, []),
+            },
+        )
+        result = detect_gasparotto(f)
+        assert result is not None
+        assert result.category == "gasparotto"
+        assert result.confidence >= 0.85
+
     def test_wrong_extension_returns_none(self, tmp_path):
         f = tmp_path / "Master Completo.xls"
         f.write_bytes(b"\xd0\xcf\x11\xe0")

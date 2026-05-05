@@ -2,6 +2,9 @@
 """
 Gasparotto Master Budget → BigQuery f_budget_mensile (fonte=GASPAROTTO).
 
+Also accepts **Budget_ORTI_*.xlsx** (sheets Ricavi, Fissi, Variabili, Personale,
+Finanziari with Italian month columns): same ``fonte=GASPAROTTO`` and DELETE-INSERT.
+
 Reads the "Budget" sheet of the Gasparotto Master XLSX. Extracts every data row
 (ricavi + acquisti + costi produttivi + personale + costi commerciali +
 costi amministrativi + oneri tributari + oneri finanziari) with its codice_conto,
@@ -53,6 +56,11 @@ except ImportError:
 
 from core.bq.client import get_client
 from core.config import PROJECT
+
+from ingest.flussi.budget_orti_xlsx import (
+    parse_budget_orti_workbook,
+    sniff_budget_orti_monthly_format,
+)
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -443,6 +451,8 @@ def parse_gasparotto_budget(
     filepath: Path,
     societa_id: str,
     logger: logging.Logger,
+    *,
+    anno: int | None = None,
 ) -> list[dict]:
     """Parse the Budget sheet of Gasparotto Master XLSX.
 
@@ -454,6 +464,7 @@ def parse_gasparotto_budget(
 
     Returns list of dicts ready for f_budget_mensile.
     """
+    target_anno = anno if anno is not None else ANNO
     wb = openpyxl.load_workbook(str(filepath), data_only=True)
     now = datetime.now(timezone.utc)
 
@@ -575,7 +586,7 @@ def parse_gasparotto_budget(
             records.append(
                 {
                     "societa_id": societa_id,
-                    "anno": ANNO,
+                    "anno": target_anno,
                     "mese": mese,
                     "codice_conto": codice_conto,
                     "descrizione": desc,
@@ -674,16 +685,18 @@ BQ_SCHEMA = (
 )
 
 
-def load_to_bq(rows: list[dict], bq_client, logger: logging.Logger) -> None:
+def load_to_bq(
+    rows: list[dict], bq_client, logger: logging.Logger, anno: int
+) -> None:
     if not rows:
         logger.warning("Nessuna riga da caricare")
         return
 
     # Delete existing GASPAROTTO rows for this year
     bq_client.query(
-        f"DELETE FROM `{BQ_TABLE}` WHERE anno = {ANNO} AND fonte = '{FONTE}'"
+        f"DELETE FROM `{BQ_TABLE}` WHERE anno = {anno} AND fonte = '{FONTE}'"
     ).result()
-    logger.info(f"  Righe precedenti anno={ANNO} fonte={FONTE} cancellate")
+    logger.info(f"  Righe precedenti anno={anno} fonte={FONTE} cancellate")
 
     validate_batch(rows, BudgetMensileRow, "f_budget_mensile (gasparotto)")
     job = bq_client.load_table_from_json(
@@ -746,6 +759,12 @@ def main() -> None:
         "--dry-run", action="store_true", help="Parse + validate + CSV, no BQ write"
     )
     parser.add_argument(
+        "--anno",
+        type=int,
+        default=ANNO,
+        help=f"Anno fiscale budget (default {ANNO})",
+    )
+    parser.add_argument(
         "--output-dir", default="output", help="Directory per CSV output in dry-run"
     )
     args = parser.parse_args()
@@ -763,9 +782,23 @@ def main() -> None:
 
     logger.info(f"File: {filepath.name}")
     logger.info(f"Società: {args.societa}")
-    logger.info(f"Anno: {ANNO}")
+    logger.info(f"Anno: {args.anno}")
 
-    rows = parse_gasparotto_budget(filepath, args.societa, logger)
+    fmt_wb = openpyxl.load_workbook(str(filepath), read_only=True)
+    try:
+        sheetnames = list(fmt_wb.sheetnames)
+    finally:
+        fmt_wb.close()
+
+    if sniff_budget_orti_monthly_format(sheetnames):
+        logger.info("Formato: Budget ORTI (griglia mensile per foglio)")
+        rows = parse_budget_orti_workbook(
+            filepath, args.societa, args.anno, logger, fonte=FONTE
+        )
+    else:
+        rows = parse_gasparotto_budget(
+            filepath, args.societa, logger, anno=args.anno
+        )
     if not rows:
         logger.error("Nessuna riga estratta")
         sys.exit(1)
@@ -783,7 +816,7 @@ def main() -> None:
         sys.exit(1)
 
     bq_client = get_client()
-    load_to_bq(rows, bq_client, logger)
+    load_to_bq(rows, bq_client, logger, args.anno)
     logger.info("✓ DONE")
 
 
