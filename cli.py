@@ -339,7 +339,9 @@ def cmd_drop(args):
 
     print(f"\n{'═' * 70}")
     print("  DROP → classifica + smista + ingest  (BQ: APPEND dedup / SNAPSHOT)")
-    print(f"  Datahub: {datahub}  |  rclone: {'no (--locale)' if args.locale else 'sì'}")
+    print(
+        f"  Datahub: {datahub}  |  rclone: {'no (--locale)' if args.locale else 'sì'}"
+    )
     print(f"{'═' * 70}\n")
 
     results = classify_batch(expanded)
@@ -427,6 +429,106 @@ def cmd_drop(args):
     print(f"{'─' * 70}\n")
 
 
+# ── Lineage subcommands (Phase 1 — additive) ──────────────────────────────────
+
+
+def cmd_intake(args):
+    """Register a file in the lineage layer (no canonical write)."""
+    from pathlib import Path
+
+    from ingest.intake import intake_file
+
+    result = intake_file(
+        Path(args.file),
+        source_name=args.source_name,
+        actor="cli",
+    )
+    print(f"raw_object_id: {result.raw_object_id}")
+    print(f"content_hash:  {result.content_hash}")
+    print(f"source_name:   {result.source_name or '(none)'}")
+
+
+def cmd_promote(args):
+    """Promote a PROMOTABLE raw_object to canonical via its source policy."""
+    from ingest.promotion import promote_raw_object
+
+    if args.raw_object_id:
+        r = promote_raw_object(args.raw_object_id, actor="cli")
+        print(
+            f"status={r.status} reason={r.reason or '-'} rows={r.rows_written} noop={r.noop}"
+        )
+        if r.status == "REJECTED":
+            sys.exit(2)
+        return
+
+    print("--all-promotable not yet implemented in Phase 1 (use --raw-object-id)")
+    sys.exit(1)
+
+
+def cmd_lineage(args):
+    """Inspect a raw_object: identity + event history + current status."""
+    from core.bq.client import get_client
+    from core.lineage.raw_manifest import (
+        F_LINEAGE_EVENTS,
+        F_RAW_OBJECTS,
+        V_RAW_OBJECTS_CURRENT,
+    )
+    from google.cloud import bigquery
+
+    client = get_client()
+    p = bigquery.ScalarQueryParameter("id", "STRING", args.raw_object_id)
+    qc = bigquery.QueryJobConfig(query_parameters=[p])
+
+    print("\n  Identity:")
+    rows = list(
+        client.query(
+            f"SELECT * FROM `{F_RAW_OBJECTS}` WHERE raw_object_id = @id",
+            job_config=qc,
+        ).result()
+    )
+    if not rows:
+        print(f"  ❌ raw_object_id not found: {args.raw_object_id}")
+        sys.exit(1)
+    r = rows[0]
+    for k in (
+        "source_name",
+        "societa_id",
+        "file_name_original",
+        "intake_at",
+        "raw_uri",
+    ):
+        print(f"    {k}: {getattr(r, k, '-')}")
+
+    print("\n  Current status:")
+    cur = list(
+        client.query(
+            f"SELECT current_status, last_event_at FROM `{V_RAW_OBJECTS_CURRENT}` "
+            f"WHERE raw_object_id = @id",
+            job_config=qc,
+        ).result()
+    )
+    if cur:
+        print(f"    {cur[0].current_status}  (last event: {cur[0].last_event_at})")
+
+    print("\n  Event history:")
+    events = list(
+        client.query(
+            f"SELECT event_type, event_at, actor, from_status, to_status, reason "
+            f"FROM `{F_LINEAGE_EVENTS}` WHERE raw_object_id = @id ORDER BY event_at",
+            job_config=qc,
+        ).result()
+    )
+    for ev in events:
+        transition = (
+            f"{ev.from_status or '∅'} → {ev.to_status}"
+            if ev.to_status
+            else "(no transition)"
+        )
+        reason = f"  [{ev.reason}]" if ev.reason else ""
+        print(f"    {ev.event_at}  {ev.event_type:<22s} {transition}{reason}")
+    print()
+
+
 # ── Ingest ─────────────────────────────────────────────────────────────────
 
 
@@ -510,7 +612,7 @@ def cmd_tesoreria(args):
     import subprocess
 
     app_path = Path(__file__).parent / "condges" / "tesoreria.py"
-    print(f"  Lancio: streamlit run condges/tesoreria.py")
+    print("  Lancio: streamlit run condges/tesoreria.py")
     subprocess.run(["streamlit", "run", str(app_path)], check=True)
 
 
@@ -700,7 +802,9 @@ def main():
     )
 
     # tesoreria
-    sub.add_parser("tesoreria", help="App Streamlit tesoreria (cashflow, PF, fornitori)")
+    sub.add_parser(
+        "tesoreria", help="App Streamlit tesoreria (cashflow, PF, fornitori)"
+    )
 
     # reviews
     p_reviews = sub.add_parser("reviews", help="Reviews ospiti: scrape, alert, stats")
@@ -778,6 +882,29 @@ def main():
         "--min-score", type=float, default=0.0, help="Score minimo per match (0.0–1.0)"
     )
 
+    # ── Lineage subcommands (Phase 1) ──────────────────────────────────────
+    p_intake = sub.add_parser(
+        "intake",
+        help="Lineage: registra un file (raw blob + RAW_INGESTED event)",
+    )
+    p_intake.add_argument("file", help="Path al file")
+    p_intake.add_argument(
+        "--source-name",
+        default=None,
+        help="source_name del registry (es. ESOLVER_BILANCINO_ORTI_SNAPSHOT)",
+    )
+
+    p_promote = sub.add_parser(
+        "promote",
+        help="Lineage: promuovi raw_object a canonical (parser + bq_write_validated)",
+    )
+    p_promote.add_argument("--raw-object-id", required=True)
+
+    p_lin = sub.add_parser(
+        "lineage", help="Lineage: ispeziona raw_object + storia eventi"
+    )
+    p_lin.add_argument("raw_object_id")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -806,6 +933,9 @@ def main():
         "acc": cmd_accodamenti,
         "reviews": cmd_reviews,
         "help": cmd_help,
+        "intake": cmd_intake,
+        "promote": cmd_promote,
+        "lineage": cmd_lineage,
     }
 
     handlers[args.command](args)
