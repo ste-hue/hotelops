@@ -4,8 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core.lineage.policy_gate import PolicyViolation
-from ingest.promotion import PromotionResult, promote_raw_object
+from ingest.promotion import promote_raw_object
 
 
 @pytest.fixture

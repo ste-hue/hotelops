@@ -6,7 +6,6 @@ Spec: §3.1, §5.2 (PROMOTABLE → PROMOTED transition), §7.1 (hard gate)
 from __future__ import annotations
 
 import argparse
-import importlib
 import logging
 import subprocess
 import sys
