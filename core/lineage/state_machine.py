@@ -29,7 +29,8 @@ _TRANSITIONS: dict[
     # Validation events (non-transitional — they precede PROMOTED/REJECTED)
     ("PROMOTABLE", "VALIDATED_OK"): None,
     ("PROMOTABLE", "VALIDATED_FAIL"): None,
-    ("CLASSIFIED", "VALIDATED_OK"): None,  # Task 4.6: promote from CLASSIFIED
+    ("CLASSIFIED", "VALIDATED_OK"): None,   # Task 4.6: promote from CLASSIFIED
+    ("CLASSIFIED", "VALIDATED_FAIL"): None,  # Task 4.6: error path from CLASSIFIED
     ("CLASSIFIED", "PROMOTION_REQUESTED"): None,
     ("PROMOTABLE", "PROMOTION_REQUESTED"): None,
     # Promotion

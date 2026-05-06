@@ -7,10 +7,16 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
+
+# Worktree root: parent of ingest/ where this file lives.
+# Used to set subprocess CWD so python -m resolves modules from the correct tree.
+_WORKTREE_ROOT = str(Path(__file__).parent.parent.resolve())
 
 from core.lineage.policy_gate import (
     PolicyViolation,
@@ -90,9 +96,11 @@ def _invoke_parser(
     if raw_object_id:
         cmd += ["--raw-object-id", raw_object_id]
 
-    log.info("Invoking parser: %s", " ".join(cmd))
+    log.info("Invoking parser: %s (cwd=%s)", " ".join(cmd), _WORKTREE_ROOT)
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=600, cwd=_WORKTREE_ROOT
+        )
         if proc.returncode != 0:
             raise RuntimeError(
                 f"Parser {parser_module} failed (exit {proc.returncode}): "
@@ -181,13 +189,14 @@ def promote_raw_object(raw_object_id: str, actor: str = "cli") -> PromotionResul
                 raw_object_id=raw_object_id,
                 event_type="VALIDATED_FAIL",
                 actor=actor,
+                from_status=current,  # Task 4.6: dynamic, matches current status
                 payload={"error": str(e)[:500]},
             )
             emit_event(
                 raw_object_id=raw_object_id,
                 event_type="REJECTED",
                 actor=actor,
-                from_status="PROMOTABLE",
+                from_status=current,  # Task 4.6: dynamic, no hardcoded PROMOTABLE
                 to_status="REJECTED",
                 reason="VALIDATE_FAIL",
                 payload={"error": str(e)[:500]},
