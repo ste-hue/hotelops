@@ -200,13 +200,14 @@ def promote_raw_object(raw_object_id: str, actor: str = "cli") -> PromotionResul
             raw_object_id=raw_object_id,
             event_type="VALIDATED_OK",
             actor=actor,
+            from_status=current,  # Task 4.6: dynamic, no hardcoded PROMOTABLE
             payload=parser_result,
         )
         emit_event(
             raw_object_id=raw_object_id,
             event_type="PROMOTED",
             actor=actor,
-            from_status="PROMOTABLE",
+            from_status=current,  # Task 4.6: dynamic, no hardcoded PROMOTABLE
             to_status="PROMOTED",
             payload={
                 "canonical_table": source_def.canonical_table,

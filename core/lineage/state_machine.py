@@ -29,10 +29,12 @@ _TRANSITIONS: dict[
     # Validation events (non-transitional — they precede PROMOTED/REJECTED)
     ("PROMOTABLE", "VALIDATED_OK"): None,
     ("PROMOTABLE", "VALIDATED_FAIL"): None,
+    ("CLASSIFIED", "VALIDATED_OK"): None,  # Task 4.6: promote from CLASSIFIED
     ("CLASSIFIED", "PROMOTION_REQUESTED"): None,
     ("PROMOTABLE", "PROMOTION_REQUESTED"): None,
     # Promotion
     ("PROMOTABLE", "PROMOTED"): "PROMOTED",
+    ("CLASSIFIED", "PROMOTED"): "PROMOTED",  # Task 4.6: promote from CLASSIFIED
     # Rejection (from any non-terminal)
     ("RAW_ONLY", "REJECTED"): "REJECTED",
     ("CLASSIFIED", "REJECTED"): "REJECTED",
