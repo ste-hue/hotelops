@@ -798,6 +798,247 @@ EOF
 
 ---
 
+## Task 4.6: Fix B.2 — close downstream state machine gaps for promote from CLASSIFIED
+
+**Context:** Task 4.5 closed the first gap (`(RAW_ONLY, PROMOTION_REQUESTED)` blocked because intake left rows at `RAW_ONLY`). After Task 4.5 the row reaches `CLASSIFIED` and `PROMOTION_REQUESTED` is valid. But the existing `promote_raw_object` then emits `VALIDATED_OK` with no `from_status` (defaults to `None`), and the state machine has no `(None, "VALIDATED_OK")` entry → still raises `InvalidTransition`. Even if VALIDATED_OK passes, the next emit (`PROMOTED`) hardcodes `from_status="PROMOTABLE"` while the actual current state is `CLASSIFIED` — formally validates against `(PROMOTABLE, PROMOTED)` in the table but writes a **lie** to the lineage event log (claims a transition we never actually went through).
+
+This task implements **Fix B.2** per Stefano's constraints:
+
+1. Add 2 transitions to the state machine: `(CLASSIFIED, VALIDATED_OK)` and `(CLASSIFIED, PROMOTED): "PROMOTED"`.
+2. In `promotion.py`, use `from_status=current` (dynamic) for the `VALIDATED_OK` and `PROMOTED` emits — no more hardcoded `"PROMOTABLE"` lie.
+3. One regression test that reproduces this exact fail path through the **real** state machine (not mocked) and proves no `InvalidTransition`.
+
+**Out of scope (note for future Task 4.7 if needed)**: the failure-path emits (`VALIDATED_FAIL` + `REJECTED` with hardcoded `from_status="PROMOTABLE"`) have the same pattern but only fire when the parser fails. The success-path smoke does not exercise them. Stefano's constraints address only the success path.
+
+**Files:**
+- Modify: `core/lineage/state_machine.py` — 2 entries added to `_TRANSITIONS`
+- Modify: `ingest/promotion.py` — 2 `emit_event` calls (VALIDATED_OK + PROMOTED) gain `from_status=current`
+- Test: `tests/test_intake_promote_e2e.py` — add a NEW test using real state machine (existing mocked test stays)
+
+- [ ] **Step 1: Write the failing regression test (real state machine)**
+
+Edit `tests/test_intake_promote_e2e.py` — APPEND a new test below the existing one:
+
+```python
+def test_intake_then_promote_with_real_state_machine(
+    monkeypatch, fixture_file: Path
+) -> None:
+    """Regression: real emit_event + real state machine, no InvalidTransition.
+
+    Pre-Task-4.6 this raises InvalidTransition at the VALIDATED_OK emit
+    (no `(None, "VALIDATED_OK")` transition in the state machine table).
+
+    Mocks BQ writes and BQ-side queries; lets emit_event + state_machine
+    run with real implementations. The Task 4.5 sibling test mocks
+    emit_event itself, so it doesn't catch this.
+    """
+    import contextlib
+    from unittest.mock import MagicMock
+
+    # ── Mock BQ writes inside the lineage layer ────────────────────────────
+    monkeypatch.setattr(
+        "core.lineage.raw_manifest.bq_write_validated", lambda *a, **kw: None
+    )
+
+    # ── Mock BQ-side reads ─────────────────────────────────────────────────
+    monkeypatch.setattr(
+        "ingest.intake._lookup_existing_by_hash", lambda h: None
+    )
+    # latest_status is the function promote uses to decide the current state.
+    # Since we mocked bq_write_validated, the v_raw_objects_current view
+    # wouldn't be updated by the SOURCE_RESOLVED emit. Simulate the post-
+    # intake state directly: CLASSIFIED.
+    monkeypatch.setattr(
+        "ingest.promotion.latest_status", lambda _id: "CLASSIFIED"
+    )
+
+    # ── Mock the storage backend (avoid touching disk) ─────────────────────
+    fake_upload_result = MagicMock(
+        raw_uri=f"file://{fixture_file}", generation=None
+    )
+    fake_local = MagicMock(upload=lambda **kw: fake_upload_result)
+    monkeypatch.setattr("ingest.intake.LocalBackend", lambda: fake_local)
+
+    # ── Source registry (real-looking MPS source) ─────────────────────────
+    fake_source = MagicMock()
+    fake_source.source_name = "MPS_BANCA_ORTI_APPEND"
+    fake_source.societa = "ORTI"
+    fake_source.business_unit = None
+    fake_source.detector_category = "banca"
+    fake_source.raw_storage = MagicMock(backend="local", bucket=None)
+    fake_source.loop_targets = ["daily_reconciliation"]
+    fake_source.promotion_policy = "AUTO"
+    fake_source.parser_module = "ingest.banca.ingest"
+    fake_source.canonical_table = "f_banche_movimenti"
+
+    fake_reg = MagicMock()
+    fake_reg.get = (
+        lambda name: fake_source if name == fake_source.source_name else None
+    )
+    monkeypatch.setattr("ingest.intake.load_registry", lambda: fake_reg)
+    monkeypatch.setattr("ingest.promotion.load_registry", lambda: fake_reg)
+
+    # ── Mock _fetch_raw_object (would query BQ otherwise) ──────────────────
+    fake_raw = MagicMock()
+    fake_raw.source_name = "MPS_BANCA_ORTI_APPEND"
+    fake_raw.raw_uri = f"file://{fixture_file}"
+    fake_raw.gcs_generation = None
+    fake_raw.societa_id = "ORTI"
+    monkeypatch.setattr("ingest.promotion._fetch_raw_object", lambda _id: fake_raw)
+
+    # ── Mock subprocess (parser run) ───────────────────────────────────────
+    fake_proc = MagicMock(returncode=0, stderr="")
+    monkeypatch.setattr(
+        "ingest.promotion.subprocess.run", lambda cmd, **kw: fake_proc
+    )
+
+    # ── Skip PipelineRun side effects ──────────────────────────────────────
+    monkeypatch.setattr(
+        "ingest.intake.PipelineRun",
+        lambda *a, **kw: contextlib.nullcontext(),
+    )
+    monkeypatch.setattr(
+        "ingest.promotion.PipelineRun",
+        lambda *a, **kw: contextlib.nullcontext(),
+    )
+
+    # ── Run the full chain with REAL emit_event + REAL state_machine ──────
+    from ingest.intake import intake_file
+    from ingest.promotion import promote_raw_object
+
+    intake_result = intake_file(
+        path=fixture_file,
+        source_name="MPS_BANCA_ORTI_APPEND",
+        actor="test",
+    )
+    # If intake or promote raised InvalidTransition, the test fails here.
+    result = promote_raw_object(intake_result.raw_object_id, actor="test")
+
+    assert result.status == "PROMOTED", (
+        f"Expected PROMOTED via real state machine; got {result.status!r}"
+    )
+```
+
+- [ ] **Step 2: Run the failing test**
+
+Run: `pytest tests/test_intake_promote_e2e.py::test_intake_then_promote_with_real_state_machine -v`
+Expected: FAIL with `core.lineage.state_machine.InvalidTransition: Cannot apply 'VALIDATED_OK' from status None`.
+
+(If it fails at a different point — e.g., promotion.py call site uses `current` differently than expected — STOP and report; don't improvise.)
+
+- [ ] **Step 3: Add the 2 transitions to `state_machine.py`**
+
+Edit `core/lineage/state_machine.py` — in the `_TRANSITIONS` dict, add 2 entries near the existing `("PROMOTABLE", "VALIDATED_OK")` and `("PROMOTABLE", "PROMOTED")` lines. Place them adjacent for grouping:
+
+```python
+    # Validation events (non-transitional — they precede PROMOTED/REJECTED)
+    ("PROMOTABLE", "VALIDATED_OK"): None,
+    ("PROMOTABLE", "VALIDATED_FAIL"): None,
+    ("CLASSIFIED", "VALIDATED_OK"): None,  # Task 4.6: promote from CLASSIFIED
+    ("CLASSIFIED", "PROMOTION_REQUESTED"): None,
+    ("PROMOTABLE", "PROMOTION_REQUESTED"): None,
+    # Promotion
+    ("PROMOTABLE", "PROMOTED"): "PROMOTED",
+    ("CLASSIFIED", "PROMOTED"): "PROMOTED",  # Task 4.6: promote from CLASSIFIED
+```
+
+- [ ] **Step 4: Update `promotion.py` to use dynamic `from_status=current`**
+
+Edit `ingest/promotion.py` — find the success-path emits (around lines 194-210). Currently:
+
+```python
+        emit_event(
+            raw_object_id=raw_object_id,
+            event_type="VALIDATED_OK",
+            actor=actor,
+            payload=parser_result,
+        )
+        emit_event(
+            raw_object_id=raw_object_id,
+            event_type="PROMOTED",
+            actor=actor,
+            from_status="PROMOTABLE",
+            to_status="PROMOTED",
+            payload={
+                "canonical_table": source_def.canonical_table,
+                **parser_result,
+            },
+        )
+```
+
+Change to:
+
+```python
+        emit_event(
+            raw_object_id=raw_object_id,
+            event_type="VALIDATED_OK",
+            actor=actor,
+            from_status=current,  # Task 4.6: dynamic, no hardcoded PROMOTABLE
+            payload=parser_result,
+        )
+        emit_event(
+            raw_object_id=raw_object_id,
+            event_type="PROMOTED",
+            actor=actor,
+            from_status=current,  # Task 4.6: dynamic, no hardcoded PROMOTABLE
+            to_status="PROMOTED",
+            payload={
+                "canonical_table": source_def.canonical_table,
+                **parser_result,
+            },
+        )
+```
+
+`current` is the local variable already in scope (set near the top of `promote_raw_object` from `latest_status(raw_object_id)`).
+
+**Do NOT** touch the failure-path emits (`VALIDATED_FAIL` + `REJECTED`-on-fail) — out of scope per Stefano. Note their asymmetry in the report.
+
+- [ ] **Step 5: Run the regression test + sibling tests**
+
+Run: `pytest tests/test_intake_promote_e2e.py -v`
+Expected: both tests pass (the Task 4.5 mocked one and the Task 4.6 real one).
+
+- [ ] **Step 6: Run full suite to verify no regression**
+
+Run: `pytest --tb=line -q`
+Expected: all green (was 470 after Task 4.5, +1 new test = 471).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add core/lineage/state_machine.py ingest/promotion.py tests/test_intake_promote_e2e.py
+git commit -m "$(cat <<'EOF'
+fix(lineage): close state machine gaps for promote from CLASSIFIED (B.2)
+
+Task 4.5 fixed intake to advance RAW_ONLY → CLASSIFIED. But the existing
+promote flow then hit two more gaps:
+  1. emit_event(VALIDATED_OK) with no from_status raised InvalidTransition
+     (no (None, VALIDATED_OK) in the state machine).
+  2. emit_event(PROMOTED, from_status="PROMOTABLE") would technically pass
+     state machine validation but wrote a lie to the lineage event log
+     (claims a transition we never went through).
+
+Fix B.2:
+- Add (CLASSIFIED, VALIDATED_OK): None and (CLASSIFIED, PROMOTED): PROMOTED
+  to the state machine.
+- promotion.py uses from_status=current for both emits — honest event log
+  reflecting the actual transition.
+
+Failure-path emits (VALIDATED_FAIL + REJECTED-on-fail) intentionally
+unchanged — same hardcoded-PROMOTABLE asymmetry but not exercised by the
+success-path smoke. Tracked separately if needed.
+
+Regression test: test_intake_then_promote_with_real_state_machine uses the
+real emit_event + state machine (only BQ writes are mocked) and reproduces
+the InvalidTransition pre-fix.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
 ## Task 5: End-to-end production smoke — promote a real MPS file, verify FK in BQ
 
 **Context:** No new code. Operational verification on production with a real bank file. Mirrors the Phase 4 smoke test pattern.
