@@ -1009,7 +1009,10 @@ def cmd_lineage_list(args):
     where = ["1=1"]
     params = []
     if args.status:
-        where.append("c.current_status = @status")
+
+        # Keep LEFT JOIN semantics: rows missing from v_raw_objects_current
+        # are treated as RAW_ONLY instead of being dropped by a WHERE on c.*.
+        where.append("COALESCE(c.current_status, 'RAW_ONLY') = @status")
         params.append(bigquery.ScalarQueryParameter("status", "STRING", args.status))
     if args.source:
         where.append("r.source_name = @source")
@@ -1024,7 +1027,7 @@ def cmd_lineage_list(args):
     SELECT
       r.raw_object_id,
       r.source_name,
-      c.current_status,
+      COALESCE(c.current_status, 'RAW_ONLY') AS current_status,
       r.intake_at,
       r.file_name_original
     FROM `{F_RAW_OBJECTS}` r
