@@ -18,7 +18,7 @@ HotelOps esiste per:
 2. **Servire** audience di business specifiche con interfacce dedicate (Rosa tesoreria, Gasparotto budget, Antonio GM reputation, Mario economato)
 3. **Automatizzare** i cicli che oggi sono manuali (classificazione file, riconciliazione, forecast cassa)
 
-Non è un ERP, non è un BI tool generico. È una **piattaforma dati verticale** sul dominio specifico del gruppo. Il goal di lungo termine è essere un **digital twin** delle vere operazioni del business.
+Non è un ERP, non è un BI tool generico. È una **piattaforma dati verticale** sul dominio specifico del gruppo. Il goal di lungo termine è essere un **digital twin** delle vere operazioni del business (sinonimo accettato: **company OS** — stessa architettura, diverso angolo di lettura).
 
 ## Invariants
 

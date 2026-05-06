@@ -18,7 +18,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > 3. `docs/architecture/LE_3_DIMENSIONI.md` — il concetto temporale più importante del sistema.
 > 4. `CLAUDE.md` (this file) — repo mechanics: commands, schemas, pipeline internals.
 >
-> **Goal di lungo termine**: HotelOps è un **digital twin** delle vere operazioni del business. 3 layer:
+> **Goal di lungo termine**: HotelOps è un **digital twin** delle vere operazioni del business (equivalente: **company OS** — stessa architettura, diverso angolo: twin enfatizza il rispecchiamento della realtà, OS enfatizza che i verticals sono "apps" su uno stesso substrate). 3 layer:
 > - **Code** (`core/`, `ingest/`, `condges/`, `reviews/`): come opera il twin.
 > - **BigQuery**: cosa il twin osserva.
 > - **Vault `<vault>/HotelOps/`**: meta-knowledge umano della realtà operativa che il twin riflette (people, companies, banks, loans, departments, stories). **Non canonical per fatti tecnici** — può essere stale. Verifica sempre con repo + BQ + utente.

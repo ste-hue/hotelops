@@ -13,7 +13,7 @@ canonical: repo (was vault HotelOps/AI_INSTRUCTIONS.md)
 
 ## Identità
 
-HotelOps è il sistema che mantiene **una versione unica, spiegabile e tracciabile della verità operativa** su fonti frammentate (ERP Esolver, PMS HotelCube, 4 banche, Drive, WhatsApp). Il goal di lungo termine è essere un **digital twin** delle vere operazioni del business.
+HotelOps è il sistema che mantiene **una versione unica, spiegabile e tracciabile della verità operativa** su fonti frammentate (ERP Esolver, PMS HotelCube, 4 banche, Drive, WhatsApp). Il goal di lungo termine è essere un **digital twin** delle vere operazioni del business (sinonimo accettato: **company OS** — stessa architettura, diverso angolo di lettura).
 
 Non è: query tool, BI layer, raccolta di script. Ogni azione deve rinforzare questa identità.
 
