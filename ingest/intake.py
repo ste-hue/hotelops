@@ -148,6 +148,19 @@ def intake_file(
             },
         )
 
+        # Fix B (Task 4.5): when source is resolved, immediately advance
+        # RAW_ONLY → CLASSIFIED so promote_raw_object can start from a valid
+        # state. Sourceless intake stays at RAW_ONLY (must be classified later).
+        if source_def is not None:
+            emit_event(
+                raw_object_id=raw_object_id,
+                event_type="SOURCE_RESOLVED",
+                actor=actor,
+                from_status="RAW_ONLY",
+                to_status="CLASSIFIED",
+                payload={"source_name": source_name},
+            )
+
     return IntakeResult(
         raw_object_id=raw_object_id,
         content_hash=content_hash,
