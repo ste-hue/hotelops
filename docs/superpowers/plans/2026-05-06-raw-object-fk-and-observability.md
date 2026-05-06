@@ -693,6 +693,111 @@ EOF
 
 ---
 
+## Task 4.5: Fix B — intake emits `SOURCE_RESOLVED`, advance to `CLASSIFIED`
+
+**Context:** Task 5 (production smoke, first attempt) revealed a real bug. `promote_raw_object` emits `PROMOTION_REQUESTED` with `from_status="RAW_ONLY"`, but the state machine transition table has no such pair — it only allows `PROMOTION_REQUESTED` from `CLASSIFIED` or `PROMOTABLE`. Root cause: `intake_file` only emits `RAW_INGESTED → RAW_ONLY`; it never emits the `SOURCE_RESOLVED` event that would advance to `CLASSIFIED`. So after intake, the row stays at `RAW_ONLY` forever, and any promote raises `InvalidTransition`.
+
+This task implements **Fix B (faithful to design)**: intake emits `SOURCE_RESOLVED → CLASSIFIED` when `source_name` is resolved. Promote then starts from `CLASSIFIED` and the rest of the existing flow continues.
+
+**Stefano's explicit rules (respect strictly):**
+1. **Do NOT add** a `(RAW_ONLY, "PROMOTION_REQUESTED")` transition. (Shortcut prohibited.)
+2. Intake **MUST** emit `SOURCE_RESOLVED → CLASSIFIED` when `source_name` is resolved.
+3. Promote starts from `CLASSIFIED` and **continues the existing flow** (no new event types unless absolutely necessary).
+4. Add a targeted test that **reproduces the real bug** (intake → promote with mocked subprocess) and verifies no `InvalidTransition` is raised.
+5. **Escalate if downstream state machine gaps** prevent the existing promote flow from completing (e.g., `VALIDATED_OK` only valid from `PROMOTABLE` would block the path post-`CLASSIFIED`). Do NOT improvise new event types or add transitions Stefano hasn't authorized.
+
+**Files:**
+- Modify: `ingest/intake.py` — after the existing `emit_event(RAW_INGESTED)`, conditionally emit `SOURCE_RESOLVED`
+- Modify: `tests/test_intake.py` — `test_intake_basic` currently asserts `len(events) == 1` with source_name set; update to expect 2 events (RAW_INGESTED + SOURCE_RESOLVED)
+- Test: `tests/test_intake_promote_e2e.py` (new) — reproduces the bug end-to-end with mocked subprocess
+
+- [ ] **Step 1: Write the failing E2E test (the bug reproducer)**
+
+Create `tests/test_intake_promote_e2e.py` with a single test that:
+1. Stubs `_lookup_existing_by_hash`, `register_raw_object`, `emit_event`, `load_registry` for intake
+2. Calls `intake_file(path, source_name="MPS_BANCA_ORTI_APPEND", actor="test")`
+3. Asserts that `SOURCE_RESOLVED` is in the captured events (post-Fix-B contract)
+4. Stubs `subprocess.run`, `_fetch_raw_object`, `latest_status`, `load_registry`, `emit_event`, `PipelineRun` for promote
+5. Calls `promote_raw_object(intake_result.raw_object_id, actor="test")`
+6. Asserts `result.status == "PROMOTED"` (the crux: must NOT raise `InvalidTransition`)
+
+The test isolates the state-machine flow without touching BQ, GCS, or the parser. Detailed test code in implementer prompt — keep all stubs scoped to the two functions they cover.
+
+- [ ] **Step 2: Run the failing test**
+
+Run: `pytest tests/test_intake_promote_e2e.py -v`
+Expected: FAIL on `"SOURCE_RESOLVED" in event_types` (pre-Fix-B intake emits only RAW_INGESTED).
+
+If the test fails at a DIFFERENT assertion (downstream state machine gap), **STOP and report — that's the new bug Stefano needs to know about.**
+
+- [ ] **Step 3: Apply Fix B in `ingest/intake.py`**
+
+Edit `ingest/intake.py` — after the existing `emit_event(RAW_INGESTED)` call (around line 137), add a conditional second emit when `source_def` is resolved:
+
+```python
+        # Fix B (Task 4.5): when source is resolved, immediately advance
+        # RAW_ONLY → CLASSIFIED so promote_raw_object can start from a valid
+        # state. Sourceless intake stays at RAW_ONLY (must be classified later).
+        if source_def is not None:
+            emit_event(
+                raw_object_id=raw_object_id,
+                event_type="SOURCE_RESOLVED",
+                actor=actor,
+                from_status="RAW_ONLY",
+                to_status="CLASSIFIED",
+                payload={"source_name": source_name},
+            )
+```
+
+Place inside the existing `with PipelineRun(...)` context, immediately after the RAW_INGESTED emit_event call.
+
+- [ ] **Step 4: Update existing intake tests that asserted single RAW_INGESTED**
+
+Read `tests/test_intake.py:test_intake_basic` (lines 16-44). It currently asserts `len(captured["events"]) == 1` and checks event_type. With Fix B, when `source_name` is provided, there are 2 events. Update assertions to expect both `RAW_INGESTED → RAW_ONLY` and `SOURCE_RESOLVED → CLASSIFIED`.
+
+`test_intake_no_source_skips_classification_event` stays unchanged (no source_name → only RAW_INGESTED).
+
+- [ ] **Step 5: Run the new E2E test + the touched intake tests**
+
+Run: `pytest tests/test_intake.py tests/test_intake_promote_e2e.py -v`
+Expected: all pass.
+
+**If the new E2E test fails at `result.status == "PROMOTED"` because of a downstream state machine gap** (e.g., `(CLASSIFIED, "VALIDATED_OK")` not in transitions, or PROMOTED hardcoded `from_status="PROMOTABLE"` no longer matches the actual current state in a way that breaks), **STOP and report BLOCKED with the exact error and which transition is missing**. Do NOT add transitions Stefano hasn't authorized.
+
+- [ ] **Step 6: Run full test suite to verify no regression**
+
+Run: `pytest --tb=line -q`
+Expected: all green (was 464 baseline + new tests added).
+
+If existing tests in `test_intake_gcs.py` or elsewhere fail because they implicitly counted events: investigate. If the new event genuinely breaks an assertion, update that assertion (don't weaken — make it accurate).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add ingest/intake.py tests/test_intake.py tests/test_intake_promote_e2e.py
+git commit -m "$(cat <<'EOF'
+fix(lineage): intake emits SOURCE_RESOLVED — promote can start from CLASSIFIED
+
+Closes the InvalidTransition bug found in Task 5 production smoke:
+intake_file only emitted RAW_INGESTED, leaving the row at RAW_ONLY.
+promote_raw_object then tried to emit PROMOTION_REQUESTED from RAW_ONLY,
+which is not a valid transition in the state machine.
+
+Fix B (faithful to design): when source_name is resolved at intake,
+also emit SOURCE_RESOLVED to advance RAW_ONLY → CLASSIFIED. Promote then
+starts from CLASSIFIED, which is a valid PROMOTION_REQUESTED source.
+
+Sourceless intake unchanged: stays at RAW_ONLY (must be classified later).
+
+E2E regression test reproduces the original bug and verifies the fix.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
 ## Task 5: End-to-end production smoke — promote a real MPS file, verify FK in BQ
 
 **Context:** No new code. Operational verification on production with a real bank file. Mirrors the Phase 4 smoke test pattern.
