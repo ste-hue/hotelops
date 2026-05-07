@@ -569,6 +569,79 @@ def cmd_lineage(args):
     print()
 
 
+def cmd_lineage_list(args):
+    """List raw_objects filtered by status / source / age."""
+    from core.bq.client import get_client
+    from core.lineage.raw_manifest import F_RAW_OBJECTS, V_RAW_OBJECTS_CURRENT
+    from google.cloud import bigquery
+
+    where = ["1 = 1"]
+    params = []
+    status = getattr(args, "status", None)
+    if status is not None and status != "":
+        where.append("COALESCE(c.current_status, 'RAW_ONLY') = @status")
+        params.append(bigquery.ScalarQueryParameter("status", "STRING", args.status))
+    source = getattr(args, "source", None)
+    if source is not None and source != "":
+        where.append("r.source_name = @source")
+        params.append(bigquery.ScalarQueryParameter("source", "STRING", args.source))
+    days = getattr(args, "days", None)
+    if days is not None:
+        where.append(
+            "r.intake_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY)"
+        )
+        params.append(bigquery.ScalarQueryParameter("days", "INT64", args.days))
+
+    limit = int(getattr(args, "limit", None) or 20)
+    sql = f"""
+    SELECT
+      r.raw_object_id,
+      r.source_name,
+      COALESCE(c.current_status, 'RAW_ONLY') AS current_status,
+      r.intake_at,
+      r.file_name_original
+    FROM `{F_RAW_OBJECTS}` r
+    LEFT JOIN `{V_RAW_OBJECTS_CURRENT}` c USING (raw_object_id)
+    WHERE {' AND '.join(where)}
+    ORDER BY r.intake_at DESC
+    LIMIT {limit}
+    """
+    client = get_client()
+    qc = bigquery.QueryJobConfig(query_parameters=params)
+    rows = list(client.query(sql, job_config=qc).result())
+
+    if not rows:
+        print("(no raw_objects match filters)")
+        return
+
+    print(
+        f"{'raw_object_id':<38} {'status':<12} {'source':<32} {'intake_at':<25} file"
+    )
+    print("-" * 130)
+    for row in rows:
+        print(
+            f"{row.raw_object_id:<38} "
+            f"{str(row.current_status or '?'):<12} "
+            f"{str(row.source_name or '-'):<32} "
+            f"{str(row.intake_at):<25} "
+            f"{row.file_name_original or '-'}"
+        )
+
+
+def cmd_lineage_dispatch(args):
+    """Route --list vs single-id lineage inspection."""
+    if getattr(args, "lineage_list", False):
+        cmd_lineage_list(args)
+        return
+    if not args.raw_object_id:
+        print(
+            "ERROR: provide raw_object_id or use --list",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    cmd_lineage(args)
+
+
 # ── Ingest ─────────────────────────────────────────────────────────────────
 
 
@@ -946,9 +1019,32 @@ def main():
     p_promote.add_argument("--raw-object-id", required=True)
 
     p_lin = sub.add_parser(
-        "lineage", help="Lineage: ispeziona raw_object + storia eventi"
+        "lineage", help="Lineage: ispeziona raw_object o lista con filtri"
     )
-    p_lin.add_argument("raw_object_id")
+    p_lin.add_argument(
+        "raw_object_id",
+        nargs="?",
+        default=None,
+        help="ID singolo (ometti con --list)",
+    )
+    p_lin.add_argument(
+        "--list",
+        dest="lineage_list",
+        action="store_true",
+        help="Lista raw_objects con filtri",
+    )
+    p_lin.add_argument(
+        "--status",
+        choices=["RAW_ONLY", "CLASSIFIED", "PROMOTABLE", "PROMOTED", "REJECTED"],
+        default=None,
+    )
+    p_lin.add_argument("--source", help="Filtra per source_name")
+    p_lin.add_argument(
+        "--days", type=int, default=None, help="Solo intake negli ultimi N giorni"
+    )
+    p_lin.add_argument(
+        "--limit", type=int, default=20, help="Max righe in --list (default 20)"
+    )
 
     args = parser.parse_args()
 
@@ -980,7 +1076,7 @@ def main():
         "help": cmd_help,
         "intake": cmd_intake,
         "promote": cmd_promote,
-        "lineage": cmd_lineage,
+        "lineage": cmd_lineage_dispatch,
     }
 
     handlers[args.command](args)

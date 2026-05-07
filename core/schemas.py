@@ -163,6 +163,8 @@ class BancaMovimentoRow(BaseModel):
     note: Optional[str] = None
     data_ingresso: Optional[str] = None  # ISO date
     riga_sorgente: Optional[int] = None
+    # FK to f_raw_objects.raw_object_id (Phase 4 FK — pilot on banca).
+    raw_object_id: Optional[str] = None
 
 
 # ── f_saldi_banca_snapshot ───────────────────────────────────────────────────

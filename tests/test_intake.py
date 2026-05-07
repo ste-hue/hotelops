@@ -38,10 +38,12 @@ def test_intake_basic(monkeypatch, tmp_path) -> None:
     assert result.raw_object_id == "raw-id-1"
     assert captured["register"]["content_hash"]
     assert captured["register"]["source_name"] == "ESOLVER_BILANCINO_ORTI_SNAPSHOT"
-    # 1 event: RAW_INGESTED
-    assert len(captured["events"]) == 1
+    # 2 events with source_name resolved: RAW_INGESTED + SOURCE_RESOLVED
+    assert len(captured["events"]) == 2
     assert captured["events"][0]["event_type"] == "RAW_INGESTED"
     assert captured["events"][0]["to_status"] == "RAW_ONLY"
+    assert captured["events"][1]["event_type"] == "SOURCE_RESOLVED"
+    assert captured["events"][1]["to_status"] == "CLASSIFIED"
 
 
 def test_intake_unknown_source_raises(monkeypatch, tmp_path) -> None:
