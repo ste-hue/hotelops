@@ -1118,6 +1118,12 @@ Row count must be unchanged from step 3.
 
 - [ ] **Step 6: No commit — operational verification only. Document in PR description / STATUS.**
 
+### Task 5 — closure note (2026-05-07)
+
+- **State machine smoke ✅**: full event chain `RAW_INGESTED → SOURCE_RESOLVED → PROMOTION_REQUESTED → VALIDATED_OK → PROMOTED` verificato su `raw_object_id=1524f144-9631-446a-9a24-c71d5e219a54` (MPS_BANCA_ORTI_APPEND, file `ORTI_MPS_20260323.xls`), final status `PROMOTED`.
+- **FK stamping su NEW rows ⏳**: il file scelto era già storicamente ingestito; il parser ha dedupato per `hash_riga` → 0 nuove righe scritte → `raw_object_id` non stampato su righe nuove. Le 98 righe esistenti hanno `raw_object_id IS NULL` (pre-FK historical). La prova end-to-end FK su new rows è in coda al prossimo MPS file fresh.
+- **Scope creep accettato (commit `2b9d26a`)**: l'implementer ha esteso il failure path (transizione `(CLASSIFIED, VALIDATED_FAIL)`, `from_status=current` per `VALIDATED_FAIL` + `REJECTED`) durante lo smoke. Fuori scope stretto Task 4.6 (constraint #4) ma semanticamente coerente con il modello reale (promotion può fallire) e previene il prossimo `InvalidTransition` sul failure path. Tenuto come scope creep accepted, paper trail in PR/STATUS.
+
 ---
 
 ## Task 6: View `v_raw_promotion_status` — per-source × status backlog
