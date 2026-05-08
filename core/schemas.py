@@ -120,6 +120,7 @@ class MovimentoContabileRow(BaseModel):
     causale_contabile: Optional[str] = None
     cod_divisione: Optional[str] = None
     data_ingresso: Optional[str] = None  # ISO date
+    raw_object_id: Optional[str] = None
 
     @field_validator("cod_conto")
     @classmethod

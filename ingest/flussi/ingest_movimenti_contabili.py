@@ -75,6 +75,7 @@ FACT_HEADER = [
     "cod_divisione",
     "file_sorgente",
     "data_ingresso",
+    "raw_object_id",
 ]
 
 BQ_SCHEMA = (
@@ -101,6 +102,7 @@ BQ_SCHEMA = (
         bigquery.SchemaField("cod_divisione", "STRING"),
         bigquery.SchemaField("file_sorgente", "STRING"),
         bigquery.SchemaField("data_ingresso", "DATE"),
+        bigquery.SchemaField("raw_object_id", "STRING"),
     ]
     if HAS_BQ
     else []
@@ -129,7 +131,7 @@ def make_hash(societa_id: str, id_documento: int, num_progr_riga: int) -> str:
 
 def make_hash_content(
     societa_id: str,
-    data_reg_iso: str,
+    data_reg_iso: str | None,
     cod_conto: str | None,
     imp_dare: float | None,
     imp_avere: float | None,
@@ -146,6 +148,9 @@ def make_hash_content(
     while legacy XLS leaves it NULL. The causale already carries the
     distinguishing info (counterparty name, document ref, etc.).
     """
+    if not data_reg_iso:
+        raise ValueError("data_reg_iso is required for hash stability")
+
     key = "|".join(
         [
             societa_id,
@@ -237,6 +242,7 @@ def parse_file(filepath: Path, societa_id: str, logger: logging.Logger) -> list[
                 "cod_divisione": cod_divisione,
                 "file_sorgente": file_sorgente,
                 "data_ingresso": today,
+                "raw_object_id": None,
             }
         )
 
@@ -360,6 +366,7 @@ def parse_file_xlsx(
                 "cod_divisione": None,
                 "file_sorgente": file_sorgente,
                 "data_ingresso": today,
+                "raw_object_id": None,
             }
         )
 
@@ -480,6 +487,10 @@ def process_societa(
     if not all_rows:
         logger.info(f"  {societa_id}: nessuna riga")
         return
+
+    if raw_object_id:
+        for row in all_rows:
+            row["raw_object_id"] = raw_object_id
 
     logger.info(f"  {societa_id}: {len(all_rows)} righe totali")
 
