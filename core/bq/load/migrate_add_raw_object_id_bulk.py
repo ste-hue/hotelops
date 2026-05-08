@@ -1,7 +1,6 @@
 """Bulk migration: add raw_object_id column to all canonical fact tables.
 
-Idempotent — safe to re-run.  BigQuery's ALTER TABLE ADD COLUMN IF NOT EXISTS
-is supported since ~2022; we catch any "already exists" errors for safety.
+Idempotent — safe to re-run. Uses ADD COLUMN IF NOT EXISTS (supported by BigQuery).
 
 Run ONCE after deploying Phase 4 / Track C changes:
     python -m core.bq.load.migrate_add_raw_object_id_bulk

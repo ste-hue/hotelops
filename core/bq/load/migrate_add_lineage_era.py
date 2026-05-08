@@ -1,7 +1,6 @@
 """Migration: add lineage_era column to f_raw_objects.
 
-Idempotent — safe to re-run (ALTER TABLE IF NOT EXISTS is not supported by BQ,
-so we catch the "Already Exists" error and continue).
+Idempotent — safe to re-run. Uses ADD COLUMN IF NOT EXISTS (supported by BigQuery).
 
 Run once after deploying the Phase 4 / Track B changes:
     python -m core.bq.load.migrate_add_lineage_era

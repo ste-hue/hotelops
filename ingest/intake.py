@@ -61,7 +61,7 @@ def _lineage_gate() -> str:
 
 @dataclass
 class IntakeResult:
-    raw_object_id: str
+    raw_object_id: Optional[str]
     content_hash: str
     source_name: Optional[str]
     deduped: bool
@@ -101,7 +101,7 @@ def intake_file(
     if gate == "disabled":
         log.debug("intake_file: lineage gate=disabled — skipping for %s", path.name)
         return IntakeResult(
-            raw_object_id=None,  # type: ignore[arg-type]
+            raw_object_id=None,
             content_hash="",
             source_name=source_name,
             deduped=False,
@@ -117,7 +117,7 @@ def intake_file(
                 exc_info=True,
             )
             return IntakeResult(
-                raw_object_id=None,  # type: ignore[arg-type]
+                raw_object_id=None,
                 content_hash="",
                 source_name=source_name,
                 deduped=False,

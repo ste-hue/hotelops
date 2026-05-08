@@ -539,7 +539,7 @@ def main():
         return
 
     if not args.datahub or not args.staging:
-        parser.error("--datahub e --staging sono richiesti (oppure usa --file per single-file mode)")
+        parser.error("--datahub e --staging sono richiesti (oppure usa --file per la modalità single-file)")
 
     datahub = Path(args.datahub)
     staging = Path(args.staging)
