@@ -472,9 +472,17 @@ def process_societa(
     raw_object_id: str | None,
     logger: logging.Logger,
 ):
+    """Parse files for one societa and write to f_movimenti_contabili.
+
+    raw_object_id contract (lineage FK):
+      - None        → legacy/manual ingest, raw_object_id stays NULL on every row.
+      - <id>        → stamped on every row (set after parse, before write/dedup),
+                      lands in f_movimenti_contabili.raw_object_id and links
+                      back to f_raw_objects (provenance verifiable end-to-end).
+    """
     if raw_object_id:
         logger.info(
-            f"  lineage raw_object_id ricevuto: {raw_object_id} (non ancora scritto su f_movimenti_contabili)"
+            f"  lineage raw_object_id: {raw_object_id} (will be stamped on each row)"
         )
     all_rows = []
     for f in files:
@@ -541,9 +549,9 @@ def main():
     )
     parser.add_argument(
         "--raw-object-id",
-        help="Lineage raw_object_id (accepted for promote subprocess contract). "
-        "Currently only tracked in logs; not yet stamped on rows "
-        "(f_movimenti_contabili FK column TBD).",
+        help="Lineage raw_object_id (from promote subprocess contract). "
+        "When provided, stamped on every row written to "
+        "f_movimenti_contabili.raw_object_id (FK to f_raw_objects).",
     )
     args = parser.parse_args()
 
