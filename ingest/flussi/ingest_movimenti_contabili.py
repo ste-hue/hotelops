@@ -75,6 +75,7 @@ FACT_HEADER = [
     "cod_divisione",
     "file_sorgente",
     "data_ingresso",
+    "raw_object_id",
 ]
 
 BQ_SCHEMA = (
@@ -101,6 +102,7 @@ BQ_SCHEMA = (
         bigquery.SchemaField("cod_divisione", "STRING"),
         bigquery.SchemaField("file_sorgente", "STRING"),
         bigquery.SchemaField("data_ingresso", "DATE"),
+        bigquery.SchemaField("raw_object_id", "STRING"),
     ]
     if HAS_BQ
     else []
@@ -203,6 +205,7 @@ def parse_file(filepath: Path, societa_id: str, logger: logging.Logger) -> list[
                 "cod_divisione": cod_divisione,
                 "file_sorgente": file_sorgente,
                 "data_ingresso": today,
+                "raw_object_id": None,
             }
         )
 
@@ -318,6 +321,7 @@ def parse_file_xlsx(
                 "cod_divisione": None,
                 "file_sorgente": file_sorgente,
                 "data_ingresso": today,
+                "raw_object_id": None,
             }
         )
 
@@ -421,6 +425,7 @@ def process_societa(
     dry_run: bool,
     replace: bool,
     logger: logging.Logger,
+    raw_object_id: str | None = None,
 ):
     all_rows = []
     for f in files:
@@ -433,6 +438,9 @@ def process_societa(
     if not all_rows:
         logger.info(f"  {societa_id}: nessuna riga")
         return
+
+    for r in all_rows:
+        r["raw_object_id"] = raw_object_id
 
     logger.info(f"  {societa_id}: {len(all_rows)} righe totali")
 
@@ -480,6 +488,11 @@ def main():
         "--replace",
         action="store_true",
         help="SNAPSHOT mode: DELETE rows in the file's date range before insert (true idempotency)",
+    )
+    parser.add_argument(
+        "--raw-object-id",
+        default=None,
+        help="FK to f_raw_objects.raw_object_id (stamped on every row — used by promotion path)",
     )
     args = parser.parse_args()
 
@@ -534,7 +547,14 @@ def main():
     for societa_id, files in files_by_societa.items():
         logger.info(f"=== {societa_id} ===")
         process_societa(
-            societa_id, files, datahub, bq_client, args.dry_run, args.replace, logger
+            societa_id,
+            files,
+            datahub,
+            bq_client,
+            args.dry_run,
+            args.replace,
+            logger,
+            raw_object_id=args.raw_object_id,
         )
 
     logger.info("DONE")

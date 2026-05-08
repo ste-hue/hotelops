@@ -378,6 +378,7 @@ BQ_SCHEMA = (
         bigquery.SchemaField("note", "STRING"),
         bigquery.SchemaField("file_sorgente", "STRING"),
         bigquery.SchemaField("data_caricamento", "TIMESTAMP"),
+        bigquery.SchemaField("raw_object_id", "STRING"),
     ]
     if HAS_BQ
     else []
@@ -465,6 +466,11 @@ def main() -> None:
         action="store_true",
         help="Only process the most recent file per società",
     )
+    parser.add_argument(
+        "--raw-object-id",
+        default=None,
+        help="FK to f_raw_objects.raw_object_id (stamped on every row — used by promotion path)",
+    )
     args = parser.parse_args()
 
     logger = setup_logger()
@@ -520,6 +526,9 @@ def main() -> None:
             # Keep the one from the more recent file
             seen[h] = r  # Last file wins
     all_rows = list(seen.values())
+
+    for r in all_rows:
+        r["raw_object_id"] = args.raw_object_id
 
     validate_rows(all_rows, logger)
     quality_summary(all_rows, logger)

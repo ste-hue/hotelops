@@ -1,6 +1,22 @@
 """Intake entrypoint — file + source metadata → raw blob + RAW_INGESTED event.
 
 Spec: §3.1, §5.2 (∅ → RAW_ONLY transition)
+
+Lineage gate
+────────────
+Set the HOTELOPS_LINEAGE_GATE environment variable to control lineage behaviour:
+
+  required  (default) — intake must succeed before promotion is allowed.
+                        GCS upload failures raise, halting the pipeline.
+  optional  — intake is attempted; failures are logged as warnings and
+              skipped gracefully (raw_object_id = None on the canonical rows).
+  disabled  — lineage layer is bypassed entirely. No GCS upload, no row in
+              f_raw_objects, no event. raw_object_id = None everywhere.
+              USE ONLY for emergency rollback or local dev without GCS.
+
+Track D guidance (see docs/architecture/AI_INSTRUCTIONS.md §Lineage eras):
+  Start with 'optional' on first production rollout; move to 'required' once
+  GCS + promotion has been verified on all 11 registered sources.
 """
 
 from __future__ import annotations
@@ -8,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,10 +42,26 @@ from core.pipeline_run import PipelineRun
 
 log = logging.getLogger(__name__)
 
+# HOTELOPS_LINEAGE_GATE controls how lineage failures are handled.
+_GATE_MODES = {"required", "optional", "disabled"}
+
+
+def _lineage_gate() -> str:
+    """Return the current lineage gate mode."""
+    mode = os.environ.get("HOTELOPS_LINEAGE_GATE", "required").lower()
+    if mode not in _GATE_MODES:
+        log.warning(
+            "HOTELOPS_LINEAGE_GATE=%r is not a valid mode (%s) — using 'required'",
+            mode,
+            ", ".join(sorted(_GATE_MODES)),
+        )
+        return "required"
+    return mode
+
 
 @dataclass
 class IntakeResult:
-    raw_object_id: str
+    raw_object_id: Optional[str]
     content_hash: str
     source_name: Optional[str]
     deduped: bool
@@ -57,7 +90,46 @@ def intake_file(
       - gcs → file uploaded to gs://<bucket>/<source>/<YYYY>/<MM>/<filename>,
               raw_uri = gs://..., gcs_generation populated
     Sourceless intake (source_name=None) is always treated as local.
+
+    Respects HOTELOPS_LINEAGE_GATE:
+      disabled → returns a null IntakeResult (no upload, no row, no event)
+      optional → wraps execution; logs failures and returns null on error
+      required → raises on any failure (default)
     """
+    gate = _lineage_gate()
+
+    if gate == "disabled":
+        log.debug("intake_file: lineage gate=disabled — skipping for %s", path.name)
+        return IntakeResult(
+            raw_object_id=None,
+            content_hash="",
+            source_name=source_name,
+            deduped=False,
+        )
+
+    try:
+        return _intake_file_core(path, source_name=source_name, actor=actor)
+    except Exception:
+        if gate == "optional":
+            log.warning(
+                "intake_file: lineage gate=optional — error suppressed for %s",
+                path.name,
+                exc_info=True,
+            )
+            return IntakeResult(
+                raw_object_id=None,
+                content_hash="",
+                source_name=source_name,
+                deduped=False,
+            )
+        raise
+
+
+def _intake_file_core(
+    path: Path,
+    source_name: Optional[str] = None,
+    actor: str = "cli",
+) -> IntakeResult:
     if not path.exists():
         raise FileNotFoundError(path)
 

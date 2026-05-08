@@ -477,6 +477,7 @@ BQ_SCHEMA = (
         bigquery.SchemaField("fonte", "STRING", mode="NULLABLE"),
         bigquery.SchemaField("hash_riga", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("data_caricamento", "TIMESTAMP", mode="NULLABLE"),
+        bigquery.SchemaField("raw_object_id", "STRING", mode="NULLABLE"),
     ]
     if HAS_BQ
     else []
@@ -660,6 +661,11 @@ def main():
         action="store_true",
         help="Non scrive su BQ, stampa solo il summary",
     )
+    parser.add_argument(
+        "--raw-object-id",
+        default=None,
+        help="FK to f_raw_objects.raw_object_id (stamped on every row — used by promotion path)",
+    )
     args = parser.parse_args()
 
     from ingest._logging import setup_logging
@@ -710,6 +716,9 @@ def main():
                 len(rows),
                 pre_dedup - len(rows),
             )
+
+        for r in rows:
+            r["raw_object_id"] = args.raw_object_id
 
         load_to_bq(rows, dry_run=args.dry_run, replace=args.replace)
         quality_summary(rows)

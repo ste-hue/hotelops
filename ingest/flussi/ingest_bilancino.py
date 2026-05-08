@@ -76,7 +76,32 @@ FACT_HEADER = [
     "categoria",
     "file_sorgente",
     "data_ingresso",
+    "raw_object_id",
 ]
+
+MESI_IT = {
+    "GENNAIO": 1, "FEBBRAIO": 2, "MARZO": 3, "APRILE": 4,
+    "MAGGIO": 5, "GIUGNO": 6, "LUGLIO": 7, "AGOSTO": 8,
+    "SETTEMBRE": 9, "OTTOBRE": 10, "NOVEMBRE": 11, "DICEMBRE": 12,
+}
+
+
+def infer_mese_from_filename(filepath: Path) -> str | None:
+    """Try to parse YYYY-MM from filenames like GENNAIO2026ESOLVER.xls."""
+    import re
+
+    name = filepath.stem.upper()
+    # Try numeric pattern YYYY-MM or YYYYMM
+    m = re.search(r"(\d{4})[-_]?(\d{2})", name)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}"
+    # Try Italian month name
+    for mese_name, mese_num in MESI_IT.items():
+        if mese_name in name:
+            year_m = re.search(r"(\d{4})", name)
+            if year_m:
+                return f"{year_m.group(1)}-{mese_num:02d}"
+    return None
 
 
 def setup_logger() -> logging.Logger:
@@ -314,6 +339,7 @@ BQ_SCHEMA = (
         bigquery.SchemaField("categoria", "STRING"),
         bigquery.SchemaField("file_sorgente", "STRING"),
         bigquery.SchemaField("data_ingresso", "STRING"),
+        bigquery.SchemaField("raw_object_id", "STRING"),
     ]
     if HAS_BQ
     else []
@@ -373,12 +399,19 @@ def main():
         help="Società (INTUR o ORTI)",
     )
     parser.add_argument(
-        "--mese", required=True, help="Mese contabile (YYYY-MM, es. 2026-01)"
+        "--mese",
+        default=None,
+        help="Mese contabile (YYYY-MM, es. 2026-01). Auto-inferred from filename if omitted.",
     )
     parser.add_argument(
         "--datahub", help="Path to datahub root (for CSV backup). Optional."
     )
     parser.add_argument("--dry-run", action="store_true", help="Parse only, no write")
+    parser.add_argument(
+        "--raw-object-id",
+        default=None,
+        help="FK to f_raw_objects.raw_object_id (stamped on every row — used by promotion path)",
+    )
     args = parser.parse_args()
 
     logger = setup_logger()
@@ -387,7 +420,15 @@ def main():
         logger.error(f"File non trovato: {filepath}")
         sys.exit(1)
 
-    rows = parse_bilancino(filepath, args.societa, args.mese, logger)
+    mese = args.mese or infer_mese_from_filename(filepath)
+    if not mese:
+        logger.error("--mese richiesto (YYYY-MM) — impossibile inferirlo dal filename")
+        sys.exit(1)
+
+    rows = parse_bilancino(filepath, args.societa, mese, logger)
+
+    for r in rows:
+        r["raw_object_id"] = args.raw_object_id
 
     # Print summary
     by_cat = {}
@@ -418,7 +459,7 @@ def main():
         sys.exit(1)
 
     bq_client = get_client()
-    existing_hashes = load_hashes_bq(bq_client, args.mese, args.societa, logger)
+    existing_hashes = load_hashes_bq(bq_client, mese, args.societa, logger)
     new_rows = [r for r in rows if r["hash_riga"] not in existing_hashes]
     logger.info(
         f"Nuove righe da inserire: {len(new_rows)} (già presenti: {len(rows) - len(new_rows)})"

@@ -370,6 +370,7 @@ BQ_SCHEMA = (
         bigquery.SchemaField("importo", "FLOAT64"),
         bigquery.SchemaField("file_sorgente", "STRING"),
         bigquery.SchemaField("data_caricamento", "TIMESTAMP"),
+        bigquery.SchemaField("raw_object_id", "STRING"),
     ]
     if HAS_BQ
     else []
@@ -491,6 +492,11 @@ def main() -> None:
     parser.add_argument("--anno", type=int, default=2025)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--output-dir", default="output")
+    parser.add_argument(
+        "--raw-object-id",
+        default=None,
+        help="FK to f_raw_objects.raw_object_id (stamped on every row — used by promotion path)",
+    )
     args = parser.parse_args()
 
     logger = setup_logger()
@@ -512,6 +518,10 @@ def main() -> None:
     logger.info(f"Anno:   {args.anno}  |  dry-run: {args.dry_run}")
 
     all_rows = collect_all(source, args.anno, mapping, logger)
+
+    for r in all_rows:
+        r["raw_object_id"] = args.raw_object_id
+
     quality_summary(all_rows, logger)
 
     if args.dry_run:
