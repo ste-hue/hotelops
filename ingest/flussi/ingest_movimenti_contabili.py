@@ -127,6 +127,35 @@ def make_hash(societa_id: str, id_documento: int, num_progr_riga: int) -> str:
     return hashlib.md5(key.encode()).hexdigest()
 
 
+def make_hash_content(
+    societa_id: str,
+    data_reg_iso: str,
+    cod_conto: str | None,
+    imp_dare: float | None,
+    imp_avere: float | None,
+    causale: str | None,
+    rag_sociale: str | None,
+) -> str:
+    """Content-based stable hash across XLS legacy and XLSX report formats.
+
+    The same logical accounting row produces the same hash regardless of the
+    Esolver report format used to extract it. Must stay in sync with the SQL
+    expression used by the migration in core/bq/migrations/2026_05_08_movimenti_content_hash.py.
+    """
+    key = "|".join(
+        [
+            societa_id,
+            data_reg_iso,
+            (cod_conto or "").strip(),
+            f"{(imp_dare or 0.0):.2f}",
+            f"{(imp_avere or 0.0):.2f}",
+            (causale or "").strip(),
+            (rag_sociale or "").strip(),
+        ]
+    )
+    return hashlib.md5(key.encode()).hexdigest()
+
+
 def infer_societa(filepath: Path) -> str | None:
     name = filepath.stem.upper()
     if "INTUR" in name:
@@ -177,7 +206,9 @@ def parse_file(filepath: Path, societa_id: str, logger: logging.Logger) -> list[
         if id_doc is None or num_progr is None:
             continue
 
-        hash_riga = make_hash(societa_id, id_doc, num_progr)
+        hash_riga = make_hash_content(
+            societa_id, data_reg, cod_conto, imp_dare, imp_avere, causale, rag_sociale
+        )
 
         rows.append(
             {
@@ -290,16 +321,25 @@ def parse_file_xlsx(
             except ValueError:
                 pass
 
-        # Hash: use date + pnc_num + idx for stable dedup
-        hash_key = f"{societa_id}|{data_reg.isoformat()}|{pnc_num}|{idx}"
-        hash_riga = hashlib.md5(hash_key.encode()).hexdigest()
+        rag_sociale = str(raw_row[11]).strip() if raw_row[11] else None
+        causale = str(raw_row[12]).strip() if raw_row[12] else None
+
+        hash_riga = make_hash_content(
+            societa_id,
+            data_reg.isoformat(),
+            cod_conto,
+            imp_dare,
+            imp_avere,
+            causale,
+            rag_sociale,
+        )
 
         rows.append(
             {
                 "hash_riga": hash_riga,
                 "societa_id": societa_id,
-                "id_documento": pnc_num,
-                "num_progr_riga": idx,
+                "id_documento": None,
+                "num_progr_riga": idx + 1,
                 "gruppo_doc": sigla_raw,
                 "anno": data_reg.year,
                 "mese": data_reg.month,
@@ -311,8 +351,8 @@ def parse_file_xlsx(
                 "tipo_documento": str(raw_row[8]).strip() if raw_row[8] else None,
                 "cod_conto": cod_conto,
                 "cod_partitario": cod_partitario,
-                "rag_sociale": str(raw_row[11]).strip() if raw_row[11] else None,
-                "causale_contabile": str(raw_row[12]).strip() if raw_row[12] else None,
+                "rag_sociale": rag_sociale,
+                "causale_contabile": causale,
                 "imp_dare": imp_dare,
                 "imp_avere": imp_avere,
                 "cod_divisione": None,
