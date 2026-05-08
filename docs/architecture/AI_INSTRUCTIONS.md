@@ -145,7 +145,35 @@ L'agente **non deve mai**:
 - Duplicare logica di row-selection/dedup nei consumer (**I8**).
 - Produrre numeri che non sa giustificare.
 
-## Quando aggiornare questo file
+## Lineage eras
+
+HotelOps has two archaeological layers in `f_raw_objects`. Understanding which era a raw object belongs to is critical before making provenance claims.
+
+| Era | `lineage_era` | `raw_backend` | `intake_at` | Provenance trust |
+|---|---|---|---|---|
+| **Pre-Phase-4** | `'pre_phase4'` (or NULL) | `drive` / `local` | < 2026-05-05 | Partial. raw_uri may be stale. FK to canonical (`raw_object_id`) may be absent. |
+| **Live (GCS)** | `'live'` | `gcs` | ≥ 2026-05-05 | Full. gs:// URI stable, content_hash verified, FK present after promotion. |
+
+**Canonical rows with `raw_object_id IS NULL`** are pre-lineage: ingested before Phase 1 launched. Provenance is absent — but canonical data is trusted. This is honest architecture.
+
+### Lineage confidence vocabulary
+
+When reasoning about provenance, use this vocabulary (informational, not enforced at BQ level):
+
+| Confidence | When | Meaning |
+|---|---|---|
+| `NONE` | canonical row has `raw_object_id IS NULL` | Pre-lineage era. No raw file tracked. Trust canonical data; provenance absent. |
+| `PARTIAL` | `lineage_era='pre_phase4'` OR FK present but not GCS-backed | Raw row registered, but file may be on Drive/local (path may not resolve). |
+| `VERIFIED` | `lineage_era='live'`, FK chain intact, hash matches promotion record | Full chain: GCS file → intake → promote → canonical row. Replayable. |
+| `RECONSTRUCTED` | retroactively backfilled post-hoc | Use only for legally/compliance-required backfill. Mark as RECONSTRUCTED — never present as VERIFIED. |
+
+**Rules:**
+- Do not claim `VERIFIED` for pre-Phase-4 rows.
+- Do not backfill retroactively unless legally required. Accept `NULL` FK as honest provenance gap.
+- The **value of lineage is forward integrity**, not retroactive perfection.
+- Cutoff constant: `core.lineage.schemas.PHASE4_GCS_CUTOFF = 2026-05-05T00:00:00Z`
+
+
 
 - Nasce una nuova canonical source → aggiorna §Canonical Registry.
 - Nuovo invariant in `INVARIANTS.md` → rispecchialo qui in §Invarianti.

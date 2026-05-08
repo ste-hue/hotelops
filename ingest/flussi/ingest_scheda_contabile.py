@@ -380,6 +380,7 @@ def write_saldi_to_bq(
     societa_id: str,
     banca_id: str,
     dry_run: bool = False,
+    raw_object_id: str | None = None,
 ) -> int:
     """Write end-of-day saldi to f_saldi_banca_snapshot via the BQ gate."""
     if not saldi:
@@ -395,6 +396,7 @@ def write_saldi_to_bq(
             banca_id=banca_id,
             data_snapshot=d,
             saldo_finale=saldo,
+            raw_object_id=raw_object_id,
         )
         for d, saldo in sorted(saldi.items())
     ]
@@ -422,6 +424,7 @@ def process_file(
     societa_id: str,
     banca_id: str | None,
     dry_run: bool,
+    raw_object_id: str | None = None,
 ) -> int:
     """Process a single scheda contabile file."""
     from core.pipeline_run import PipelineRun
@@ -456,7 +459,7 @@ def process_file(
         daily_saldi = extract_daily_saldi(rows)
         log.info(f"Extracted {len(daily_saldi)} end-of-day saldi")
 
-        return write_saldi_to_bq(daily_saldi, societa_id, banca_id, dry_run)
+        return write_saldi_to_bq(daily_saldi, societa_id, banca_id, dry_run, raw_object_id=raw_object_id)
 
 
 def main():
@@ -482,6 +485,11 @@ def main():
     parser.add_argument(
         "--dry-run", action="store_true", help="Parse and show results, no BQ writes"
     )
+    parser.add_argument(
+        "--raw-object-id",
+        default=None,
+        help="FK to f_raw_objects.raw_object_id (stamped on every row — used by promotion path)",
+    )
     args = parser.parse_args()
 
     from ingest._logging import setup_logging
@@ -504,7 +512,7 @@ def main():
         if not societa:
             log.error(f"Cannot infer societa from {filepath.name}. Use --societa.")
             sys.exit(1)
-        total = process_file(filepath, societa, banca, args.dry_run)
+        total = process_file(filepath, societa, banca, args.dry_run, raw_object_id=args.raw_object_id)
 
     elif args.dir:
         dirpath = Path(args.dir)
@@ -543,7 +551,7 @@ def main():
             if not societa:
                 log.warning(f"Skipping {filepath.name}: cannot infer societa")
                 continue
-            n = process_file(filepath, societa, banca, args.dry_run)
+            n = process_file(filepath, societa, banca, args.dry_run, raw_object_id=args.raw_object_id)
             total += n
 
     log.info(f"Total saldi written: {total}")

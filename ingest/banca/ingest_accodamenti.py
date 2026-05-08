@@ -99,6 +99,7 @@ FACT_HEADER = [
     "file_sorgente",
     "riga_sorgente",
     "hash_riga",
+    "raw_object_id",
 ]
 
 BQ_SCHEMA = [
@@ -123,6 +124,7 @@ BQ_SCHEMA = [
     bigquery.SchemaField("file_sorgente", "STRING"),
     bigquery.SchemaField("riga_sorgente", "INTEGER"),
     bigquery.SchemaField("hash_riga", "STRING"),
+    bigquery.SchemaField("raw_object_id", "STRING"),
 ]
 
 
@@ -216,6 +218,7 @@ def _make_row(
         "hash_riga": _md5(
             societa, bu, data_iso, float(importo), descrizione or "", conto
         ),
+        "raw_object_id": None,
     }
 
 
@@ -435,6 +438,7 @@ def process_file(
     logger: logging.Logger,
     dry_run: bool,
     rel_path: str | None = None,
+    raw_object_id: str | None = None,
 ) -> dict:
     stats = {
         "file": rel_path or path.name,
@@ -450,6 +454,9 @@ def process_file(
         logger.error(f"Errore parsing {path.name}: {e}")
         stats["errors"] = 1
         return stats
+
+    for r in rows:
+        r["raw_object_id"] = raw_object_id
 
     stats["parsed"] = len(rows)
     new_rows = [r for r in rows if r["hash_riga"] not in hashes]
@@ -489,14 +496,50 @@ def main():
     parser.add_argument("--dry-run", "-d", action="store_true")
     parser.add_argument("--verbose", "-v", action="store_true")
     parser.add_argument("--inspect", metavar="FILE", help="Ispeziona file raw ed esci")
+    parser.add_argument(
+        "--file", default=None,
+        help="Single TXT file to ingest (promotion mode — bypasses sync and staging)",
+    )
+    parser.add_argument(
+        "--raw-object-id",
+        default=None,
+        help="FK to f_raw_objects.raw_object_id (stamped on every row — used by promotion path)",
+    )
     args = parser.parse_args()
 
     if args.inspect:
         inspect_file(Path(args.inspect))
         return
 
+    # Single-file mode (used by promotion path)
+    if args.file:
+        log_dir = Path(args.datahub) / "meta" / "pipeline" / "logs" if args.datahub else None
+        logger = setup_logging(log_dir, args.verbose)
+        filepath = Path(args.file)
+        if not filepath.exists():
+            logger.error(f"File non trovato: {filepath}")
+            sys.exit(1)
+        bq_client = get_client()
+        hashes = load_hashes_bq(bq_client, logger)
+        dummy_datahub = Path(args.datahub) if args.datahub else Path("/tmp")
+        stats = process_file(
+            filepath,
+            bq_client,
+            hashes,
+            dummy_datahub,
+            args.societa,
+            logger,
+            args.dry_run,
+            raw_object_id=args.raw_object_id,
+        )
+        logger.info(
+            f"  → parsed={stats['parsed']}, new={stats['new']}, "
+            f"dupes={stats['dupes']}, errors={stats['errors']}"
+        )
+        return
+
     if not args.datahub or not args.staging:
-        parser.error("--datahub e --staging sono richiesti")
+        parser.error("--datahub e --staging sono richiesti (oppure usa --file per single-file mode)")
 
     datahub = Path(args.datahub)
     staging = Path(args.staging)

@@ -43,6 +43,8 @@ class BudgetMensileRow(BaseModel):
     importo: float
     fonte: str
     data_caricamento: str  # ISO timestamp
+    # FK to f_raw_objects.raw_object_id (Phase 4 FK).
+    raw_object_id: Optional[str] = None
 
     @field_validator("mese")
     @classmethod
@@ -75,6 +77,8 @@ class PianoFinanziarioInputRow(BaseModel):
     note: Optional[str] = None
     file_sorgente: Optional[str] = None
     data_caricamento: str  # ISO timestamp
+    # FK to f_raw_objects.raw_object_id (Phase 4 FK).
+    raw_object_id: Optional[str] = None
 
     @field_validator("mese")
     @classmethod
@@ -120,6 +124,8 @@ class MovimentoContabileRow(BaseModel):
     causale_contabile: Optional[str] = None
     cod_divisione: Optional[str] = None
     data_ingresso: Optional[str] = None  # ISO date
+    # FK to f_raw_objects.raw_object_id (Phase 4 FK).
+    raw_object_id: Optional[str] = None
 
     @field_validator("cod_conto")
     @classmethod
@@ -181,6 +187,8 @@ class SaldoBancaSnapshotRow(BaseModel):
     banca_id: str
     data_snapshot: date
     saldo_finale: float
+    # FK to f_raw_objects.raw_object_id (Phase 4 FK).
+    raw_object_id: Optional[str] = None
 
 
 # ── f_saldi_banca_chiusura_mensile ────────────────────────────────────────────
@@ -256,6 +264,8 @@ class PartitaApertaFornitoreRow(BaseModel):
     metodo_pagamento: str  # Bonifico SEPA, SDD, Carta di credit, etc.
     is_intercompany: bool = False  # True if PANORAMA COMPANY / INTUR
     file_sorgente: str
+    # FK to f_raw_objects.raw_object_id (Phase 4 FK).
+    raw_object_id: Optional[str] = None
 
 
 # ── f_vendite_fb ──────────────────────────────────────────────────────────────
@@ -615,6 +625,8 @@ class CopertoGiornalieroRow(BaseModel):
     fonte: str | None = None
     hash_riga: str
     data_caricamento: datetime
+    # FK to f_raw_objects.raw_object_id (Phase 4 FK).
+    raw_object_id: Optional[str] = None
 
 
 # ── projects (event-sourced Step 1) ──────────────────────────────────────────

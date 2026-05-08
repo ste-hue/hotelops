@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS `{PROJECT}.{DATASET}.f_raw_objects` (
   pipeline_run_id      STRING,
   pipeline_name        STRING,
   file_sorgente        STRING,
-  ingestion_ts         TIMESTAMP NOT NULL
+  ingestion_ts         TIMESTAMP NOT NULL,
+  lineage_era          STRING OPTIONS(description="'live' for GCS-backed rows (Phase 4+); 'pre_phase4' for legacy file:// / drive:// rows — see PHASE4_GCS_CUTOFF")
 )
 PARTITION BY DATE(intake_at)
 CLUSTER BY content_hash, source_name

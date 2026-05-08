@@ -86,6 +86,17 @@ def register_raw_object(
     now = datetime.now(timezone.utc)
     raw_object_id = str(uuid.uuid4())
 
+    # Determine lineage_era: rows with a non-GCS backend or registered before
+    # the Phase 4 cutoff are archaeological (pre_phase4). All new GCS intakes
+    # are 'live'.
+    from core.lineage.schemas import PHASE4_GCS_CUTOFF
+
+    lineage_era: str = (
+        "live"
+        if (raw_backend == "gcs" and now >= PHASE4_GCS_CUTOFF)
+        else "pre_phase4"
+    )
+
     # PipelineRun ContextVar is read by bq_write_validated for lineage fields;
     # we still need to pass them on the Pydantic row (REQUIRED). Read here.
     from core.pipeline_run import PipelineRun
@@ -114,6 +125,7 @@ def register_raw_object(
         pipeline_name=pipeline_name,
         file_sorgente=file_sorgente,
         ingestion_ts=now,
+        lineage_era=lineage_era,
     )
     bq_write_validated(F_RAW_OBJECTS, [row], mode="append")
     return raw_object_id

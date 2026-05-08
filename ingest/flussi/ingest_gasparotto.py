@@ -679,6 +679,7 @@ BQ_SCHEMA = (
         bigquery.SchemaField("importo", "FLOAT64"),
         bigquery.SchemaField("fonte", "STRING"),
         bigquery.SchemaField("data_caricamento", "TIMESTAMP"),
+        bigquery.SchemaField("raw_object_id", "STRING"),
     ]
     if HAS_BQ
     else []
@@ -767,6 +768,11 @@ def main() -> None:
     parser.add_argument(
         "--output-dir", default="output", help="Directory per CSV output in dry-run"
     )
+    parser.add_argument(
+        "--raw-object-id",
+        default=None,
+        help="FK to f_raw_objects.raw_object_id (stamped on every row — used by promotion path)",
+    )
     args = parser.parse_args()
 
     logger = setup_logger()
@@ -802,6 +808,9 @@ def main() -> None:
     if not rows:
         logger.error("Nessuna riga estratta")
         sys.exit(1)
+
+    for r in rows:
+        r["raw_object_id"] = args.raw_object_id
 
     validate_rows(rows, logger)
     quality_summary(rows, logger)

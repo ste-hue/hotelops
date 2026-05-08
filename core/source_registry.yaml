@@ -37,7 +37,8 @@ sources:
     promotion_policy: AUTO
     detector_category: banca
     raw_storage:
-      backend: drive
+      backend: gcs
+      bucket: hotelops-raw
       path_template: "homebanking/INTUR/MPS"
 
   # (additional banca sources MPSKROSS/SELLA/INTESA/BCP follow the same pattern;
@@ -58,7 +59,8 @@ sources:
     promotion_policy: AUTO
     detector_category: movimenti_contabili
     raw_storage:
-      backend: drive
+      backend: gcs
+      bucket: hotelops-raw
       path_template: "movimenti_contabili/ORTI"
 
   # ── Esolver scheda contabile — APPEND ─────────────────────────────────────
@@ -75,7 +77,8 @@ sources:
     promotion_policy: AUTO
     detector_category: scheda_contabile
     raw_storage:
-      backend: drive
+      backend: gcs
+      bucket: hotelops-raw
       path_template: "registro_banca_esolver/ORTI"
 
   # ── Partite aperte — SNAPSHOT ─────────────────────────────────────────────
@@ -92,7 +95,8 @@ sources:
     promotion_policy: AUTO
     detector_category: partite_fornitori
     raw_storage:
-      backend: drive
+      backend: gcs
+      bucket: hotelops-raw
       path_template: "partite_fornitori/ORTI"
 
   ESOLVER_PARTITE_INTUR_SNAPSHOT:
@@ -107,7 +111,8 @@ sources:
     promotion_policy: AUTO
     detector_category: partite_fornitori
     raw_storage:
-      backend: drive
+      backend: gcs
+      bucket: hotelops-raw
       path_template: "partite_fornitori/INTUR"
 
   # ── Bilancino — SNAPSHOT ──────────────────────────────────────────────────
@@ -123,7 +128,8 @@ sources:
     promotion_policy: AUTO
     detector_category: bilancino
     raw_storage:
-      backend: drive
+      backend: gcs
+      bucket: hotelops-raw
       path_template: "bilancino/ORTI"
 
   # ── Gasparotto budget — SNAPSHOT ──────────────────────────────────────────
@@ -140,7 +146,8 @@ sources:
     promotion_policy: AUTO
     detector_category: gasparotto
     raw_storage:
-      backend: drive
+      backend: gcs
+      bucket: hotelops-raw
       path_template: "gasparotto"
     notes: |
       Q7 chiusa: system=ESOLVER (la fonte primaria dei dati è l'ERP).
@@ -160,7 +167,8 @@ sources:
     promotion_policy: AUTO
     detector_category: piano_finanziario
     raw_storage:
-      backend: drive
+      backend: gcs
+      bucket: hotelops-raw
       path_template: "piani_finanziari/ORTI"
 
   # ── HotelCube accodamenti — APPEND, BU per-file ───────────────────────────
@@ -178,7 +186,8 @@ sources:
     promotion_policy: AUTO
     detector_category: accodamenti
     raw_storage:
-      backend: drive
+      backend: gcs
+      bucket: hotelops-raw
       path_template: "accodamenti/ORTI"
 
   # ── Coperti — APPEND ──────────────────────────────────────────────────────
@@ -195,7 +204,8 @@ sources:
     promotion_policy: AUTO
     detector_category: coperti
     raw_storage:
-      backend: drive
+      backend: gcs
+      bucket: hotelops-raw
       path_template: "coperti"
 
   # ── Economato consumi — APPEND ────────────────────────────────────────────
@@ -212,7 +222,8 @@ sources:
     promotion_policy: AUTO
     detector_category: economato
     raw_storage:
-      backend: drive
+      backend: gcs
+      bucket: hotelops-raw
       path_template: "economato"
 
   # ── PMS statistiche — RAW_ONLY (esempio hard gate) ────────────────────────

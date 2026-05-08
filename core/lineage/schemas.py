@@ -1,15 +1,46 @@
 """Pydantic schemas + naming grammar for the lineage layer.
 
 Spec: docs/superpowers/specs/2026-05-05-ingest-lineage-gcs-design.md §4
+
+Era semantics
+─────────────
+PHASE4_GCS_CUTOFF is the wall-clock boundary between two archaeological layers:
+
+  pre_phase4  (raw_backend in 'drive'|'local', intake_at < cutoff)
+    Immutable history.  f_raw_objects rows created during Phase 1-4 smoke
+    tests.  raw_uri points to file:// or drive:// paths that may no longer
+    exist.  Provenance is partial — canonical rows downstream may have
+    raw_object_id IS NULL.  Trust the canonical data; treat the raw provenance
+    as archaeological context only.
+
+  live        (raw_backend = 'gcs', intake_at >= cutoff)
+    Operational memory.  Every raw file is in GCS with a stable gs:// URI,
+    a content_hash, and an FK chain to canonical rows.  This is the layer
+    where provenance is trustworthy and replayable.
+
+Lineage confidence vocabulary (informational — not enforced at write time):
+  NONE         pre-lineage canonical rows: raw_object_id IS NULL
+  PARTIAL      lineage_era='pre_phase4': raw row exists, FK may be absent
+  VERIFIED     lineage_era='live', FK present, hash matches promotion record
+  RECONSTRUCTED retroactively backfilled (see docs/architecture/AI_INSTRUCTIONS.md)
 """
 
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
+
+# ── Era boundary ──────────────────────────────────────────────────────────────
+
+# Phase 4 cutover: GCS becomes default raw backend for all new sources.
+# Files registered BEFORE this date (lineage_era='pre_phase4') are considered
+# archaeological; files AFTER (lineage_era='live') are the operational memory.
+PHASE4_GCS_CUTOFF = datetime(2026, 5, 5, tzinfo=timezone.utc)
+
+LineageEra = Literal["pre_phase4", "live"]
 
 # ── Closed enums ──────────────────────────────────────────────────────────────
 
@@ -132,6 +163,7 @@ class RawObject(BaseModel):
     pipeline_name: str
     file_sorgente: Optional[str] = None
     ingestion_ts: datetime
+    lineage_era: LineageEra = "live"
 
 
 # ── Lineage event (state transition log row) ──────────────────────────────────

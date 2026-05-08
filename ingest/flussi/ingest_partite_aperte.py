@@ -230,6 +230,7 @@ BQ_SCHEMA = [
     bigquery.SchemaField("metodo_pagamento", "STRING"),
     bigquery.SchemaField("is_intercompany", "BOOLEAN"),
     bigquery.SchemaField("file_sorgente", "STRING"),
+    bigquery.SchemaField("raw_object_id", "STRING"),
 ]
 
 
@@ -316,6 +317,11 @@ def main():
     parser.add_argument(
         "--dry-run", action="store_true", help="Parse only, no BQ write"
     )
+    parser.add_argument(
+        "--raw-object-id",
+        default=None,
+        help="FK to f_raw_objects.raw_object_id (stamped on every row — used by promotion path)",
+    )
     args = parser.parse_args()
 
     from ingest._logging import setup_logging
@@ -340,6 +346,9 @@ def main():
         if not rows:
             logger.warning("No partite found in file")
             return  # not sys.exit(0): SystemExit propagates as exc_val to PipelineRun.__exit__ → status=FAIL
+
+        for r in rows:
+            r["raw_object_id"] = args.raw_object_id
 
         # Load (gate validates via PartitaApertaFornitoreRow)
         if args.dry_run:
