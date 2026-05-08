@@ -134,13 +134,17 @@ def make_hash_content(
     imp_dare: float | None,
     imp_avere: float | None,
     causale: str | None,
-    rag_sociale: str | None,
 ) -> str:
     """Content-based stable hash across XLS legacy and XLSX report formats.
 
     The same logical accounting row produces the same hash regardless of the
     Esolver report format used to extract it. Must stay in sync with the SQL
     expression used by the migration in core/bq/migrations/2026_05_08_movimenti_content_hash.py.
+
+    Note: rag_sociale is intentionally excluded — XLSX populates it with the
+    account description for bank/cash rows (e.g. 190101 → 'Banca c/c MPS')
+    while legacy XLS leaves it NULL. The causale already carries the
+    distinguishing info (counterparty name, document ref, etc.).
     """
     key = "|".join(
         [
@@ -150,7 +154,6 @@ def make_hash_content(
             f"{(imp_dare or 0.0):.2f}",
             f"{(imp_avere or 0.0):.2f}",
             (causale or "").strip(),
-            (rag_sociale or "").strip(),
         ]
     )
     return hashlib.md5(key.encode()).hexdigest()
@@ -203,11 +206,11 @@ def parse_file(filepath: Path, societa_id: str, logger: logging.Logger) -> list[
         imp_avere = float(row[21]) if isinstance(row[21], float) else 0.0
         cod_divisione = str(row[25]).strip() if row[25] else None
 
-        if id_doc is None or num_progr is None:
+        if id_doc is None or num_progr is None or data_reg is None:
             continue
 
         hash_riga = make_hash_content(
-            societa_id, data_reg, cod_conto, imp_dare, imp_avere, causale, rag_sociale
+            societa_id, data_reg, cod_conto, imp_dare, imp_avere, causale
         )
 
         rows.append(
@@ -331,7 +334,6 @@ def parse_file_xlsx(
             imp_dare,
             imp_avere,
             causale,
-            rag_sociale,
         )
 
         rows.append(
@@ -460,8 +462,13 @@ def process_societa(
     bq_client,
     dry_run: bool,
     replace: bool,
+    raw_object_id: str | None,
     logger: logging.Logger,
 ):
+    if raw_object_id:
+        logger.info(
+            f"  lineage raw_object_id ricevuto: {raw_object_id} (non ancora scritto su f_movimenti_contabili)"
+        )
     all_rows = []
     for f in files:
         if f.suffix.lower() == ".xlsx":
@@ -521,12 +528,18 @@ def main():
         action="store_true",
         help="SNAPSHOT mode: DELETE rows in the file's date range before insert (true idempotency)",
     )
+    parser.add_argument(
+        "--raw-object-id",
+        help="Lineage raw_object_id (accepted for promote subprocess contract). "
+        "Currently only tracked in logs; not yet stamped on rows "
+        "(f_movimenti_contabili FK column TBD).",
+    )
     args = parser.parse_args()
 
     logger = setup_logger()
 
-    if not HAS_XLRD:
-        logger.error("xlrd non installato. Run: pip install xlrd")
+    if args.raw_object_id and not args.file:
+        logger.error("--raw-object-id supportato solo con --file")
         sys.exit(1)
 
     # Single file mode
@@ -574,7 +587,14 @@ def main():
     for societa_id, files in files_by_societa.items():
         logger.info(f"=== {societa_id} ===")
         process_societa(
-            societa_id, files, datahub, bq_client, args.dry_run, args.replace, logger
+            societa_id,
+            files,
+            datahub,
+            bq_client,
+            args.dry_run,
+            args.replace,
+            args.raw_object_id,
+            logger,
         )
 
     logger.info("DONE")

@@ -76,8 +76,9 @@ sources:
     promotion_policy: AUTO
     detector_category: scheda_contabile
     raw_storage:
-      backend: drive
-      path_template: "registro_banca_esolver/ORTI"
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "scheda_contabile/ORTI"
 
   # ── Partite aperte — SNAPSHOT ─────────────────────────────────────────────
   ESOLVER_PARTITE_ORTI_SNAPSHOT:

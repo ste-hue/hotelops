@@ -296,6 +296,129 @@ def parse_scheda_contabile(filepath: Path) -> list[dict]:
         return []
 
 
+# ── Multi-bank parsing (Esolver "Mastrini banche" all-in-one CSV) ─────────────
+
+
+def is_multibank_csv(filepath: Path) -> bool:
+    """Detect Esolver "Mastrini banche" all-in-one CSV.
+
+    The file has the same column layout as a per-bank scheda contabile, but
+    rows for multiple bank accounts are interleaved chronologically and
+    distinguished only by the Partitario column (col 7).
+
+    Detection: column 7 ("Partitario") is populated with single-digit numeric
+    values {1,2,3,4} on at least 2 distinct values across the data rows.
+
+    Mono-bank scheda CSVs leave Partitario blank (the bank identity is the
+    file itself, inferred from filename).
+    """
+    if filepath.suffix.lower() not in (".csv", ".tsv"):
+        return False
+    for enc in ["utf-8-sig", "latin-1", "cp1252"]:
+        try:
+            with open(filepath, "r", encoding=enc) as f:
+                content = f.read()
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        return False
+    reader = csv.reader(content.splitlines(), delimiter=";")
+    distinct_partitari = set()
+    for fields in reader:
+        if len(fields) < 8:
+            continue
+        if parse_date(fields[0]) is None:
+            continue
+        p = (fields[7] or "").strip()
+        if p in ("1", "2", "3", "4"):
+            distinct_partitari.add(p)
+        if len(distinct_partitari) >= 2:
+            return True
+    return False
+
+
+def parse_mastrino_multibank_csv(
+    filepath: Path, societa_id: str
+) -> list[dict]:
+    """Parse multi-bank Esolver mastrino CSV.
+
+    Returns one entry per movement row, with banca_id resolved via
+    ESOLVER_CC_MAP[(societa_id, partitario)]. The "Saldo in UdC" column is
+    intentionally ignored (it is a cumulative total across all banks in the
+    file, not a per-bank running balance — verified by reconciliation).
+
+    The "Ripresa saldi" rows on 01/01 are treated as ordinary first-of-year
+    movements: their dare/avere amount becomes the per-bank running balance
+    starting point.
+    """
+    rows = []
+    for enc in ["utf-8-sig", "latin-1", "cp1252"]:
+        try:
+            with open(filepath, "r", encoding=enc) as f:
+                content = f.read()
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        log.error(f"Cannot decode {filepath.name}")
+        return []
+
+    reader = csv.reader(content.splitlines(), delimiter=";")
+    skipped_unmapped = 0
+    for fields in reader:
+        if len(fields) < 9:
+            continue
+        d = parse_date(fields[0])
+        if d is None:
+            continue  # header / "Riporto saldi" total row / blanks
+        partitario = (fields[7] or "").strip()
+        if partitario not in ("1", "2", "3", "4"):
+            continue
+        banca_id = ESOLVER_CC_MAP.get((societa_id, partitario))
+        if banca_id is None:
+            skipped_unmapped += 1
+            continue
+        dare = parse_italian_number(fields[3]) or 0.0
+        avere = parse_italian_number(fields[4]) or 0.0
+        rows.append(
+            {
+                "data_registrazione": d,
+                "banca_id": banca_id,
+                "dare": dare,
+                "avere": avere,
+                "causale": fields[2].strip() if len(fields) > 2 else "",
+                "rif_registrazione": fields[1].strip() if len(fields) > 1 else "",
+            }
+        )
+
+    if skipped_unmapped:
+        log.warning(
+            f"Skipped {skipped_unmapped} rows with unmapped Partitario for societa={societa_id}"
+        )
+    return rows
+
+
+def extract_daily_saldi_per_banca(
+    rows: list[dict],
+) -> dict[tuple[str, date], float]:
+    """Compute per-bank running balance and return end-of-day saldo per (banca, date).
+
+    Rows must be in chronological order (mastrino is). For each bank, walk
+    movements forward, applying delta = dare - avere; record the saldo at the
+    end of each day where that bank had at least one movement. Days without
+    movements for a given bank are NOT backfilled.
+    """
+    running: dict[str, float] = {}
+    daily: dict[tuple[str, date], float] = {}
+    for r in rows:
+        b = r["banca_id"]
+        d = r["data_registrazione"]
+        running[b] = running.get(b, 0.0) + r["dare"] - r["avere"]
+        daily[(b, d)] = round(running[b], 2)  # last write of day wins
+    return daily
+
+
 # ── Inference ─────────────────────────────────────────────────────────────────
 
 
@@ -414,6 +537,51 @@ def write_saldi_to_bq(
     return len(rows)
 
 
+def write_saldi_multibank_to_bq(
+    saldi: dict[tuple[str, date], float],
+    societa_id: str,
+    dry_run: bool = False,
+) -> int:
+    """Write end-of-day saldi for multiple banks to f_saldi_banca_snapshot.
+
+    Single SNAPSHOT write keyed on (societa_id, banca_id, data_snapshot) so
+    re-runs idempotently replace overlapping days per-bank.
+    """
+    if not saldi:
+        log.warning("No saldi to write")
+        return 0
+
+    from core.bq.write import bq_write_validated
+    from core.schemas import SaldoBancaSnapshotRow
+
+    rows = [
+        SaldoBancaSnapshotRow(
+            societa_id=societa_id,
+            banca_id=b,
+            data_snapshot=d,
+            saldo_finale=saldo,
+        )
+        for (b, d), saldo in sorted(saldi.items(), key=lambda kv: (kv[0][1], kv[0][0]))
+    ]
+
+    if dry_run:
+        per_bank: dict[str, int] = {}
+        for r in rows:
+            per_bank[r.banca_id] = per_bank.get(r.banca_id, 0) + 1
+        log.info(f"DRY RUN: {len(rows)} saldi for {societa_id} multi-bank")
+        for b, n in sorted(per_bank.items()):
+            log.info(f"  {b}: {n} snapshot")
+        return len(rows)
+
+    bq_write_validated(
+        BQ_TABLE,
+        rows,
+        mode="snapshot",
+        natural_key=["societa_id", "banca_id", "data_snapshot"],
+    )
+    return len(rows)
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
@@ -422,8 +590,14 @@ def process_file(
     societa_id: str,
     banca_id: str | None,
     dry_run: bool,
+    raw_object_id: str | None = None,
 ) -> int:
-    """Process a single scheda contabile file."""
+    """Process a single scheda contabile file.
+
+    Two modes, auto-detected:
+      - multi-bank: CSV with Partitario column populated → per-bank running balance
+      - mono-bank (legacy): one file per (societa, banca), banca inferred from filename
+    """
     from core.pipeline_run import PipelineRun
 
     with PipelineRun(
@@ -432,8 +606,30 @@ def process_file(
         file_sorgente=filepath.name,
     ):
         log.info(f"Processing: {filepath.name}")
+        if raw_object_id:
+            log.info(
+                f"  lineage raw_object_id ricevuto: {raw_object_id} "
+                "(non ancora stampato sulle righe — f_saldi_banca_snapshot FK column TBD)"
+            )
 
-        # Infer banca if not provided
+        if is_multibank_csv(filepath):
+            log.info("Detected multi-bank Esolver mastrino (Partitario populated)")
+            rows = parse_mastrino_multibank_csv(filepath, societa_id)
+            if not rows:
+                log.warning(f"No rows parsed from {filepath.name}")
+                return 0
+            log.info(
+                f"Parsed {len(rows)} movements, date range: "
+                f"{rows[0]['data_registrazione']} → {rows[-1]['data_registrazione']}"
+            )
+            daily_saldi = extract_daily_saldi_per_banca(rows)
+            per_bank: dict[str, int] = {}
+            for (b, _), _saldo in daily_saldi.items():
+                per_bank[b] = per_bank.get(b, 0) + 1
+            for b, n in sorted(per_bank.items()):
+                log.info(f"  {b}: {n} end-of-day saldi")
+            return write_saldi_multibank_to_bq(daily_saldi, societa_id, dry_run)
+
         if not banca_id:
             banca_id = infer_banca_from_filename(filepath.name, societa_id)
             if not banca_id:
@@ -482,6 +678,12 @@ def main():
     parser.add_argument(
         "--dry-run", action="store_true", help="Parse and show results, no BQ writes"
     )
+    parser.add_argument(
+        "--raw-object-id",
+        help="Lineage raw_object_id (accepted for promote subprocess contract). "
+        "Currently only tracked in logs; not yet stamped on rows "
+        "(f_saldi_banca_snapshot FK column TBD).",
+    )
     args = parser.parse_args()
 
     from ingest._logging import setup_logging
@@ -504,7 +706,9 @@ def main():
         if not societa:
             log.error(f"Cannot infer societa from {filepath.name}. Use --societa.")
             sys.exit(1)
-        total = process_file(filepath, societa, banca, args.dry_run)
+        total = process_file(
+            filepath, societa, banca, args.dry_run, args.raw_object_id
+        )
 
     elif args.dir:
         dirpath = Path(args.dir)

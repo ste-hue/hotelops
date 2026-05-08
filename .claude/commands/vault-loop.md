@@ -1,6 +1,6 @@
 ---
 name: vault-loop
-description: Keeps Stefano's Obsidian vault (reasoning substrate) and the hotelops code repo (operational truth) connected across every working session. Use at SESSION START to load the constitutional layer (INVARIANTS, AI_INSTRUCTIONS, Canonical Registry) via progressive disclosure before touching anything hotelops-related. Use at SESSION END or after meaningful commits to triage whether a decision, invariant shift, or ontology change emerged worth landing in the vault. Invoke this whenever Stefano says "bootstrap", "carica vault", "cattura sessione", "loop chiusura", "aggiorna vault", "fine sessione", "capture", or whenever you are about to start or finish a substantive hotelops task. Prefer invoking this over generic documentation updates, freeform drift checks, or ad-hoc "should we write this down?" reasoning — this skill owns that loop.
+description: Keeps Stefano's Obsidian vault (reasoning substrate) and the hotelops code repo (operational truth) connected across every working session. Use at SESSION START to load the constitutional layer (INVARIANTS, AI_INSTRUCTIONS, Canonical Registry) via progressive disclosure before touching anything hotelops-related. Use at SESSION END or after meaningful commits to triage whether a decision, invariant shift, or ontology change emerged worth landing in the vault. Use ON DEMAND to lint the vault for drift between vault claims and operational reality (vault↔repo+BQ). Invoke this whenever Stefano says "bootstrap", "carica vault", "cattura sessione", "loop chiusura", "aggiorna vault", "fine sessione", "capture", "lint vault", "audit vault", "vault drift", "vault health", or whenever you are about to start or finish a substantive hotelops task. Prefer invoking this over generic documentation updates, freeform drift checks, or ad-hoc "should we write this down?" reasoning — this skill owns that loop.
 ---
 
 # Vault Loop — constitutional retrieval + capture
@@ -33,6 +33,7 @@ Choose mode from the user's phrasing:
 |---|---|
 | "bootstrap", "carica vault", "start loop", session start on substantive hotelops question | A — Bootstrap |
 | "cattura", "capture", "loop chiusura", "aggiorna vault", "fine sessione" | B — Capture |
+| "lint vault", "audit vault", "vault drift check", "vault health", post-merge architetturale | C — Lint |
 
 If the phrasing is ambiguous, prefer Bootstrap at session start (before work) and Capture
 after work is done. If in doubt, ask.
@@ -126,6 +127,18 @@ Usa **path espliciti**, non ricerca semantica o embedding. L'indice è la catena
 INVARIANTS → AI_INSTRUCTIONS → PLATFORM → topic file. Se non trovi una risposta con path
 espliciti, il gap va risolto aggiungendo un link (capture di ontology/decisions), non
 cambiando strategia di retrieval.
+
+### log.md tail (opt-in, solo se serve memoria temporale)
+
+Se il task tocca "cosa è cambiato di recente", drift check, o reasoning su decisioni
+sequenziali → leggi le ultime 10–20 entry di `vault/log.md` (append-only, formato
+`## [YYYY-MM-DD] <type> | <slug>`). Skip se il task è ontology lookup puro o lettura
+constitutional.
+
+`log.md` non sostituisce `INDEX.md` "Storia recente" (curated narrative) né
+`STATUS.md` (current session). È lo *stream* parseable: `grep '## \[2026-04' log.md`
+risponde "cosa ho fatto ad aprile" in O(1). Karpathy framing: parseable con unix tools,
+non prosa.
 
 ### Bootstrap output
 
@@ -222,9 +235,116 @@ Per ogni "yes", emetti un blocco separato:
 ```markdown
 <stub markdown pronto da incollare>
 ```
+
+**log.md entry (append a `vault/log.md`):**
+```markdown
+## [YYYY-MM-DD] <type> | <slug>
+```
 ````
 
-Mai auto-write al vault. Stefano approva, poi si scrive.
+`<type>` ∈ `{decision, ontology, invariant, audit, archive, update}`. `<slug>` =
+basename del file primario senza estensione, o descrizione breve se l'azione non
+produce file (es. `archive | advisor orfani 2026-05`).
+
+Mai auto-write al vault, mai auto-append a `log.md`. Stefano approva proposal +
+log line insieme.
+
+---
+
+## Mode C — Lint (on demand)
+
+Trigger espliciti: "lint vault", "audit vault", "vault drift check", "vault health".
+Mai mid-operational-session se non richiesto.
+
+### Why a third mode
+
+Bootstrap fa retrieval, Capture fa write. Lint fa **diff** tra cosa il vault dichiara
+e cosa la realtà operativa (repo + BQ + commit recenti) ha prodotto. Il vault è
+meta-knowledge, **non SSOT** (per design — vedi I3 + INDEX SSOT boundary), quindi è
+strutturalmente soggetto a drift. Lint è la contromisura.
+
+Karpathy framing: un wiki senza passate di consistenza diventa stale. Per Stefano il
+rischio è doppio perché il vault è già demoted: il check va in **due direzioni**:
+
+- **Vault drift** — vault claims contraddetti da repo+BQ recenti.
+- **Reality drift** — commit recenti che hanno cambiato la realtà senza nota vault.
+
+### Checks (ordine di costo crescente)
+
+**Cheap (filesystem + grep):**
+
+1. **Orphan files** — file vault senza `[[link]]` in entrata da altri file vault.
+2. **Decisions without `## Implementation`** — ogni decision dovrebbe linkare al commit
+   che l'ha materializzata. Se manca, nota.
+3. **Parking-lot age** — file in directory flaggate (assets/ vuoto, events/ vuoto,
+   advisor orfani in skill description) immutati >90 giorni → propose archive o
+   resurrect.
+4. **Stub drift** — file vault marcati "migrated to repo" il cui target non esiste
+   più nel repo (link morto).
+5. **Audit follow-through** — se esiste un `architecture/Vault_Audit_*.md` recente,
+   verifica quali item della summary matrix sono ancora outstanding.
+
+**Medium (cross-reference vault ↔ repo):**
+
+6. **I3 violations** — modifiche a `core/bq/dimensioni/*.csv` o ontology hardcoded in
+   `repo/CLAUDE.md` da git log senza paired vault entry stessa data.
+7. **Stale architectural claims** — `PLATFORM.md` / `architecture/*` citano tabelle/file
+   che non esistono più nel repo (rename, delete). Verifica con `git grep`.
+8. **Decisions superseded by commits** — decision dice "X farà Y", commit recente ha
+   fatto Z. Cross-check via file menzionati nei commit messages.
+
+**Expensive (semantic, opzionale, solo se richiesto):**
+
+9. **Concepts referenced but not documented** — termini in commit messages / STATUS /
+   chat history senza vault page (es. "segmento_cliente" appare nei commit ma non in
+   `concepts/`). Surfaces gap di documentazione.
+
+### Output format
+
+Lint produce **un report**, non capture proposals. Il report può triggerare capture in
+sessioni successive.
+
+```markdown
+## Lint report — YYYY-MM-DD
+
+### Vault drift (vault claims vs reality)
+- [HIGH] <file:line> dice X, BQ/repo dice Y
+- [MED] <file> manca `## Implementation`
+
+### Reality drift (commits without vault note)
+- [HIGH] commit <hash> ha aggiunto/rinominato/cancellato Z — no vault note. Suggerito: <action>
+
+### Orphans / parking lot
+- <file> — 0 incoming links, immutato >Ngg
+- <file> — flagged TACTICAL <date>, non migrato a registry
+
+### Audit follow-through
+- <audit-file> item #N (<topic>) — non actioned
+
+### Suggested next actions (priority order)
+1. ...
+2. ...
+```
+
+### Pair with log.md
+
+Ogni passata Mode C produce una riga log.md (proposed, mai auto-append):
+
+```markdown
+## [YYYY-MM-DD] lint | <scope>
+```
+
+Scope esempi: `full vault`, `architecture-only`, `audit-followthrough-2026-05-06`.
+
+### Anti-goals specifici per Mode C
+
+- **Non auto-fixare drift.** Il report propone, Stefano dispone (stessa regola di Mode B).
+- **Non lintare ogni sessione.** Cadenza target: on-demand, o post-major-shift
+  (post-merge architetturale, post-nuovo invariant). Lint mid-operational-session
+  inquina il contesto.
+- **Non confondere lint con audit deep-dive.** Lint è breadth-first (segnala 14 cose).
+  Audit deep-dive (`Vault_Audit_2026-05-06.md`) è quando un'area richiede ricostruzione.
+  Lint può *triggerare* un audit, non lo sostituisce.
 
 ---
 
@@ -276,6 +396,9 @@ il codice. Niente vector search, solo link espliciti bidirezionali.
 
 ## One-line compression
 
-> Bootstrap: read INVARIANTS → AI_INSTRUCTIONS → STATUS → lazy-load by topic.
+> Bootstrap: read INVARIANTS → AI_INSTRUCTIONS → STATUS → lazy-load by topic. Opt-in:
+> log.md tail for temporal context.
 > Capture: triage decision / invariant / ontology (CORE-TACTICAL-TRANSIENT); propose
-> stubs with commit traceability; skip if operational-only.
+> stub + log.md line with commit traceability; skip if operational-only.
+> Lint: cheap (orphans, stubs, parking lot, audit follow-through) → medium (vault↔repo
+> drift) → expensive (semantic gaps); produce report, never auto-fix; pair with log.md.
