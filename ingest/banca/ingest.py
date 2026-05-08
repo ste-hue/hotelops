@@ -103,6 +103,7 @@ FACT_HEADER = [
     "file_sorgente",
     "riga_sorgente",
     "hash_riga",
+    "raw_object_id",
 ]
 
 
@@ -804,6 +805,7 @@ def process_file(
     logger: logging.Logger,
     dry_run: bool = False,
     meta: dict = None,
+    raw_object_id: Optional[str] = None,
 ) -> dict:
     stats = {"file": filepath.name, "total": 0, "written": 0, "dupes": 0, "errors": 0}
 
@@ -849,6 +851,7 @@ def process_file(
     for i, raw in enumerate(raw_rows, 1):
         raw = apply_mapping(raw, mappings, meta["societa_banca"])
         fact = transform(raw, meta, i)
+        fact["raw_object_id"] = raw_object_id
 
         if fact["hash_riga"] in hashes:
             stats["dupes"] += 1
@@ -887,18 +890,93 @@ def collect_files(source: Path) -> list[Path]:
     return sorted(files)
 
 
+def ingest_single_file(
+    file_path: Path,
+    raw_object_id: str,
+    societa: Optional[str] = None,
+    dry_run: bool = False,
+) -> dict:
+    """Single-file ingestion path used by promote_raw_object.
+
+    Differs from main() batch mode: caller already resolved the file (downloaded
+    from GCS to temp by promotion), no datahub folder needed for mappings (we
+    use an empty mapping dict — promote contract assumes the parser tolerates
+    no-mapping for unmapped descriptors). Caller passes raw_object_id which is
+    stamped on every row.
+    """
+    bq_client = get_client()
+    mappings: dict = {}  # promote contract: no datahub access
+    hashes = load_hashes(bq_client)
+
+    meta = infer_meta(file_path)
+    if "UNKNOWN" in meta["societa_banca"] and societa:
+        # Override inferred societa from CLI flag when fname doesn't carry it.
+        meta["societa_banca"] = meta["societa_banca"].replace("UNKNOWN", societa)
+
+    logger = logging.getLogger("ingest.banca.single_file")
+    return process_file(
+        file_path,
+        bq_client,
+        mappings,
+        hashes,
+        logger,
+        dry_run,
+        meta=meta,
+        raw_object_id=raw_object_id,
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Bank transaction ingestion")
+    # Batch mode (existing):
     parser.add_argument(
-        "--datahub", required=True, help="Path to datahub root (for mappings and logs)"
+        "--datahub", help="Path to datahub root (batch mode — for mappings and logs)"
     )
     parser.add_argument(
-        "--source", "-s", help="Staging folder from rclone sync (default: auto)"
+        "--source", "-s", help="Staging folder from rclone sync (batch mode default)"
+    )
+    # Single-file mode (new — used by promote subprocess):
+    parser.add_argument(
+        "--file", help="Single file to ingest (used by promotion path)"
+    )
+    parser.add_argument(
+        "--raw-object-id", help="Raw object ID to stamp on rows (single-file mode)"
+    )
+    parser.add_argument(
+        "--societa", choices=["ORTI", "INTUR"],
+        help="Societa override for single-file mode when filename doesn't carry it",
     )
     parser.add_argument("--project", default=PROJECT, help="GCP project")
     parser.add_argument("--dry-run", "-d", action="store_true")
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(levelname)s: %(message)s",
+    )
+
+    # Single-file mode (promotion path)
+    if args.file:
+        if not args.raw_object_id:
+            print("ERROR: --file requires --raw-object-id", file=sys.stderr)
+            sys.exit(2)
+        stats = ingest_single_file(
+            file_path=Path(args.file),
+            raw_object_id=args.raw_object_id,
+            societa=args.societa,
+            dry_run=args.dry_run,
+        )
+        print(
+            f"single-file: {stats.get('total', 0)} total, "
+            f"{stats.get('written', 0)} written, {stats.get('dupes', 0)} dupes"
+        )
+        return
+
+    # Batch mode (existing — keep behavior unchanged)
+    if not args.datahub:
+        print("ERROR: batch mode requires --datahub", file=sys.stderr)
+        sys.exit(2)
 
     datahub = Path(args.datahub)
     if not datahub.exists():

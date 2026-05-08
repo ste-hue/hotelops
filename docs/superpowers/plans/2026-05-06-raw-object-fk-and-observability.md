@@ -693,6 +693,352 @@ EOF
 
 ---
 
+## Task 4.5: Fix B — intake emits `SOURCE_RESOLVED`, advance to `CLASSIFIED`
+
+**Context:** Task 5 (production smoke, first attempt) revealed a real bug. `promote_raw_object` emits `PROMOTION_REQUESTED` with `from_status="RAW_ONLY"`, but the state machine transition table has no such pair — it only allows `PROMOTION_REQUESTED` from `CLASSIFIED` or `PROMOTABLE`. Root cause: `intake_file` only emits `RAW_INGESTED → RAW_ONLY`; it never emits the `SOURCE_RESOLVED` event that would advance to `CLASSIFIED`. So after intake, the row stays at `RAW_ONLY` forever, and any promote raises `InvalidTransition`.
+
+This task implements **Fix B (faithful to design)**: intake emits `SOURCE_RESOLVED → CLASSIFIED` when `source_name` is resolved. Promote then starts from `CLASSIFIED` and the rest of the existing flow continues.
+
+**Stefano's explicit rules (respect strictly):**
+1. **Do NOT add** a `(RAW_ONLY, "PROMOTION_REQUESTED")` transition. (Shortcut prohibited.)
+2. Intake **MUST** emit `SOURCE_RESOLVED → CLASSIFIED` when `source_name` is resolved.
+3. Promote starts from `CLASSIFIED` and **continues the existing flow** (no new event types unless absolutely necessary).
+4. Add a targeted test that **reproduces the real bug** (intake → promote with mocked subprocess) and verifies no `InvalidTransition` is raised.
+5. **Escalate if downstream state machine gaps** prevent the existing promote flow from completing (e.g., `VALIDATED_OK` only valid from `PROMOTABLE` would block the path post-`CLASSIFIED`). Do NOT improvise new event types or add transitions Stefano hasn't authorized.
+
+**Files:**
+- Modify: `ingest/intake.py` — after the existing `emit_event(RAW_INGESTED)`, conditionally emit `SOURCE_RESOLVED`
+- Modify: `tests/test_intake.py` — `test_intake_basic` currently asserts `len(events) == 1` with source_name set; update to expect 2 events (RAW_INGESTED + SOURCE_RESOLVED)
+- Test: `tests/test_intake_promote_e2e.py` (new) — reproduces the bug end-to-end with mocked subprocess
+
+- [ ] **Step 1: Write the failing E2E test (the bug reproducer)**
+
+Create `tests/test_intake_promote_e2e.py` with a single test that:
+1. Stubs `_lookup_existing_by_hash`, `register_raw_object`, `emit_event`, `load_registry` for intake
+2. Calls `intake_file(path, source_name="MPS_BANCA_ORTI_APPEND", actor="test")`
+3. Asserts that `SOURCE_RESOLVED` is in the captured events (post-Fix-B contract)
+4. Stubs `subprocess.run`, `_fetch_raw_object`, `latest_status`, `load_registry`, `emit_event`, `PipelineRun` for promote
+5. Calls `promote_raw_object(intake_result.raw_object_id, actor="test")`
+6. Asserts `result.status == "PROMOTED"` (the crux: must NOT raise `InvalidTransition`)
+
+The test isolates the state-machine flow without touching BQ, GCS, or the parser. Detailed test code in implementer prompt — keep all stubs scoped to the two functions they cover.
+
+- [ ] **Step 2: Run the failing test**
+
+Run: `pytest tests/test_intake_promote_e2e.py -v`
+Expected: FAIL on `"SOURCE_RESOLVED" in event_types` (pre-Fix-B intake emits only RAW_INGESTED).
+
+If the test fails at a DIFFERENT assertion (downstream state machine gap), **STOP and report — that's the new bug Stefano needs to know about.**
+
+- [ ] **Step 3: Apply Fix B in `ingest/intake.py`**
+
+Edit `ingest/intake.py` — after the existing `emit_event(RAW_INGESTED)` call (around line 137), add a conditional second emit when `source_def` is resolved:
+
+```python
+        # Fix B (Task 4.5): when source is resolved, immediately advance
+        # RAW_ONLY → CLASSIFIED so promote_raw_object can start from a valid
+        # state. Sourceless intake stays at RAW_ONLY (must be classified later).
+        if source_def is not None:
+            emit_event(
+                raw_object_id=raw_object_id,
+                event_type="SOURCE_RESOLVED",
+                actor=actor,
+                from_status="RAW_ONLY",
+                to_status="CLASSIFIED",
+                payload={"source_name": source_name},
+            )
+```
+
+Place inside the existing `with PipelineRun(...)` context, immediately after the RAW_INGESTED emit_event call.
+
+- [ ] **Step 4: Update existing intake tests that asserted single RAW_INGESTED**
+
+Read `tests/test_intake.py:test_intake_basic` (lines 16-44). It currently asserts `len(captured["events"]) == 1` and checks event_type. With Fix B, when `source_name` is provided, there are 2 events. Update assertions to expect both `RAW_INGESTED → RAW_ONLY` and `SOURCE_RESOLVED → CLASSIFIED`.
+
+`test_intake_no_source_skips_classification_event` stays unchanged (no source_name → only RAW_INGESTED).
+
+- [ ] **Step 5: Run the new E2E test + the touched intake tests**
+
+Run: `pytest tests/test_intake.py tests/test_intake_promote_e2e.py -v`
+Expected: all pass.
+
+**If the new E2E test fails at `result.status == "PROMOTED"` because of a downstream state machine gap** (e.g., `(CLASSIFIED, "VALIDATED_OK")` not in transitions, or PROMOTED hardcoded `from_status="PROMOTABLE"` no longer matches the actual current state in a way that breaks), **STOP and report BLOCKED with the exact error and which transition is missing**. Do NOT add transitions Stefano hasn't authorized.
+
+- [ ] **Step 6: Run full test suite to verify no regression**
+
+Run: `pytest --tb=line -q`
+Expected: all green (was 464 baseline + new tests added).
+
+If existing tests in `test_intake_gcs.py` or elsewhere fail because they implicitly counted events: investigate. If the new event genuinely breaks an assertion, update that assertion (don't weaken — make it accurate).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add ingest/intake.py tests/test_intake.py tests/test_intake_promote_e2e.py
+git commit -m "$(cat <<'EOF'
+fix(lineage): intake emits SOURCE_RESOLVED — promote can start from CLASSIFIED
+
+Closes the InvalidTransition bug found in Task 5 production smoke:
+intake_file only emitted RAW_INGESTED, leaving the row at RAW_ONLY.
+promote_raw_object then tried to emit PROMOTION_REQUESTED from RAW_ONLY,
+which is not a valid transition in the state machine.
+
+Fix B (faithful to design): when source_name is resolved at intake,
+also emit SOURCE_RESOLVED to advance RAW_ONLY → CLASSIFIED. Promote then
+starts from CLASSIFIED, which is a valid PROMOTION_REQUESTED source.
+
+Sourceless intake unchanged: stays at RAW_ONLY (must be classified later).
+
+E2E regression test reproduces the original bug and verifies the fix.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
+## Task 4.6: Fix B.2 — close downstream state machine gaps for promote from CLASSIFIED
+
+**Context:** Task 4.5 closed the first gap (`(RAW_ONLY, PROMOTION_REQUESTED)` blocked because intake left rows at `RAW_ONLY`). After Task 4.5 the row reaches `CLASSIFIED` and `PROMOTION_REQUESTED` is valid. But the existing `promote_raw_object` then emits `VALIDATED_OK` with no `from_status` (defaults to `None`), and the state machine has no `(None, "VALIDATED_OK")` entry → still raises `InvalidTransition`. Even if VALIDATED_OK passes, the next emit (`PROMOTED`) hardcodes `from_status="PROMOTABLE"` while the actual current state is `CLASSIFIED` — formally validates against `(PROMOTABLE, PROMOTED)` in the table but writes a **lie** to the lineage event log (claims a transition we never actually went through).
+
+This task implements **Fix B.2** per Stefano's constraints:
+
+1. Add 2 transitions to the state machine: `(CLASSIFIED, VALIDATED_OK)` and `(CLASSIFIED, PROMOTED): "PROMOTED"`.
+2. In `promotion.py`, use `from_status=current` (dynamic) for the `VALIDATED_OK` and `PROMOTED` emits — no more hardcoded `"PROMOTABLE"` lie.
+3. One regression test that reproduces this exact fail path through the **real** state machine (not mocked) and proves no `InvalidTransition`.
+
+**Out of scope (note for future Task 4.7 if needed)**: the failure-path emits (`VALIDATED_FAIL` + `REJECTED` with hardcoded `from_status="PROMOTABLE"`) have the same pattern but only fire when the parser fails. The success-path smoke does not exercise them. Stefano's constraints address only the success path.
+
+**Files:**
+- Modify: `core/lineage/state_machine.py` — 2 entries added to `_TRANSITIONS`
+- Modify: `ingest/promotion.py` — 2 `emit_event` calls (VALIDATED_OK + PROMOTED) gain `from_status=current`
+- Test: `tests/test_intake_promote_e2e.py` — add a NEW test using real state machine (existing mocked test stays)
+
+- [ ] **Step 1: Write the failing regression test (real state machine)**
+
+Edit `tests/test_intake_promote_e2e.py` — APPEND a new test below the existing one:
+
+```python
+def test_intake_then_promote_with_real_state_machine(
+    monkeypatch, fixture_file: Path
+) -> None:
+    """Regression: real emit_event + real state machine, no InvalidTransition.
+
+    Pre-Task-4.6 this raises InvalidTransition at the VALIDATED_OK emit
+    (no `(None, "VALIDATED_OK")` transition in the state machine table).
+
+    Mocks BQ writes and BQ-side queries; lets emit_event + state_machine
+    run with real implementations. The Task 4.5 sibling test mocks
+    emit_event itself, so it doesn't catch this.
+    """
+    import contextlib
+    from unittest.mock import MagicMock
+
+    # ── Mock BQ writes inside the lineage layer ────────────────────────────
+    monkeypatch.setattr(
+        "core.lineage.raw_manifest.bq_write_validated", lambda *a, **kw: None
+    )
+
+    # ── Mock BQ-side reads ─────────────────────────────────────────────────
+    monkeypatch.setattr(
+        "ingest.intake._lookup_existing_by_hash", lambda h: None
+    )
+    # latest_status is the function promote uses to decide the current state.
+    # Since we mocked bq_write_validated, the v_raw_objects_current view
+    # wouldn't be updated by the SOURCE_RESOLVED emit. Simulate the post-
+    # intake state directly: CLASSIFIED.
+    monkeypatch.setattr(
+        "ingest.promotion.latest_status", lambda _id: "CLASSIFIED"
+    )
+
+    # ── Mock the storage backend (avoid touching disk) ─────────────────────
+    fake_upload_result = MagicMock(
+        raw_uri=f"file://{fixture_file}", generation=None
+    )
+    fake_local = MagicMock(upload=lambda **kw: fake_upload_result)
+    monkeypatch.setattr("ingest.intake.LocalBackend", lambda: fake_local)
+
+    # ── Source registry (real-looking MPS source) ─────────────────────────
+    fake_source = MagicMock()
+    fake_source.source_name = "MPS_BANCA_ORTI_APPEND"
+    fake_source.societa = "ORTI"
+    fake_source.business_unit = None
+    fake_source.detector_category = "banca"
+    fake_source.raw_storage = MagicMock(backend="local", bucket=None)
+    fake_source.loop_targets = ["daily_reconciliation"]
+    fake_source.promotion_policy = "AUTO"
+    fake_source.parser_module = "ingest.banca.ingest"
+    fake_source.canonical_table = "f_banche_movimenti"
+
+    fake_reg = MagicMock()
+    fake_reg.get = (
+        lambda name: fake_source if name == fake_source.source_name else None
+    )
+    monkeypatch.setattr("ingest.intake.load_registry", lambda: fake_reg)
+    monkeypatch.setattr("ingest.promotion.load_registry", lambda: fake_reg)
+
+    # ── Mock _fetch_raw_object (would query BQ otherwise) ──────────────────
+    fake_raw = MagicMock()
+    fake_raw.source_name = "MPS_BANCA_ORTI_APPEND"
+    fake_raw.raw_uri = f"file://{fixture_file}"
+    fake_raw.gcs_generation = None
+    fake_raw.societa_id = "ORTI"
+    monkeypatch.setattr("ingest.promotion._fetch_raw_object", lambda _id: fake_raw)
+
+    # ── Mock subprocess (parser run) ───────────────────────────────────────
+    fake_proc = MagicMock(returncode=0, stderr="")
+    monkeypatch.setattr(
+        "ingest.promotion.subprocess.run", lambda cmd, **kw: fake_proc
+    )
+
+    # ── Skip PipelineRun side effects ──────────────────────────────────────
+    monkeypatch.setattr(
+        "ingest.intake.PipelineRun",
+        lambda *a, **kw: contextlib.nullcontext(),
+    )
+    monkeypatch.setattr(
+        "ingest.promotion.PipelineRun",
+        lambda *a, **kw: contextlib.nullcontext(),
+    )
+
+    # ── Run the full chain with REAL emit_event + REAL state_machine ──────
+    from ingest.intake import intake_file
+    from ingest.promotion import promote_raw_object
+
+    intake_result = intake_file(
+        path=fixture_file,
+        source_name="MPS_BANCA_ORTI_APPEND",
+        actor="test",
+    )
+    # If intake or promote raised InvalidTransition, the test fails here.
+    result = promote_raw_object(intake_result.raw_object_id, actor="test")
+
+    assert result.status == "PROMOTED", (
+        f"Expected PROMOTED via real state machine; got {result.status!r}"
+    )
+```
+
+- [ ] **Step 2: Run the failing test**
+
+Run: `pytest tests/test_intake_promote_e2e.py::test_intake_then_promote_with_real_state_machine -v`
+Expected: FAIL with `core.lineage.state_machine.InvalidTransition: Cannot apply 'VALIDATED_OK' from status None`.
+
+(If it fails at a different point — e.g., promotion.py call site uses `current` differently than expected — STOP and report; don't improvise.)
+
+- [ ] **Step 3: Add the 2 transitions to `state_machine.py`**
+
+Edit `core/lineage/state_machine.py` — in the `_TRANSITIONS` dict, add 2 entries near the existing `("PROMOTABLE", "VALIDATED_OK")` and `("PROMOTABLE", "PROMOTED")` lines. Place them adjacent for grouping:
+
+```python
+    # Validation events (non-transitional — they precede PROMOTED/REJECTED)
+    ("PROMOTABLE", "VALIDATED_OK"): None,
+    ("PROMOTABLE", "VALIDATED_FAIL"): None,
+    ("CLASSIFIED", "VALIDATED_OK"): None,  # Task 4.6: promote from CLASSIFIED
+    ("CLASSIFIED", "PROMOTION_REQUESTED"): None,
+    ("PROMOTABLE", "PROMOTION_REQUESTED"): None,
+    # Promotion
+    ("PROMOTABLE", "PROMOTED"): "PROMOTED",
+    ("CLASSIFIED", "PROMOTED"): "PROMOTED",  # Task 4.6: promote from CLASSIFIED
+```
+
+- [ ] **Step 4: Update `promotion.py` to use dynamic `from_status=current`**
+
+Edit `ingest/promotion.py` — find the success-path emits (around lines 194-210). Currently:
+
+```python
+        emit_event(
+            raw_object_id=raw_object_id,
+            event_type="VALIDATED_OK",
+            actor=actor,
+            payload=parser_result,
+        )
+        emit_event(
+            raw_object_id=raw_object_id,
+            event_type="PROMOTED",
+            actor=actor,
+            from_status="PROMOTABLE",
+            to_status="PROMOTED",
+            payload={
+                "canonical_table": source_def.canonical_table,
+                **parser_result,
+            },
+        )
+```
+
+Change to:
+
+```python
+        emit_event(
+            raw_object_id=raw_object_id,
+            event_type="VALIDATED_OK",
+            actor=actor,
+            from_status=current,  # Task 4.6: dynamic, no hardcoded PROMOTABLE
+            payload=parser_result,
+        )
+        emit_event(
+            raw_object_id=raw_object_id,
+            event_type="PROMOTED",
+            actor=actor,
+            from_status=current,  # Task 4.6: dynamic, no hardcoded PROMOTABLE
+            to_status="PROMOTED",
+            payload={
+                "canonical_table": source_def.canonical_table,
+                **parser_result,
+            },
+        )
+```
+
+`current` is the local variable already in scope (set near the top of `promote_raw_object` from `latest_status(raw_object_id)`).
+
+**Do NOT** touch the failure-path emits (`VALIDATED_FAIL` + `REJECTED`-on-fail) — out of scope per Stefano. Note their asymmetry in the report.
+
+- [ ] **Step 5: Run the regression test + sibling tests**
+
+Run: `pytest tests/test_intake_promote_e2e.py -v`
+Expected: both tests pass (the Task 4.5 mocked one and the Task 4.6 real one).
+
+- [ ] **Step 6: Run full suite to verify no regression**
+
+Run: `pytest --tb=line -q`
+Expected: all green (was 470 after Task 4.5, +1 new test = 471).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add core/lineage/state_machine.py ingest/promotion.py tests/test_intake_promote_e2e.py
+git commit -m "$(cat <<'EOF'
+fix(lineage): close state machine gaps for promote from CLASSIFIED (B.2)
+
+Task 4.5 fixed intake to advance RAW_ONLY → CLASSIFIED. But the existing
+promote flow then hit two more gaps:
+  1. emit_event(VALIDATED_OK) with no from_status raised InvalidTransition
+     (no (None, VALIDATED_OK) in the state machine).
+  2. emit_event(PROMOTED, from_status="PROMOTABLE") would technically pass
+     state machine validation but wrote a lie to the lineage event log
+     (claims a transition we never went through).
+
+Fix B.2:
+- Add (CLASSIFIED, VALIDATED_OK): None and (CLASSIFIED, PROMOTED): PROMOTED
+  to the state machine.
+- promotion.py uses from_status=current for both emits — honest event log
+  reflecting the actual transition.
+
+Failure-path emits (VALIDATED_FAIL + REJECTED-on-fail) intentionally
+unchanged — same hardcoded-PROMOTABLE asymmetry but not exercised by the
+success-path smoke. Tracked separately if needed.
+
+Regression test: test_intake_then_promote_with_real_state_machine uses the
+real emit_event + state machine (only BQ writes are mocked) and reproduces
+the InvalidTransition pre-fix.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
 ## Task 5: End-to-end production smoke — promote a real MPS file, verify FK in BQ
 
 **Context:** No new code. Operational verification on production with a real bank file. Mirrors the Phase 4 smoke test pattern.
@@ -771,6 +1117,12 @@ WHERE raw_object_id = "<id>"'
 Row count must be unchanged from step 3.
 
 - [ ] **Step 6: No commit — operational verification only. Document in PR description / STATUS.**
+
+### Task 5 — closure note (2026-05-07)
+
+- **State machine smoke ✅**: full event chain `RAW_INGESTED → SOURCE_RESOLVED → PROMOTION_REQUESTED → VALIDATED_OK → PROMOTED` verificato su `raw_object_id=1524f144-9631-446a-9a24-c71d5e219a54` (MPS_BANCA_ORTI_APPEND, file `ORTI_MPS_20260323.xls`), final status `PROMOTED`.
+- **FK stamping su NEW rows ⏳**: il file scelto era già storicamente ingestito; il parser ha dedupato per `hash_riga` → 0 nuove righe scritte → `raw_object_id` non stampato su righe nuove. Le 98 righe esistenti hanno `raw_object_id IS NULL` (pre-FK historical). La prova end-to-end FK su new rows è in coda al prossimo MPS file fresh.
+- **Scope creep accettato (commit `2b9d26a`)**: l'implementer ha esteso il failure path (transizione `(CLASSIFIED, VALIDATED_FAIL)`, `from_status=current` per `VALIDATED_FAIL` + `REJECTED`) durante lo smoke. Fuori scope stretto Task 4.6 (constraint #4) ma semanticamente coerente con il modello reale (promotion può fallire) e previene il prossimo `InvalidTransition` sul failure path. Tenuto come scope creep accepted, paper trail in PR/STATUS.
 
 ---
 
@@ -1009,7 +1361,10 @@ def cmd_lineage_list(args):
     where = ["1=1"]
     params = []
     if args.status:
-        where.append("c.current_status = @status")
+
+        # Keep LEFT JOIN semantics: rows missing from v_raw_objects_current
+        # are treated as RAW_ONLY instead of being dropped by a WHERE on c.*.
+        where.append("COALESCE(c.current_status, 'RAW_ONLY') = @status")
         params.append(bigquery.ScalarQueryParameter("status", "STRING", args.status))
     if args.source:
         where.append("r.source_name = @source")
@@ -1024,7 +1379,7 @@ def cmd_lineage_list(args):
     SELECT
       r.raw_object_id,
       r.source_name,
-      c.current_status,
+      COALESCE(c.current_status, 'RAW_ONLY') AS current_status,
       r.intake_at,
       r.file_name_original
     FROM `{F_RAW_OBJECTS}` r
