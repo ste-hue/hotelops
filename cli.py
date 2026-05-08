@@ -633,6 +633,7 @@ def cmd_app(args):
     apps = {
         "pf": "condges/app.py",
         "scadenzario": "condges/app_scadenzario.py",
+        "accodamenti": "condges/app_accodamenti.py",
         "reviews": "reviews/app.py",
     }
     app_key = args.app_name or "pf"
@@ -843,7 +844,7 @@ def main():
         "app_name",
         nargs="?",
         default=None,
-        help="App da lanciare: pf (default), scadenzario",
+        help="App da lanciare: pf (default), scadenzario, accodamenti, reviews",
     )
 
     # tesoreria
