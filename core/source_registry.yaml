@@ -58,7 +58,8 @@ sources:
     promotion_policy: AUTO
     detector_category: movimenti_contabili
     raw_storage:
-      backend: drive
+      backend: gcs
+      bucket: hotelops-raw
       path_template: "movimenti_contabili/ORTI"
 
   # ── Esolver scheda contabile — APPEND ─────────────────────────────────────
