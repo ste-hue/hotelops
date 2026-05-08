@@ -13,9 +13,14 @@ from __future__ import annotations
 
 import csv
 import re
+import sys
 from datetime import date
 from io import BytesIO
 from pathlib import Path
+
+# Streamlit Cloud runs this script directly, so the repo root isn't on sys.path
+# and `from condges.X import …` fails. Inject it before the first such import.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import openpyxl
 import pandas as pd
