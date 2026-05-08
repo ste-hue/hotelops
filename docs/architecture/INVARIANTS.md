@@ -1,7 +1,7 @@
 ---
 type: invariants
 domain: HotelOps
-last_updated: 2026-04-30
+last_updated: 2026-05-07
 canonical: repo (was vault HotelOps/INVARIANTS.md)
 ---
 
@@ -14,6 +14,7 @@ canonical: repo (was vault HotelOps/INVARIANTS.md)
 Gruppo Panorama (ORTI + INTUR) ha dati finanziari e operativi frammentati tra ERP (Esolver), PMS (HotelCube), homebanking di 4 banche, Drive, WhatsApp, fogli Excel manuali. Nessuna vista unificata. Decisioni di tesoreria, budget e forecast vengono prese su dati ricostruiti a mano ogni volta.
 
 HotelOps esiste per:
+
 1. **Centralizzare** questi dati in un unico store canonico (BigQuery)
 2. **Servire** audience di business specifiche con interfacce dedicate (Rosa tesoreria, Gasparotto budget, Antonio GM reputation, Mario economato)
 3. **Automatizzare** i cicli che oggi sono manuali (classificazione file, riconciliazione, forecast cassa)
@@ -27,14 +28,14 @@ Le regole che **non devono essere violate**. Se un cambiamento le rompe, non è 
 ### I1. Nessun write a BigQuery senza validation gate
 
 Ogni riga che entra in BQ passa da `core.bq.write.bq_write_validated`, che applica:
+
 - Validazione Pydantic stretta (`core/schemas.py`)
 - Probe di serializzazione (`json.dumps` per-row, prima di qualunque side-effect su BQ)
 - Lineage automatica via `core/pipeline_run.PipelineRun.get_current()` (ContextVar)
 - Single observable log line per write
 
-Hard rule collegata al layer Raw: nessun write diretto nel Canonical è valido
-senza intake Raw tracciato (identità + provenienza verificabile). Eccezioni solo
-via decisione esplicita e verificabile.
+Nota: il boundary Raw/GCS è ora esplicitato in I9 (2026-05-07). I1 resta il
+vincolo sul validation gate dei write.
 
 Mai bypass, mai "solo stavolta". Violare questo invariant significa perdere la garanzia di consistenza dei fatti → tutto il motore a valle diventa inaffidabile.
 
@@ -87,6 +88,24 @@ Primo caso concreto: `v_budget_canonical` come verità risolta del budget multi-
 
 ADR: `docs/adr/2026-04-17_Budget_Canonical_View.md` (da migrare dal vault).
 
+### I9. GCS Raw Layer è il boundary obbligatorio dell'ingest (enforcement progressivo)
+
+Nessun write su fact table canoniche di business è valido senza provenienza
+tracciabile da Raw Object registrato (`raw_object_id`) con `raw_uri` su `gs://...`.
+
+L'enforcement è **progressivo per source**:
+
+- una source entra nel regime obbligatorio quando viene flippata a `raw_storage.backend: gcs`;
+- finché non è flippata, può restare su percorso legacy temporaneo;
+- i blob legacy già caricati con path precedente restano validi e non vanno riscritti retroattivamente.
+
+Corollario operativo:
+
+- ingest diretto a canonical senza passare da intake lineage è comportamento da deprecare;
+- nuove sorgenti discovery-first vanno in `RAW_ONLY` finché non esiste un target canonical esplicito.
+
+ADR: `docs/adr/0004-gcs-mandatory-ingestion-boundary.md`
+
 ## Quando aggiornare questo file
 
 - Nasce un nuovo invariant → aggiungilo, spiega il *perché*
@@ -94,6 +113,7 @@ ADR: `docs/adr/2026-04-17_Budget_Canonical_View.md` (da migrare dal vault).
 - Cambia lo scopo di HotelOps (nuovo gruppo, nuova audience strutturale) → rewrite della sezione "Perché esiste"
 
 **Non aggiornare** questo file quando:
+
 - Aggiungi una fact table (aggiorna `CLAUDE.md` BigQuery section)
 - Aggiungi un detector (aggiorna `ingest/classify.py`)
 - Cambi un comando CLI (aggiorna `CLAUDE.md` Commands section)

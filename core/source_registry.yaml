@@ -227,6 +227,49 @@ sources:
       path_template: "economato"
 
   # ── PMS statistiche — RAW_ONLY (esempio hard gate) ────────────────────────
+  POWERBI_CONSUMI_ORTI_APPEND:
+    system: POWERBI
+    dataset: CONSUMI
+    dataset_label: "HotelCube PowerBI - Consumi Articoli / F&B"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_consumi_economato
+    parser_module: ingest.flussi.ingest_consumi_economato
+    hash_basis: hash_riga
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: pms_statistiche
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/consumi/ORTI"
+    notes: |
+      Source raw-first per export semantic layer HotelCube/PowerBI su consumi
+      articoli. In questa fase resta RAW_ONLY finché non fissiamo parser e
+      contratto canonical dedicato.
+
+  POWERBI_SEMANTICMODEL_ORTI_APPEND:
+    system: POWERBI
+    dataset: SEMANTICMODEL
+    dataset_label: "Mappa semantic model Power BI (fonte HotelCube) - ORTI"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_pms_statistiche
+    parser_module: ingest.flussi.ingest_pms_statistiche
+    hash_basis: hash_riga
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: pms_statistiche
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/semantic_model/ORTI"
+    notes: |
+      File documentale del semantic layer Power BI studiato manualmente.
+      Al momento viene registrato come meta-layer RAW_ONLY per lineage.
+
   POWERBI_CRUSCOTTO_ORTI_APPEND:
     system: POWERBI
     dataset: CRUSCOTTO
