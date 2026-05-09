@@ -60,10 +60,22 @@ def search_messages(service, query: str, max_results: int = 1000) -> Iterator[di
             return
 
 
-def get_message(service, msg_id: str) -> GmailMessage:
+def get_thread(service, thread_id: str) -> list[GmailMessage]:
+    """Fetch all messages in a thread (auto Pass 2: thread expansion).
+
+    A thread fetched via threads.get includes every message in the conversation,
+    even ones that didn't directly match the search query.
+    """
     full = (
-        service.users().messages().get(userId="me", id=msg_id, format="full").execute()
+        service.users()
+        .threads()
+        .get(userId="me", id=thread_id, format="full")
+        .execute()
     )
+    return [_message_from_full(m) for m in full.get("messages", [])]
+
+
+def _message_from_full(full: dict) -> GmailMessage:
     headers = {
         h["name"].lower(): h["value"]
         for h in full.get("payload", {}).get("headers", [])

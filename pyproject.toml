@@ -13,6 +13,7 @@ dependencies = [
   "pandas>=2.0",
   "google-cloud-bigquery>=3.20",
   "google-cloud-storage>=2.14",
+  "google-api-python-client>=2.100",
   "pydantic>=2.0",
 ]
 
@@ -38,7 +39,7 @@ markers = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "ingest*", "condges*"]
+include = ["core*", "ingest*", "condges*", "workspace*"]
 
 [tool.setuptools]
 py-modules = ["cli"]

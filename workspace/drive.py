@@ -5,11 +5,24 @@ import io
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-from .auth import drive_credentials
+from .auth import drive_read_credentials, drive_write_credentials
 
 
-def get_drive_service():
-    return build("drive", "v3", credentials=drive_credentials(), cache_discovery=False)
+def get_drive_writer():
+    """Drive service for writing output (SA identity, drive.file scope)."""
+    return build(
+        "drive", "v3", credentials=drive_write_credentials(), cache_discovery=False
+    )
+
+
+def get_drive_reader(subject: str):
+    """Drive service for reading user's Drive (impersonated, drive.readonly scope)."""
+    return build(
+        "drive",
+        "v3",
+        credentials=drive_read_credentials(subject),
+        cache_discovery=False,
+    )
 
 
 def ensure_subfolder(service, parent_id: str, name: str) -> str:
