@@ -69,7 +69,6 @@
 - **Test cassa giornaliera su 1 giorno reale** — usare nuovo stream `f_accodamenti` per validare `condges/cassa_giornaliera.py` vs riferimento manuale.
 - **Materializzare** v_ledger_movimenti + v_condges_banca_dettaglio su BQ.
 - **Schema fix `f_chiusura_mensile`** — creare tabella o rimuovere riferimenti dalle pipeline (drift schema 🔴).
-- **Inviare email a Lara Durisotti** (bozza pronta) — sblocca revman.
 - **Documento interno `docs/hotelcube-api-extension.md`** — mappatura 5 export + 12 report Power BI Z_DataSet.
 - **Discussione `SOCIETA_DEFAULT = "INTUR"`** — righe `ingresso/accodamenti/ORTI/…` taggate INTUR via default.
 - **Backfill `file_sorgente` 277 righe vecchie** (cosmetico, non blocca query).
