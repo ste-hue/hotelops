@@ -16,16 +16,9 @@ def test_pilot_mps_banca_orti_uses_gcs_backend() -> None:
     assert src.lifecycle == "APPEND"
 
 
-def test_other_sources_remain_drive() -> None:
-    """Bulk flip is a separate PR; verify only pilot moved."""
-    reg = load_registry()
-    not_pilot_gcs = []
-    # SourceRegistry exposes sources via the public `sources` attribute.
-    for name, src in reg.sources.items():
-        if name == PILOT_SOURCE:
-            continue
-        if src.raw_storage and src.raw_storage.backend == "gcs":
-            not_pilot_gcs.append(name)
-    assert not_pilot_gcs == [], (
-        f"Only the pilot should be on gcs in this PR; found extra: {not_pilot_gcs}"
-    )
+# NOTE: test_other_sources_remain_drive removed on verticals-v2 branch.
+# It enforced "only MPS_BANCA_ORTI on gcs" which was a Phase 4 single-pilot
+# constraint. The verticals-v2 strategy is "every source on gcs eventually"
+# (sync-first to nuke), so this assertion contradicts the new direction.
+# See KERNEL.md and .cursor/plans/platform-canonical-boundary_*.plan.md
+# (rev 3, 2026-05-09).
