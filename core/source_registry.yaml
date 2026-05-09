@@ -63,6 +63,24 @@ sources:
       bucket: hotelops-raw
       path_template: "movimenti_contabili/ORTI"
 
+  ESOLVER_MOVIMENTI_INTUR_APPEND:
+    system: ESOLVER
+    dataset: MOVIMENTI
+    dataset_label: "Prima nota Esolver (LISTAMOVCONT)"
+    societa: INTUR
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_movimenti_contabili
+    parser_module: ingest.flussi.ingest_movimenti_contabili
+    hash_basis: hash_riga
+    loop_targets: [monthly_close, budget_canonical]
+    promotion_policy: AUTO
+    detector_category: movimenti_contabili
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "movimenti_contabili/INTUR"
+
   # ── Esolver scheda contabile — APPEND ─────────────────────────────────────
   ESOLVER_SCHEDA_ORTI_APPEND:
     system: ESOLVER
