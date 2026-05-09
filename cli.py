@@ -57,6 +57,7 @@ _load_dotenv()
 # noqa: E402 — import after _load_dotenv() è intenzionale: i submodule possono
 # leggere env var al toplevel, quindi .env va caricato prima.
 from reviews.cli_commands import cmd_reviews  # noqa: E402
+from workspace.cli_commands import cmd_workspace  # noqa: E402
 
 
 # ── Lineage: intake / promote / lineage ─────────────────────────────────────
@@ -309,6 +310,45 @@ def main():
         "--dry-run", action="store_true", help="Preview senza azioni"
     )
 
+    # ── Workspace (Gmail/Drive via DWD service account) ─────────────────────
+    p_ws = sub.add_parser(
+        "workspace",
+        help="Workspace API ops (Gmail/Drive via service account DWD)",
+    )
+    ws_sub = p_ws.add_subparsers(dest="workspace_action")
+    p_mc = ws_sub.add_parser(
+        "mine-capex",
+        help="Mine email threads + attachments for a CapEx project",
+    )
+    p_mc.add_argument(
+        "--project", required=True, help="Project code (es. HPAN25PIANO1)"
+    )
+    p_mc.add_argument(
+        "--mailboxes",
+        required=True,
+        help="Comma-separated emails (es. gm@panoramagroup.it,amministrazione@panoramagroup.it)",
+    )
+    p_mc.add_argument(
+        "--output-folder",
+        required=True,
+        help="Drive folder ID (must be shared with workspace-controller SA as Editor)",
+    )
+    p_mc.add_argument(
+        "--keywords",
+        help="Comma-separated project keywords (default: project-specific built-in)",
+    )
+    p_mc.add_argument(
+        "--fuzzy",
+        help="Comma-separated fuzzy keywords for Pass 3 (es. preventivo,offerta). Off by default.",
+    )
+    p_mc.add_argument(
+        "--extra",
+        help="Extra Gmail query filter appended to passes (es. 'after:2024/01/01')",
+    )
+    p_mc.add_argument(
+        "--dry-run", action="store_true", help="Search only, no Drive uploads"
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -320,6 +360,7 @@ def main():
         "promote": cmd_promote,
         "lineage": cmd_lineage_dispatch,
         "reviews": cmd_reviews,
+        "workspace": cmd_workspace,
     }
     handler = handlers.get(args.command)
     if handler is None:
