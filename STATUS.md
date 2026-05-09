@@ -23,6 +23,7 @@
 - 2026-04-23: **parser account-based + hardening cassa + shell scripts** — c72e66a/966542d, 34 test verdi.
 
 ## Decisioni aperte
+- **Forward-only GCS su main + `verticals-v2` frozen** (deciso 2026-05-09): `verticals-v2` è laboratorio architettura (kernel preservato + condges/ingest cancellati) ma **non si tocca, non si mergea, non si usa per operare**. Main resta il branch operativo. Su main forward-only GCS in modalità **additiva**: nuovi file passano via `hotelops intake` → GCS → `f_raw_objects` (lineage), ma i parser legacy continuano a girare invariati. NO Phoenix merge. NO drop dati. NO cherry-pick massivo. Rotta: "legacy operativo + GCS forward-only progressivo". Primo loop reale che validerà la nuova architettura = `cash_control v1` (vedi Prossimi passi).
 - Budget Apify: **$25/mese** hard limit (deciso 2026-04-09)
 - Doc tecniche → `docs/`. Business/ontology → vault. Deciso 2026-04-09.
 - Refactoring cleanup: spec esiste, non prioritizzato.
@@ -55,6 +56,7 @@
 - 🟡 Gap residuo crash totale `send_email` → `mark_alerts_sent` — fix `af685b2` cattura streaming buffer; processo morto tra send_email e persist_pending non lascia traccia locale. Scelta consapevole "alert duplicato > alert perso", blast radius ridotto.
 
 ## Prossimi passi
+- **`cash_control v1` su main** — primo loop minimo end-to-end che rende vera la nuova architettura. Input: 3 fonti già `backend: gcs` (`MPS_BANCA_ORTI_APPEND`, `ESOLVER_MOVIMENTI_ORTI_APPEND`, `ESOLVER_SCHEDA_ORTI_APPEND`). Output: saldo reale + movimenti banca + confronto banca vs contabilità + freshness + alert divergenze. Costruire sopra parser esistenti + GCS lineage boundary, **senza rompere CONDGES legacy** (`pf`/`bva`/`chiudi`/`saldo` continuano a girare). Supersede la riga storica "Spec loop cassa giornaliera quadra y/n (post-Doc-Refresh)": ora si fa, non si rimanda.
 - **FK end-to-end smoke su MPS file fresh** — al prossimo export bancario non già storico, rilanciare `intake + promote` e verificare `f_banche_movimenti.raw_object_id IS NOT NULL` con JOIN risolto a `f_raw_objects`. Chiude la prova FK su NEW rows pending da Task 5.
 - **Bulk extension FK pattern** — quando una nuova source flippa a `backend: gcs`, aggiungere `raw_object_id` alla sua canonical_table nello stesso commit (template: migration `2026_05_06_add_raw_object_id_f_banche_movimenti.py`).
 - **Doc Refresh Sprint Step 3-9** — README rewrite (diff proposto, OK pendente) → CLAUDE.md Project Overview + Architecture (Step 4) → CLAUDE.md sezioni mancanti (Step 5) → counts + tests refresh (Step 6) → Cutover decision in vault (Step 7) → TODO markers in `ingest/banca/ingest.py` (Step 8) → Agent Epistemology promotion in AI_INSTRUCTIONS (Step 9). Plan-First per ogni step.
