@@ -134,8 +134,11 @@ class TestParseFileXlsx:
         assert r3["data_registrazione"] == "2026-03-02"
         assert r3["imp_avere"] == 916.0
 
-    def test_pnc_id_extraction(self, tmp_path):
-        """PNC number is extracted as id_documento."""
+    def test_id_documento_and_progr_riga(self, tmp_path):
+        """XLSX report does not expose Esolver document id, so id_documento is NULL.
+
+        num_progr_riga is 1-based to align with legacy XLS parser output.
+        """
         from ingest.flussi.ingest_movimenti_contabili import parse_file_xlsx
         import logging
 
@@ -143,6 +146,33 @@ class TestParseFileXlsx:
         logger = logging.getLogger("test")
         rows = parse_file_xlsx(path, "ORTI", logger)
 
-        assert rows[0]["id_documento"] == 1  # "PNC 1"
-        assert rows[0]["num_progr_riga"] == 0  # first row within this PNC+date group
-        assert rows[1]["num_progr_riga"] == 1  # second row
+        assert rows[0]["id_documento"] is None
+        assert rows[0]["num_progr_riga"] == 1  # first row within this PNC+date group
+        assert rows[1]["num_progr_riga"] == 2  # second row
+
+    def test_hash_content_based(self, tmp_path):
+        """Same content → same hash. PNC/idx do not influence the hash.
+
+        Regression: this contract is what allows dedup against legacy data and
+        across re-extractions with different report layouts.
+        """
+        from ingest.flussi.ingest_movimenti_contabili import (
+            make_hash_content,
+            parse_file_xlsx,
+        )
+        import logging
+
+        path = _make_xlsx(tmp_path, SAMPLE_ROWS)
+        logger = logging.getLogger("test")
+        rows = parse_file_xlsx(path, "ORTI", logger)
+
+        r0 = rows[0]
+        expected = make_hash_content(
+            "ORTI",
+            "2026-02-26",
+            "330301",
+            452.74,
+            0.0,
+            "Pagamento con Bonifico SEPA FT 678",
+        )
+        assert r0["hash_riga"] == expected
