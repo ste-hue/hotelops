@@ -77,6 +77,7 @@ from core.bq.client import get_client  # noqa: E402
 from core.config import PROJECT  # noqa: E402
 from core.datahub_sync import DATAHUB_ROOT  # noqa: E402
 from reviews.cli_commands import cmd_reviews  # noqa: E402
+from workspace.cli_commands import cmd_workspace  # noqa: E402
 
 # ── Lazy BQ client ──────────────────────────────────────────────────────────
 
@@ -1047,6 +1048,50 @@ def main():
         "--limit", type=int, default=20, help="Max righe in --list (default 20)"
     )
 
+    # ── Workspace (Gmail/Drive via DWD service account) ─────────────────────
+    p_ws = sub.add_parser(
+        "workspace",
+        help="Workspace API ops (Gmail/Drive via service account DWD)",
+    )
+    ws_sub = p_ws.add_subparsers(dest="workspace_action")
+    p_mc = ws_sub.add_parser(
+        "mine-capex",
+        help="Mine email threads + attachments for a CapEx project",
+    )
+    p_mc.add_argument(
+        "--project", required=True, help="Project code (es. HPAN25PIANO1)"
+    )
+    p_mc.add_argument(
+        "--mailboxes",
+        required=True,
+        help="Comma-separated emails (es. gm@panoramagroup.it,amministrazione@panoramagroup.it)",
+    )
+    p_mc.add_argument(
+        "--output-folder",
+        required=True,
+        help="Drive folder ID (must be accessible by --write-as user)",
+    )
+    p_mc.add_argument(
+        "--write-as",
+        default="stefano@panoramagroup.it",
+        help="User to impersonate for Drive writes (needs storage quota). Default: stefano@panoramagroup.it",
+    )
+    p_mc.add_argument(
+        "--keywords",
+        help="Comma-separated project keywords (default: project-specific built-in)",
+    )
+    p_mc.add_argument(
+        "--fuzzy",
+        help="Comma-separated fuzzy keywords for Pass 3 (es. preventivo,offerta). Off by default.",
+    )
+    p_mc.add_argument(
+        "--extra",
+        help="Extra Gmail query filter appended to passes (es. 'after:2024/01/01')",
+    )
+    p_mc.add_argument(
+        "--dry-run", action="store_true", help="Search only, no Drive uploads"
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -1078,6 +1123,7 @@ def main():
         "intake": cmd_intake,
         "promote": cmd_promote,
         "lineage": cmd_lineage_dispatch,
+        "workspace": cmd_workspace,
     }
 
     handlers[args.command](args)
