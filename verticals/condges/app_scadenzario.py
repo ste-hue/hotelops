@@ -26,7 +26,7 @@ import openpyxl
 import pandas as pd
 import streamlit as st
 
-from condges.scadenze_parse import parse_scadenze
+from verticals.condges.scadenze_parse import parse_scadenze
 
 # -- Config --------------------------------------------------------------------
 

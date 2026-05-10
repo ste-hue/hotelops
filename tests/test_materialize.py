@@ -5,7 +5,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from condges.materialize_reconciliation import (
+from verticals.condges.materialize_reconciliation import (
     _compute_status,
     materialize_reconciliation_state,
 )

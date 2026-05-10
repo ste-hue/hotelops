@@ -3,7 +3,7 @@
 No yellow highlights — clean muted palette only.
 
 Usage:
-    from condges.export_excel import generate_tesoreria_excel
+    from verticals.condges.export_excel import generate_tesoreria_excel
     buf = generate_tesoreria_excel(societa, anno, cashflow_rows, voci_data, fornitori, saldi_banca)
     with open("tesoreria.xlsx", "wb") as f:
         f.write(buf.getvalue())
@@ -17,7 +17,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from condges.cashflow import CashflowRow
+from verticals.condges.cashflow import CashflowRow
 
 MESI = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"]
 

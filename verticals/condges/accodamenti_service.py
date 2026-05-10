@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 from google.cloud import bigquery
 
-from condges.cassa_giornaliera import run_accodamenti_to_excel
+from verticals.condges.cassa_giornaliera import run_accodamenti_to_excel
 from core.bq.client import get_client
 from ingest.banca.ingest_accodamenti import BQ_TABLE, parse_and_transform, write_to_bq
 

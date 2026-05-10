@@ -64,7 +64,7 @@ _load_dotenv()
 
 # noqa: E402 — import after _load_dotenv() è intenzionale: i submodule possono
 # leggere env var al toplevel, quindi .env va caricato prima.
-from condges.cli_commands import (  # noqa: E402
+from verticals.condges.cli_commands import (  # noqa: E402
     cmd_accodamenti,
     cmd_chiudi,
     cmd_docs,
@@ -76,7 +76,7 @@ from condges.cli_commands import (  # noqa: E402
 from core.bq.client import get_client  # noqa: E402
 from core.config import PROJECT  # noqa: E402
 from core.datahub_sync import DATAHUB_ROOT  # noqa: E402
-from reviews.cli_commands import cmd_reviews  # noqa: E402
+from verticals.reviews.cli_commands import cmd_reviews  # noqa: E402
 from workspace.cli_commands import cmd_workspace  # noqa: E402
 
 # ── Lazy BQ client ──────────────────────────────────────────────────────────
@@ -147,7 +147,7 @@ def cmd_bva(args):
 
 def cmd_previsione(args):
     """Inserisci/aggiorna previsione budget."""
-    from condges.update_previsione import update_previsione, resolve_voce
+    from verticals.condges.update_previsione import update_previsione, resolve_voce
 
     voce_id = resolve_voce(args.voce) or args.voce.upper()
     societa = args.societa or "ORTI"
@@ -155,12 +155,12 @@ def cmd_previsione(args):
 
     if "-" in args.mesi:
         parts = args.mesi.split("-")
-        from condges.update_previsione import resolve_mese
+        from verticals.condges.update_previsione import resolve_mese
 
         mese_start = resolve_mese(parts[0]) or int(parts[0])
         mese_end = resolve_mese(parts[1]) or int(parts[1])
     else:
-        from condges.update_previsione import resolve_mese
+        from verticals.condges.update_previsione import resolve_mese
 
         mese_start = resolve_mese(args.mesi) or int(args.mesi)
         mese_end = mese_start
@@ -705,10 +705,10 @@ def cmd_app(args):
     import subprocess
 
     apps = {
-        "pf": "condges/app.py",
-        "scadenzario": "condges/app_scadenzario.py",
-        "accodamenti": "condges/app_accodamenti.py",
-        "reviews": "reviews/app.py",
+        "pf": "verticals/condges/app_cdg.py",
+        "scadenzario": "verticals/condges/app_scadenzario.py",
+        "accodamenti": "verticals/condges/app_accodamenti.py",
+        "reviews": "verticals/reviews/app.py",
     }
     app_key = args.app_name or "pf"
     app_path = apps.get(app_key)
@@ -726,8 +726,8 @@ def cmd_tesoreria(args):
     """Launch Streamlit tesoreria app."""
     import subprocess
 
-    app_path = Path(__file__).parent / "condges" / "tesoreria.py"
-    print("  Lancio: streamlit run condges/tesoreria.py")
+    app_path = Path(__file__).parent / "verticals" / "condges" / "tesoreria.py"
+    print("  Lancio: streamlit run verticals/condges/tesoreria.py")
     subprocess.run(["streamlit", "run", str(app_path)], check=True)
 
 
@@ -736,7 +736,7 @@ def cmd_tesoreria(args):
 
 def cmd_reconcile(args):
     """Bank reconciliation."""
-    from condges.reconcile_banca import run_reconciliation
+    from verticals.condges.reconcile_banca import run_reconciliation
 
     print(f"\n{'═' * 60}")
     print(f"  RICONCILIAZIONE BANCA  {args.societa} / {args.conto}")

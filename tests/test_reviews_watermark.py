@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from reviews.ingest import filter_by_watermark
+from verticals.reviews.ingest import filter_by_watermark
 
 
 @pytest.fixture(autouse=True)
@@ -125,7 +125,7 @@ def test_read_watermarks_returns_dict(monkeypatch):
     ]
 
     with patch("google.cloud.bigquery.Client", return_value=fake_client):
-        from reviews.ingest import read_watermarks
+        from verticals.reviews.ingest import read_watermarks
 
         result = read_watermarks()
 
@@ -144,7 +144,7 @@ def test_read_watermarks_empty(monkeypatch):
         MagicMock(result=MagicMock(return_value=iter([]))),
     ]
     with patch("google.cloud.bigquery.Client", return_value=fake_client):
-        from reviews.ingest import read_watermarks
+        from verticals.reviews.ingest import read_watermarks
 
         assert read_watermarks() == {}
 

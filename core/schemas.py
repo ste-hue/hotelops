@@ -574,7 +574,7 @@ class ReviewRow(BaseModel):
 class ApifyRunRow(BaseModel):
     """Schema for f_apify_runs — one row per Apify actor run (cost observability).
 
-    Source: reviews/scrape.py after each client.actor().call().
+    Source: verticals/reviews/scrape.py after each client.actor().call().
     Pattern: APPEND (no dedup — run_id is unique per Apify invocation).
     """
 

@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from openpyxl import load_workbook
 
-from condges.cassa_giornaliera import (
+from verticals.condges.cassa_giornaliera import (
     build_daily_reconciliation,
     build_detail_reconciliation,
     classify_payment_account,
@@ -311,7 +311,7 @@ def test_fattura_without_ivas_is_skipped_with_warning(caplog):
         "rigs": [{"imponibile": Decimal("500")}],
         "ivas": [],
     }
-    with caplog.at_level(logging.WARNING, logger="condges.cassa_giornaliera"):
+    with caplog.at_level(logging.WARNING, logger="verticals.condges.cassa_giornaliera"):
         rows = build_daily_reconciliation([], [], [fattura])
     assert rows == []
     assert any("iva" in rec.message.lower() for rec in caplog.records)

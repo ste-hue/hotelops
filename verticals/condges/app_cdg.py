@@ -23,7 +23,7 @@ import streamlit as st
 from io import BytesIO
 
 from core import config as cfg
-from condges.cdg_engine import compute_ce_cascade, compute_indicatori
+from verticals.condges.cdg_engine import compute_ce_cascade, compute_indicatori
 
 MESI_NOMI = [
     "Gen",
@@ -680,7 +680,7 @@ def page_budget(
         # ── Year-end projection per codice conto ───────────────────────────
         st.subheader("Proiezione Fine Anno")
 
-        from condges.cdg_engine import compute_proiezione_anno
+        from verticals.condges.cdg_engine import compute_proiezione_anno
 
         stag_df = load_stagionalita()
         stag_by_bu = {}

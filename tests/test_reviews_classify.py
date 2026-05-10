@@ -1,6 +1,6 @@
 """Tests for reviews NLP classification."""
 
-from reviews.classify import build_prompt, parse_batch_classification, parse_classification
+from verticals.reviews.classify import build_prompt, parse_batch_classification, parse_classification
 
 
 def test_parse_valid_json():

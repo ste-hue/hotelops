@@ -31,7 +31,7 @@ def _make_sintetica_workbook(rows, header_dates=None):
 
 class TestParseSinteticaScadenze:
     def test_parses_codice_and_nome(self, tmp_path):
-        from condges.scadenzario_excel import parse_sintetica_scadenze
+        from verticals.condges.scadenzario_excel import parse_sintetica_scadenze
         wb = _make_sintetica_workbook([
             ("264 PANORAMA COMPANY S.R.L.", -1000, -500, -500),
         ])
@@ -43,7 +43,7 @@ class TestParseSinteticaScadenze:
         assert result[0]["nome"] == "PANORAMA COMPANY S.R.L."
 
     def test_parses_buckets_from_headers(self, tmp_path):
-        from condges.scadenzario_excel import parse_sintetica_scadenze
+        from verticals.condges.scadenzario_excel import parse_sintetica_scadenze
         wb = _make_sintetica_workbook([
             ("1 FORNITORE TEST", -1500, -500, -600, -400),
         ])
@@ -57,7 +57,7 @@ class TestParseSinteticaScadenze:
         assert months == [5, 6, 7]
 
     def test_skips_rows_without_numeric_prefix(self, tmp_path):
-        from condges.scadenzario_excel import parse_sintetica_scadenze
+        from verticals.condges.scadenzario_excel import parse_sintetica_scadenze
         wb = _make_sintetica_workbook([
             ("264 PANORAMA S.R.L.", -1000, -1000),
             ("Totale", -1000, -1000),
@@ -68,7 +68,7 @@ class TestParseSinteticaScadenze:
         assert len(result) == 1
 
     def test_handles_positive_amounts(self, tmp_path):
-        from condges.scadenzario_excel import parse_sintetica_scadenze
+        from verticals.condges.scadenzario_excel import parse_sintetica_scadenze
         wb = _make_sintetica_workbook([
             ("1008 MIELE SPA", 2294.28, 2294.28),
         ])
@@ -80,7 +80,7 @@ class TestParseSinteticaScadenze:
 
 class TestMapToVoci:
     def test_maps_supplier_to_voce(self):
-        from condges.scadenzario_excel import map_to_voci
+        from verticals.condges.scadenzario_excel import map_to_voci
         partite = [
             {"codice_fornitore": 1, "nome": "LE CROISSANT", "totale": -1000,
              "scaduto": -500, "buckets": {5: -500}},
@@ -92,7 +92,7 @@ class TestMapToVoci:
         assert unmapped == []
 
     def test_unmapped_supplier_goes_to_unmapped_list(self):
-        from condges.scadenzario_excel import map_to_voci
+        from verticals.condges.scadenzario_excel import map_to_voci
         partite = [
             {"codice_fornitore": 9999, "nome": "UNKNOWN", "totale": -100,
              "scaduto": -100, "buckets": {}},
@@ -103,7 +103,7 @@ class TestMapToVoci:
         assert unmapped[0]["codice_fornitore"] == 9999
 
     def test_multiple_suppliers_same_voce(self):
-        from condges.scadenzario_excel import map_to_voci
+        from verticals.condges.scadenzario_excel import map_to_voci
         partite = [
             {"codice_fornitore": 1, "nome": "A", "totale": -500,
              "scaduto": -500, "buckets": {}},
@@ -117,7 +117,7 @@ class TestMapToVoci:
 
 class TestLoadFornitoriMap:
     def test_loads_csv(self, tmp_path):
-        from condges.scadenzario_excel import load_fornitori_map
+        from verticals.condges.scadenzario_excel import load_fornitori_map
         csv_path = tmp_path / "d_fornitori.csv"
         csv_path.write_text(
             "codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany\n"
@@ -146,14 +146,14 @@ class TestGenerateExcel:
         return mapped
 
     def test_creates_riepilogo_sheet(self, tmp_path):
-        from condges.scadenzario_excel import generate_excel
+        from verticals.condges.scadenzario_excel import generate_excel
         out = tmp_path / "test.xlsx"
         generate_excel(self._sample_data(), None, [], out, bucket_months=[5, 6, 7])
         wb = openpyxl.load_workbook(out)
         assert "Riepilogo" in wb.sheetnames
 
     def test_creates_per_voce_sheets(self, tmp_path):
-        from condges.scadenzario_excel import generate_excel
+        from verticals.condges.scadenzario_excel import generate_excel
         out = tmp_path / "test.xlsx"
         generate_excel(self._sample_data(), None, [], out, bucket_months=[5, 6, 7])
         wb = openpyxl.load_workbook(out)
@@ -161,7 +161,7 @@ class TestGenerateExcel:
         assert "Utenze" in wb.sheetnames
 
     def test_riepilogo_has_totals(self, tmp_path):
-        from condges.scadenzario_excel import generate_excel
+        from verticals.condges.scadenzario_excel import generate_excel
         out = tmp_path / "test.xlsx"
         generate_excel(self._sample_data(), None, [], out, bucket_months=[5, 6, 7])
         wb = openpyxl.load_workbook(out, data_only=True)
@@ -173,7 +173,7 @@ class TestGenerateExcel:
         assert values.get("totale_col") is not None
 
     def test_unmapped_sheet_created_when_needed(self, tmp_path):
-        from condges.scadenzario_excel import generate_excel
+        from verticals.condges.scadenzario_excel import generate_excel
         out = tmp_path / "test.xlsx"
         unmapped = [{"codice_fornitore": 999, "nome": "UNKNOWN",
                      "totale": -100, "scaduto": -100, "buckets": {}}]
@@ -182,7 +182,7 @@ class TestGenerateExcel:
         assert "DA VERIFICARE" in wb.sheetnames
 
     def test_no_unmapped_sheet_when_all_mapped(self, tmp_path):
-        from condges.scadenzario_excel import generate_excel
+        from verticals.condges.scadenzario_excel import generate_excel
         out = tmp_path / "test.xlsx"
         generate_excel(self._sample_data(), None, [], out, bucket_months=[5])
         wb = openpyxl.load_workbook(out)
@@ -192,7 +192,7 @@ class TestGenerateExcel:
 class TestLoadPfForecasts:
     def test_parses_uscite_rows(self, tmp_path):
         """Test parsing Rosa's PF Excel uscite rows."""
-        from condges.scadenzario_excel import load_pf_forecasts
+        from verticals.condges.scadenzario_excel import load_pf_forecasts
         import openpyxl
 
         wb = openpyxl.Workbook()
@@ -220,7 +220,7 @@ class TestLoadPfForecasts:
 
 class TestCascadeScaduto:
     def test_moves_overdue_to_current_month(self):
-        from condges.scadenzario_excel import cascade_scaduto
+        from verticals.condges.scadenzario_excel import cascade_scaduto
 
         suppliers = [
             {
@@ -248,7 +248,7 @@ class TestCascadeScaduto:
         assert result[1]["scaduto"] == 0
 
     def test_adds_to_existing_current_month(self):
-        from condges.scadenzario_excel import cascade_scaduto
+        from verticals.condges.scadenzario_excel import cascade_scaduto
 
         suppliers = [
             {
@@ -263,7 +263,7 @@ class TestCascadeScaduto:
         assert result[0]["buckets"][4] == 500
 
     def test_zero_scaduto_unchanged(self):
-        from condges.scadenzario_excel import cascade_scaduto
+        from verticals.condges.scadenzario_excel import cascade_scaduto
 
         suppliers = [
             {
@@ -320,7 +320,7 @@ def _make_pf_fixture(tmp_path):
 
 class TestWriteBackToPf:
     def test_places_amounts_correctly(self, tmp_path):
-        from condges.scadenzario_excel import write_back_to_pf
+        from verticals.condges.scadenzario_excel import write_back_to_pf
 
         pf_path = _make_pf_fixture(tmp_path)
 
@@ -362,7 +362,7 @@ class TestWriteBackToPf:
         assert len(summary["Materie Prime"]) == 2
 
     def test_preserves_existing_data(self, tmp_path):
-        from condges.scadenzario_excel import write_back_to_pf
+        from verticals.condges.scadenzario_excel import write_back_to_pf
 
         pf_path = _make_pf_fixture(tmp_path)
 
@@ -395,7 +395,7 @@ class TestWriteBackToPf:
         assert ws_mp.cell(row=5, column=12).value == 9999  # preserved
 
     def test_skips_unmapped_nome_pf(self, tmp_path):
-        from condges.scadenzario_excel import write_back_to_pf
+        from verticals.condges.scadenzario_excel import write_back_to_pf
 
         pf_path = _make_pf_fixture(tmp_path)
 
@@ -421,7 +421,7 @@ class TestWriteBackToPf:
 
 class TestBuildMonthColMap:
     def test_takes_2026_columns_for_duplicate_months(self):
-        from condges.scadenzario_excel import _build_month_col_map
+        from verticals.condges.scadenzario_excel import _build_month_col_map
 
         wb = openpyxl.Workbook()
         ws = wb.active

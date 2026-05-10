@@ -8,7 +8,7 @@ follow-up).
 
 import pytest
 
-from reviews.scrape import MAX_REVIEWS_PER_PROPERTY, _build_input
+from verticals.reviews.scrape import MAX_REVIEWS_PER_PROPERTY, _build_input
 
 
 @pytest.fixture(autouse=True)
@@ -93,7 +93,7 @@ def test_unknown_platform_raises():
 def test_persist_apify_run_validates_and_inserts():
     """persist_apify_run should validate via schema and call insert_rows_json."""
     from unittest.mock import MagicMock, patch
-    from reviews.scrape import persist_apify_run
+    from verticals.reviews.scrape import persist_apify_run
 
     fake_client = MagicMock()
     fake_client.insert_rows_json.return_value = []
@@ -125,7 +125,7 @@ def test_persist_apify_run_validates_and_inserts():
 def test_persist_apify_run_accepts_none_cost():
     """cost_usd=None is valid (Apify doesn't always return usageTotalUsd)."""
     from unittest.mock import MagicMock, patch
-    from reviews.scrape import persist_apify_run
+    from verticals.reviews.scrape import persist_apify_run
 
     fake_client = MagicMock()
     fake_client.insert_rows_json.return_value = []
@@ -148,7 +148,7 @@ def test_persist_apify_run_accepts_none_cost():
 def test_persist_apify_run_swallows_bq_errors():
     """BQ failures must never raise — costs are observability, not blocker."""
     from unittest.mock import MagicMock, patch
-    from reviews.scrape import persist_apify_run
+    from verticals.reviews.scrape import persist_apify_run
 
     fake_client = MagicMock()
     fake_client.insert_rows_json.side_effect = RuntimeError("BQ down")

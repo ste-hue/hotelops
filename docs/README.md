@@ -27,7 +27,7 @@ Ogni file in `procedures/` e `protocols/` **deve** avere front-matter YAML:
 
 ```yaml
 ---
-subsystem: ingest              # macro-area (ingest, condges, reviews, core)
+subsystem: ingest              # macro-area (ingest, core, verticals/<name>)
 code_paths:                    # path del codice che questo doc descrive
   - ingest/classify.py
   - core/registry.yaml

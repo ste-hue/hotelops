@@ -10,7 +10,7 @@ Logica portata da reconciliation_dino amputata di IMPPN, fingerprint state,
 CSV writer e Dino account mapping.
 
 Uso programmatico:
-    from condges.cassa_giornaliera import run_accodamenti_to_excel
+    from verticals.condges.cassa_giornaliera import run_accodamenti_to_excel
     run_accodamenti_to_excel(Path("~/datahub/ingresso/accodamenti/ORTI"),
                               Path("~/Desktop/Riconciliazione.xlsx"))
 """

@@ -8,7 +8,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-from reviews.config import REPORT_RECIPIENTS
+from verticals.reviews.config import REPORT_RECIPIENTS
 
 log = logging.getLogger(__name__)
 

@@ -4,7 +4,7 @@ Supports both ORTI and INTUR variants. Returns a PFData object with
 structured data ready for BigQuery ingestion.
 
 Usage:
-    from condges.parse_pf import parse_pf
+    from verticals.condges.parse_pf import parse_pf
 
     with open("PF_ORTI.xlsx", "rb") as f:
         pf = parse_pf(f)

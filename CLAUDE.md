@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > 4. `CLAUDE.md` (this file) — repo mechanics: commands, schemas, pipeline internals.
 >
 > **Goal di lungo termine**: HotelOps è un **digital twin** delle vere operazioni del business. 3 layer:
-> - **Code** (`core/`, `ingest/`, `condges/`, `reviews/`): come opera il twin.
+> - **Code** (`core/`, `ingest/`, `verticals/condges/`, `verticals/reviews/`): come opera il twin.
 > - **BigQuery**: cosa il twin osserva.
 > - **Vault `<vault>/HotelOps/`**: meta-knowledge umano della realtà operativa che il twin riflette (people, companies, banks, loans, departments, stories). **Non canonical per fatti tecnici** — può essere stale. Verifica sempre con repo + BQ + utente.
 
@@ -74,8 +74,9 @@ ingest/     <- continuous data flow pipelines
   orchestrate.py <- unified pipeline runner
   banca/         <- bank + PMS pipelines
   flussi/        <- recurring accounting pipelines (movimenti, gasparotto, scheda_contabile, etc.)
-condges/    <- Controllo di Gestione vertical (Streamlit app, Excel gen, forecasts)
-reviews/    <- Vertical #2: Guest reviews (scrape, classify, alert, dashboard)
+verticals/  <- domain apps (each consumes core/ + ingest/)
+  condges/  <- Controllo di Gestione vertical (Streamlit app, Excel gen, forecasts)
+  reviews/  <- Vertical #2: Guest reviews (scrape, classify, alert, dashboard)
 cli.py      <- CLI entry point (hotelops command)
 ```
 
@@ -108,30 +109,30 @@ Spec: `docs/superpowers/specs/2026-05-05-ingest-lineage-gcs-design.md`.
 - `ingest/banca/` -- Bank and PMS pipelines (ingest.py, ingest_accodamenti.py, fetch_drive.py).
 - `ingest/flussi/` -- Recurring accounting pipelines: ingest_movimenti_contabili, ingest_gasparotto, ingest_scheda_contabile, ingest_piano_finanziario_xlsx, ingest_partite_aperte, ingest_bilancino, ingest_consumi_economato, ingest_coperti.
 
-**condges/** -- Vertical #1: Controllo di Gestione (containerizable)
-- `condges/app_cdg.py` -- Streamlit Controllo di Gestione: CE riclassificato, Budget vs Consuntivo, Tesoreria, Indicatori.
-- `condges/cdg_engine.py` -- Pure computation: CE cascade, indicatori (EBITDA, BEP), proiezione anno con stagionalità.
-- `condges/cli_commands.py` -- Extracted CLI handlers (cmd_pf, cmd_health, cmd_chiudi, cmd_saldo, cmd_scadenzario, cmd_accodamenti, cmd_help).
-- `condges/genera_excel.py` -- Generate PF Excel from BQ (color-coded: nero=consuntivo, blu=previsione, verde=formula).
-- `condges/update_previsione.py` -- Write forecasts to f_piano_finanziario_input (DELETE-INSERT, parameterized).
-- `condges/reconcile_banca.py` -- Bank vs ledger reconciliation.
-- `condges/scadenzario_excel.py` -- Excel bridge: scadenzario fornitori → voci PF.
-- `condges/app_scadenzario.py` -- Streamlit scadenzario app.
-- `condges/cassa_giornaliera.py` -- Riconciliazione cassa giornaliera da accodamenti HotelCube. Legge TXT pipe-delimited (H_/R_/C_ × Corr/Mov/Fatt), aggrega per giorno × struttura (POS/contanti/caparre) e produce Excel 2 sheet (Riepilogo + Dettaglio strutture). Porting amputato di `reconciliation_dino` (scartati: IMPPN/TeamSystem, fingerprint state, CSV writer).
+**verticals/condges/** -- Vertical #1: Controllo di Gestione (containerizable)
+- `verticals/condges/app_cdg.py` -- Streamlit Controllo di Gestione: CE riclassificato, Budget vs Consuntivo, Tesoreria, Indicatori.
+- `verticals/condges/cdg_engine.py` -- Pure computation: CE cascade, indicatori (EBITDA, BEP), proiezione anno con stagionalità.
+- `verticals/condges/cli_commands.py` -- Extracted CLI handlers (cmd_pf, cmd_health, cmd_chiudi, cmd_saldo, cmd_scadenzario, cmd_accodamenti, cmd_help).
+- `verticals/condges/genera_excel.py` -- Generate PF Excel from BQ (color-coded: nero=consuntivo, blu=previsione, verde=formula).
+- `verticals/condges/update_previsione.py` -- Write forecasts to f_piano_finanziario_input (DELETE-INSERT, parameterized).
+- `verticals/condges/reconcile_banca.py` -- Bank vs ledger reconciliation.
+- `verticals/condges/scadenzario_excel.py` -- Excel bridge: scadenzario fornitori → voci PF.
+- `verticals/condges/app_scadenzario.py` -- Streamlit scadenzario app.
+- `verticals/condges/cassa_giornaliera.py` -- Riconciliazione cassa giornaliera da accodamenti HotelCube. Legge TXT pipe-delimited (H_/R_/C_ × Corr/Mov/Fatt), aggrega per giorno × struttura (POS/contanti/caparre) e produce Excel 2 sheet (Riepilogo + Dettaglio strutture). Porting amputato di `reconciliation_dino` (scartati: IMPPN/TeamSystem, fingerprint state, CSV writer).
 
-**reviews/** -- Vertical #2: Guest Reviews (Apify scrape -> Claude NLP -> BQ -> alert + dashboard)
-- `reviews/config.py` -- Apify actor IDs, property URLs, thresholds, email recipients.
-- `reviews/scrape.py` -- Trigger Apify actors (Booking, TripAdvisor, Google, Expedia), collect JSON.
-- `reviews/ingest.py` -- Normalize per platform, dedup by review_hash, write to f_reviews.
-- `reviews/classify.py` -- Claude API (Haiku) batch classification: categoria + sentiment + riassunto.
-- `reviews/alert.py` -- Email alert for reviews with punteggio_norm <= 6.0.
-- `reviews/email.py` -- Weekly HTML report + Gmail API send.
-- `reviews/app.py` -- Streamlit dashboard: KPIs, trends, categories, review table.
-- `reviews/cli_commands.py` -- CLI handlers for `hotelops reviews`.
-- `reviews/PROPERTIES.md` -- Reference doc: actors, costs, property URLs, env vars.
+**verticals/reviews/** -- Vertical #2: Guest Reviews (Apify scrape -> Claude NLP -> BQ -> alert + dashboard)
+- `verticals/reviews/config.py` -- Apify actor IDs, property URLs, thresholds, email recipients.
+- `verticals/reviews/scrape.py` -- Trigger Apify actors (Booking, TripAdvisor, Google, Expedia), collect JSON.
+- `verticals/reviews/ingest.py` -- Normalize per platform, dedup by review_hash, write to f_reviews.
+- `verticals/reviews/classify.py` -- Claude API (Haiku) batch classification: categoria + sentiment + riassunto.
+- `verticals/reviews/alert.py` -- Email alert for reviews with punteggio_norm <= 6.0.
+- `verticals/reviews/email.py` -- Weekly HTML report + Gmail API send.
+- `verticals/reviews/app.py` -- Streamlit dashboard: KPIs, trends, categories, review table.
+- `verticals/reviews/cli_commands.py` -- CLI handlers for `hotelops reviews`.
+- `verticals/reviews/PROPERTIES.md` -- Reference doc: actors, costs, property URLs, env vars.
 
 **Root**
-- `cli.py` -- CLI entry point (`hotelops` command). 16 subcommands. Large handlers in `condges/cli_commands.py` and `reviews/cli_commands.py`.
+- `cli.py` -- CLI entry point (`hotelops` command). 16 subcommands. Large handlers in `verticals/condges/cli_commands.py` and `verticals/reviews/cli_commands.py`.
 - `core/registry.yaml` -- Pipeline registry: file types, dest folders, BQ tables, signatures.
 
 ## GCP
@@ -181,12 +182,12 @@ hotelops reviews --stats                   # Stats mese corrente per piattaforma
 hotelops reviews --stats --mese 3          # Stats mese specifico
 hotelops reviews --alert                   # Mostra review che hanno generato alert
 hotelops reviews --report                  # Invia report settimanale manualmente
-streamlit run reviews/app.py               # Dashboard reviews
+streamlit run verticals/reviews/app.py               # Dashboard reviews
 
 # Condges vertical
-streamlit run condges/app_cdg.py               # Controllo di Gestione (CE, Budget, Tesoreria, Indicatori)
-python -m condges.genera_excel --output ~/Desktop/PF.xlsx
-python -m condges.update_previsione --voce utenze --societa ORTI --mesi 4-12 --importo 22000
+streamlit run verticals/condges/app_cdg.py               # Controllo di Gestione (CE, Budget, Tesoreria, Indicatori)
+python -m verticals.condges.genera_excel --output ~/Desktop/PF.xlsx
+python -m verticals.condges.update_previsione --voce utenze --societa ORTI --mesi 4-12 --importo 22000
 
 # Ingest pipelines
 python -m ingest.orchestrate                           # Run everything (sync + ingest all)

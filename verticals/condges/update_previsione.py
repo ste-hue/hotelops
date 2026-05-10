@@ -16,7 +16,7 @@ Usage (CLI):
         --mesi 4-10 --importo 180000 --anno 2026 --note "stagione 2026"
 
 Usage (NanoClaw — programmatic):
-    from condges.update_previsione import update_previsione
+    from verticals.condges.update_previsione import update_previsione
     result = update_previsione(
         voce_id="USCITE_UTENZE", societa_id="ORTI",
         anno=2026, mese_start=4, mese_end=12,

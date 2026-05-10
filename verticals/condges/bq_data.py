@@ -11,7 +11,7 @@ import streamlit as st
 
 from core import config as cfg
 
-from condges.bq_tesoreria_core import fetch_consuntivo_df, fetch_voci_df
+from verticals.condges.bq_tesoreria_core import fetch_consuntivo_df, fetch_voci_df
 
 BQ_PROJECT = "hotelops-suite"
 

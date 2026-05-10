@@ -16,7 +16,7 @@ from typing import BinaryIO
 import openpyxl
 import pandas as pd
 
-from condges.parse_pf import ScadenzarioData
+from verticals.condges.parse_pf import ScadenzarioData
 
 
 def parse_scadenze(file_bytes: BinaryIO) -> tuple[pd.DataFrame, list[int]]:

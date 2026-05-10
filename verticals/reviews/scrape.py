@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from apify_client import ApifyClient
 
-from reviews.config import APIFY_ACTORS, PROPERTIES
+from verticals.reviews.config import APIFY_ACTORS, PROPERTIES
 
 log = logging.getLogger(__name__)
 

@@ -63,16 +63,16 @@ def _cmd_summary(args):
 def _cmd_scrape(args):
     """Trigger manual scrape. Watermark-gated pipeline."""
     from core.pipeline_run import PipelineRun
-    from reviews.scrape import scrape_platform, scrape_all, MAX_REVIEWS_PER_PROPERTY
-    from reviews.ingest import (
+    from verticals.reviews.scrape import scrape_platform, scrape_all, MAX_REVIEWS_PER_PROPERTY
+    from verticals.reviews.ingest import (
         normalize_items,
         dedup_reviews,
         load_to_bq,
         read_watermarks,
         filter_by_watermark,
     )
-    from reviews.classify import classify_reviews
-    from reviews.alert import (
+    from verticals.reviews.classify import classify_reviews
+    from verticals.reviews.alert import (
         send_alerts,
         mark_alerts_sent,
         send_gap_alert,
@@ -276,7 +276,7 @@ def _cmd_report(args):
     from datetime import date, timedelta
     from core.bq.client import get_client
     from core.config import F_REVIEWS
-    from reviews.email import send_weekly_report
+    from verticals.reviews.email import send_weekly_report
 
     if args.start and args.end:
         start = date.fromisoformat(args.start)

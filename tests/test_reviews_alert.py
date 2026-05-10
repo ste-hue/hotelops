@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from reviews.alert import should_alert, render_alert_body
-from reviews.email import render_weekly_report
+from verticals.reviews.alert import should_alert, render_alert_body
+from verticals.reviews.email import render_weekly_report
 
 
 @pytest.fixture(autouse=True)
@@ -93,7 +93,7 @@ def test_render_weekly_report():
 
 def test_send_alerts_applies_grace_window_for_first_run_keys():
     """Reviews older than 7 days for a first-run key should NOT alert."""
-    from reviews.alert import send_alerts
+    from verticals.reviews.alert import send_alerts
 
     today = date.today()
     old_date = (today - timedelta(days=30)).isoformat()
@@ -133,7 +133,7 @@ def test_send_alerts_applies_grace_window_for_first_run_keys():
     ]
     first_run_keys = {("BOOKING", "HOTEL")}
 
-    with patch("reviews.email.send_email") as mock_send:
+    with patch("verticals.reviews.email.send_email") as mock_send:
         alerted = send_alerts(rows, first_run_keys=first_run_keys)
 
     assert [r["review_hash"] for r in alerted] == ["h2"]
@@ -142,7 +142,7 @@ def test_send_alerts_applies_grace_window_for_first_run_keys():
 
 def test_send_alerts_no_grace_window_when_key_not_first_run():
     """If key is NOT in first_run_keys, all negatives alert regardless of age."""
-    from reviews.alert import send_alerts
+    from verticals.reviews.alert import send_alerts
 
     old_date = (date.today() - timedelta(days=30)).isoformat()
     rows = [
@@ -163,7 +163,7 @@ def test_send_alerts_no_grace_window_when_key_not_first_run():
         }
     ]
 
-    with patch("reviews.email.send_email") as mock_send:
+    with patch("verticals.reviews.email.send_email") as mock_send:
         alerted = send_alerts(rows, first_run_keys=set())
 
     assert len(alerted) == 1
@@ -172,10 +172,10 @@ def test_send_alerts_no_grace_window_when_key_not_first_run():
 
 def test_mark_alerts_sent_issues_parameterized_update():
     """mark_alerts_sent should run an UPDATE with parameterized hash list."""
-    from reviews.alert import mark_alerts_sent
+    from verticals.reviews.alert import mark_alerts_sent
 
     fake_client = MagicMock()
-    with patch("reviews.alert.bigquery.Client", return_value=fake_client):
+    with patch("verticals.reviews.alert.bigquery.Client", return_value=fake_client):
         mark_alerts_sent(["h1", "h2", "h3"])
 
     assert fake_client.query.called
@@ -192,10 +192,10 @@ def test_mark_alerts_sent_issues_parameterized_update():
 
 
 def test_mark_alerts_sent_noop_on_empty_list():
-    from reviews.alert import mark_alerts_sent
+    from verticals.reviews.alert import mark_alerts_sent
 
     fake_client = MagicMock()
-    with patch("reviews.alert.bigquery.Client", return_value=fake_client):
+    with patch("verticals.reviews.alert.bigquery.Client", return_value=fake_client):
         mark_alerts_sent([])
 
     assert not fake_client.query.called
@@ -214,7 +214,7 @@ def test_mark_alerts_sent_retries_on_streaming_buffer_then_succeeds(
     tmp_path, monkeypatch
 ):
     """First 2 attempts hit streaming buffer, 3rd succeeds — no pending file."""
-    from reviews import alert as alert_mod
+    from verticals.reviews import alert as alert_mod
 
     monkeypatch.setattr(alert_mod, "_MARK_ALERTS_RETRY_DELAYS", [0, 0, 0])
     monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", tmp_path / "pending.json")
@@ -245,7 +245,7 @@ def test_mark_alerts_sent_persists_pending_after_all_retries_fail(
 ):
     """All retries exhausted: hashes persisted to pending state file, no raise."""
     import json as _json
-    from reviews import alert as alert_mod
+    from verticals.reviews import alert as alert_mod
 
     monkeypatch.setattr(alert_mod, "_MARK_ALERTS_RETRY_DELAYS", [0, 0, 0])
     state_path = tmp_path / "pending.json"
@@ -266,7 +266,7 @@ def test_mark_alerts_sent_persists_pending_after_all_retries_fail(
 
 def test_mark_alerts_sent_reraises_non_buffer_errors(tmp_path, monkeypatch):
     """Non-streaming-buffer errors propagate immediately (no retry, no pending)."""
-    from reviews import alert as alert_mod
+    from verticals.reviews import alert as alert_mod
 
     monkeypatch.setattr(alert_mod, "_MARK_ALERTS_RETRY_DELAYS", [0, 0, 0])
     monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", tmp_path / "pending.json")
@@ -288,7 +288,7 @@ def test_mark_alerts_sent_reraises_non_buffer_errors(tmp_path, monkeypatch):
 def test_flush_pending_alert_flags_success_clears_state(tmp_path, monkeypatch):
     """On successful flush, state file is removed."""
     import json as _json
-    from reviews import alert as alert_mod
+    from verticals.reviews import alert as alert_mod
 
     state_path = tmp_path / "pending.json"
     state_path.write_text(_json.dumps({"hashes": ["h1", "h2"], "last_updated": "x"}))
@@ -303,7 +303,7 @@ def test_flush_pending_alert_flags_success_clears_state(tmp_path, monkeypatch):
 
 
 def test_flush_pending_alert_flags_noop_when_no_state(tmp_path, monkeypatch):
-    from reviews import alert as alert_mod
+    from verticals.reviews import alert as alert_mod
 
     monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", tmp_path / "nope.json")
     flushed = alert_mod.flush_pending_alert_flags()
@@ -315,7 +315,7 @@ def test_flush_pending_alert_flags_keeps_state_if_buffer_still_blocking(
 ):
     """If the buffer is still blocking, state file stays intact for next run."""
     import json as _json
-    from reviews import alert as alert_mod
+    from verticals.reviews import alert as alert_mod
 
     state_path = tmp_path / "pending.json"
     state_path.write_text(_json.dumps({"hashes": ["h1"], "last_updated": "x"}))
@@ -333,7 +333,7 @@ def test_flush_pending_alert_flags_keeps_state_if_buffer_still_blocking(
 
 def test_weekly_report_renders_cost_section_when_data_present():
     """Cost section must render when _fetch_apify_costs returns rows."""
-    from reviews.email import render_weekly_report
+    from verticals.reviews.email import render_weekly_report
 
     fake_costs = [
         {
@@ -351,7 +351,7 @@ def test_weekly_report_renders_cost_section_when_data_present():
             "n_cap_violated": 1,
         },
     ]
-    with patch("reviews.email._fetch_apify_costs", return_value=fake_costs):
+    with patch("verticals.reviews.email._fetch_apify_costs", return_value=fake_costs):
         html = render_weekly_report(
             rows=[], date_start="2026-04-06", date_end="2026-04-12"
         )
@@ -366,9 +366,9 @@ def test_weekly_report_renders_cost_section_when_data_present():
 
 def test_weekly_report_omits_cost_section_when_no_data():
     """Cost section is silent when _fetch_apify_costs returns empty."""
-    from reviews.email import render_weekly_report
+    from verticals.reviews.email import render_weekly_report
 
-    with patch("reviews.email._fetch_apify_costs", return_value=[]):
+    with patch("verticals.reviews.email._fetch_apify_costs", return_value=[]):
         html = render_weekly_report(
             rows=[], date_start="2026-04-06", date_end="2026-04-12"
         )
@@ -379,7 +379,7 @@ def test_weekly_report_omits_cost_section_when_no_data():
 def test_persist_pending_merges_with_existing(tmp_path, monkeypatch):
     """Repeated failures merge hashes, never lose old ones."""
     import json as _json
-    from reviews import alert as alert_mod
+    from verticals.reviews import alert as alert_mod
 
     state_path = tmp_path / "pending.json"
     monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", state_path)

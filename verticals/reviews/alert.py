@@ -13,7 +13,7 @@ from google.cloud import bigquery
 
 from core.bq.client import get_client
 
-from reviews.config import ALERT_THRESHOLD, ALERT_RECIPIENTS
+from verticals.reviews.config import ALERT_THRESHOLD, ALERT_RECIPIENTS
 
 log = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ def send_alerts(
     Returns: list of alerted rows. Caller is responsible for calling
     mark_alerts_sent() with the hashes of the returned rows.
     """
-    from reviews.email import send_email
+    from verticals.reviews.email import send_email
 
     first_run_keys = first_run_keys or set()
 
@@ -280,7 +280,7 @@ def send_gap_alert(gap_keys: list[tuple[str, str]], dry_run: bool = False) -> No
     if not gap_keys:
         return
 
-    from reviews.email import send_email
+    from verticals.reviews.email import send_email
 
     lines = [f"- {p} / {bu}" for p, bu in gap_keys]
     body = (

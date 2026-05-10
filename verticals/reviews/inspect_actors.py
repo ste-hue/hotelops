@@ -21,7 +21,7 @@ import sys
 
 from apify_client import ApifyClient
 
-from reviews.config import APIFY_ACTORS
+from verticals.reviews.config import APIFY_ACTORS
 
 
 def _get_client() -> ApifyClient:

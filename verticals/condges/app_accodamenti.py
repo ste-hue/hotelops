@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from condges.accodamenti_service import (
+from verticals.condges.accodamenti_service import (
     current_watermark,
     generate_cumulative_excel_from_bq,
     ingest_rows,

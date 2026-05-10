@@ -18,16 +18,16 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from condges.bq_data import load_bva, load_consuntivo, load_voci
-from condges.cashflow import project_cashflow
-from condges.export_excel import generate_tesoreria_excel
-from condges.parse_pf import PFData, ScadenzarioData, parse_pf, parse_scadenzario
-from condges.scadenze_parse import (
+from verticals.condges.bq_data import load_bva, load_consuntivo, load_voci
+from verticals.condges.cashflow import project_cashflow
+from verticals.condges.export_excel import generate_tesoreria_excel
+from verticals.condges.parse_pf import PFData, ScadenzarioData, parse_pf, parse_scadenzario
+from verticals.condges.scadenze_parse import (
     parse_scadenze,
     partite_df_to_scadenzario_data,
     sintetica_list_to_scadenzario_data,
 )
-from condges.scadenzario_excel import parse_sintetica_scadenze
+from verticals.condges.scadenzario_excel import parse_sintetica_scadenze
 
 # ---------------------------------------------------------------------------
 # Page config

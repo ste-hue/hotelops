@@ -528,7 +528,7 @@ domains:
     views_looker: [v_condges_pf_mensile, v_condges_cashflow, v_condges_budget_consuntivo]
     facts: [f_banche_movimenti, f_piano_finanziario_input, f_saldi_banca_snapshot]
     cli: [hotelops pf, hotelops saldo, hotelops chiudi, hotelops previsione]
-    app: condges/app.py
+    app: verticals/condges/app_cdg.py
 
   controllo_gestione:
     asse: COMPETENZA

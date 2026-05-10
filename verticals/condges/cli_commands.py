@@ -720,12 +720,12 @@ def cmd_scadenzario(args):
     """Scadenzario fornitori → aggiorna PF Excel."""
     from datetime import date
     from io import BytesIO
-    from condges.app_scadenzario import (
+    from verticals.condges.app_scadenzario import (
         load_fornitori_map,
         write_pf,
         MESI_NOMI,
     )
-    from condges.scadenze_parse import parse_scadenze
+    from verticals.condges.scadenze_parse import parse_scadenze
 
     if not args.pf:
         print("  Uso: hotelops scad --pf <PF.xlsx> --file <scadenzario.xlsx>")
@@ -811,7 +811,7 @@ def cmd_scadenzario(args):
 def cmd_accodamenti(args):
     """Accodamenti HotelCube → riconciliazione cassa giornaliera → Excel."""
     from pathlib import Path
-    from condges.cassa_giornaliera import (
+    from verticals.condges.cassa_giornaliera import (
         DEFAULT_OUTPUT,
         print_ultime_date,
         report_ultime_date,

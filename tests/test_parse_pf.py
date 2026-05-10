@@ -1,4 +1,4 @@
-"""Tests for condges/parse_pf.py -- Rosa's Piano Finanziario Excel parser.
+"""Tests for verticals/condges/parse_pf.py -- Rosa's Piano Finanziario Excel parser.
 
 Uses in-memory openpyxl Workbooks so no real files are needed.
 """
@@ -201,73 +201,73 @@ def intur_bytes() -> BytesIO:
 
 class TestParseORTI:
     def test_parse_orti_detects_societa(self, orti_bytes):
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
         assert result.societa == "ORTI"
 
     def test_parse_orti_anno(self, orti_bytes):
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
         assert result.anno == 2026
 
     def test_parse_orti_reads_data_saldo(self, orti_bytes):
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
         assert result.data_saldo == date(2026, 2, 28)
 
     def test_parse_orti_reads_voci_hotel_luglio(self, orti_bytes):
         """Entrate Hotel Luglio (month 7) = 700000."""
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
         assert "ENTRATE_HOTEL" in result.voci
         assert result.voci["ENTRATE_HOTEL"].importi[7] == 700000
 
     def test_parse_orti_reads_voci_salari_marzo(self, orti_bytes):
         """Salari Marzo (month 3) = 18142.04."""
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
         assert "USCITE_SALARI" in result.voci
         assert result.voci["USCITE_SALARI"].importi[3] == pytest.approx(18142.04)
 
     def test_parse_orti_reads_saldi_banca(self, orti_bytes):
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
         assert result.saldi_banca["MPS"] == pytest.approx(67724.67)
         assert result.saldi_banca["Intesa"] == pytest.approx(66922.12)
 
     def test_parse_orti_saldo_totale(self, orti_bytes):
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
         assert result.saldo_totale == pytest.approx(134646.79)
 
     def test_parse_orti_all_12_months_present(self, orti_bytes):
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
         hotel = result.voci["ENTRATE_HOTEL"]
         assert set(hotel.importi.keys()) == set(range(1, 13))
 
     def test_parse_orti_no_skip_labels_as_voci(self, orti_bytes):
         """'Totale Entrate' must not appear as a voce."""
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
         voce_ids = set(result.voci.keys())
         assert not any("TOTALE" in v for v in voce_ids)
 
     def test_parse_mutui_typo_matches(self, orti_bytes):
         """Rosa's typo 'Mutui e Finaziamenti' (missing 'n') must map to USCITE_MUTUI."""
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
         assert "USCITE_MUTUI" in result.voci
 
     def test_parse_orti_excel_label_preserved(self, orti_bytes):
         """excel_label on VoceRow must match the original cell text."""
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
         assert result.voci["ENTRATE_HOTEL"].excel_label == "Entrate Hotel"
 
     def test_parse_orti_voce_id_on_row(self, orti_bytes):
         """VoceRow.voce_id must equal the key in voci dict."""
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
         for voce_id, row in result.voci.items():
             assert row.voce_id == voce_id
@@ -275,23 +275,23 @@ class TestParseORTI:
 
 class TestParseINTUR:
     def test_parse_intur_detects_societa(self, intur_bytes):
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(intur_bytes)
         assert result.societa == "INTUR"
 
     def test_parse_intur_anno(self, intur_bytes):
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(intur_bytes)
         assert result.anno == 2026
 
     def test_parse_intur_reads_data_saldo(self, intur_bytes):
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(intur_bytes)
         assert result.data_saldo == date(2025, 10, 31)
 
     def test_parse_intur_fitto_hotel_and_ar_summed(self, intur_bytes):
         """'Fitto Hotel' + 'Fitto AR' both map to ENTRATE_AFFITTI_INTUR; amounts summed."""
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(intur_bytes)
         assert "ENTRATE_AFFITTI_INTUR" in result.voci
         # 80000 + 20000 = 100000 for every month
@@ -299,19 +299,19 @@ class TestParseINTUR:
 
     def test_parse_intur_godimento_beni_typo(self, intur_bytes):
         """'Godimento Benidi Terzi' (INTUR typo) maps to USCITE_GODIMENTO_BENI."""
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(intur_bytes)
         assert "USCITE_GODIMENTO_BENI" in result.voci
 
     def test_parse_intur_caparre_girocantare(self, intur_bytes):
         """'Caparre da Girocantare aOrti' maps to ENTRATE_CAPARRE_INTUR."""
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(intur_bytes)
         assert "ENTRATE_CAPARRE_INTUR" in result.voci
 
     def test_parse_intur_saldi_banca_col_c(self, intur_bytes):
         """INTUR saldi are in col C, not B."""
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(intur_bytes)
         assert result.saldi_banca["Banca Sella"] == pytest.approx(17317.96)
         assert result.saldi_banca["MPS"] == pytest.approx(37075.87)
@@ -321,7 +321,7 @@ class TestParseINTUR:
 class TestWarnings:
     def test_unknown_voce_logged_as_warning(self):
         """A label not in the mapping must appear in warnings, not crash."""
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
 
         wb = Workbook()
         ws = wb.active
@@ -342,7 +342,7 @@ class TestWarnings:
 
     def test_no_warnings_on_clean_orti(self, orti_bytes):
         """A well-formed ORTI file must produce no warnings."""
-        from condges.parse_pf import parse_pf
+        from verticals.condges.parse_pf import parse_pf
         result = parse_pf(orti_bytes)
         assert result.warnings == []
 
@@ -406,7 +406,7 @@ def scadenzario_bytes() -> BytesIO:
 class TestParseScadenzario:
     def test_parse_scadenzario_totals(self, scadenzario_bytes):
         """totale_per_mese sums correctly across all fornitori."""
-        from condges.parse_pf import parse_scadenzario
+        from verticals.condges.parse_pf import parse_scadenzario
         result = parse_scadenzario(scadenzario_bytes)
         # apr=4, mag=5, giu=6
         assert result.totale_per_mese[4] == pytest.approx(3000.0)   # 2000+1000
@@ -415,7 +415,7 @@ class TestParseScadenzario:
 
     def test_parse_scadenzario_suppliers(self, scadenzario_bytes):
         """Reads both fornitori; skips empty row."""
-        from condges.parse_pf import parse_scadenzario
+        from verticals.condges.parse_pf import parse_scadenzario
         result = parse_scadenzario(scadenzario_bytes)
         assert len(result.fornitori) == 2
         names = [f["fornitore"] for f in result.fornitori]
@@ -424,6 +424,6 @@ class TestParseScadenzario:
 
     def test_parse_scadenzario_scaduto(self, scadenzario_bytes):
         """scaduto_totale is the sum of all Scaduto values."""
-        from condges.parse_pf import parse_scadenzario
+        from verticals.condges.parse_pf import parse_scadenzario
         result = parse_scadenzario(scadenzario_bytes)
         assert result.scaduto_totale == pytest.approx(1500.0)   # 1000+500

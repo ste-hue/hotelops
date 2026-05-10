@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from core.bq.client import get_client
 from core.schemas import make_hash, validate_batch, ReviewRow
-from reviews.config import PROPERTIES
+from verticals.reviews.config import PROPERTIES
 
 log = logging.getLogger(__name__)
 

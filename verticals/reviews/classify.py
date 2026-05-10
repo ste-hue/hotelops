@@ -6,7 +6,7 @@ import json
 import logging
 import re
 
-from reviews.config import NLP_MODEL, NLP_BATCH_SIZE
+from verticals.reviews.config import NLP_MODEL, NLP_BATCH_SIZE
 
 log = logging.getLogger(__name__)
 

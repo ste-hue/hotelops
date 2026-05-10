@@ -1,7 +1,7 @@
 ---
 subsystem: condges
 code_paths:
-  - condges/reconcile_banca.py
+  - verticals/condges/reconcile_banca.py
 last_verified: 2026-04-09
 source: migrated from Obsidian vault (procedures/reconcile_banca.md, v1.0 2026-03-03)
 ---

@@ -1,6 +1,6 @@
 """Contract test: reviews NLP enums must stay in sync across code + schema.
 
-Context: on 2026-04-07 a rename ALTRO -> GENERICA was done in reviews/classify.py
+Context: on 2026-04-07 a rename ALTRO -> GENERICA was done in verticals/reviews/classify.py
 and in 341 BQ rows, but core/schemas.py was forgotten. The drift silently broke
 the cron on 2026-04-09 when a new review arrived with categoria=GENERICA.
 
@@ -10,7 +10,7 @@ This test ensures any future rename touches all three places at once.
 from typing import get_args
 
 from core.schemas import CategoriaNlp, SentimentNlp
-from reviews.classify import VALID_CATEGORIE, VALID_SENTIMENTI
+from verticals.reviews.classify import VALID_CATEGORIE, VALID_SENTIMENTI
 
 
 def test_categoria_nlp_in_sync():
@@ -18,7 +18,7 @@ def test_categoria_nlp_in_sync():
     schema_values = set(get_args(CategoriaNlp))
     assert VALID_CATEGORIE == schema_values, (
         f"Drift detected!\n"
-        f"  reviews/classify.py VALID_CATEGORIE: {sorted(VALID_CATEGORIE)}\n"
+        f"  verticals/reviews/classify.py VALID_CATEGORIE: {sorted(VALID_CATEGORIE)}\n"
         f"  core/schemas.py    CategoriaNlp:    {sorted(schema_values)}\n"
         f"  only in classify.py: {VALID_CATEGORIE - schema_values}\n"
         f"  only in schemas.py:  {schema_values - VALID_CATEGORIE}"
@@ -30,7 +30,7 @@ def test_sentiment_nlp_in_sync():
     schema_values = set(get_args(SentimentNlp))
     assert VALID_SENTIMENTI == schema_values, (
         f"Drift detected!\n"
-        f"  reviews/classify.py VALID_SENTIMENTI: {sorted(VALID_SENTIMENTI)}\n"
+        f"  verticals/reviews/classify.py VALID_SENTIMENTI: {sorted(VALID_SENTIMENTI)}\n"
         f"  core/schemas.py    SentimentNlp:     {sorted(schema_values)}"
     )
 

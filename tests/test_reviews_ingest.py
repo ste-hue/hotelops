@@ -1,6 +1,6 @@
 """Tests for reviews ingest: normalization and dedup."""
 
-from reviews.ingest import (
+from verticals.reviews.ingest import (
     normalize_booking,
     normalize_tripadvisor,
     normalize_google,

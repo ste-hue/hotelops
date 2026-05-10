@@ -1,7 +1,7 @@
 """Tests for condges.cashflow — TDD, written before implementation."""
 
 import pytest
-from condges.cashflow import CashflowRow, project_cashflow
+from verticals.condges.cashflow import CashflowRow, project_cashflow
 
 
 def test_basic_projection():
