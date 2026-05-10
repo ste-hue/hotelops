@@ -99,6 +99,23 @@ sources:
       bucket: hotelops-raw
       path_template: "registro_banca_esolver/ORTI"
 
+  ESOLVER_SCHEDA_INTUR_APPEND:
+    system: ESOLVER
+    dataset: SCHEDA
+    dataset_label: "Scheda contabile / saldi banca da Esolver"
+    societa: INTUR
+    lifecycle: APPEND
+    canonical_table: f_saldi_banca_snapshot
+    parser_module: ingest.flussi.ingest_scheda_contabile
+    hash_basis: hash_riga
+    loop_targets: [bank_ledger_reconciliation, cash_control]
+    promotion_policy: AUTO
+    detector_category: scheda_contabile
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "registro_banca_esolver/INTUR"
+
   # ── Partite aperte — SNAPSHOT ─────────────────────────────────────────────
   ESOLVER_PARTITE_ORTI_SNAPSHOT:
     system: ESOLVER
