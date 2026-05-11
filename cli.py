@@ -643,6 +643,138 @@ def cmd_lineage_dispatch(args):
     cmd_lineage(args)
 
 
+# ── Capture (lineage-first single-file ingest) ────────────────────────────
+
+
+def _resolve_source_from_classification(
+    classification, registry, override_societa=None
+):
+    """Find source_name matching classification.
+
+    Returns (resolved_name_or_None, list_of_candidate_names).
+    """
+    cat = classification.category
+    banca = classification.banca
+    lifecycle = classification.lifecycle
+    societa = override_societa or classification.societa
+
+    cands = []
+    for name, src in registry.sources.items():
+        if src.detector_category != cat:
+            continue
+        if src.lifecycle != lifecycle:
+            continue
+        if cat == "banca" and banca and src.system != banca:
+            continue
+        cands.append((name, src))
+
+    if societa:
+        narrowed = [(n, s) for n, s in cands if s.societa == societa]
+        if narrowed:
+            cands = narrowed
+
+    if len(cands) == 1:
+        return cands[0][0], [n for n, _ in cands]
+    return None, [n for n, _ in cands]
+
+
+def cmd_capture(args):
+    """Single-file lineage flow: classify → intake → promote (if AUTO)."""
+    from pathlib import Path
+
+    from core.lineage.source_resolver import load_registry
+    from ingest.classify import classify
+    from ingest.intake import intake_file
+    from ingest.promotion import promote_raw_object
+
+    fp = Path(args.file).expanduser().resolve()
+    if not fp.exists():
+        print(f"ERROR: file not found: {fp}", file=sys.stderr)
+        sys.exit(2)
+
+    registry = load_registry()
+    source_name = args.source_name
+
+    if not source_name:
+        classification = classify(fp)
+        if classification.category in ("unknown", "error"):
+            print(
+                f"ERROR: cannot classify file: {classification.details}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        print(
+            f"  classify:  type={classification.file_type} "
+            f"category={classification.category} "
+            f"banca={classification.banca or '-'} "
+            f"societa={classification.societa or '?'} "
+            f"lifecycle={classification.lifecycle} "
+            f"(confidence: {classification.confidence:.0%})"
+        )
+        resolved, cands = _resolve_source_from_classification(
+            classification, registry, override_societa=args.societa
+        )
+        if not resolved:
+            if not cands:
+                print(
+                    f"ERROR: no source_registry entry for "
+                    f"category={classification.category}, "
+                    f"banca={classification.banca}, "
+                    f"lifecycle={classification.lifecycle}. "
+                    f"Add entry to core/source_registry.yaml.",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"ERROR: ambiguous, candidates: {cands}. "
+                    f"Specify --source-name or --societa to disambiguate.",
+                    file=sys.stderr,
+                )
+            sys.exit(2)
+        source_name = resolved
+
+    src = registry.get(source_name)
+    if src is None:
+        print(f"ERROR: source_name not in registry: {source_name}", file=sys.stderr)
+        sys.exit(2)
+    print(
+        f"  source:    {source_name}  "
+        f"(system={src.system}, societa={src.societa}, "
+        f"table={src.canonical_table}, policy={src.promotion_policy})"
+    )
+
+    if args.dry_run:
+        action = (
+            "intake + promote" if src.promotion_policy == "AUTO" else "intake only"
+        )
+        print(f"\n[DRY-RUN] would {action}")
+        return
+
+    ir = intake_file(fp, source_name=source_name, actor="capture")
+    print(
+        f"  intake:    raw_object_id={ir.raw_object_id}  "
+        f"content_hash={ir.content_hash[:12]}…"
+    )
+
+    if args.no_promote:
+        print(f"  promote:   skipped (--no-promote)")
+        return
+    if src.promotion_policy != "AUTO":
+        print(f"  promote:   skipped (policy={src.promotion_policy}, manual)")
+        return
+
+    pr = promote_raw_object(ir.raw_object_id, actor="capture")
+    reason = f" reason={pr.reason}" if pr.reason else ""
+    print(f"  promote:   status={pr.status} rows={pr.rows_written} noop={pr.noop}{reason}")
+    if pr.status == "REJECTED":
+        sys.exit(2)
+
+    suffix = (
+        f" ({pr.rows_written} rows)" if not pr.noop else " (noop, already ingested)"
+    )
+    print(f"\n✓ {fp.name} → {src.canonical_table}{suffix}")
+
+
 # ── Ingest ─────────────────────────────────────────────────────────────────
 
 
@@ -1020,6 +1152,32 @@ def main():
     )
     p_promote.add_argument("--raw-object-id", required=True)
 
+    p_capture = sub.add_parser(
+        "capture",
+        help="Single-file lineage flow: classify → intake → promote (if AUTO)",
+    )
+    p_capture.add_argument("file", help="Path al file")
+    p_capture.add_argument(
+        "--source-name",
+        default=None,
+        help="Override source_name (skip classify resolution)",
+    )
+    p_capture.add_argument(
+        "--societa",
+        choices=["ORTI", "INTUR"],
+        help="Override societa quando classify non la rileva (es. SELLA→INTUR)",
+    )
+    p_capture.add_argument(
+        "--no-promote",
+        action="store_true",
+        help="Ferma a CLASSIFIED (manual promote dopo)",
+    )
+    p_capture.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Mostra plan senza scrivere (no intake, no promote)",
+    )
+
     p_lin = sub.add_parser(
         "lineage", help="Lineage: ispeziona raw_object o lista con filtri"
     )
@@ -1122,6 +1280,7 @@ def main():
         "help": cmd_help,
         "intake": cmd_intake,
         "promote": cmd_promote,
+        "capture": cmd_capture,
         "lineage": cmd_lineage_dispatch,
         "workspace": cmd_workspace,
     }
