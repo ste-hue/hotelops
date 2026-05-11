@@ -20,7 +20,7 @@ from pathlib import Path
 
 # Streamlit Cloud runs this script directly, so the repo root isn't on sys.path
 # and `from condges.X import …` fails. Inject it before the first such import.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import openpyxl
 import pandas as pd
@@ -30,7 +30,7 @@ from verticals.condges.scadenze_parse import parse_scadenze
 
 # -- Config --------------------------------------------------------------------
 
-FORNITORI_CSV = Path(__file__).parent.parent / "core" / "bq" / "dimensioni" / "d_fornitori.csv"
+FORNITORI_CSV = Path(__file__).parent.parent.parent / "core" / "bq" / "dimensioni" / "d_fornitori.csv"
 
 VOCE_TO_SHEET_CANDIDATES = {
     "USCITE_MATERIE_PRIME": ["Materie Prime-Consumo ", "Materie Prime-Conumo "],

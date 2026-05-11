@@ -48,6 +48,16 @@ SOCIETA = "ORTI"
 
 @st.cache_resource
 def get_bq():
+    if hasattr(st, "secrets") and "gcp_service_account" in st.secrets:
+        from google.cloud import bigquery
+        from google.oauth2 import service_account
+
+        from core.config import PROJECT
+
+        creds = service_account.Credentials.from_service_account_info(
+            dict(st.secrets["gcp_service_account"])
+        )
+        return bigquery.Client(project=PROJECT, credentials=creds)
     from core.bq.client import get_client
 
     return get_client()

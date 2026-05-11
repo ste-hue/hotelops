@@ -78,7 +78,7 @@ def parse_sintetica_scadenze(source: Path | BinaryIO) -> tuple[list[dict], list[
 # ── Mapper ─────────────────────────────────────────────────────────────────
 
 FORNITORI_CSV = (
-    Path(__file__).parent.parent / "core" / "bq" / "dimensioni" / "d_fornitori.csv"
+    Path(__file__).parent.parent.parent / "core" / "bq" / "dimensioni" / "d_fornitori.csv"
 )
 
 
