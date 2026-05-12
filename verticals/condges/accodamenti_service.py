@@ -31,7 +31,7 @@ def _collect_txt_files(input_dir: Path) -> list[Path]:
     return sorted(input_dir.rglob("*.txt")) + sorted(input_dir.rglob("*.TXT"))
 
 
-def parse_rows_from_folder(input_dir: Path, societa: str = "INTUR") -> list[dict]:
+def parse_rows_from_folder(input_dir: Path, societa: str = "ORTI") -> list[dict]:
     rows: list[dict] = []
     for filepath in _collect_txt_files(input_dir):
         rel_path = str(filepath.relative_to(input_dir))
@@ -72,7 +72,7 @@ def _existing_hashes(candidate_hashes: list[str]) -> set[str]:
     return found
 
 
-def preview_folder(input_dir: Path, societa: str = "INTUR") -> tuple[BatchPreview, list[dict], list[dict]]:
+def preview_folder(input_dir: Path, societa: str = "ORTI") -> tuple[BatchPreview, list[dict], list[dict]]:
     txt_files = _collect_txt_files(input_dir)
     rows = parse_rows_from_folder(input_dir, societa=societa)
 

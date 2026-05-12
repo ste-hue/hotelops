@@ -55,7 +55,7 @@ BQ_TABLE = f"{PROJECT}.{BQ_DATASET}.f_accodamenti"
 
 DEFAULT_FUNZIONE = "CONTABILITA"
 DEFAULT_LOCATION = "N_A"
-SOCIETA_DEFAULT = "INTUR"
+SOCIETA_DEFAULT = "ORTI"
 
 # struttura field from parser → business_unit_id
 STRUTTURA_TO_BU: dict[str, str] = {
@@ -489,7 +489,7 @@ def main():
     parser.add_argument("--datahub", help="Path to datahub root")
     parser.add_argument("--staging", help="Dir locale per file accodamenti")
     parser.add_argument(
-        "--societa", default=SOCIETA_DEFAULT, help="Società ID (default: INTUR)"
+        "--societa", default=SOCIETA_DEFAULT, help="Società ID (default: ORTI)"
     )
     parser.add_argument("--project", default=PROJECT)
     parser.add_argument("--no-sync", action="store_true", help="Salta rclone sync")
