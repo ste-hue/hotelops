@@ -68,6 +68,21 @@ DEFAULT_LOCATION = "N_A"
 FOOTER_DESCRIPTIONS = {"totale (€)", "totale(€)", "totale"}
 FOOTER_PREFIXES = ("saldo al",)
 
+# Italian IBAN: IT + 2 check digits + 1 letter (CIN) + 5 ABI + 5 CAB + 12 conto = 27 chars
+IBAN_REGEX = re.compile(r"IT\d{2}[A-Z]\d{22}")
+
+# ABI → banca_id. Source: core/registry.yaml banche section.
+_ABI_TO_BANCA = {
+    "01030": "MPS",
+    "03069": "INTESA",
+    "03268": "SELLA",
+    "05142": "BCP",
+}
+
+# ORTI has two MPS accounts; the Kross one (conto 1205058) is its own banca_id.
+# Match on the 12-char conto suffix of the IBAN.
+_MPS_KROSS_CONTI = {"000001205058"}
+
 
 def is_footer_row(raw: dict) -> bool:
     desc = (raw.get("desc") or "").strip().lower()
@@ -114,18 +129,64 @@ def setup_logging(log_dir: Path, verbose: bool = False) -> logging.Logger:
     return _setup_logging("ingest_banca", log_dir, verbose)
 
 
+def _scan_xlsx_preamble_iban(filepath: Path, max_rows: int = 30) -> Optional[str]:
+    """Scan the first ~30 rows of an XLSX cell-by-cell for an Italian IBAN.
+
+    MPS Web Banking 2026 exports put IBAN at R12 (preceded by 9 empty rows +
+    Conto/Di labels), so reading only the first 5 rows misses it.
+    """
+    try:
+        import openpyxl
+
+        wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+        try:
+            ws = wb.active
+            for row in ws.iter_rows(values_only=True, max_row=max_rows):
+                for cell in row:
+                    if cell is None:
+                        continue
+                    s = str(cell).replace(" ", "").replace("\t", "")
+                    m = IBAN_REGEX.search(s)
+                    if m:
+                        return m.group(0)
+        finally:
+            wb.close()
+    except Exception:
+        pass
+    return None
+
+
+def _banca_from_iban(iban: str) -> Optional[str]:
+    """Map an Italian IBAN to banca_id. Distinguishes MPS vs MPS_KROSS via conto."""
+    if not iban or len(iban) < 27:
+        return None
+    abi = iban[5:10]
+    banca = _ABI_TO_BANCA.get(abi)
+    if banca == "MPS" and iban[15:27] in _MPS_KROSS_CONTI:
+        return "MPS_KROSS"
+    return banca
+
+
 def _detect_banca_from_content(filepath: Path) -> Optional[str]:
-    """Detect bank type by inspecting file content (headers/columns)."""
+    """Detect bank type by inspecting file content.
+
+    Primary signal: IBAN regex on the first ~30 rows (deterministic via ABI
+    lookup, robust to header offsets like MPS Web Banking 2026 where the data
+    header sits at R19). Fallback: column-name matching on first 5 rows for
+    legacy formats whose preamble doesn't carry an IBAN.
+    """
     ext = filepath.suffix.lower()
     try:
         if ext in (".xls", ".xlsx"):
-            # Check if it's actually xlsx (PK header) or xls
-            with open(filepath, "rb") as f:
-                is_xlsx = f.read(2) == b"PK"
-            if is_xlsx:
-                df = pd.read_excel(filepath, nrows=5)
-            else:
-                df = pd.read_excel(filepath, nrows=5)
+            # Primary: IBAN preamble. Works for any Italian bank statement.
+            iban = _scan_xlsx_preamble_iban(filepath)
+            if iban:
+                banca = _banca_from_iban(iban)
+                if banca:
+                    return banca
+
+            # Fallback: column-name matching on first 5 rows (legacy formats).
+            df = pd.read_excel(filepath, nrows=5)
             cols_upper = {str(c).upper() for c in df.columns}
             # MPS classic: Data, Valuta, Dare, Avere, Descrizione operazioni
             if {"DATA", "VALUTA", "DARE", "AVERE"}.issubset(cols_upper):
@@ -969,8 +1030,14 @@ def main():
         )
         print(
             f"single-file: {stats.get('total', 0)} total, "
-            f"{stats.get('written', 0)} written, {stats.get('dupes', 0)} dupes"
+            f"{stats.get('written', 0)} written, {stats.get('dupes', 0)} dupes, "
+            f"{stats.get('errors', 0)} errors"
         )
+        # Non-zero exit if parser couldn't read the file (schema violation,
+        # unknown bank, etc). Promotion interprets exit≠0 as VALIDATE_FAIL
+        # → emits REJECTED instead of falsely flagging PROMOTED.
+        if stats.get("errors", 0) > 0:
+            sys.exit(1)
         return
 
     # Batch mode (existing — keep behavior unchanged)
