@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import sys
 import tempfile
-from datetime import date
 from pathlib import Path
 
 import streamlit as st
@@ -16,7 +15,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from verticals.condges.accodamenti_service import (
     current_watermark,
-    generate_cumulative_excel_from_bq,
+    generate_gaia_excel_from_bq,
     ingest_rows,
     preview_folder,
 )
@@ -57,7 +56,7 @@ def main() -> None:
     _init_state()
 
     st.title("Raccolta Accodamenti")
-    st.caption("Workflow standard: drop -> anteprima -> ingest nuove righe -> Excel cumulativo da BQ")
+    st.caption("Workflow standard: drop -> anteprima -> ingest nuove righe -> Excel GAIA cumulativo da BQ")
 
     watermark = current_watermark()
     st.info(f"Watermark corrente f_accodamenti: `{watermark or 'N/A'}`")
@@ -78,7 +77,6 @@ def main() -> None:
         "Output Excel",
         value=str(DEFAULT_OUTPUT),
     ).strip()
-    start_date = st.date_input("Data inizio cumulativo (BQ)", value=date(2026, 4, 3))
 
     if dropped_files:
         uploaded_dir = _materialize_uploaded_files(dropped_files)
@@ -120,7 +118,7 @@ def main() -> None:
             with st.spinner("Esecuzione workflow completo..."):
                 stats, _rows, new_rows = preview_folder(input_dir, societa=societa)
                 written = ingest_rows(new_rows)
-                result = generate_cumulative_excel_from_bq(start_date, output_path)
+                result = generate_gaia_excel_from_bq(output_path)
             st.session_state.preview_new_rows = new_rows
             st.session_state.preview_stats = stats
             st.session_state.preview_input_dir = str(input_dir)
@@ -169,14 +167,12 @@ def main() -> None:
                     st.success(f"Ingest completato: {written} nuove righe.")
                     st.info(f"Nuovo watermark: `{current_watermark() or 'N/A'}`")
         with a3:
-            if st.button("Excel cumulativo da BQ"):
+            if st.button("Excel GAIA da BQ"):
                 output_path = Path(output_path_raw).expanduser()
-                with st.spinner("Export cumulativo da BigQuery..."):
-                    result = generate_cumulative_excel_from_bq(start_date, output_path)
-                st.success(f"Excel cumulativo generato: {result['output']}")
-                st.write(
-                    f"Righe esportate: {result['rows']} | Data inizio: {result['start_date']}"
-                )
+                with st.spinner("Generazione Excel GAIA da BigQuery..."):
+                    result = generate_gaia_excel_from_bq(output_path)
+                st.success(f"Excel GAIA generato: {result['output']}")
+                st.write(f"Giorni esportati: {result['rows']}")
                 generated_path = Path(result["output"])
                 if generated_path.exists():
                     st.session_state.last_excel_bytes = generated_path.read_bytes()
