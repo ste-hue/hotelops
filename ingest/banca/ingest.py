@@ -132,16 +132,23 @@ def setup_logging(log_dir: Path, verbose: bool = False) -> logging.Logger:
 def _scan_xlsx_preamble_iban(filepath: Path, max_rows: int = 30) -> Optional[str]:
     """Scan the first ~30 rows of an XLSX cell-by-cell for an Italian IBAN.
 
-    MPS Web Banking 2026 exports put IBAN at R12 (preceded by 9 empty rows +
-    Conto/Di labels), so reading only the first 5 rows misses it.
+    MPS Web Banking 2026 puts IBAN at R12; Intesa Sanpaolo Web Banking at R2.
+
+    Caveat: openpyxl in read_only=True silently drops columns beyond the first
+    on workbooks missing a default style (Intesa export hits this case). Use
+    the normal load path — the preamble is ≤30 rows so memory is negligible.
     """
     try:
         import openpyxl
 
-        wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+        wb = openpyxl.load_workbook(filepath, data_only=True)
         try:
             ws = wb.active
-            for row in ws.iter_rows(values_only=True, max_row=max_rows):
+            for row_idx, row in enumerate(
+                ws.iter_rows(values_only=True), start=1
+            ):
+                if row_idx > max_rows:
+                    break
                 for cell in row:
                     if cell is None:
                         continue
