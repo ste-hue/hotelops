@@ -56,8 +56,8 @@ def rclone_shortcut(src_path: str, dest_path: str, dry_run: bool) -> tuple[bool,
     """Create Drive shortcut. Returns (ok, message)."""
     cmd = [
         "rclone", "backend", "shortcut", f"{RCLONE_REMOTE}:",
-        f"{RCLONE_REMOTE}:{PROJECT_DRIVE_PATH}/{src_path}",
-        f"{RCLONE_REMOTE}:{PROJECT_DRIVE_PATH}/{dest_path}",
+        f"{PROJECT_DRIVE_PATH}/{src_path}",
+        f"{PROJECT_DRIVE_PATH}/{dest_path}",
     ]
     if dry_run:
         return True, "dry-run"

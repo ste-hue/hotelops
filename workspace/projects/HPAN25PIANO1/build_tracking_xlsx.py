@@ -218,12 +218,24 @@ def load_xlsx_data(xlsx: Path) -> dict:
     }
 
 
-def scan_drive(drive_index_json: Path, f_folders_json: Path) -> tuple[list[dict], dict[str, str]]:
-    """Return (documents list, F-folder ID map)."""
+def load_classifier_by_filename(classifier_csv: Path | None) -> dict[str, dict]:
+    """Index classifier output by filename → category/fornitore/importo."""
+    if not classifier_csv or not classifier_csv.exists():
+        return {}
+    out = {}
+    with classifier_csv.open() as f:
+        for r in csv.DictReader(f):
+            out[r["filename"]] = r
+    return out
+
+
+def scan_drive(drive_index_json: Path, f_folders_json: Path,
+               classifier_by_name: dict[str, dict] | None = None) -> tuple[list[dict], dict[str, str]]:
+    """Return (documents list, F-folder ID map). Includes ALL files (canonical + mining)."""
     files = json.loads(drive_index_json.read_text())
+    classifier_by_name = classifier_by_name or {}
     f_folders = {}
     for d in json.loads(f_folders_json.read_text()):
-        # d['Name'] like 'F001_AMCN'
         m = re.match(r"(F\d{3})_", d["Name"])
         if m:
             f_folders[m.group(1)] = d["ID"]
@@ -232,37 +244,82 @@ def scan_drive(drive_index_json: Path, f_folders_json: Path) -> tuple[list[dict]
     for f in files:
         name = f["Name"]
         path = f["Path"]
-        if name in (".keep", "_NOTE.md", "README.md", "index.csv"):
+        # Skip pure metadata
+        if name in (".keep", "thread.json"):
             continue
-        if name.startswith(".") or path.endswith(".xlsx") and "HPAN25PIANO1_CapEx_Controllo" in name:
+        if name.endswith(".xlsx") and "HPAN25PIANO1_CapEx_Controllo" in name:
+            continue
+        if name.endswith(".xlsx") and "HPAN25PIANO1_Tracking" in name:
             continue
 
-        # Determine F-code from path
         fcode = None
         cat = "?"
+        source = ""
+
         if path.startswith("07_fornitori/"):
             m = re.match(r"07_fornitori/(F\d{3})_[^/]+/([^/]+)/", path)
             if m:
                 fcode = m.group(1)
                 subfolder = m.group(2)
-                cat_map = {
+                cat = {
                     "01_preventivi": "PREVENTIVO",
                     "02_ordini_contratti": "CONTRATTO",
                     "03_fatture": "FATTURA",
                     "04_comunicazioni": "COMUNICAZIONE",
-                }
-                cat = cat_map.get(subfolder, "?")
+                }.get(subfolder, "?")
+                source = "07_fornitori"
+            elif name == "_NOTE.md":
+                continue  # skip note files
+            elif name == "README.md":
+                continue
         elif path.startswith("FATTURE_LAVORI_HOTEL/"):
             cat = "FATTURA"
+            source = "06_FATTURE"
         elif path.startswith("Preventivi_Lavori_Hotel/"):
             cat = "PREVENTIVO"
+            source = "Preventivi_Lavori"
+        elif path.startswith("Blocco Camere/"):
+            cat = "TECNICO"
+            source = "Blocco Camere"
+        elif path.startswith("workspace-controller-test/"):
+            source = "MINING"
+            if name in ("index.csv", "README.md"):
+                continue
+            c = classifier_by_name.get(name)
+            if c:
+                cat = c.get("category_final") or c.get("stage2") or c.get("stage1") or "?"
+            else:
+                cat = "MINING_UNCLASSIFIED"
+            # FILTER mining output: only keep CapEx-relevant categories
+            # Drop LEGAL_NOISE, GENERIC_PROJECT, ALTRO, NOISE, SKIP, FOTO, MINING_UNCLASSIFIED
+            RELEVANT_FROM_MINING = {"PREVENTIVO", "CONTRATTO", "FATTURA", "TECNICO"}
+            if cat not in RELEVANT_FROM_MINING:
+                continue
+            # Also filter by extracted name noise (e.g., "Delibera Regione Campania")
+            if NOISE_KEYWORDS.search(name):
+                continue
         elif "/" not in path:  # root
-            if "offerta" in name.lower() or "preventivo" in name.lower():
+            source = "root"
+            n = name.lower()
+            if "offerta" in n or "preventivo" in n:
                 cat = "PREVENTIVO"
-            elif "rendering" in name.lower() or "sal" in name.lower() or "report" in name.lower():
+            elif "rendering" in n or "sal" in n or "report" in n or "appunti" in n:
                 cat = "TECNICO"
             else:
                 cat = "ROOT"
+
+        # Optional fornitore/importo from classifier
+        forn = ""
+        importo = 0.0
+        c = classifier_by_name.get(name)
+        if c:
+            forn = c.get("fornitore", "") or ""
+            try:
+                importo = float(c["importo_eur"]) if c.get("importo_eur") else 0.0
+            except (ValueError, TypeError):
+                importo = 0.0
+            if importo > 500_000:
+                importo = 0.0  # noise cap
 
         docs.append({
             "path": path,
@@ -272,6 +329,9 @@ def scan_drive(drive_index_json: Path, f_folders_json: Path) -> tuple[list[dict]
             "drive_url": drive_url(f["ID"]),
             "category": cat,
             "fcode": fcode or "",
+            "source": source,
+            "fornitore_extracted": forn,
+            "importo_extracted": importo,
         })
 
     return docs, f_folders
@@ -422,48 +482,57 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
     # ── Sheet 2: Documents ──────────────────────────────────────────────────
     ws_doc = wb.create_sheet("Documents", 1)
     write_header(ws_doc, [
-        "Cod", "Categoria", "Path Drive", "Nome file", "Size KB", "Importo € (xlsx)", "Link Drive",
+        "Cod", "Categoria", "Source", "Path Drive", "Nome file", "Size KB",
+        "Fornitore estratto", "€ importo", "Link Drive",
     ])
     r = 2
-    # xlsx fatture (authoritative for importi)
+    # xlsx fatture (authoritative for importi, no Drive link since per-record)
     for cod, lst in data["fatture_xlsx"].items():
         for item in lst:
             ws_doc.cell(row=r, column=1, value=cod)
             ws_doc.cell(row=r, column=2, value="FATTURA (xlsx)")
-            ws_doc.cell(row=r, column=3, value=item.get("fornitore_name", ""))
-            ws_doc.cell(row=r, column=4, value=f"FT {item.get('numero', '?')} del {item.get('data', '?')}")
-            c = ws_doc.cell(row=r, column=6, value=item["importo_eur"])
+            ws_doc.cell(row=r, column=3, value="Controllo.xlsx")
+            ws_doc.cell(row=r, column=4, value="Dati Fatture sheet")
+            ws_doc.cell(row=r, column=5, value=f"FT {item.get('numero', '?')} del {item.get('data', '?')}")
+            ws_doc.cell(row=r, column=7, value=item.get("fornitore_name", ""))
+            c = ws_doc.cell(row=r, column=8, value=item["importo_eur"])
             c.number_format = money_fmt
-            for col in range(1, 8):
+            for col in range(1, 10):
                 ws_doc.cell(row=r, column=col).border = border
             r += 1
-    # xlsx preventivi (authoritative)
     for cod, lst in data["preventivi_xlsx"].items():
         for item in lst:
             ws_doc.cell(row=r, column=1, value=cod)
             ws_doc.cell(row=r, column=2, value="PREVENTIVO (xlsx)")
-            ws_doc.cell(row=r, column=3, value=item.get("fornitore_name", ""))
-            ws_doc.cell(row=r, column=4, value=f"Prev {item.get('numero', '')} del {item.get('data', '')}")
-            c = ws_doc.cell(row=r, column=6, value=item["importo_eur"])
+            ws_doc.cell(row=r, column=3, value="Controllo.xlsx")
+            ws_doc.cell(row=r, column=4, value="Preventivi sheet")
+            ws_doc.cell(row=r, column=5, value=f"Prev {item.get('numero', '')} del {item.get('data', '')}")
+            ws_doc.cell(row=r, column=7, value=item.get("fornitore_name", ""))
+            c = ws_doc.cell(row=r, column=8, value=item["importo_eur"])
             c.number_format = money_fmt
-            for col in range(1, 8):
+            for col in range(1, 10):
                 ws_doc.cell(row=r, column=col).border = border
             r += 1
-    # filesystem docs with links
-    for d in sorted(docs, key=lambda x: (x["fcode"] or "ZZZ", x["category"], x["path"])):
+    # All Drive files (canonical + mining), each with clickable link
+    for d in sorted(docs, key=lambda x: (x["source"], x["fcode"] or "ZZZ", x["category"], x["path"])):
         ws_doc.cell(row=r, column=1, value=d["fcode"] or "—")
         ws_doc.cell(row=r, column=2, value=d["category"])
-        ws_doc.cell(row=r, column=3, value=d["path"])
-        ws_doc.cell(row=r, column=4, value=d["name"])
-        ws_doc.cell(row=r, column=5, value=d["size_kb"])
-        c = ws_doc.cell(row=r, column=7, value="Apri →")
+        ws_doc.cell(row=r, column=3, value=d["source"])
+        ws_doc.cell(row=r, column=4, value=d["path"])
+        ws_doc.cell(row=r, column=5, value=d["name"])
+        ws_doc.cell(row=r, column=6, value=d["size_kb"])
+        ws_doc.cell(row=r, column=7, value=d["fornitore_extracted"])
+        if d["importo_extracted"]:
+            c = ws_doc.cell(row=r, column=8, value=d["importo_extracted"])
+            c.number_format = money_fmt
+        c = ws_doc.cell(row=r, column=9, value="Apri →")
         c.hyperlink = d["drive_url"]
         c.font = link_font
-        for col in range(1, 8):
+        for col in range(1, 10):
             ws_doc.cell(row=r, column=col).border = border
         r += 1
 
-    for col, w in enumerate([6, 18, 60, 50, 8, 16, 12], 1):
+    for col, w in enumerate([6, 22, 18, 70, 50, 8, 28, 14, 12], 1):
         ws_doc.column_dimensions[get_column_letter(col)].width = w
     ws_doc.freeze_panes = "A2"
 
@@ -579,8 +648,9 @@ def main():
           f"{sum(len(v) for v in data['fatture_xlsx'].values())} fatture, "
           f"{sum(len(v) for v in data['preventivi_xlsx'].values())} preventivi (xlsx)")
 
-    docs, f_folders = scan_drive(args.drive_index, args.f_folders)
-    print(f"Drive: {len(docs)} documenti, {len(f_folders)} F-folder IDs")
+    classifier_by_name = load_classifier_by_filename(args.classifier_csv) if args.classifier_csv else {}
+    docs, f_folders = scan_drive(args.drive_index, args.f_folders, classifier_by_name)
+    print(f"Drive: {len(docs)} documenti (incl. mining run), {len(f_folders)} F-folder IDs")
 
     matched, unmatched = [], []
     if args.classifier_csv and args.classifier_csv.exists():
