@@ -1,16 +1,17 @@
-# Status — 2026-05-10
+# Status — 2026-05-14
 
 ## In corso
 - v_condges_banca_dettaglio: view SQL creata, non ancora materializzata su BQ
 - v_ledger_movimenti: view SQL creata (`core/bq/views/v_ledger_movimenti.sql`), non ancora materializzata su BQ
 - xlsx-movimenti-parser: piano scritto (`docs/superpowers/plans/2026-03-30-xlsx-movimenti-parser.md`), non eseguito
-- **revman vertical**: mappatura completa 5 fonti HotelCube; Power BI Z_DataSet espone 12 report downstream (AndamentoPrenotazioni, CamereTree, Clienti, ConsumazioniF&B, Cruscotto, CruscottoMP, CurveCumulative, Prenotazioni, StoricoPrevisione*3) — solo Cruscotto/CruscottoMP ha loop dichiarato (mail produzione). **Bozza email a Lara pronta** (non inviata).
+- **revman vertical**: mappatura completa 5 fonti HotelCube; Power BI Z_DataSet espone 12 report downstream (AndamentoPrenotazioni, CamereTree, Clienti, ConsumazioniF&B, Cruscotto, CruscottoMP, CurveCumulative, Prenotazioni, StoricoPrevisione*3) — solo Cruscotto/CruscottoMP ha loop dichiarato (mail produzione). **API HotelCube negata 2026-05-14** dopo conversazione con vendor → scope confermato = export Z_DataSet via Power BI / file Excel (no integrazione live). Pattern: ogni report Z_DataSet entra in `source_registry.yaml` come `POWERBI_*` RAW_ONLY finché un loop lo richiama. Primo applicato oggi: `POWERBI_ANDAMENTOPRENOTAZIONI_ORTI_SNAPSHOT`.
 - **condges Rosa→Gasparotto integration**: spec + plan scritti (`c69abc1`, `beddc7e`). 2 task iniziali implementati. Plan in esecuzione.
 - **Projects event-sourced Step 1**: spec scritta `docs/superpowers/specs/2026-04-22-projects-event-sourced-design.md`. **Plan TDD da generare**, defer a Doc Refresh + cassa loop chiusi.
 - **Vault loops restructure**: 2/12 loop specs scritti (`daily_reconciliation`, `cash_control`). Next candidate: `monthly_close` (Gasparotto file, COMPETENZA mensile).
 - **Doc Refresh Sprint** (`docs/superpowers/plans/2026-05-01-doc-refresh-sprint.md`): Step 1+2+2.5 chiusi in working tree (da committare). Step 3 (README rewrite) — diff proposto in chat, in attesa OK. Step 4-9 in coda.
 
 ## Completato di recente
+- 2026-05-14: **HotelCube API negata + prima fonte Z_DataSet registrata** — conversazione con HotelCube chiusa: API programmatica non praticabile. Decisione "client diretto da hotelops CLI, auth apiKey + IP whitelist" (deciso 2026-04-18) **archiviata come non applicabile**. Pattern operativo confermato: export Z_DataSet (file Excel da Power BI) come unica via di accesso ai dati PMS. Primo entry registrato: `POWERBI_ANDAMENTOPRENOTAZIONI_ORTI_SNAPSHOT` in `core/source_registry.yaml` (RAW_ONLY, backend gcs, path `powerbi/andamento_prenotazioni/ORTI`), intake eseguito su `Andamento Prenotazioni Data.xlsx` (raw_object_id `d26ec582-ca13-4704-b9ae-c00deb1e359f`, content_hash `35320beb…`, status CLASSIFIED, file su `gs://hotelops-raw/POWERBI_ANDAMENTOPRENOTAZIONI_ORTI_SNAPSHOT/2026/05/`). Pattern riusabile per altri 11 report Z_DataSet quando un loop li richiamerà.
 - 2026-05-10: **Branch consolidation train** — mergiati su `main` con `--no-ff`: `delete-digest` (cmd_lineage_list + view v_raw_promotion_status + drop 66k-line digest.txt), `2026-05-08-m6l1` (raw_object_id FK extension a scheda_contabile + movimenti, hash content-based, source_registry MPS_BANCA_INTUR flip a GCS), `docs/vault-sync-bootstrap` (doc progetto vault sync). 3 conflitti risolti su m6l1: schemas.py (kept HEAD comment), source_registry path_template scheda contabile (kept `registro_banca_esolver/ORTI` — production-running path), ingest_movimenti_contabili (fixed duplicate `raw_object_id` param da auto-merge + help text più informativo da m6l1). Branch `2026-05-09-workspace-controller` (placeholder vuoto) cancellato. Worktree `output/worktrees/docs-vault-sync` rimosso. `verticals-v2` resettato hard a origin (dropped commit 5f9d43b non pushato).
 - 2026-05-10: **Workspace Controller v1** — branch `2026-05-10-workspace-controller`, mergiato su main `--no-ff`. Service account `workspace-controller@hotelops-suite` + Domain-Wide Delegation per panoramagroup.it (scopes: `gmail.readonly`, `drive.readonly`, `drive.file`). Modulo `workspace/` (auth, gmail, drive, miners/capex_emails, cli_commands). CLI `hotelops workspace mine-capex` con `--write-as` (impersonation per Drive quota — SA non ha storage proprio). DWD cross-mailbox provato (gm@panoramagroup.it dry-run → 33 messages / 23 threads). Scope architettura: workspace = SDK + scoop layer; output Drive intermediate → clean/rename → GCS canonical via lineage. Cloud Function naming TBD.
 - 2026-05-07: **Lineage FK + observability** (branch `feat/lineage-fk-and-observability`, 14 commit, mergiato `delete-digest` per Task 6+7). Migration `f_banche_movimenti.raw_object_id STRING NULLABLE` applicata su BQ produzione. `BancaMovimentoRow.raw_object_id` in `core/schemas.py`. `ingest.banca.ingest` single-file mode (`--file --raw-object-id --societa`), `promotion._invoke_parser` propaga `--raw-object-id` al subprocess. **Task 4.5**: `intake.py` emette `SOURCE_RESOLVED` (RAW_ONLY → CLASSIFIED) → sblocca `promote`. **Task 4.6**: state machine accetta `(CLASSIFIED, VALIDATED_OK)` + `(CLASSIFIED, PROMOTED)`, emit con `from_status=current`. View `v_raw_promotion_status` deployata su BQ (per-source × status counts), CLI `hotelops lineage --list --status/--source/--days/--limit`. Smoke produzione: state machine flow ✅ (`RAW_INGESTED → SOURCE_RESOLVED → PROMOTION_REQUESTED → VALIDATED_OK → PROMOTED`); FK stamping su new rows ⏳ (file di test era già storicamente ingestito → 0 nuove righe → in coda al prossimo MPS fresh). Scope creep `2b9d26a` accettato (failure path `(CLASSIFIED, VALIDATED_FAIL)` + `from_status=current` su VALIDATED_FAIL/REJECTED — semanticamente coerente, paper trail in plan).
@@ -34,8 +35,7 @@
 - Manifest/shadow OS: spec esiste, parking lot.
 - Reviews GENERICA al 39% — monitorare se servono categorie aggiuntive.
 - Gap detection euristica `len(kept)==cap` da rivedere dopo 2-4 settimane di dati reali.
-- **revman come verticale #3**: confermato. Scope dipende da risposta API HotelCube.
-- **Pattern integrazione API HotelCube**: client diretto da hotelops CLI, auth apiKey + IP whitelist (deciso 2026-04-18).
+- **revman come verticale #3**: confermato. Scope chiuso 2026-05-14 = export Z_DataSet via Power BI / file Excel (API negata dal vendor).
 - **Projects come dimensione di primo livello (CapEx)**: deciso 2026-04-21, refined 2026-04-26 con event-sourcing 3 tab. Aperta: vertical #4 vs CONDGES extension (rinviata a fine Step 1).
 - **Fonti CLI/APP in `f_piano_finanziario_input` cieche a `v_previsione_cassa`** (emerso 2026-04-23): decidere se promuovere fonti a canonical o consolidare. Richiede decision esplicita prima di toccare la view.
 - **Drift `bank_reconciliation` vs `bank_ledger_reconciliation`** in vault loops: due loop semanticamente distinti — decidere se coesistono o si unificano.
@@ -79,14 +79,13 @@
 - **Test cassa giornaliera su 1 giorno reale** — usare nuovo stream `f_accodamenti` per validare `condges/cassa_giornaliera.py` vs riferimento manuale.
 - **Materializzare** v_ledger_movimenti + v_condges_banca_dettaglio su BQ.
 - **Schema fix `f_chiusura_mensile`** — creare tabella o rimuovere riferimenti dalle pipeline (drift schema 🔴).
-- **Inviare email a Lara Durisotti** (bozza pronta) — sblocca revman.
-- **Documento interno `docs/hotelcube-api-extension.md`** — mappatura 5 export + 12 report Power BI Z_DataSet.
+- **Documento interno `docs/hotelcube-zdataset-catalog.md`** — mappatura 5 export + 12 report Power BI Z_DataSet (ex `hotelcube-api-extension.md`, rinominato dopo che API è stata negata 2026-05-14).
 - **Discussione `SOCIETA_DEFAULT = "INTUR"`** — righe `ingresso/accodamenti/ORTI/…` taggate INTUR via default.
 - **Backfill `file_sorgente` 277 righe vecchie** (cosmetico, non blocca query).
 - **Projects Step 1 plan TDD** — defer a Doc Refresh + cassa loop chiusi.
 - **condges Rosa→Gasparotto plan resume** — continuare esecuzione plan `beddc7e`.
 - **Mail produzione giornaliera** — email occupazione + revenue per BU da `f_pms_statistiche` (richiede freshness fix sopra).
-- **Struttura `revman/`** dopo risposta HotelCube.
+- **Struttura `verticals/revman/`** — scope ora chiaro (Z_DataSet exports). Step minimo: definire il primo loop concreto (pickup analysis? mail produzione esistente?) prima di scaffold.
 - Investigare CVM Trip.com avg 4.57 (sotto threshold alert 6.0).
 - Instrumentare banca/flussi pipeline con `PipelineRun` (context manager generico).
 - Valutare email alert per `check_watermark_staleness` dopo 2-3 settimane.
