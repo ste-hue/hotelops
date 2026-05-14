@@ -58,6 +58,7 @@
 - 🟡 **f_pms_statistiche freshness**: dati fermi al 2026-04-11 (21gg indietro). Da estrarre 60 file Cruscotto giornalieri (20gg × 3 BU) da Power BI per coprire 2026-04-12 → 2026-05-01. Solo `Cruscotto/CruscottoMP` ha loop dichiarato (mail produzione giornaliera).
 - 🟡 **Banche stale**: INTUR/INTESA 53gg, ORTI/INTESA 32gg, INTUR/MPS 31gg, ORTI/MPS+MPS_KROSS 15gg. Solo INTUR/SELLA fresh.
 - 🟡 Gap residuo crash totale `send_email` → `mark_alerts_sent` — fix `af685b2` cattura streaming buffer; processo morto tra send_email e persist_pending non lascia traccia locale. Scelta consapevole "alert duplicato > alert perso", blast radius ridotto.
+- 🔴 **`f_saldi_banca_snapshot` duplicates ORTI 2026-05-01** — emerso 2026-05-13 in session parallela esolver-pilot durante prep rollover Aprile→Maggio: 9 righe MPS per stessa giornata con 2 valori distinti (38719.51 e 33486.28). Probabile bug in `ingest_scheda_contabile` (append senza dedup o multiple ingestion run). NON bloccante per rollover (Stefano ha usato valore corretto manuale 251897.54 MPS, 87439.92 Intesa). Investigazione + cleanup DELETE-INSERT in worktree separata.
 
 ## Prossimi passi
 - **Smoke test workspace su Drive write** — verificare che impersonation `--write-as stefano@panoramagroup.it` risolva il 403 "Service Accounts do not have storage quota". Run minimo: 1 mailbox, 1 keyword, non-dry-run. Cleanup folder orfani in `1rFxRXd1vbFMk1LowDqmdjk_Z2F8pdFaT` (SMOKE_TEST__ + PROOF__) prima.
@@ -91,3 +92,4 @@
 - Valutare email alert per `check_watermark_staleness` dopo 2-3 settimane.
 - Verifica manuale Google Maps RESIDENCE+CVM post-2025-09-13.
 - Valutare esecuzione xlsx-movimenti-parser.
+- **Worktree `fix/saldi-banca-dedup`** — investigare `ingest_scheda_contabile` per duplicates `f_saldi_banca_snapshot` (ORTI 2026-05-01 ha 9 righe MPS / 2 valori distinti). Verificare se mancante dedup MD5 o multiple run senza idempotency. Cleanup table via DELETE-INSERT.

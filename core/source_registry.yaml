@@ -58,8 +58,39 @@ sources:
       bucket: hotelops-raw
       path_template: "homebanking/INTUR/SELLA"
 
-  # (additional banca sources MPSKROSS/INTESA/BCP follow the same pattern;
-  #  add them per societa as the migration proceeds — see spec Appendice B)
+  INTESA_BANCA_INTUR_APPEND:
+    system: INTESA
+    dataset: BANCA
+    societa: INTUR
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_banche_movimenti
+    parser_module: ingest.banca.ingest
+    hash_basis: hash_riga
+    loop_targets: [daily_reconciliation, cash_control, monthly_close]
+    promotion_policy: AUTO
+    detector_category: banca
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "homebanking/INTUR/INTESA"
+
+  INTESA_BANCA_ORTI_APPEND:
+    system: INTESA
+    dataset: BANCA
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_banche_movimenti
+    parser_module: ingest.banca.ingest
+    hash_basis: hash_riga
+    loop_targets: [daily_reconciliation, cash_control, monthly_close]
+    promotion_policy: AUTO
+    detector_category: banca
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "homebanking/ORTI/INTESA"
 
   # ── Esolver flussi — APPEND ───────────────────────────────────────────────
   ESOLVER_MOVIMENTI_ORTI_APPEND:
