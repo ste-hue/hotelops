@@ -322,6 +322,30 @@ sources:
       File documentale del semantic layer Power BI studiato manualmente.
       Al momento viene registrato come meta-layer RAW_ONLY per lineage.
 
+  POWERBI_ANDAMENTOPRENOTAZIONI_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: ANDAMENTOPRENOTAZIONI
+    dataset_label: "Pickup / on-the-books prospettico camera-giorno (export Z_DataSet)"
+    societa: ORTI
+    business_unit: null   # CodiceHotel in colonna (PANORAMAHT = HOTEL oggi)
+    lifecycle: SNAPSHOT
+    canonical_table: f_pms_statistiche
+    parser_module: ingest.flussi.ingest_pms_statistiche
+    natural_key: [data_snapshot, codice_hotel, giorno]
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: andamento_prenotazioni
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/andamento_prenotazioni/ORTI"
+    notes: |
+      Z_DataSet export da Power BI (fonte HotelCube downstream). Forward-looking
+      pickup per (giorno, hotel) con Camere/Presenze ARB/Importo Lordo/ADR.
+      Resta RAW_ONLY finché il vertical revman non dichiara un loop esplicito.
+      canonical_table + parser_module sono placeholder (riusati da semantic model)
+      — la canonical dedicata nascerà col loop revman.
+
   POWERBI_CRUSCOTTO_ORTI_APPEND:
     system: POWERBI
     dataset: CRUSCOTTO
