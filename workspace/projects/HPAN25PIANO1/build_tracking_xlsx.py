@@ -377,19 +377,42 @@ def integrate_classifier(classifier_csv: Path, fmap: dict[str, str]) -> tuple[li
     return matched, unmatched
 
 
+def load_prev_importi(out_path: Path) -> dict[str, float]:
+    """Read previous tracking xlsx Documents sheet → map (filename → importo) to preserve user edits."""
+    if not out_path.exists():
+        return {}
+    try:
+        wb = load_workbook(out_path, data_only=True)
+        if "Documents" not in wb.sheetnames:
+            return {}
+        ws = wb["Documents"]
+        # Find column indices for filename + importo
+        header = [c.value for c in ws[1]]
+        name_idx = header.index("Nome file") if "Nome file" in header else None
+        imp_idx = header.index("€ importo") if "€ importo" in header else None
+        if name_idx is None or imp_idx is None:
+            return {}
+        out = {}
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if name_idx < len(row) and row[name_idx]:
+                v = row[imp_idx] if imp_idx < len(row) else None
+                if isinstance(v, (int, float)) and v > 0:
+                    out[str(row[name_idx])] = float(v)
+        return out
+    except Exception:
+        return {}
+
+
 def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], f_folders: dict[str, str],
                candidates_matched: list[dict], candidates_unmatched: list[dict]):
-    """Load source xlsx (preserving Fornitori/Preventivi/Dati Fatture), strip & re-add auto sheets."""
-    if source_xlsx.exists():
-        wb = load_workbook(source_xlsx)
-        # Drop existing auto-generated sheets to avoid duplication
-        for auto_name in ("Summary", "Tracking_Fornitori", "Documents", "Candidates"):
-            if auto_name in wb.sheetnames:
-                del wb[auto_name]
-    else:
-        wb = Workbook()
-        if "Sheet" in wb.sheetnames:
-            wb.remove(wb["Sheet"])
+    """Build clean v5 tracking xlsx with ONLY 3 sheets: Summary, Tracking_Fornitori, Documents.
+    Importi from prev tracking (if exists) take precedence over source xlsx for user-edit preservation."""
+    wb = Workbook()
+    if "Sheet" in wb.sheetnames:
+        wb.remove(wb["Sheet"])
+
+    # Preserve user importo edits from previous tracking xlsx
+    prev_importi = load_prev_importi(out_path)
 
     # Styles
     hdr_font = Font(bold=True, color="FFFFFF")
@@ -407,40 +430,77 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
             c.alignment = Alignment(horizontal="center", vertical="center")
             c.border = border
 
-    # ── Sheet 1: Tracking_Fornitori ─────────────────────────────────────────
+    # Build inherited importi from xlsx (one-time migration) → map (cod, filename_match) → importo
+    importi_xlsx_fatt = {(p["cod_interno"] if False else cod, str(p.get("numero", "")).strip()): p["importo_eur"]
+                         for cod, lst in data["fatture_xlsx"].items() for p in lst}
+    importi_xlsx_prev = {(cod, str(p.get("numero", "")).strip()): p["importo_eur"]
+                         for cod, lst in data["preventivi_xlsx"].items() for p in lst}
+
+    def lookup_importo(d: dict) -> tuple[float, str]:
+        """Return (importo, source). Priority: prev tracking (user edit) > xlsx Dati Fatture/Preventivi > 0."""
+        if d["name"] in prev_importi:
+            return prev_importi[d["name"]], "user-edit (preserved)"
+        if d["fcode"]:
+            for (c, num), eur in importi_xlsx_fatt.items():
+                if c == d["fcode"] and num and num in d["name"]:
+                    return eur, "xlsx Dati Fatture"
+            for (c, num), eur in importi_xlsx_prev.items():
+                if c == d["fcode"] and num and num in d["name"]:
+                    return eur, "xlsx Preventivi"
+        return 0.0, ""
+
+    # Enrich docs with importi
+    for d in docs:
+        d["importo_eur"], d["importo_source"] = lookup_importo(d)
+
+    # ── Sheet 1: Tracking_Fornitori (filesystem-driven, no double count) ────
     ws = wb.create_sheet("Tracking_Fornitori", 0)
     write_header(ws, [
         "Cod", "Ragione Sociale", "Macro", "Scope",
-        "# Prev", "€ Prev (xlsx)", "# Contr", "# Fatt", "€ Fatt (xlsx)",
+        "# Prev", "€ Prev", "# Contr", "€ Contr", "# Fatt", "€ Fatt", "Totale €",
         "Status", "Cartella F* (Drive)",
     ])
 
-    # Compute per-F-code aggregates
     docs_by_fcode: dict[str, dict[str, list]] = defaultdict(lambda: {"PREVENTIVO": [], "CONTRATTO": [], "FATTURA": []})
     for d in docs:
         if d["fcode"] and d["category"] in ("PREVENTIVO", "CONTRATTO", "FATTURA"):
             docs_by_fcode[d["fcode"]][d["category"]].append(d)
 
-    row_idx = 2
     fornitori = data["fornitori"]
+    row_idx = 2
+    grand_prev = grand_contr = grand_fatt = 0.0
     for cod in sorted(fornitori.keys()):
         f = fornitori[cod]
+        if "alias_of" in f and f["alias_of"]:
+            continue
+
         macro = F_TO_BUDGET_MACRO.get(cod, "—")
-        n_prev = len(docs_by_fcode[cod]["PREVENTIVO"]) + len(data["preventivi_xlsx"].get(cod, []))
-        n_contr = len(docs_by_fcode[cod]["CONTRATTO"])
-        n_fatt = len(docs_by_fcode[cod]["FATTURA"]) + len(data["fatture_xlsx"].get(cod, []))
+        prevs = docs_by_fcode[cod]["PREVENTIVO"]
+        contrs = docs_by_fcode[cod]["CONTRATTO"]
+        fatts = docs_by_fcode[cod]["FATTURA"]
+        # importi: prefer user-edits in Documents (sum prev_importi where match), fallback to xlsx aggregated per F-code
+        user_edit_prev = sum(d["importo_eur"] for d in prevs if d["importo_eur"] > 0 and d["importo_source"] == "user-edit (preserved)")
+        user_edit_fatt = sum(d["importo_eur"] for d in fatts if d["importo_eur"] > 0 and d["importo_source"] == "user-edit (preserved)")
+        xlsx_prev = sum(p["importo_eur"] for p in data["preventivi_xlsx"].get(cod, []))
+        xlsx_fatt = sum(p["importo_eur"] for p in data["fatture_xlsx"].get(cod, []))
+        eur_prev = user_edit_prev if user_edit_prev > 0 else xlsx_prev
+        eur_contr = 0.0  # contracts rarely have xlsx importi; could add later
+        eur_fatt = user_edit_fatt if user_edit_fatt > 0 else xlsx_fatt
+        eur_tot = eur_prev + eur_contr + eur_fatt
+        grand_prev += eur_prev; grand_contr += eur_contr; grand_fatt += eur_fatt
 
-        # money from xlsx authoritative
-        eur_prev_xlsx = sum(p["importo_eur"] for p in data["preventivi_xlsx"].get(cod, []))
-        eur_fatt_xlsx = sum(p["importo_eur"] for p in data["fatture_xlsx"].get(cod, []))
-
-        # Status
-        if n_fatt > 0 and n_prev > 0:
-            status = "FATTURATO+PREV"
-        elif n_fatt > 0:
-            status = "FATTURATO (no prev)"
-        elif n_prev > 0:
-            status = "SOLO PREVENTIVO"
+        # Status filesystem-driven + importo-aware
+        has_imp = len(prevs) + len(contrs) > 0
+        has_comp = len(fatts) > 0
+        has_euros = (eur_prev + eur_contr + eur_fatt) > 0
+        if has_imp and has_comp and has_euros:
+            status = "COMPLETO"
+        elif has_comp and not has_euros:
+            status = "FATTURE SENZA €"   # docs ci sono ma manca importo
+        elif has_comp:
+            status = "SOLO COMPETENZA"
+        elif has_imp:
+            status = "SOLO IMPEGNO"
         else:
             status = "SCOPERTO"
 
@@ -448,34 +508,34 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
         ws.cell(row=row_idx, column=2, value=f["ragione_sociale"])
         ws.cell(row=row_idx, column=3, value=macro)
         ws.cell(row=row_idx, column=4, value=f["scope"])
-        ws.cell(row=row_idx, column=5, value=n_prev)
-        c = ws.cell(row=row_idx, column=6, value=eur_prev_xlsx if eur_prev_xlsx else None)
-        c.number_format = money_fmt
-        ws.cell(row=row_idx, column=7, value=n_contr)
-        ws.cell(row=row_idx, column=8, value=n_fatt)
-        c = ws.cell(row=row_idx, column=9, value=eur_fatt_xlsx if eur_fatt_xlsx else None)
-        c.number_format = money_fmt
-        ws.cell(row=row_idx, column=10, value=status)
+        ws.cell(row=row_idx, column=5, value=len(prevs))
+        c = ws.cell(row=row_idx, column=6, value=eur_prev if eur_prev else None); c.number_format = money_fmt
+        ws.cell(row=row_idx, column=7, value=len(contrs))
+        c = ws.cell(row=row_idx, column=8, value=eur_contr if eur_contr else None); c.number_format = money_fmt
+        ws.cell(row=row_idx, column=9, value=len(fatts))
+        c = ws.cell(row=row_idx, column=10, value=eur_fatt if eur_fatt else None); c.number_format = money_fmt
+        c = ws.cell(row=row_idx, column=11, value=eur_tot if eur_tot else None); c.number_format = money_fmt
+        ws.cell(row=row_idx, column=12, value=status)
         if cod in f_folders:
-            c = ws.cell(row=row_idx, column=11, value="Apri →")
+            c = ws.cell(row=row_idx, column=13, value="Apri →")
             c.hyperlink = folder_url(f_folders[cod])
             c.font = link_font
-        for col in range(1, 12):
+        for col in range(1, 14):
             ws.cell(row=row_idx, column=col).border = border
         row_idx += 1
 
-    # Totals row
-    tot_prev = sum(sum(p["importo_eur"] for p in v) for v in data["preventivi_xlsx"].values())
-    tot_fatt = sum(sum(p["importo_eur"] for p in v) for v in data["fatture_xlsx"].values())
-    n_prev_tot = sum(len(v) for v in data["preventivi_xlsx"].values()) + sum(len(docs_by_fcode[c]["PREVENTIVO"]) for c in fornitori)
-    n_fatt_tot = sum(len(v) for v in data["fatture_xlsx"].values()) + sum(len(docs_by_fcode[c]["FATTURA"]) for c in fornitori)
+    # Totals
     ws.cell(row=row_idx, column=1, value="TOTALE").font = Font(bold=True)
-    ws.cell(row=row_idx, column=5, value=n_prev_tot).font = Font(bold=True)
-    c = ws.cell(row=row_idx, column=6, value=tot_prev); c.number_format = money_fmt; c.font = Font(bold=True)
-    ws.cell(row=row_idx, column=8, value=n_fatt_tot).font = Font(bold=True)
-    c = ws.cell(row=row_idx, column=9, value=tot_fatt); c.number_format = money_fmt; c.font = Font(bold=True)
+    c = ws.cell(row=row_idx, column=6, value=grand_prev); c.number_format = money_fmt; c.font = Font(bold=True)
+    c = ws.cell(row=row_idx, column=8, value=grand_contr); c.number_format = money_fmt; c.font = Font(bold=True)
+    c = ws.cell(row=row_idx, column=10, value=grand_fatt); c.number_format = money_fmt; c.font = Font(bold=True)
+    c = ws.cell(row=row_idx, column=11, value=grand_prev + grand_contr + grand_fatt); c.number_format = money_fmt; c.font = Font(bold=True)
 
-    for col, w in enumerate([6, 36, 14, 32, 7, 14, 8, 7, 14, 22, 16], 1):
+    # backward-compat for Summary aggregations below
+    tot_prev = grand_prev + grand_contr  # IMPEGNO = preventivi + contratti
+    tot_fatt = grand_fatt
+
+    for col, w in enumerate([6, 36, 14, 32, 7, 12, 8, 12, 7, 14, 14, 22, 16], 1):
         ws.column_dimensions[get_column_letter(col)].width = w
     ws.freeze_panes = "A2"
 
@@ -536,34 +596,7 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
         ws_doc.column_dimensions[get_column_letter(col)].width = w
     ws_doc.freeze_panes = "A2"
 
-    # ── Sheet 3: Candidates (mining recovery) ───────────────────────────────
-    ws_c = wb.create_sheet("Candidates", 2)
-    write_header(ws_c, [
-        "Stato", "Cod (suggerito)", "Categoria", "Fornitore (estratto)", "Filename", "Importo (estratto)",
-        "Confidence", "Reasoning",
-    ])
-    r = 2
-    for row in candidates_matched + candidates_unmatched:
-        stato = "MATCHED" if row["fcode"] else "DA REVIEWARE"
-        ws_c.cell(row=r, column=1, value=stato)
-        ws_c.cell(row=r, column=2, value=row["fcode"])
-        ws_c.cell(row=r, column=3, value=row["category"])
-        ws_c.cell(row=r, column=4, value=row["fornitore"])
-        ws_c.cell(row=r, column=5, value=row["filename"])
-        if row["importo_eur"]:
-            c = ws_c.cell(row=r, column=6, value=row["importo_eur"])
-            c.number_format = money_fmt
-        ws_c.cell(row=r, column=7, value=row["confidence"])
-        ws_c.cell(row=r, column=8, value=row["reasoning"])
-        for col in range(1, 9):
-            ws_c.cell(row=r, column=col).border = border
-        r += 1
-
-    for col, w in enumerate([14, 12, 14, 32, 60, 14, 10, 60], 1):
-        ws_c.column_dimensions[get_column_letter(col)].width = w
-    ws_c.freeze_panes = "A2"
-
-    # ── Sheet 4: Summary ─────────────────────────────────────────────────────
+    # ── Sheet 3: Summary ─────────────────────────────────────────────────────
     ws_s = wb.create_sheet("Summary", 0)
     ws_s["A1"] = "HPAN25PIANO1 — Camere Primo Piano · Tracking Master"
     ws_s["A1"].font = Font(bold=True, size=14)
@@ -571,67 +604,107 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
     ws_s["B3"] = BUDGET_TARGET_EUR
     ws_s["B3"].number_format = money_fmt
 
-    ws_s["A5"] = "IMPEGNO (preventivi xlsx)"
+    ws_s["A5"] = "IMPEGNO documentato (preventivi + contratti su Drive)"
     ws_s["B5"] = tot_prev
     ws_s["B5"].number_format = money_fmt
-    ws_s["A6"] = "COMPETENZA (fatture xlsx)"
+    ws_s["A6"] = "COMPETENZA documentata (fatture su Drive)"
     ws_s["B6"] = tot_fatt
     ws_s["B6"].number_format = money_fmt
 
-    candidates_matched_eur = sum(c["importo_eur"] for c in candidates_matched)
-    ws_s["A7"] = "Candidati mining (matched, importo estratto)"
-    ws_s["B7"] = candidates_matched_eur
-    ws_s["B7"].number_format = money_fmt
-    ws_s["C7"] = "(import. da verificare)"
-
-    documented = max(tot_prev + candidates_matched_eur, tot_fatt)
+    documented = max(tot_prev, tot_fatt)
     gap = BUDGET_TARGET_EUR - documented
-    ws_s["A9"] = "Documentato (max IMPEGNO/COMPETENZA)"
-    ws_s["B9"] = documented
+    ws_s["A8"] = "Documentato (max IMPEGNO / COMPETENZA)"
+    ws_s["B8"] = documented
+    ws_s["B8"].number_format = money_fmt
+    ws_s["B8"].font = Font(bold=True)
+    ws_s["A9"] = "Gap 'nell'etere' (da scoprire o documentare)"
+    ws_s["B9"] = gap
     ws_s["B9"].number_format = money_fmt
-    ws_s["B9"].font = Font(bold=True)
-    ws_s["A10"] = "Gap 'nell'etere' (da scoprire)"
-    ws_s["B10"] = gap
-    ws_s["B10"].number_format = money_fmt
-    ws_s["B10"].font = Font(bold=True, color="C00000")
-    ws_s["C10"] = f"{gap / BUDGET_TARGET_EUR * 100:.0f}% del target"
+    ws_s["B9"].font = Font(bold=True, color="C00000")
+    ws_s["C9"] = f"{gap / BUDGET_TARGET_EUR * 100:.0f}% del target"
 
-    ws_s["A12"] = "Per macro (fatture xlsx + preventivi xlsx):"
-    ws_s["A12"].font = Font(bold=True)
-    macro_agg = defaultdict(lambda: {"prev": 0.0, "fatt": 0.0})
-    for cod, lst in data["preventivi_xlsx"].items():
-        macro_agg[F_TO_BUDGET_MACRO.get(cod, "?")]["prev"] += sum(p["importo_eur"] for p in lst)
-    for cod, lst in data["fatture_xlsx"].items():
-        macro_agg[F_TO_BUDGET_MACRO.get(cod, "?")]["fatt"] += sum(p["importo_eur"] for p in lst)
+    ws_s["A11"] = "Per macro budget (importi da Documents):"
+    ws_s["A11"].font = Font(bold=True)
+    macro_agg: dict[str, dict[str, float]] = defaultdict(lambda: {"prev": 0.0, "fatt": 0.0})
+    for cod in fornitori:
+        macro = F_TO_BUDGET_MACRO.get(cod, "?")
+        macro_agg[macro]["prev"] += sum(d["importo_eur"] for d in docs_by_fcode[cod]["PREVENTIVO"]) + sum(d["importo_eur"] for d in docs_by_fcode[cod]["CONTRATTO"])
+        macro_agg[macro]["fatt"] += sum(d["importo_eur"] for d in docs_by_fcode[cod]["FATTURA"])
 
-    ws_s["A13"] = "Macro"
-    ws_s["B13"] = "€ Preventivi"
-    ws_s["C13"] = "€ Fatture"
-    for col in ("A13", "B13", "C13"):
+    ws_s["A12"] = "Macro"
+    ws_s["B12"] = "€ IMPEGNO"
+    ws_s["C12"] = "€ COMPETENZA"
+    for col in ("A12", "B12", "C12"):
         ws_s[col].font = hdr_font
         ws_s[col].fill = hdr_fill
-    r = 14
+    r = 13
     for macro in sorted(macro_agg.keys()):
         ws_s.cell(row=r, column=1, value=macro)
         c = ws_s.cell(row=r, column=2, value=macro_agg[macro]["prev"]); c.number_format = money_fmt
         c = ws_s.cell(row=r, column=3, value=macro_agg[macro]["fatt"]); c.number_format = money_fmt
         r += 1
 
-    ws_s["A" + str(r + 2)] = "Documenti scoperti (fornitori senza alcun documento):"
-    ws_s["A" + str(r + 2)].font = Font(bold=True)
+    # Compute scoperti list for Summary teaser + dedicated sheet
     scoperti = [
-        f"{cod} {data['fornitori'][cod]['ragione_sociale']}"
-        for cod in fornitori
-        if not data["preventivi_xlsx"].get(cod) and not data["fatture_xlsx"].get(cod) and not docs_by_fcode[cod]["PREVENTIVO"] and not docs_by_fcode[cod]["FATTURA"]
+        cod
+        for cod in sorted(fornitori.keys())
+        if not fornitori[cod].get("alias_of")
+        and not docs_by_fcode[cod]["PREVENTIVO"]
+        and not docs_by_fcode[cod]["CONTRATTO"]
+        and not docs_by_fcode[cod]["FATTURA"]
     ]
-    for i, sc in enumerate(scoperti, r + 3):
-        ws_s["A" + str(i)] = sc
+    ws_s["A" + str(r + 2)] = f"Fornitori SCOPERTI: {len(scoperti)} — vedi foglio Scoperti per dettaglio"
+    ws_s["A" + str(r + 2)].font = Font(bold=True)
+    ws_s["A" + str(r + 3)] = ", ".join(scoperti)
+
+    # ── Sheet 4: Scoperti (dedicato per follow-up uno-per-uno) ──────────────
+    ws_sc = wb.create_sheet("Scoperti", 3)
+    write_header(ws_sc, [
+        "Cod", "Ragione Sociale", "Macro", "Scope", "Mappa dice atteso?",
+        "Cartella F* (Drive)", "Azione",
+    ])
+    rr = 2
+    # known "expected" per mappa tesoro: hardcoded summary
+    mappa_atteso = {
+        "F003": "—",
+        "F004": "Acquisti Amazon (forniture minute)",
+        "F006": "Offerta TV camere",
+        "F008": "FT (mappa: prev)",
+        "F009": "FT prev (mappa)",
+        "F012": "SALDO FTT (mappa)",
+        "F013": "ACCONTO FTT + SALDO ??? (mappa)",
+        "F014": "ACCONTO FT (mappa) — preventivo ricevuto, manca fattura",
+        "F015": "Offerta frigobar+casseforti",
+        "F021": "—",
+        "F029": "ALIAS di F026 — non valutare separatamente",
+        "F030": "FT (mappa) — manca tutto",
+        "F031": "FT prev + FT acc (mappa) — manca fattura",
+        "F032": "???? (mappa)",
+    }
+    for cod in scoperti:
+        f = fornitori[cod]
+        ws_sc.cell(row=rr, column=1, value=cod)
+        ws_sc.cell(row=rr, column=2, value=f["ragione_sociale"])
+        ws_sc.cell(row=rr, column=3, value=F_TO_BUDGET_MACRO.get(cod, "—"))
+        ws_sc.cell(row=rr, column=4, value=f["scope"])
+        ws_sc.cell(row=rr, column=5, value=mappa_atteso.get(cod, "?"))
+        if cod in f_folders:
+            c = ws_sc.cell(row=rr, column=6, value="Apri →")
+            c.hyperlink = folder_url(f_folders[cod])
+            c.font = link_font
+        ws_sc.cell(row=rr, column=7, value="Verificare con gm/amministrazione: c'è doc o no?")
+        for col in range(1, 8):
+            ws_sc.cell(row=rr, column=col).border = border
+        rr += 1
+    for col, w in enumerate([6, 36, 14, 32, 42, 16, 50], 1):
+        ws_sc.column_dimensions[get_column_letter(col)].width = w
+    ws_sc.freeze_panes = "A2"
 
     for col, w in enumerate([40, 18, 30], 1):
         ws_s.column_dimensions[get_column_letter(col)].width = w
 
     wb.save(out_path)
-    return tot_prev, tot_fatt, candidates_matched_eur, gap, len(scoperti)
+    return tot_prev, tot_fatt, 0.0, gap, len(scoperti)
 
 
 def main():

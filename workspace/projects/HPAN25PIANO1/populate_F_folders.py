@@ -25,10 +25,36 @@ SUPPLIERS_YAML = Path(__file__).parent / "suppliers.yaml"
 
 def normalize(s: str) -> str:
     s = (s or "").upper()
+    s = s.replace("&", "AND")  # preserve B&T → BAND T (then BAND matches as token)
     s = re.sub(r"\b(S\.?\s*R\.?\s*L\.?|S\.?\s*P\.?\s*A\.?|SOCIO\s*UNICO|AZIONISTA\s*UNICO|SRL|SPA|SAS|SNC|GROUP)\b", " ", s)
     s = re.sub(r"[^\w\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
+
+
+EXPLICIT_ALIASES = {
+    # F-code → list of filename tokens that should match (short / branded names)
+    "F001": ["AMCN", "A.M.C.N", "AMCN BONIFICO"],
+    "F005": ["B&T", "B & T", "DORELAN"],
+    "F009": ["CSC", "IL CENTRO CSC", "CENTRO CSC"],
+    "F011": ["CUOMO", "RINO CUOMO"],
+    "F014": ["ILLUXIT"],
+    "F015": ["INDELB", "INDEL B"],
+    "F016": ["ITX", "ZARA"],
+    "F017": ["LAUDATO"],
+    "F018": ["MARIGLIANO", "ARCHISAVIO"],
+    "F019": ["MARINO"],
+    "F022": ["OLIVA"],
+    "F023": ["PORTEDI", "DIERRE"],
+    "F024": ["ROMANO"],
+    "F025": ["STE", "S.T.E"],
+    "F026": ["SALA", "SALA SERRAMENTI", "SALA INFISSI", "SALA GIANPIERO"],
+    "F027": ["SANTELIA"],
+    "F028": ["VDA", "VDA GROUP"],
+    "F029": ["METAL 2000", "METAL2000"],
+    "F031": ["SKLUM"],
+    "F033": ["ELECTRA"],
+}
 
 
 def build_fuzzy_map() -> dict[str, str]:
@@ -44,6 +70,15 @@ def build_fuzzy_map() -> dict[str, str]:
         for tok in rs.split():
             if len(tok) >= 4 and tok not in {"SRL", "SPA", "SAS", "GROUP", "COSTRUZIONI", "TAPPEZZERIA", "GIUSEPPE", "ITALIA", "PIASTRELLISTI", "FIGLI"}:
                 out.setdefault(tok, cod)
+    # Add explicit aliases (overrides for short/brand names)
+    for cod, aliases in EXPLICIT_ALIASES.items():
+        for a in aliases:
+            n = normalize(a)
+            if n:
+                out.setdefault(n, cod)
+            c = re.sub(r"\s+", "", n)
+            if c:
+                out.setdefault(c, cod)
     return out
 
 
@@ -56,6 +91,12 @@ def match_filename_to_fcode(filename: str, fmap: dict[str, str]) -> str | None:
         return fmap[norm]
     if compact in fmap:
         return fmap[compact]
+    # Token-level exact match (handles short brand names like VDA, CSC, STE)
+    tokens = norm.split()
+    for tok in tokens:
+        if len(tok) >= 3 and tok in fmap:
+            return fmap[tok]
+    # Substring match for longer keys
     for known, cod in fmap.items():
         if len(known) < 4:
             continue
