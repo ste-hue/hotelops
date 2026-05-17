@@ -163,6 +163,8 @@ hotelops previsione utenze 4-12 22000      # Update forecast: utenze ORTI Apr-De
 hotelops previsione "entrate hotel" aprile-ottobre 180000  # Natural language months
 hotelops manifest                              # Generate BQ table catalog (manifest.yaml)
 hotelops manifest --table f_consumi_economato  # Single table
+hotelops deploy-views                          # Deploy all BQ views from core/bq/views/ (dependency-ordered)
+hotelops deploy-views --dry-run                # Show deploy order without executing
 hotelops classifica file1.xlsx file2.csv       # Classify files (show type + destination)
 hotelops classifica *.xlsx --route --ingest    # Classify + route + ingest
 hotelops accodamenti                           # Sync da Drive + riconciliazione cassa da TXT HotelCube → Excel su Desktop

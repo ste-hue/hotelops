@@ -240,6 +240,18 @@ def cmd_manifest(args):
     print(f"  ✓ Written to {output}")
 
 
+def cmd_deploy_views(args):
+    """Deploy tutte le view BigQuery da core/bq/views/ in ordine di dipendenza."""
+    import logging
+
+    from core.bq.load.load_views import deploy_views
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    order = deploy_views(dry_run=args.dry_run)
+    verb = "da deployare" if args.dry_run else "deployate"
+    print(f"\n  ✓ {len(order)} view {verb}")
+
+
 # ── Classifica: classify + route + ingest files ──────────────────────────────
 
 
@@ -968,6 +980,14 @@ def main():
         "--output", help="Output path (default: core/bq/manifest.yaml)"
     )
 
+    # deploy-views
+    p_deploy_views = sub.add_parser(
+        "deploy-views", help="Deploy view BigQuery da core/bq/views/"
+    )
+    p_deploy_views.add_argument(
+        "--dry-run", action="store_true", help="Mostra l'ordine senza eseguire"
+    )
+
     # help
     sub.add_parser("help", help="Guida completa con esempi")
 
@@ -1266,6 +1286,7 @@ def main():
         "prev": cmd_previsione,
         "voci": cmd_voci,
         "manifest": cmd_manifest,
+        "deploy-views": cmd_deploy_views,
         "classifica": cmd_classifica,
         "cls": cmd_classifica,
         "drop": cmd_drop,
