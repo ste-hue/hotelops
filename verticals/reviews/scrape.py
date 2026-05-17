@@ -99,11 +99,14 @@ def _build_input(piattaforma: str, bu: str, url: str) -> dict:
             "reviewsSort": "newest",
         }
     elif piattaforma == "EXPEDIA":
-        # memo23/expedia-scraper 0.0: maxItems is the ONLY cap param.
+        # memo23/expedia-scraper: maxItems is the ONLY cap param.
         # The old maxReviewsPerHotel/maxReviews were both silently ignored,
         # causing the 2026-04-10 blowout (226 items for a 15-cap request).
+        # Rebuilt 2026-05-17: startUrls editor is now `stringList` — wants
+        # plain string URLs, not [{"url": ...}] objects. The object form
+        # crashes the actor at startup ("Provide at least one start URL").
         return {
-            "startUrls": [{"url": url}],
+            "startUrls": [url],
             "maxItems": n,
         }
     elif piattaforma == "TRIP":
