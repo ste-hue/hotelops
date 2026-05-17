@@ -55,6 +55,14 @@ def test_expedia_uses_maxItems_only():
     assert "maxReviews" not in inp
 
 
+def test_expedia_startUrls_plain_strings():
+    """memo23/expedia-scraper rebuilt 2026-05-17: startUrls editor changed to
+    stringList — wants plain string URLs, not [{"url": ...}] objects. Old
+    object form crashed the actor ("Provide at least one start URL")."""
+    inp = _build_input("EXPEDIA", "HOTEL", "https://example.com/expedia")
+    assert inp["startUrls"] == ["https://example.com/expedia"]
+
+
 def test_google_unchanged():
     """compass/Google-Maps-Reviews-Scraper: maxReviews + reviewsSort both
     valid per live schema. Regression guard — don't accidentally break it."""

@@ -1,0 +1,73 @@
+project_code: HPAN25PIANO1
+project_name: Camere Primo Piano - Hotel Panorama
+status: retrospective_lineage_recovery
+drive_folder: 04_Progetti_Investimenti/Investimenti2026/HPAN25PIANO1_CamerePrimoPiano
+master_xlsx: HPAN25PIANO1_CapEx_Controllo.xlsx
+mailboxes:
+  - gm@panoramagroup.it
+  - amministrazione@panoramagroup.it
+cutoff_date: '2025-09-01'
+
+# Ground truth: 33 fornitori, source = 07_fornitori/README.md
+suppliers:
+  # LAVORI
+  - {code: F001, ragione_sociale: 'A.M.C.N. COSTRUZIONI SRL',         scope: 'Lavori edili (impresa principale)',     macro: LAVORI}
+  - {code: F008, ragione_sociale: 'CHIANESE',                          scope: 'Montaggio porte',                       macro: LAVORI}
+  - {code: F019, ragione_sociale: 'MARINO LUIGI GIUSEPPE',             scope: 'Posa pavimenti',                        macro: LAVORI}
+  - {code: F024, ragione_sociale: 'ROMANO GAETANO',                    scope: 'Piastrellisti extra',                   macro: LAVORI}
+  - {code: F025, ragione_sociale: 'S.T.E IMPIANTI ELETTRICI',          scope: 'Impianti elettrici',                    macro: LAVORI}
+  - {code: F027, ragione_sociale: 'SANTELIA LUIGI',                    scope: 'Impianti idraulici/meccanici',          macro: LAVORI}
+  # FORNITURE
+  - {code: F002, ragione_sociale: 'ABC FLOOR DESIGNER S.R.L.',         scope: 'Moquette',                              macro: FORNITURE}
+  - {code: F004, ragione_sociale: 'AMAZON',                            scope: 'Staffe e forniture minute',             macro: FORNITURE}
+  - {code: F005, ragione_sociale: 'B & T S.p.A. (DORELAN)',            scope: 'Materassi Dorelan',                     macro: FORNITURE}
+  - {code: F006, ragione_sociale: 'CAPONE',                            scope: 'TV camere',                             macro: FORNITURE}
+  - {code: F007, ragione_sociale: "CERAMICA D'ARTE SICIGNANO SRL",     scope: 'Piastrelle + bagni',                    macro: FORNITURE}
+  - {code: F009, ragione_sociale: 'CSC',                               scope: 'Porte tagliafuoco REI',                 macro: FORNITURE}
+  - {code: F010, ragione_sociale: "DOMUS TAPPEZZERIA D'ARREDO S.R.L.", scope: 'Testiere e tende',                      macro: FORNITURE}
+  - {code: F011, ragione_sociale: 'FALEGNAMERIA CUOMO RINO',           scope: 'Falegnameria arredi camere',            macro: FORNITURE}
+  - {code: F012, ragione_sociale: 'FLAB',                              scope: 'Cabine doccia e specchi',               macro: FORNITURE}
+  - {code: F014, ragione_sociale: 'ILLUXIT',                           scope: 'Luci',                                  macro: FORNITURE}
+  - {code: F015, ragione_sociale: 'INDELB',                            scope: 'Frigobar + casseforti',                 macro: FORNITURE}
+  - {code: F016, ragione_sociale: 'ITX ITALIA S.R.L.',                 scope: 'Comodini ZARA',                         macro: FORNITURE}
+  - {code: F020, ragione_sociale: 'MIELE GIUSEPPE E FIGLI SPA',        scope: 'Piastrelle',                            macro: FORNITURE}
+  - {code: F023, ragione_sociale: 'PORTEDI S.R.L.',                    scope: 'Porte DIERRE',                          macro: FORNITURE}
+  - {code: F026, ragione_sociale: 'SALA GIANPIERO',                    scope: 'Infissi',                               macro: FORNITURE}
+  - {code: F028, ragione_sociale: 'VDA GROUP S.p.A.',                  scope: 'Building automation',                   macro: FORNITURE}
+  - {code: F029, ragione_sociale: 'METAL 2000 (alias di F026 SALA INFISSI)', scope: 'Infissi/serramenti — stessa entità di F026 (merge 2026-05-13). F-code preservato per continuità numerica.', macro: FORNITURE, alias_of: F026}
+  - {code: F030, ragione_sociale: 'GRANATO',                           scope: 'Sedie esterne e tavolini',              macro: FORNITURE}
+  - {code: F031, ragione_sociale: 'SKLUM',                             scope: 'Sedie esterne e tavolini',              macro: FORNITURE}
+  - {code: F033, ragione_sociale: 'ELECTRA S.P.A.',                    scope: 'Materiale elettrico',                   macro: FORNITURE}
+  - {code: F034, ragione_sociale: 'NINNI SRL',                         scope: 'TV camere (Samsung UE50/UE65)',         macro: FORNITURE}
+  - {code: F035, ragione_sociale: 'OCEANO SRL',                        scope: 'Sanitari (lavabi Circle 60, pilette)',  macro: FORNITURE}
+  - {code: F036, ragione_sociale: 'INNOVA RESIN DESIGN S.R.L.',        scope: 'Pavimenti in resina',                   macro: FORNITURE}
+  - {code: F037, ragione_sociale: 'IRWID SRL',                         scope: 'Colonnine separatori con nastro',       macro: FORNITURE}
+  # CONSULENZA
+  - {code: F003, ragione_sociale: 'AMALIA PISACANE',                   scope: 'Ingegnere DL / pratiche',               macro: CONSULENZA}
+  - {code: F013, ragione_sociale: 'HOSPITALITY PROJECT',               scope: 'Project management',                    macro: CONSULENZA}
+  - {code: F017, ragione_sociale: 'LAUDATO GRU DI LAUDATO FRANCESCO',  scope: 'Noleggio autogru',                      macro: CONSULENZA}
+  - {code: F018, ragione_sociale: 'MARIGLIANO SALVATORE',              scope: 'Architetto (studio Archisavio)',        macro: CONSULENZA}
+  - {code: F021, ragione_sociale: 'NESE',                              scope: 'Progettazione impianti',                macro: CONSULENZA}
+  - {code: F022, ragione_sociale: 'OLIVA COPERTURE GROUP S.R.L.',      scope: 'Smaltimento eternit/amianto',           macro: CONSULENZA}
+  - {code: F032, ragione_sociale: 'ORILIA',                            scope: 'Trasporto',                             macro: CONSULENZA}
+
+extra_codes:
+  - code: SCARTATO_RUMOLO
+    label: 'Rumolo Carlo (offerta non scelta — candidato alternativa AMCN)'
+  - code: SCARTATO_APICELLA
+    label: 'Edil Apicella (offerta non scelta — candidato alternativa AMCN)'
+  - code: GENERIC_PROJECT
+    label: 'Email project-wide (PM, banking, decisioni cross-fornitore)'
+  - code: NOISE
+    label: 'Non related a HPAN25PIANO1 (rumore storico)'
+
+# Out-of-scope: fatture INTUR ma non per HPAN25PIANO1 (camere primo piano)
+out_of_scope:
+  - {fornitore: 'DI GIULIO SRL',                    motivo: 'Centralina irrigazione — giardino/esterno'}
+  - {fornitore: 'LEROY MERLIN',                     motivo: 'Fioriere — outdoor, intestate PANORAMA COMPANY'}
+  - {fornitore: 'OMBRELLONI LETTINI ITALIA SRL',    motivo: 'Spiaggia — altro progetto HPAN25SPIAGGIA'}
+
+valid_subfolders:
+  - 01_preventivi
+  - 02_ordini_contratti
+  - 04_comunicazioni

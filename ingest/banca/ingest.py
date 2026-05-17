@@ -633,49 +633,38 @@ def extract_saldo_mps2026(
 def upsert_saldo_snapshot(
     bq_client: bigquery.Client, snapshot: dict, dry_run: bool, logger: logging.Logger
 ):
-    """Write saldo snapshot to f_saldi_banca_snapshot (upsert by societa+banca+data_snapshot)."""
+    """Write saldo snapshot to f_saldi_banca_snapshot via the BQ gate.
+
+    Uses bq_write_validated SNAPSHOT mode (load job, no streaming buffer) so
+    the surgical DELETE-INSERT per (societa, banca, data_snapshot) actually
+    replaces prior rows. The previous streaming path (insert_rows_json) could
+    not DELETE rows still in the streaming buffer, so re-runs accumulated
+    duplicates — see tests/test_ingest_banca_saldo_snapshot.py.
+    """
     if dry_run:
         logger.info(
             f"  DRY RUN saldo: {snapshot['societa_id']}/{snapshot['banca_id']} {snapshot['data_snapshot']} = €{snapshot['saldo_finale']:,.2f}"
         )
         return
-    from google.cloud import bigquery as bq_lib
 
-    table_id = BQ_SNAPSHOT_TABLE
-    try:
-        bq_client.get_table(table_id)
-    except Exception:
-        schema = [
-            bq_lib.SchemaField("societa_id", "STRING"),
-            bq_lib.SchemaField("banca_id", "STRING"),
-            bq_lib.SchemaField("data_snapshot", "DATE"),
-            bq_lib.SchemaField("saldo_finale", "FLOAT"),
-        ]
-        bq_client.create_table(bq_lib.Table(table_id, schema=schema))
-        logger.info(f"  Created {table_id}")
-    try:
-        bq_client.query(f"""
-        DELETE FROM `{table_id}`
-        WHERE societa_id = '{snapshot["societa_id"]}'
-          AND banca_id = '{snapshot["banca_id"]}'
-          AND data_snapshot = DATE('{snapshot["data_snapshot"]}')
-        """).result()
-    except Exception as e:
-        # Streaming buffer conflict — rows just inserted can't be DELETEd yet.
-        # Safe to skip: we'll just INSERT (may produce a dupe for today, next run cleans up).
-        if "streaming buffer" in str(e).lower():
-            logger.warning(
-                f"  Saldo skip DELETE (streaming buffer): {snapshot['societa_id']}/{snapshot['banca_id']} — inserting anyway"
-            )
-        else:
-            raise
-    errors = bq_client.insert_rows_json(table_id, [snapshot])
-    if errors:
-        logger.error(f"  Snapshot errors: {errors[:2]}")
-    else:
-        logger.info(
-            f"  ✓ Saldo snapshot saved: {snapshot['societa_id']}/{snapshot['banca_id']} {snapshot['data_snapshot']}"
-        )
+    from core.bq.write import bq_write_validated
+    from core.schemas import SaldoBancaSnapshotRow
+
+    row = SaldoBancaSnapshotRow(
+        societa_id=snapshot["societa_id"],
+        banca_id=snapshot["banca_id"],
+        data_snapshot=snapshot["data_snapshot"],
+        saldo_finale=snapshot["saldo_finale"],
+    )
+    bq_write_validated(
+        BQ_SNAPSHOT_TABLE,
+        [row],
+        mode="snapshot",
+        natural_key=["societa_id", "banca_id", "data_snapshot"],
+    )
+    logger.info(
+        f"  ✓ Saldo snapshot saved: {snapshot['societa_id']}/{snapshot['banca_id']} {snapshot['data_snapshot']}"
+    )
 
 
 def read_sella_xls(path: Path, logger: logging.Logger) -> list[dict]:
