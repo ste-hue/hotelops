@@ -311,6 +311,51 @@ class VenditaFbRow(BaseModel):
         return v
 
 
+# ── f_ricavi_fb ──────────────────────────────────────────────────────────────
+
+
+class RicaviFbRow(BaseModel):
+    """Schema for f_ricavi_fb — F&B revenue by structure × month × charge code.
+
+    Source: HotelCube Power BI "Produzione Netta Dashboard" XLSX, one file per
+    struttura × mese. Drill-down of classe 02FB into ~20 charge codes
+    (SCBKFBB, RISLFOOD, DINFOOD, ...).
+
+    Pattern: SNAPSHOT, natural_key (business_unit_id, anno, mese). Re-loading a
+    month replaces that structure-month's rows.
+
+    Lato ricavo del food cost. Si incrocia con f_consumi_economato (costo,
+    globale) tramite mese, e con f_coperti_giornalieri (pasti) tramite mese × BU.
+    """
+
+    societa_id: SocietaId
+    business_unit_id: BusinessUnitId
+    anno: int
+    mese: int
+    codice: str
+    descrizione: Optional[str] = None
+    netto: float
+    lordo: float
+    file_sorgente: Optional[str] = None
+    hash_riga: str
+    data_caricamento: datetime
+
+    @field_validator("mese")
+    @classmethod
+    def mese_range(cls, v: int) -> int:
+        if not 1 <= v <= 12:
+            raise ValueError(f"mese fuori range: {v}")
+        return v
+
+    @field_validator("codice")
+    @classmethod
+    def codice_not_empty(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("codice vuoto")
+        return v
+
+
 # ── f_ricavi_storici ─────────────────────────────────────────────────────────
 
 
