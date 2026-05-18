@@ -18,7 +18,8 @@
 |---|---|
 | `core/schemas.py` | + `RicaviFbRow` Pydantic model |
 | `core/config.py` | + `F_RICAVI_FB` table id constant |
-| `core/registry.yaml` | + `ricavi_fb` registry entry |
+| `core/registry.yaml` | + `ricavi_fb` detector signature entry |
+| `core/source_registry.yaml` | + `POWERBI_RICAVIFB_ORTI_SNAPSHOT` lineage source |
 | `ingest/flussi/ingest_ricavi_fb.py` | Parse Produzione Netta xlsx → `f_ricavi_fb` (SNAPSHOT) |
 | `ingest/classify.py` | + `detect_ricavi_fb` detector |
 | `core/bq/views/v_fb_consumi.sql` | Cost by category + price/volume variance |
@@ -34,6 +35,7 @@
 - The price/volume decomposition uses the **exact** convention (`effetto_prezzo = ΔP·Q₁`, `effetto_volume = ΔQ·P₀`) whose sum equals `Δcosto` identically — so there is **no residuo column** (the spec's "residuo" line is moot).
 - `societa_id` is derived in the pipeline via `OPERATIONS_CUTOVER_DATE` (defined locally in the pipeline module); the Pydantic model does not re-validate the cutover (YAGNI — all 24 files are post-cutover ORTI).
 - SNAPSHOT idempotency is verified by a real double-load + row-count check in Task 9, not a mock-BQ unit test.
+- **Lineage/GCS integration (added 2026-05-18 per user directive "parti sempre dall'ingestione in GCS"):** ingestion goes through the existing lineage layer. Files are staged to `gs://hotelops-raw` via `hotelops intake --source-name POWERBI_RICAVIFB_ORTI_SNAPSHOT` (registered in `f_raw_objects` with the source label), then `hotelops promote` invokes the parser. `f_ricavi_fb` carries a nullable `raw_object_id` FK like every other fact table. The pipeline `ingest_ricavi_fb.py` is the source's `parser_module` — `promote` invokes it as `python -m ingest.flussi.ingest_ricavi_fb --file <tmp> --raw-object-id <id>`. There is no standalone `--dir` bulk loader (it would bypass GCS).
 
 ---
 
@@ -125,8 +127,9 @@ class RicaviFbRow(BaseModel):
     descrizione: Optional[str] = None
     netto: float
     lordo: float
-    file_sorgente: Optional[str] = None
+    file_sorgente: str
     hash_riga: str
+    raw_object_id: Optional[str] = None
     data_caricamento: datetime
 
     @field_validator("mese")
@@ -159,11 +162,12 @@ git commit -m "feat(schemas): add RicaviFbRow for f_ricavi_fb"
 
 ---
 
-## Task 2: Config constant + registry entry
+## Task 2: Config + registry entries
 
 **Files:**
 - Modify: `core/config.py` (near line 16, with the other `F_*` constants)
 - Modify: `core/registry.yaml`
+- Modify: `core/source_registry.yaml`
 
 - [ ] **Step 1: Add the table id to `core/config.py`**
 
@@ -173,7 +177,7 @@ After the line `F_COPERTI_GIORNALIERI       = _t("f_coperti_giornalieri")` add:
 F_RICAVI_FB                 = _t("f_ricavi_fb")
 ```
 
-- [ ] **Step 2: Add the registry entry to `core/registry.yaml`**
+- [ ] **Step 2: Add the detector signature entry to `core/registry.yaml`**
 
 Under `file_types:`, add:
 
@@ -192,21 +196,53 @@ Under `file_types:`, add:
         header_0_2: ["Classe", "Codice", "Descrizione Addebito"]
 ```
 
-- [ ] **Step 3: Verify config imports cleanly**
+- [ ] **Step 3: Add the lineage source to `core/source_registry.yaml`**
+
+Under `sources:`, add a new source. The name follows the strict 4-token grammar
+`<SYSTEM>_<DATASET>_<SOCIETA>_<LIFECYCLE>`. `loop_targets` is non-empty so
+`promotion_policy: AUTO` is consistent with the policy-gate invariant
+(`loop_targets == [] ⇔ RAW_ONLY`):
+
+```yaml
+  # ── Ricavi F&B Produzione Netta — SNAPSHOT ────────────────────────────────
+  POWERBI_RICAVIFB_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: RICAVIFB
+    dataset_label: "Produzione Netta F&B (export Power BI HotelCube)"
+    societa: ORTI
+    business_unit: null       # HOTEL/RESIDENCE/CVM derivata per-file da CodiceHotel
+    lifecycle: SNAPSHOT
+    canonical_table: f_ricavi_fb
+    parser_module: ingest.flussi.ingest_ricavi_fb
+    natural_key: [business_unit_id, anno, mese]
+    loop_targets: [food_cost, monthly_close]
+    promotion_policy: AUTO
+    detector_category: ricavi_fb
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/ricavi_fb/ORTI"
+```
+
+- [ ] **Step 4: Verify config imports cleanly**
 
 Run: `python -c "from core.config import F_RICAVI_FB; print(F_RICAVI_FB)"`
 Expected: `hotelops-suite.hotelops.f_ricavi_fb`
 
-- [ ] **Step 4: Verify registry YAML is valid**
+- [ ] **Step 5: Verify both YAMLs are valid and the source resolves**
 
-Run: `python -c "import yaml; yaml.safe_load(open('core/registry.yaml')); print('YAML ok')"`
-Expected: `YAML ok`
+Run:
+```bash
+python -c "import yaml; yaml.safe_load(open('core/registry.yaml')); print('registry.yaml ok')"
+python -c "from core.lineage.source_resolver import load_registry; d=load_registry().get('POWERBI_RICAVIFB_ORTI_SNAPSHOT'); print('source ok:', d.canonical_table, d.parser_module)"
+```
+Expected: `registry.yaml ok` then `source ok: f_ricavi_fb ingest.flussi.ingest_ricavi_fb`. If `load_registry()` raises, the policy-gate invariant or the naming grammar rejected the new source — fix the entry.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add core/config.py core/registry.yaml
-git commit -m "feat(config): register f_ricavi_fb table + ricavi_fb file type"
+git add core/config.py core/registry.yaml core/source_registry.yaml
+git commit -m "feat(config): register f_ricavi_fb + POWERBI_RICAVIFB_ORTI_SNAPSHOT source"
 ```
 
 ---
@@ -232,8 +268,9 @@ CREATE TABLE IF NOT EXISTS `hotelops-suite.hotelops.f_ricavi_fb` (
   descrizione STRING,
   netto FLOAT64 NOT NULL,
   lordo FLOAT64 NOT NULL,
-  file_sorgente STRING,
+  file_sorgente STRING NOT NULL,
   hash_riga STRING NOT NULL,
+  raw_object_id STRING,
   data_caricamento TIMESTAMP NOT NULL
 )
 CLUSTER BY business_unit_id, anno, mese'
@@ -244,7 +281,7 @@ Expected: `Created hotelops-suite.hotelops.f_ricavi_fb` (or no error).
 - [ ] **Step 2: Verify the schema**
 
 Run: `bq show --schema --format=prettyjson hotelops-suite:hotelops.f_ricavi_fb`
-Expected: 11 fields, `netto`/`lordo` as `FLOAT64`, `data_caricamento` as `TIMESTAMP`.
+Expected: 12 fields, `netto`/`lordo` as `FLOAT64`, `raw_object_id` as a NULLABLE `STRING`, `data_caricamento` as `TIMESTAMP`.
 
 No commit (no repo files changed).
 
@@ -312,9 +349,12 @@ Mese) lives in the file's last "Applied filters" cell, not in the data rows.
 Lifecycle: SNAPSHOT, natural_key (business_unit_id, anno, mese). Re-loading a
 month replaces that structure-month's rows.
 
+È il parser_module della source POWERBI_RICAVIFB_ORTI_SNAPSHOT, invocato da
+`hotelops promote` come: python -m ingest.flussi.ingest_ricavi_fb --file X --raw-object-id Y
+
 Usage:
-    python -m ingest.flussi.ingest_ricavi_fb --file ~/Downloads/HP/HP_2025-08.xlsx
-    python -m ingest.flussi.ingest_ricavi_fb --dir ~/Downloads --dry-run
+    python -m ingest.flussi.ingest_ricavi_fb --file <xlsx> --raw-object-id <id>
+    python -m ingest.flussi.ingest_ricavi_fb --file <xlsx> --dry-run
 """
 from __future__ import annotations
 
@@ -344,8 +384,6 @@ MESE_IT = {
     "giugno": 6, "luglio": 7, "agosto": 8, "settembre": 9, "ottobre": 10,
     "novembre": 11, "dicembre": 12,
 }
-# Renamed-file pattern: HP_2025-08.xlsx / ANG_2026-04.xlsx / CVM_2025-04.xlsx
-RICAVI_FB_NAME = re.compile(r"^(HP|ANG|CVM)_\d{4}-\d{2}\.xlsx$")
 
 
 def parse_applied_filters(text: str) -> tuple[str, int, int]:
@@ -543,6 +581,18 @@ def test_build_rows_hash_deterministic():
     h1 = build_rows(("CVM", 2026, 4), raw, "a.xlsx")[0]["hash_riga"]
     h2 = build_rows(("CVM", 2026, 4), raw, "b.xlsx")[0]["hash_riga"]
     assert h1 == h2  # hash ignores file name, depends on (bu, anno, mese, codice)
+
+
+def test_build_rows_stamps_raw_object_id():
+    raw = [{"codice": "BAR", "descrizione": "Bar", "netto": 9.0, "lordo": 9.9}]
+    rows = build_rows(("CVM", 2026, 4), raw, "f.xlsx", raw_object_id="ro-abc")
+    assert rows[0]["raw_object_id"] == "ro-abc"
+
+
+def test_build_rows_raw_object_id_defaults_none():
+    raw = [{"codice": "BAR", "descrizione": "Bar", "netto": 9.0, "lordo": 9.9}]
+    rows = build_rows(("CVM", 2026, 4), raw, "f.xlsx")
+    assert rows[0]["raw_object_id"] is None
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -561,12 +611,16 @@ def _societa_for(anno: int, mese: int) -> str:
 
 
 def build_rows(
-    period: tuple[str, int, int], raw_rows: list[dict], file_name: str
+    period: tuple[str, int, int],
+    raw_rows: list[dict],
+    file_name: str,
+    raw_object_id: str | None = None,
 ) -> list[dict]:
     """Turn parsed raw rows into f_ricavi_fb dict rows.
 
     Adds societa_id (cutover-derived), hash_riga (md5 of the natural key plus
-    codice), and data_caricamento.
+    codice), raw_object_id (lineage FK — stamped by the `promote` path, None
+    when run standalone), and data_caricamento.
     """
     bu, anno, mese = period
     societa = _societa_for(anno, mese)
@@ -585,6 +639,7 @@ def build_rows(
             "lordo": r["lordo"],
             "file_sorgente": file_name,
             "hash_riga": make_hash(bu, str(anno), str(mese), codice),
+            "raw_object_id": raw_object_id,
             "data_caricamento": now,
         })
     return out
@@ -593,7 +648,7 @@ def build_rows(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_ingest_ricavi_fb.py -k build_rows -v`
-Expected: PASS (3 tests)
+Expected: PASS (5 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -609,17 +664,28 @@ git commit -m "feat(ingest): ricavi_fb pipeline — build_rows"
 **Files:**
 - Modify: `ingest/flussi/ingest_ricavi_fb.py`
 
-This task wires the parsed rows to the `bq_write_validated` gate and adds the CLI. Verification is a `--dry-run` smoke (no BQ writes, no unit test — the BQ write is exercised for real in Task 9).
+This task wires the parsed rows to the `bq_write_validated` gate and adds the CLI.
+The CLI is the source's `parser_module` — `hotelops promote` invokes it as
+`python -m ingest.flussi.ingest_ricavi_fb --file <tmp> --raw-object-id <id>`.
+One file per invocation (promote handles one raw_object at a time). No `--dir`:
+bulk loading is the intake→promote flow in Task 9. Verification is a `--dry-run`
+smoke (no BQ writes — the BQ write is exercised for real in Task 9).
 
 - [ ] **Step 1: Add `ingest_file` and `main` to the pipeline module**
 
 Append to `ingest/flussi/ingest_ricavi_fb.py`:
 
 ```python
-def ingest_file(path: Path, dry_run: bool = False) -> int:
-    """Parse one xlsx and SNAPSHOT-write it to f_ricavi_fb. Returns row count."""
+def ingest_file(
+    path: Path, raw_object_id: str | None = None, dry_run: bool = False
+) -> int:
+    """Parse one xlsx and SNAPSHOT-write it to f_ricavi_fb. Returns row count.
+
+    raw_object_id is the lineage FK passed by `hotelops promote`; stamped on
+    every row. None when run standalone (e.g. --dry-run).
+    """
     period, raw = parse_xlsx(path)
-    rows = build_rows(period, raw, path.name)
+    rows = build_rows(period, raw, path.name, raw_object_id)
     validate_batch(rows, RicaviFbRow, context=f"ricavi_fb {path.name}")
     bu, anno, mese = period
     if dry_run:
@@ -642,28 +708,19 @@ def ingest_file(path: Path, dry_run: bool = False) -> int:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Ingest Produzione Netta → f_ricavi_fb")
-    grp = ap.add_mutually_exclusive_group(required=True)
-    grp.add_argument("--file", type=Path, help="singolo xlsx")
-    grp.add_argument("--dir", type=Path, help="cartella: carica tutti gli <STRUT>_<YYYY-MM>.xlsx")
+    ap.add_argument("--file", required=True, type=Path, help="xlsx Produzione Netta")
+    ap.add_argument(
+        "--raw-object-id",
+        default=None,
+        help="FK a f_raw_objects — passato da `hotelops promote`",
+    )
     ap.add_argument("--dry-run", action="store_true", help="parse senza scrivere")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    if args.file:
-        files = [args.file]
-    else:
-        files = sorted(
-            p for p in args.dir.rglob("*.xlsx") if RICAVI_FB_NAME.match(p.name)
-        )
-    if not files:
-        log.warning("Nessun file da caricare")
-        return
-
-    total = 0
-    for f in files:
-        total += ingest_file(f, dry_run=args.dry_run)
-    log.info("Totale: %d righe da %d file", total, len(files))
+    n = ingest_file(args.file, raw_object_id=args.raw_object_id, dry_run=args.dry_run)
+    log.info("Totale: %d righe", n)
 
 
 if __name__ == "__main__":
@@ -673,12 +730,12 @@ if __name__ == "__main__":
 - [ ] **Step 2: Verify the full test suite for the module still passes**
 
 Run: `pytest tests/test_ingest_ricavi_fb.py -v`
-Expected: PASS (all tests so far — 12).
+Expected: PASS (all tests so far — 14).
 
-- [ ] **Step 3: Dry-run smoke against the real files**
+- [ ] **Step 3: Dry-run smoke against a real file**
 
-Run: `python -m ingest.flussi.ingest_ricavi_fb --dir ~/Downloads --dry-run`
-Expected: 24 lines `[DRY-RUN] <STRUT>_<YYYY-MM>.xlsx → <BU> <YYYY-MM> : N righe`, final `Totale: ... righe da 24 file`. No BQ writes.
+Run: `python -m ingest.flussi.ingest_ricavi_fb --file ~/Downloads/HP/HP_2025-08.xlsx --dry-run`
+Expected: one line `[DRY-RUN] HP_2025-08.xlsx → HOTEL 2025-08 : N righe`, then `Totale: N righe`. No BQ writes.
 
 - [ ] **Step 4: Lint**
 
@@ -689,7 +746,7 @@ Expected: no errors.
 
 ```bash
 git add ingest/flussi/ingest_ricavi_fb.py
-git commit -m "feat(ingest): ricavi_fb pipeline — ingest_file + CLI"
+git commit -m "feat(ingest): ricavi_fb pipeline — ingest_file + CLI (parser_module)"
 ```
 
 ---
@@ -792,7 +849,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 6: Run the full classifier suite to check no regression**
 
 Run: `pytest tests/test_classify.py tests/test_ingest_ricavi_fb.py -v`
-Expected: all PASS (the 65 classify tests + 14 ricavi_fb tests).
+Expected: all PASS (the 65 classify tests + 16 ricavi_fb tests).
 
 - [ ] **Step 7: Commit**
 
@@ -803,30 +860,70 @@ git commit -m "feat(classify): add detect_ricavi_fb detector"
 
 ---
 
-## Task 9: Load the 24 Produzione Netta files into `f_ricavi_fb`
+## Task 9: Stage to GCS + promote — load the 24 files into `f_ricavi_fb`
 
-**Files:** none (data load + verification)
+**Files:** none (data load + verification via the lineage layer)
 
-- [ ] **Step 1: Load all 24 files**
+The 24 files are loaded the lineage way: `hotelops intake` stages each to
+`gs://hotelops-raw` and registers it in `f_raw_objects` (status advances to
+CLASSIFIED because the source is passed explicitly); `hotelops promote` then
+invokes the parser → `f_ricavi_fb`, stamping `raw_object_id`. All three layers
+are idempotent: re-intake dedups on content_hash, re-promote no-ops on PROMOTED,
+the parser SNAPSHOT-replaces by natural key.
 
-Run: `python -m ingest.flussi.ingest_ricavi_fb --dir ~/Downloads`
-Expected: 24 `OK ...` lines, final `Totale: N righe da 24 file`.
+If `hotelops` is not on PATH in this worktree, use `python cli.py` instead.
 
-- [ ] **Step 2: Verify coverage**
+- [ ] **Step 1: Intake all 24 files → GCS + f_raw_objects**
 
 Run:
 
 ```bash
-bq query --use_legacy_sql=false 'SELECT business_unit_id, anno, COUNT(DISTINCT mese) mesi, COUNT(*) righe FROM `hotelops-suite.hotelops.f_ricavi_fb` GROUP BY 1,2 ORDER BY 1,2'
+for f in ~/Downloads/HP/HP_*.xlsx ~/Downloads/ANG/ANG_*.xlsx ~/Downloads/CVM/CVM_*.xlsx; do
+  hotelops intake "$f" --source-name POWERBI_RICAVIFB_ORTI_SNAPSHOT
+done
 ```
 
-Expected: 3 BU (HOTEL/RESIDENCE/CVM) × {2025: 7 mesi, 2026: 1 mese}.
+Expected: 24 invocations, each printing `raw_object_id: <uuid>` and
+`source_name: POWERBI_RICAVIFB_ORTI_SNAPSHOT`.
 
-- [ ] **Step 3: Verify SNAPSHOT idempotency — load again**
+- [ ] **Step 2: Verify the raw objects are registered in GCS**
 
-Run: `python -m ingest.flussi.ingest_ricavi_fb --dir ~/Downloads`
-Then re-run the Step 2 query.
-Expected: **identical row counts** — SNAPSHOT replaced each structure-month, no duplication.
+Run:
+
+```bash
+bq query --use_legacy_sql=false 'SELECT COUNT(*) n, COUNT(DISTINCT content_hash) distinti, COUNTIF(STARTS_WITH(raw_uri, "gs://")) su_gcs FROM `hotelops-suite.hotelops.f_raw_objects` WHERE source_name = "POWERBI_RICAVIFB_ORTI_SNAPSHOT"'
+```
+
+Expected: `n` = 24, `distinti` = 24 (each file content unique), `su_gcs` = 24.
+
+- [ ] **Step 3: Promote each raw object → parser runs → f_ricavi_fb**
+
+Run:
+
+```bash
+bq query --use_legacy_sql=false --format=csv \
+  'SELECT raw_object_id FROM `hotelops-suite.hotelops.f_raw_objects` WHERE source_name = "POWERBI_RICAVIFB_ORTI_SNAPSHOT"' \
+  | tail -n +2 \
+  | while read -r id; do hotelops promote --raw-object-id "$id"; done
+```
+
+Expected: 24 `status=PROMOTED rows=N` lines.
+
+- [ ] **Step 4: Verify coverage in f_ricavi_fb**
+
+Run:
+
+```bash
+bq query --use_legacy_sql=false 'SELECT business_unit_id, anno, COUNT(DISTINCT mese) mesi, COUNT(*) righe, COUNTIF(raw_object_id IS NULL) raw_id_mancanti FROM `hotelops-suite.hotelops.f_ricavi_fb` GROUP BY 1,2 ORDER BY 1,2'
+```
+
+Expected: 3 BU (HOTEL/RESIDENCE/CVM) × {2025: 7 mesi, 2026: 1 mese}; `raw_id_mancanti` = 0 (every row carries its lineage FK).
+
+- [ ] **Step 5: Verify idempotency — re-run intake + promote**
+
+Re-run Step 1 and Step 3. Intake should report dedup hits (`deduped` / no new
+`f_raw_objects` rows); promote should report `noop=True` (already PROMOTED).
+Re-run the Step 4 query → **identical row counts**.
 
 No commit (no repo files changed).
 
@@ -1219,13 +1316,14 @@ In the "### Views" table, add after `v_food_cost_categoria`:
 | `v_fb_kpi` | Looker F&B: bridge mensile globale — €/pasto + incidenza % (food cost). `core/bq/views/` |
 ```
 
-- [ ] **Step 3: Add the CLI command**
+- [ ] **Step 3: Add the CLI commands**
 
-In the `## Commands` block, under the ingest pipelines section, add:
+In the `## Commands` block, under the lineage section, add:
 
 ```
-python -m ingest.flussi.ingest_ricavi_fb --dir ~/Downloads      # Ricavi F&B Produzione Netta → f_ricavi_fb
-python -m ingest.flussi.ingest_ricavi_fb --file <xlsx> --dry-run # Singolo file, preview
+hotelops intake <xlsx> --source-name POWERBI_RICAVIFB_ORTI_SNAPSHOT  # Ricavi F&B → GCS + f_raw_objects
+hotelops promote --raw-object-id <id>                                # → parser → f_ricavi_fb
+python -m ingest.flussi.ingest_ricavi_fb --file <xlsx> --dry-run     # Parser standalone, preview
 ```
 
 - [ ] **Step 4: Run the full test suite**
@@ -1244,11 +1342,10 @@ git commit -m "docs: f_ricavi_fb + v_fb_* views in CLAUDE.md"
 
 ## Done criteria
 
-- `f_ricavi_fb` exists in BQ, loaded with 24 files (3 BU × 8 months), idempotent.
+- `f_ricavi_fb` exists in BQ, loaded with 24 files (3 BU × 8 months) **via the lineage layer** — every row carries a `raw_object_id`, every source file is in `gs://hotelops-raw`. Fully idempotent (re-intake + re-promote = no change).
 - `v_fb_consumi`, `v_fb_pasti`, `v_fb_ricavi`, `v_fb_kpi` deployed; smoke queries return data; the price/volume decomposition is exact.
 - `pytest` green; `ruff check .` clean.
 - Looker Studio can connect to the 4 views as data sources (manual, outside this plan).
 
 **Tracked separately (not in this plan):**
 - Netto vs lordo verification on `f_consumi_economato.importo` (data-quality prerequisite — see spec §"Prerequisito data-quality").
-- GCS + lineage registration of the 24 source files (spec option B).

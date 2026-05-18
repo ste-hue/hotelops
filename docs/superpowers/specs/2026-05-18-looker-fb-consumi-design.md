@@ -98,6 +98,46 @@ nessuna fusione.
 
 ---
 
+## Lineage / GCS staging (direttiva utente 2026-05-18)
+
+L'ingestione **parte sempre da GCS** col layer lineage esistente — niente load
+diretto da `~/Downloads/`. Flusso canonico, identico a tutte le 13 sorgenti già
+in `core/source_registry.yaml`:
+
+```
+hotelops intake <file> --source-name POWERBI_RICAVIFB_ORTI_SNAPSHOT
+   → carica in gs://hotelops-raw, registra in f_raw_objects (source label),
+     emette RAW_INGESTED + SOURCE_RESOLVED → stato CLASSIFIED
+hotelops promote --raw-object-id <id>
+   → invoca il parser_module → ingest_ricavi_fb stampa raw_object_id su ogni
+     riga canonica → f_ricavi_fb → stato PROMOTED
+```
+
+Nuova source in `core/source_registry.yaml` (grammatica 4-token
+`<SYSTEM>_<DATASET>_<SOCIETA>_<LIFECYCLE>`):
+
+```yaml
+POWERBI_RICAVIFB_ORTI_SNAPSHOT:
+  system: POWERBI
+  dataset: RICAVIFB
+  dataset_label: "Produzione Netta F&B (export Power BI HotelCube)"
+  societa: ORTI
+  business_unit: null            # HOTEL/RESIDENCE/CVM derivata per-file
+  lifecycle: SNAPSHOT
+  canonical_table: f_ricavi_fb
+  parser_module: ingest.flussi.ingest_ricavi_fb
+  natural_key: [business_unit_id, anno, mese]
+  loop_targets: [food_cost, monthly_close]
+  promotion_policy: AUTO
+  detector_category: ricavi_fb
+  raw_storage:
+    backend: gcs
+    bucket: hotelops-raw
+    path_template: "powerbi/ricavi_fb/ORTI"
+```
+
+Distinta da `POWERBI_CONSUMI_ORTI_APPEND` (quella è consumi → `f_consumi_economato`).
+
 ## Tabella nuova: `f_ricavi_fb`
 
 | col | tipo | mode | semantica |
@@ -108,10 +148,11 @@ nessuna fusione.
 | `mese` | INT64 | REQUIRED | dal filtro |
 | `codice` | STRING | REQUIRED | codice opaco: `SCBKFBB`, `RISLFOOD`, `DINFOOD`, ... |
 | `descrizione` | STRING | NULLABLE | "Risto Lunch Food", ... |
-| `netto` | NUMERIC | REQUIRED | ricavo netto |
-| `lordo` | NUMERIC | REQUIRED | ricavo lordo |
-| `file_sorgente` | STRING | NULLABLE | nome file per audit/lineage |
+| `netto` | FLOAT64 | REQUIRED | ricavo netto |
+| `lordo` | FLOAT64 | REQUIRED | ricavo lordo |
+| `file_sorgente` | STRING | REQUIRED | nome file per audit |
 | `hash_riga` | STRING | REQUIRED | md5 `(business_unit_id\|anno\|mese\|codice)` |
+| `raw_object_id` | STRING | NULLABLE | FK a `f_raw_objects` — lineage (stampato dal `promote`) |
 | `data_caricamento` | TIMESTAMP | REQUIRED | quando è entrato in BQ |
 
 **Lifecycle: SNAPSHOT** con `natural_key = (business_unit_id, anno, mese)`.
@@ -266,13 +307,15 @@ Responsabilità:
 3. **Righe dati**: salta header, salta riga `Total`, salta la riga filtri.
 4. Per ogni riga: `codice`, `descrizione`, `netto`, `lordo`.
 5. **Derive** `societa_id` (cutover), `hash_riga`, `data_caricamento`.
-6. **Pydantic** via `validate_batch(rows, RicaviFbRow, context=...)`.
-7. **Write** via `bq_write_validated(mode="snapshot",
+6. **Stamp** `raw_object_id` (da `--raw-object-id`) su ogni riga.
+7. **Pydantic** via `validate_batch(rows, RicaviFbRow, context=...)`.
+8. **Write** via `bq_write_validated(mode="snapshot",
    natural_key=["business_unit_id","anno","mese"])`.
 
-CLI: `python -m ingest.flussi.ingest_ricavi_fb --file <path>` e
-`--dir <cartella>` per caricare i 24 file in batch. `--dry-run` per il parse
-senza scrivere.
+CLI: `python -m ingest.flussi.ingest_ricavi_fb --file <path> --raw-object-id <id>`
+— è il `parser_module` invocato da `hotelops promote`. `--dry-run` per il parse
+senza scrivere. Nessun `--dir`: il batch dei 24 file passa per `hotelops intake`
+(→ GCS) + `hotelops promote` (→ parser).
 
 ### Classifier (`ingest/classify.py`)
 
@@ -304,11 +347,12 @@ prerequisito alla messa in produzione della Looker, **non** parte di questo plan
 
 | File | Azione |
 |---|---|
-| `core/schemas.py` | + `RicaviFbRow`, registrazione in `validate_batch` |
+| `core/schemas.py` | + `RicaviFbRow` (con `raw_object_id`) |
 | `core/config.py` | + `F_RICAVI_FB` table id |
 | `core/registry.yaml` | + entry `ricavi_fb` |
+| `core/source_registry.yaml` | + source `POWERBI_RICAVIFB_ORTI_SNAPSHOT` |
 | `ingest/classify.py` | + `detect_ricavi_fb` + builder, in `DETECTORS` |
-| `ingest/flussi/ingest_ricavi_fb.py` | nuovo |
+| `ingest/flussi/ingest_ricavi_fb.py` | nuovo (parser_module, `--file --raw-object-id`) |
 | `core/bq/views/v_fb_consumi.sql` | nuovo |
 | `core/bq/views/v_fb_pasti.sql` | nuovo |
 | `core/bq/views/v_fb_ricavi.sql` | nuovo |
@@ -348,7 +392,7 @@ Le viste si verificano con query di smoke (riga di controllo
 - ❌ Allocazione del costo cucina a Residence/CVM — non hanno cucina.
 - ❌ Fix del netto/lordo su `f_consumi_economato` — prerequisito tracciato sopra,
   task separato.
-- ❌ Caricamento su GCS / lineage dei 24 file — concordato (opzione B), separato.
+- ✅ ~~Caricamento su GCS / lineage~~ — **rientrato in scope** (direttiva 2026-05-18): l'ingestione passa sempre da GCS via `intake`/`promote`.
 - ❌ Automazione dell'export PowerBI (API giornaliera, PowerBI Plus) — discusso
   in riunione, è ops, non questo spec.
 - ❌ Streamlit dedicato — la Looker è Looker Studio su viste BQ.
