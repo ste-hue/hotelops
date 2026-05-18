@@ -353,6 +353,25 @@ sources:
       File documentale del semantic layer Power BI studiato manualmente.
       Al momento viene registrato come meta-layer RAW_ONLY per lineage.
 
+  # ── Ricavi F&B Produzione Netta — SNAPSHOT ────────────────────────────────
+  POWERBI_RICAVIFB_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: RICAVIFB
+    dataset_label: "Produzione Netta F&B (export Power BI HotelCube)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_ricavi_fb
+    parser_module: ingest.flussi.ingest_ricavi_fb
+    natural_key: [business_unit_id, anno, mese]
+    loop_targets: [food_cost, monthly_close]
+    promotion_policy: AUTO
+    detector_category: ricavi_fb
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/ricavi_fb/ORTI"
+
   POWERBI_CRUSCOTTO_ORTI_APPEND:
     system: POWERBI
     dataset: CRUSCOTTO
