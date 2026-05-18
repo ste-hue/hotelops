@@ -326,6 +326,8 @@ class RicaviFbRow(BaseModel):
 
     Lato ricavo del food cost. Si incrocia con f_consumi_economato (costo,
     globale) tramite mese, e con f_coperti_giornalieri (pasti) tramite mese × BU.
+
+    `raw_object_id` is the FK to `f_raw_objects` stamped by the `promote` path.
     """
 
     societa_id: SocietaId
@@ -336,8 +338,9 @@ class RicaviFbRow(BaseModel):
     descrizione: Optional[str] = None
     netto: float
     lordo: float
-    file_sorgente: Optional[str] = None
+    file_sorgente: str
     hash_riga: str
+    raw_object_id: Optional[str] = None
     data_caricamento: datetime
 
     @field_validator("mese")

@@ -38,3 +38,8 @@ def test_ricavi_fb_row_codice_empty():
     bad = _valid_row() | {"codice": "   "}
     with pytest.raises(ValueError, match="codice vuoto"):
         RicaviFbRow(**bad)
+
+
+def test_ricavi_fb_row_accepts_raw_object_id():
+    row = RicaviFbRow(**(_valid_row() | {"raw_object_id": "ro-uuid-123"}))
+    assert row.raw_object_id == "ro-uuid-123"
