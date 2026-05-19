@@ -136,3 +136,54 @@ def build_rows(
             "data_caricamento": now,
         })
     return out
+
+
+def ingest_file(
+    path: Path, raw_object_id: str | None = None, dry_run: bool = False
+) -> int:
+    """Parse one xlsx and SNAPSHOT-write it to f_ricavi_fb. Returns row count.
+
+    raw_object_id is the lineage FK passed by `hotelops promote`; stamped on
+    every row. None when run standalone (e.g. --dry-run).
+    """
+    period, raw = parse_xlsx(path)
+    rows = build_rows(period, raw, path.name, raw_object_id)
+    validate_batch(rows, RicaviFbRow, context=f"ricavi_fb {path.name}")
+    bu, anno, mese = period
+    if dry_run:
+        log.info("[DRY-RUN] %s → %s %d-%02d : %d righe",
+                 path.name, bu, anno, mese, len(rows))
+        return len(rows)
+
+    from core.bq.write import bq_write_validated
+
+    pydantic_rows = [RicaviFbRow(**r) for r in rows]
+    bq_write_validated(
+        F_RICAVI_FB,
+        pydantic_rows,
+        mode="snapshot",
+        natural_key=["business_unit_id", "anno", "mese"],
+    )
+    log.info("OK %s → %s %d-%02d : %d righe", path.name, bu, anno, mese, len(rows))
+    return len(rows)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Ingest Produzione Netta → f_ricavi_fb")
+    ap.add_argument("--file", required=True, type=Path, help="xlsx Produzione Netta")
+    ap.add_argument(
+        "--raw-object-id",
+        default=None,
+        help="FK a f_raw_objects — passato da `hotelops promote`",
+    )
+    ap.add_argument("--dry-run", action="store_true", help="parse senza scrivere")
+    args = ap.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+    n = ingest_file(args.file, raw_object_id=args.raw_object_id, dry_run=args.dry_run)
+    log.info("Totale: %d righe", n)
+
+
+if __name__ == "__main__":
+    main()
