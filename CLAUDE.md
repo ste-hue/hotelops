@@ -174,6 +174,9 @@ hotelops accodamenti --no-sync --input <dir>   # Skip rclone sync, legge da cart
 hotelops intake <file> --source-name X      # Register a file (RAW_INGESTED event)
 hotelops promote --raw-object-id Y          # Promote PROMOTABLE → PROMOTED
 hotelops lineage Y                          # Inspect raw_object identity + event history
+hotelops intake <xlsx> --source-name POWERBI_RICAVIFB_ORTI_SNAPSHOT  # Ricavi F&B → GCS + f_raw_objects
+hotelops promote --raw-object-id <id>                                # → parser ingest_ricavi_fb → f_ricavi_fb
+python -m ingest.flussi.ingest_ricavi_fb --file <xlsx> --dry-run     # Parser standalone, preview
 
 # Reviews vertical
 hotelops reviews                           # Ultime 30 reviews, media, negative
@@ -249,6 +252,7 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `f_affidamenti` | Affidamenti bancari (linee di credito) -- schema TBD |
 | `f_reviews` | Guest reviews da OTA (Booking, TripAdvisor, Google, Expedia). NLP classified. (APPEND) |
 | `f_vendite_fb` | Vendite F&B POS (giorno × sala × articolo) da Ristocube. Include `segmento_cliente`. (APPEND, dedup hash_riga) |
+| `f_ricavi_fb` | Ricavi F&B per struttura × mese × codice pasto (Produzione Netta PMS, export Power BI). Drill-down di classe 02FB. Ingerita via lineage (source `POWERBI_RICAVIFB_ORTI_SNAPSHOT`). (SNAPSHOT, natural_key business_unit_id+anno+mese) |
 
 ### Dimension tables
 
@@ -287,6 +291,10 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `v_economato_costo_unitario` | Looker: costo unitario per pax-notte per reparto × articolo × mese + ABC ranks. `core/bq/views/` |
 | `v_food_cost_mensile` | Food cost macro mensile: costi CUCINA+CANTINA + ricavi POS + coperti hotel + YoY (LAG su anno). `core/bq/views/` |
 | `v_food_cost_categoria` | Food cost granulare per (anno, mese, sala, tipo_piatto, segmento_cliente) + €/coperto + YoY. `core/bq/views/` |
+| `v_fb_consumi` | Looker F&B: costo merce per prodotto/categoria + scomposizione prezzo/volume + YoY. Anni >= 2025. `core/bq/views/` |
+| `v_fb_pasti` | Looker F&B: conteggio pasti per BU, mensile, YoY. Anni >= 2025. `core/bq/views/` |
+| `v_fb_ricavi` | Looker F&B: ricavi per BU × codice + scontrino medio + YoY. Anni >= 2025. `core/bq/views/` |
+| `v_fb_kpi` | Looker F&B: bridge mensile globale — €/pasto + incidenza % (food cost). Anni >= 2025. `core/bq/views/` |
 
 ### How the views connect
 
