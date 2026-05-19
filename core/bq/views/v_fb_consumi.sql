@@ -1,6 +1,7 @@
 -- v_fb_consumi
 -- Costo merce F&B per prodotto + scomposizione driver prezzo/volume + YoY.
 -- Grana: anno × mese × reparto × codice_prodotto.
+-- Solo anni >= 2025 (il 2024 INTUR non categorizzato è escluso).
 -- Costo = blocco unico cucina-hotel (nessuna struttura: il magazzino non
 -- distingue Residence/CVM).
 --
@@ -32,6 +33,7 @@ WITH base AS (
     SUM(importo)           AS costo
   FROM `hotelops-suite.hotelops.f_consumi_economato`
   WHERE reparto_id IN ('BRK', 'CUCINA', 'CANTINA', 'BANCHETTI', 'BAR_HOTEL', 'EVENTO')
+    AND anno >= 2025
   GROUP BY 1, 2, 3, 4, 5
 ),
 yoy AS (
