@@ -14,6 +14,8 @@ WITH costo AS (
   FROM `hotelops-suite.hotelops.f_consumi_economato`
   WHERE reparto_id IN ('BRK', 'CUCINA', 'CANTINA')
     AND anno >= 2025
+    -- maggio 2025: anomalia nota — esclusi i negativi del mese (vedi v_fb_consumi)
+    AND NOT (anno = 2025 AND mese = 5 AND importo < 0)
   GROUP BY 1, 2
 ),
 coperti AS (

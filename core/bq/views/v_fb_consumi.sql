@@ -34,6 +34,10 @@ WITH base AS (
   FROM `hotelops-suite.hotelops.f_consumi_economato`
   WHERE reparto_id IN ('BRK', 'CUCINA', 'CANTINA', 'BANCHETTI', 'BAR_HOTEL', 'EVENTO')
     AND anno >= 2025
+    -- maggio 2025: anomalia nota (15 righe negative, -165k€ di storni).
+    -- Esclusi i negativi di quel mese per normalizzare; i piccoli storni
+    -- legittimi degli altri mesi restano.
+    AND NOT (anno = 2025 AND mese = 5 AND importo < 0)
   GROUP BY 1, 2, 3, 4, 5
 ),
 yoy AS (
