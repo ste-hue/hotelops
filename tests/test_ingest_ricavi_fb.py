@@ -2,8 +2,11 @@
 from datetime import datetime, timezone
 
 import pytest
+from openpyxl import Workbook
 
 from core.schemas import RicaviFbRow
+from ingest.classify import detect_ricavi_fb
+from ingest.flussi.ingest_ricavi_fb import build_rows, parse_applied_filters, parse_xlsx
 
 
 def _valid_row() -> dict:
@@ -45,8 +48,6 @@ def test_ricavi_fb_row_accepts_raw_object_id():
     assert row.raw_object_id == "ro-uuid-123"
 
 
-from ingest.flussi.ingest_ricavi_fb import parse_applied_filters
-
 _FILTER_TEXT = (
     "Applied filters:\nMis_PB_ShowRow is greater than 0\n"
     "ClasseAddebito is 02FB or 80AFFITT\nCodiceHotel is PANORAMAHT\n"
@@ -76,10 +77,6 @@ def test_parse_applied_filters_unknown_hotel():
     with pytest.raises(ValueError, match="CodiceHotel sconosciuto"):
         parse_applied_filters(bad)
 
-
-from openpyxl import Workbook
-
-from ingest.flussi.ingest_ricavi_fb import parse_xlsx
 
 _HEADER = [
     "Classe", "Codice", "Descrizione Addebito", "Netto", "Netto A.P.",
@@ -127,9 +124,6 @@ def test_parse_xlsx_excludes_total_row(tmp_path):
     ])
     _, rows = parse_xlsx(f)
     assert [r["codice"] for r in rows] == ["BAR"]
-
-
-from ingest.flussi.ingest_ricavi_fb import build_rows
 
 
 def test_build_rows_societa_and_fields():
@@ -190,9 +184,6 @@ def test_parse_applied_filters_unknown_month():
     bad = _FILTER_TEXT.replace("agosto", "smongolia")
     with pytest.raises(ValueError, match="Mese sconosciuto"):
         parse_applied_filters(bad)
-
-
-from ingest.classify import detect_ricavi_fb
 
 
 def test_detect_ricavi_fb_matches(tmp_path):
