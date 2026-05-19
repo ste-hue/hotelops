@@ -127,3 +127,46 @@ def test_parse_xlsx_excludes_total_row(tmp_path):
     ])
     _, rows = parse_xlsx(f)
     assert [r["codice"] for r in rows] == ["BAR"]
+
+
+from ingest.flussi.ingest_ricavi_fb import build_rows
+
+
+def test_build_rows_societa_and_fields():
+    raw = [{"codice": "RISLFOOD", "descrizione": "Risto Lunch Food",
+            "netto": 50.0, "lordo": 55.0}]
+    rows = build_rows(("HOTEL", 2025, 8), raw, "HP_2025-08.xlsx")
+    assert len(rows) == 1
+    r = rows[0]
+    assert r["societa_id"] == "ORTI"          # 2025-08 is post-cutover
+    assert r["business_unit_id"] == "HOTEL"
+    assert r["anno"] == 2025 and r["mese"] == 8
+    assert r["file_sorgente"] == "HP_2025-08.xlsx"
+    assert r["hash_riga"]  # non-empty
+
+
+def test_build_rows_hash_changes_with_codice():
+    raw_a = [{"codice": "RISLFOOD", "descrizione": "x", "netto": 1.0, "lordo": 1.0}]
+    raw_b = [{"codice": "DINFOOD", "descrizione": "x", "netto": 1.0, "lordo": 1.0}]
+    h_a = build_rows(("HOTEL", 2025, 8), raw_a, "f.xlsx")[0]["hash_riga"]
+    h_b = build_rows(("HOTEL", 2025, 8), raw_b, "f.xlsx")[0]["hash_riga"]
+    assert h_a != h_b
+
+
+def test_build_rows_hash_deterministic():
+    raw = [{"codice": "BAR", "descrizione": "Bar", "netto": 9.0, "lordo": 9.9}]
+    h1 = build_rows(("CVM", 2026, 4), raw, "a.xlsx")[0]["hash_riga"]
+    h2 = build_rows(("CVM", 2026, 4), raw, "b.xlsx")[0]["hash_riga"]
+    assert h1 == h2  # hash ignores file name, depends on (bu, anno, mese, codice)
+
+
+def test_build_rows_stamps_raw_object_id():
+    raw = [{"codice": "BAR", "descrizione": "Bar", "netto": 9.0, "lordo": 9.9}]
+    rows = build_rows(("CVM", 2026, 4), raw, "f.xlsx", raw_object_id="ro-abc")
+    assert rows[0]["raw_object_id"] == "ro-abc"
+
+
+def test_build_rows_raw_object_id_defaults_none():
+    raw = [{"codice": "BAR", "descrizione": "Bar", "netto": 9.0, "lordo": 9.9}]
+    rows = build_rows(("CVM", 2026, 4), raw, "f.xlsx")
+    assert rows[0]["raw_object_id"] is None

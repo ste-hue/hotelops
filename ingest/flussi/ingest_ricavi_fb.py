@@ -96,3 +96,43 @@ def parse_xlsx(path: Path) -> tuple[tuple[str, int, int], list[dict]]:
             "lordo": float(lordo) if isinstance(lordo, (int, float)) else 0.0,
         })
     return period, data_rows
+
+
+def _societa_for(anno: int, mese: int) -> str:
+    """ORTI post-cutover, INTUR before. All 24 current files are ORTI."""
+    return "INTUR" if date(anno, mese, 1) < OPERATIONS_CUTOVER_DATE else "ORTI"
+
+
+def build_rows(
+    period: tuple[str, int, int],
+    raw_rows: list[dict],
+    file_name: str,
+    raw_object_id: str | None = None,
+) -> list[dict]:
+    """Turn parsed raw rows into f_ricavi_fb dict rows.
+
+    Adds societa_id (cutover-derived), hash_riga (md5 of the natural key plus
+    codice), raw_object_id (lineage FK — stamped by the `promote` path, None
+    when run standalone), and data_caricamento.
+    """
+    bu, anno, mese = period
+    societa = _societa_for(anno, mese)
+    now = datetime.now(timezone.utc)
+    out: list[dict] = []
+    for r in raw_rows:
+        codice = r["codice"]
+        out.append({
+            "societa_id": societa,
+            "business_unit_id": bu,
+            "anno": anno,
+            "mese": mese,
+            "codice": codice,
+            "descrizione": r.get("descrizione"),
+            "netto": r["netto"],
+            "lordo": r["lordo"],
+            "file_sorgente": file_name,
+            "hash_riga": make_hash(bu, str(anno), str(mese), codice),
+            "raw_object_id": raw_object_id,
+            "data_caricamento": now,
+        })
+    return out
