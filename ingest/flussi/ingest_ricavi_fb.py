@@ -176,6 +176,11 @@ def main() -> None:
         default=None,
         help="FK a f_raw_objects — passato da `hotelops promote`",
     )
+    ap.add_argument(
+        "--societa",
+        default=None,
+        help="Ignorato — societa derivata dal periodo (cutover date). Accettato da `hotelops promote`.",
+    )
     ap.add_argument("--dry-run", action="store_true", help="parse senza scrivere")
     args = ap.parse_args()
 
