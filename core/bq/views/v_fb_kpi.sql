@@ -1,5 +1,6 @@
 -- v_fb_kpi
--- Bridge mensile globale: €/pasto + incidenza % (food cost) + margine.
+-- Bridge mensile globale: €/pasto + margine. (incidenza % rimossa: il food
+-- cost % vero richiede il ricavo camere — vedi f_produzione_pms, TODO.)
 -- Grana: anno × mese (un valore di gruppo per mese).
 -- Costo = reparti cucina-hotel pieni (BRK + CUCINA + CANTINA).
 -- Coperti = HOTEL. Ricavi = somma F&B di tutte le BU.
@@ -53,7 +54,6 @@ SELECT
   anno, mese, periodo,
   costo_cucina, coperti_hotel, ricavi_fb_totali,
   SAFE_DIVIDE(costo_cucina, NULLIF(coperti_hotel, 0))    AS euro_per_pasto,
-  SAFE_DIVIDE(costo_cucina, NULLIF(ricavi_fb_totali, 0)) AS incidenza_pct,
   ricavi_fb_totali - costo_cucina                        AS margine_fb,
   LAG(costo_cucina)     OVER w AS costo_cucina_ap,
   LAG(coperti_hotel)    OVER w AS coperti_hotel_ap,
