@@ -75,3 +75,55 @@ def test_parse_applied_filters_unknown_hotel():
     bad = _FILTER_TEXT.replace("PANORAMAHT", "MISTERY")
     with pytest.raises(ValueError, match="CodiceHotel sconosciuto"):
         parse_applied_filters(bad)
+
+
+from openpyxl import Workbook
+
+from ingest.flussi.ingest_ricavi_fb import parse_xlsx
+
+_HEADER = [
+    "Classe", "Codice", "Descrizione Addebito", "Netto", "Netto A.P.",
+    "Diff A. - A.P.", "% A. vs A.P.", "Netto A.P.P.", "Diff A. - A.P.P.",
+    "% A. vs A.P.P.", "Lordo", "Lordo A.P.", "Lordo A.P.P.",
+]
+
+
+def _write_fixture(path, codice_hotel, anno, mese_nome, data_rows):
+    """data_rows: list of (codice, descrizione, netto, lordo)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Export"
+    ws.append(_HEADER)
+    for codice, desc, netto, lordo in data_rows:
+        ws.append(["02FB", codice, desc, netto, 0, 0, 0, 0, 0, 0, lordo, 0, 0])
+    ws.append(["Total", None, None, sum(d[2] for d in data_rows),
+               0, 0, 0, 0, 0, 0, sum(d[3] for d in data_rows), 0, 0])
+    ws.append([
+        f"Applied filters:\nMis_PB_ShowRow is greater than 0\n"
+        f"CodiceHotel is {codice_hotel}\nAnno is {anno}\nMese is {mese_nome}\n"
+        f"ClasseAddebito is 02FB or "
+    ])
+    wb.save(path)
+
+
+def test_parse_xlsx_period_and_rows(tmp_path):
+    f = tmp_path / "HP_2025-08.xlsx"
+    _write_fixture(f, "PANORAMAHT", 2025, "agosto", [
+        ("SCBKFBB", "Scorpori Breakfast Bb", 100.0, 110.0),
+        ("RISLFOOD", "Risto Lunch Food", 50.0, 55.0),
+    ])
+    period, rows = parse_xlsx(f)
+    assert period == ("HOTEL", 2025, 8)
+    assert len(rows) == 2  # Total row excluded
+    assert rows[0] == {"codice": "SCBKFBB",
+                       "descrizione": "Scorpori Breakfast Bb",
+                       "netto": 100.0, "lordo": 110.0}
+
+
+def test_parse_xlsx_excludes_total_row(tmp_path):
+    f = tmp_path / "ANG_2026-04.xlsx"
+    _write_fixture(f, "ANGELINARES", 2026, "aprile", [
+        ("BAR", "Bar Residence", 21.0, 23.0),
+    ])
+    _, rows = parse_xlsx(f)
+    assert [r["codice"] for r in rows] == ["BAR"]

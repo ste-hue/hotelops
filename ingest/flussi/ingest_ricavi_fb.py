@@ -61,3 +61,38 @@ def parse_applied_filters(text: str) -> tuple[str, int, int]:
     if mese_nome not in MESE_IT:
         raise ValueError(f"Mese sconosciuto: {mese_nome}")
     return HOTEL_TO_BU[codice_hotel], int(anno_m.group(1)), MESE_IT[mese_nome]
+
+
+def parse_xlsx(path: Path) -> tuple[tuple[str, int, int], list[dict]]:
+    """Read a Produzione Netta xlsx → (period, data_rows).
+
+    period = (business_unit_id, anno, mese) from the last 'Applied filters' cell.
+    data_rows = list of {codice, descrizione, netto, lordo}; the 'Total' row and
+    blanks are skipped.
+
+    Column layout (0-indexed): 0 Classe | 1 Codice | 2 Descrizione | 3 Netto |
+    ... | 10 Lordo.
+    """
+    wb = load_workbook(path, read_only=True, data_only=True)
+    ws = wb["Export"] if "Export" in wb.sheetnames else wb.worksheets[0]
+    rows = [r for r in ws.iter_rows(values_only=True) if any(c is not None for c in r)]
+    wb.close()
+    if len(rows) < 3:
+        raise ValueError(f"{path.name}: troppe poche righe ({len(rows)})")
+
+    period = parse_applied_filters(str(rows[-1][0] or ""))
+
+    data_rows: list[dict] = []
+    for r in rows[1:-1]:  # skip header (rows[0]) and filter cell (rows[-1])
+        codice = r[1] if len(r) > 1 else None
+        netto = r[3] if len(r) > 3 else None
+        if not codice or not isinstance(netto, (int, float)):
+            continue  # 'Total' row (codice None) and blanks
+        lordo = r[10] if len(r) > 10 else None
+        data_rows.append({
+            "codice": str(codice).strip(),
+            "descrizione": (str(r[2]).strip() if len(r) > 2 and r[2] else None),
+            "netto": float(netto),
+            "lordo": float(lordo) if isinstance(lordo, (int, float)) else 0.0,
+        })
+    return period, data_rows
