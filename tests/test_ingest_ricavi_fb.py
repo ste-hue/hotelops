@@ -170,3 +170,45 @@ def test_build_rows_raw_object_id_defaults_none():
     raw = [{"codice": "BAR", "descrizione": "Bar", "netto": 9.0, "lordo": 9.9}]
     rows = build_rows(("CVM", 2026, 4), raw, "f.xlsx")
     assert rows[0]["raw_object_id"] is None
+
+
+def test_ingest_file_dry_run(tmp_path):
+    """ingest_file dry-run: exercises parse_xlsx → build_rows → validate_batch,
+    returns the row count, writes nothing to BQ."""
+    from ingest.flussi.ingest_ricavi_fb import ingest_file
+
+    f = tmp_path / "HP_2025-08.xlsx"
+    _write_fixture(f, "PANORAMAHT", 2025, "agosto", [
+        ("SCBKFBB", "Scorpori Breakfast Bb", 100.0, 110.0),
+        ("RISLFOOD", "Risto Lunch Food", 50.0, 55.0),
+    ])
+    n = ingest_file(f, dry_run=True)
+    assert n == 2
+
+
+def test_parse_applied_filters_unknown_month():
+    bad = _FILTER_TEXT.replace("agosto", "smongolia")
+    with pytest.raises(ValueError, match="Mese sconosciuto"):
+        parse_applied_filters(bad)
+
+
+from ingest.classify import detect_ricavi_fb
+
+
+def test_detect_ricavi_fb_matches(tmp_path):
+    f = tmp_path / "HP_2025-08.xlsx"
+    _write_fixture(f, "PANORAMAHT", 2025, "agosto", [
+        ("SCBKFBB", "Scorpori Breakfast Bb", 100.0, 110.0),
+    ])
+    result = detect_ricavi_fb(f)
+    assert result is not None
+    assert result.file_type == "ricavi_fb"
+    assert result.confidence >= 0.9
+
+
+def test_detect_ricavi_fb_ignores_generic_xlsx(tmp_path):
+    f = tmp_path / "random.xlsx"
+    wb = Workbook()
+    wb.active.append(["foo", "bar", "baz"])
+    wb.save(f)
+    assert detect_ricavi_fb(f) is None
