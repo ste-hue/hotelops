@@ -14,8 +14,8 @@ import plotly.express as px
 import streamlit as st
 from google.cloud import bigquery
 
-PROJECT = "hotelops-suite"
-DATASET = "hotelops"
+from core.config import DATASET, PROJECT
+
 FORM_URL = "https://forms.gle/PLACEHOLDER"  # update dopo creazione Form via Apps Script
 
 PAGES = [
