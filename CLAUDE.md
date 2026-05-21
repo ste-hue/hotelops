@@ -177,6 +177,9 @@ hotelops lineage Y                          # Inspect raw_object identity + even
 hotelops intake <xlsx> --source-name POWERBI_RICAVIFB_ORTI_SNAPSHOT  # Ricavi F&B → GCS + f_raw_objects
 hotelops promote --raw-object-id <id>                                # → parser ingest_ricavi_fb → f_ricavi_fb
 python -m ingest.flussi.ingest_ricavi_fb --file <xlsx> --dry-run     # Parser standalone, preview
+hotelops intake "Orders Report RISTOCUBE*.xlsx" --source-name RISTOCUBE_ORDERS_ORTI_APPEND  # Orders → GCS + f_raw_objects
+hotelops promote --raw-object-id <id>                                # → parser ingest_ristocube_orders → f_ristocube_orders
+python -m ingest.flussi.ingest_ristocube_orders --file <xlsx> --dry-run  # Parser standalone, preview
 
 # Reviews vertical
 hotelops reviews                           # Ultime 30 reviews, media, negative
@@ -253,6 +256,7 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `f_reviews` | Guest reviews da OTA (Booking, TripAdvisor, Google, Expedia). NLP classified. (APPEND) |
 | `f_vendite_fb` | Vendite F&B POS (giorno × sala × articolo) da Ristocube. Include `segmento_cliente`. (APPEND, dedup hash_riga) |
 | `f_ricavi_fb` | Ricavi F&B per struttura × mese × codice pasto (Produzione Netta PMS, export Power BI). Drill-down di classe 02FB. Ingerita via lineage (source `POWERBI_RICAVIFB_ORTI_SNAPSHOT`). (SNAPSHOT, natural_key business_unit_id+anno+mese) |
+| `f_ristocube_orders` | Comande RistoCube POS a livello item × comanda. Campi comanda (sala, tavolo, coperti, segmento_cliente, modalita_chiusura) ereditati da ogni item. Ingerita via lineage (source `RISTOCUBE_ORDERS_ORTI_APPEND`). (APPEND, dedup hash_riga, partition DAY su data, cluster sala/segmento/comanda_id) |
 
 ### Dimension tables
 
