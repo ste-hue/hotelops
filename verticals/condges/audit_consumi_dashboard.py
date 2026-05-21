@@ -294,7 +294,144 @@ def render_b1_breakfast() -> None:
 
 def render_b2_ristorante() -> None:
     st.title("🍽️ B2 — Ristorante")
-    st.info("Pagina da implementare nel Task 4")
+    st.markdown(
+        "Vertical ristorante: ricavi food da pranzo, cena, bar, banchetti, eventi. "
+        "Cost dal reparto CUCINA."
+    )
+
+    # ── Layer 1: Ricavi ──
+    st.header("Layer 1: Ricavi food (multi-codice)")
+
+    codici_food = (
+        "'RISLFOOD', 'RISDFOOD', 'RISTLUNC', 'RISTDINN', 'DINFOOD', 'LUNBAR', "
+        "'RISBFOOD', 'BAN', 'ROOMSERV', "
+        "'FERRAD', 'FERRBA', 'PASQAD', 'PARTY', 'BRUNCH', 'APERIDIN'"
+    )
+    ricavi = run_query(
+        f"""
+        SELECT codice,
+               ANY_VALUE(descrizione) AS descrizione,
+               STRING_AGG(DISTINCT business_unit_id ORDER BY business_unit_id) AS bu,
+               ROUND(SUM(netto), 0) AS netto_2025
+        FROM `hotelops-suite.hotelops.f_ricavi_fb`
+        WHERE codice IN ({codici_food})
+          AND anno = 2025
+        GROUP BY codice
+        HAVING SUM(netto) > 0
+        ORDER BY netto_2025 DESC
+        """
+    )
+    st.dataframe(ricavi, hide_index=True, use_container_width=True)
+    ricavi_totale = float(ricavi["netto_2025"].sum())
+    st.metric("Ricavi ristorante totali 2025", f"€ {ricavi_totale:,.0f}".replace(",", "."))
+
+    # ── Layer 2: Consumi ──
+    st.header("Layer 2: Consumi reparto CUCINA")
+    cost_cuc = run_query(
+        """
+        SELECT anno,
+               COUNT(DISTINCT codice_prodotto) AS n_prodotti,
+               COUNT(*) AS righe,
+               ROUND(SUM(importo), 0) AS cost
+        FROM `hotelops-suite.hotelops.f_consumi_economato`
+        WHERE reparto_id = 'CUCINA'
+          AND NOT (anno = 2025 AND mese = 5 AND importo < 0)
+        GROUP BY anno
+        ORDER BY anno
+        """
+    )
+    st.dataframe(cost_cuc, hide_index=True, use_container_width=True)
+    cost_totale = float(cost_cuc[cost_cuc["anno"] == 2025]["cost"].iloc[0])
+
+    # ── Layer 3: Coperti ──
+    st.header("Layer 3: Coperti (lunch + dinner)")
+    coperti = run_query(
+        """
+        SELECT anno, tipo_pasto, business_unit_id,
+               SUM(n_coperti) AS coperti
+        FROM `hotelops-suite.hotelops.f_coperti_giornalieri`
+        WHERE tipo_pasto IN ('LUNCH', 'DINNER')
+          AND anno = 2025
+        GROUP BY anno, tipo_pasto, business_unit_id
+        ORDER BY coperti DESC
+        """
+    )
+    st.dataframe(coperti, hide_index=True, use_container_width=True)
+    pax_totale = int(coperti["coperti"].sum())
+    st.metric("Coperti ristorante 2025", f"{pax_totale:,}".replace(",", "."))
+
+    # ── Layer 4: KPI ──
+    st.header("Layer 4: KPI normalizzati")
+    col1, col2, col3 = st.columns(3)
+    kpi_cost_pax = cost_totale / pax_totale if pax_totale else 0
+    kpi_ricavo_pax = ricavi_totale / pax_totale if pax_totale else 0
+    kpi_fc = cost_totale / ricavi_totale if ricavi_totale else 0
+    col1.metric("€ cost/coperto", f"€ {kpi_cost_pax:.2f}")
+    col2.metric("€ ricavo/coperto", f"€ {kpi_ricavo_pax:.2f}")
+    col3.metric("Food cost %", f"{kpi_fc*100:.1f}%")
+
+    # ── Layer 5: Range industria ──
+    st.header("Layer 5: Range industria")
+    range_df = pd.DataFrame([
+        {"Tipo struttura": "🍕 Pizzeria", "Food cost target": "~15%"},
+        {"Tipo struttura": "🍝 Ristorante medio", "Food cost target": "25-35%"},
+        {"Tipo struttura": "⭐⭐⭐ Michelin 3 stelle", "Food cost target": "~38%"},
+        {"Tipo struttura": "🎯 Target Panorama (atteso)", "Food cost target": "25-35%"},
+        {"Tipo struttura": "⚠️ Warning", "Food cost target": ">40%"},
+        {"Tipo struttura": "🚨 Investigate", "Food cost target": ">50-60%"},
+    ])
+    st.dataframe(range_df, hide_index=True, use_container_width=True)
+
+    # ── Layer 6: Alert ──
+    st.header("Layer 6: Alert vs range")
+    alert_df = pd.DataFrame([
+        {"KPI": "Food cost %", "Valore": f"{kpi_fc*100:.1f}%",
+         "Status": alert_color(kpi_fc*100, 25.0, 35.0, 50.0)},
+        {"KPI": "€ cost/coperto", "Valore": f"€ {kpi_cost_pax:.2f}",
+         "Status": "ℹ️ (no range fisso)"},
+        {"KPI": "€ ricavo/coperto", "Valore": f"€ {kpi_ricavo_pax:.2f}",
+         "Status": "ℹ️ (no range fisso)"},
+    ])
+    st.dataframe(alert_df, hide_index=True, use_container_width=True)
+    st.caption("🟢 nel target · 🟡 warning · 🔴 investigate")
+
+    st.subheader("Possibili cause food cost >50-60%")
+    st.markdown(
+        """
+- pricing sbagliato
+- porzioni eccessive
+- furto
+- sprechi
+- mix prodotti (es. troppo pesce vs carne)
+- menu engineering
+- eventi sottocosto
+- ricavi incompleti (es. cose pagate fuori sistema)
+- consumi caricati male (es. cucina che assorbe banchetti senza separazione)
+"""
+    )
+
+    # ── Andamento mensile ──
+    st.header("Andamento mensile 2025")
+    monthly = run_query(
+        """
+        SELECT mese,
+               ROUND(costo_alacarte, 0) AS cost,
+               ROUND(ricavi_alacarte_totali, 0) AS ricavo
+        FROM `hotelops-suite.hotelops.v_fb_kpi`
+        WHERE anno = 2025 AND mese BETWEEN 4 AND 10
+        ORDER BY mese
+        """
+    )
+    fig = px.bar(
+        monthly.melt(id_vars="mese", value_vars=["cost", "ricavo"]),
+        x="mese", y="value", color="variable", barmode="group",
+        labels={"mese": "Mese 2025", "value": "€", "variable": ""},
+        title="Cost CUCINA vs Ricavo ristorante — 2025 Apr-Oct",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.header("Per la tua valutazione")
+    st.markdown(f"🔗 [Apri il Google Form — sezione B2 Ristorante]({FORM_URL})")
 
 
 def render_b3_bar() -> None:
