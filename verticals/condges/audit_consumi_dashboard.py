@@ -560,7 +560,69 @@ def render_b3_bar() -> None:
 
 def render_anomalie() -> None:
     st.title("⚠️ Anomalie FYI")
-    st.info("Pagina da implementare nel Task 6")
+    st.markdown(
+        "Non sono domande primarie. Ti facciamo sapere cosa abbiamo notato "
+        "nei dati, ci basta una conferma rapida nel Form."
+    )
+
+    anomalie = pd.DataFrame([
+        {
+            "ID": "FYI-1",
+            "Anomalia": "Storni UoM maggio 2025",
+            "Cosa abbiamo notato": "15 righe negative -€166k su BRK/CUCINA/CANTINA in maggio 2025",
+            "La nostra ipotesi": "Confusione kg vs grammi (caffè in grani comprato in kg, consumato in g)",
+            "Implicazione": "Già flaggate is_anomalia, escluse di default dai KPI",
+        },
+        {
+            "ID": "FYI-2",
+            "Anomalia": "BANCHETTI reparto sotto-stimato",
+            "Cosa abbiamo notato": "Cost €1.2k vs Revenue BAN €17k = food cost implicito 7%",
+            "La nostra ipotesi": "Il cibo dei banchetti esce da CUCINA mescolato col ristorante",
+            "Implicazione": "Non separabile a livello mensile, restano aggregati in B2",
+        },
+        {
+            "ID": "FYI-3",
+            "Anomalia": "BAR_HOTEL reparto vuoto",
+            "Cosa abbiamo notato": "7 righe €0 cost vs revenue BAR €76k",
+            "La nostra ipotesi": "Drink bar usa stock CANTINA, no magazzino dedicato",
+            "Implicazione": "B3 unifica BAR_HOTEL+CANTINA come fonte cost",
+        },
+        {
+            "ID": "FYI-4",
+            "Anomalia": "Codici da sospendere",
+            "Cosa abbiamo notato": "17 codici marcati 'da sospendere' nel tuo file `pianodeicontilavoro.xlsx`",
+            "La nostra ipotesi": "Forward-only deprecati, storico mantenuto",
+            "Implicazione": "Filtriamo da default Looker",
+        },
+        {
+            "ID": "FYI-5",
+            "Anomalia": "Codici orfani",
+            "Cosa abbiamo notato": "ACCFCI (Acconto Fuori Campo Iva) €252 non in classe nota",
+            "La nostra ipotesi": "Legacy, va in 07DIV o classe nuova",
+            "Implicazione": "Trattati come '(da mappare)'",
+        },
+        {
+            "ID": "FYI-6",
+            "Anomalia": "Reparti operativi non-F&B",
+            "Cosa abbiamo notato": "DIPEND €22k, HSK* €60k, MAN* €10k, DIREZIONE €13k, DEPERIMENTO €6k, D* dotazioni",
+            "La nostra ipotesi": "Sono costi operativi reali (non food cost), vivono fuori P&L F&B",
+            "Implicazione": "Pagina dashboard separata 'Costi operativi non-F&B'",
+        },
+        {
+            "ID": "FYI-7",
+            "Anomalia": "Carico magazzino stagionale",
+            "Cosa abbiamo notato": "Picco cost BRK luglio €76k, €/coperto oscilla €3.6-€12.5",
+            "La nostra ipotesi": "Acquisti concentrati luglio per servire fino a settembre",
+            "Implicazione": "Lettura trimestrale > mensile per BRK",
+        },
+    ])
+    st.dataframe(anomalie, hide_index=True, use_container_width=True)
+
+    st.header("Per la tua valutazione")
+    st.markdown(
+        f"🔗 [Apri il Google Form — sezione Anomalie FYI]({FORM_URL})\n\n"
+        "Per ogni anomalia: ✓ confermo / ✗ no + note opzionali."
+    )
 
 
 def render_recap() -> None:
