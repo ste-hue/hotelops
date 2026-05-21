@@ -627,7 +627,44 @@ def render_anomalie() -> None:
 
 def render_recap() -> None:
     st.title("📋 Recap + Form")
-    st.info("Pagina da implementare nel Task 7")
+    st.markdown(
+        "Grazie per aver navigato i 3 vertical + le anomalie. Adesso il prossimo "
+        "passo è confermare i codici nel Google Form."
+    )
+
+    st.header("Cosa ti chiediamo nel Form")
+    riepilogo = pd.DataFrame([
+        {"Sezione": "S1 — Breakfast", "Cosa chiediamo": "Conferma codici ricavi + se aggregare BU"},
+        {"Sezione": "S2 — Ristorante", "Cosa chiediamo": "Conferma codici food + dove vanno eventi e RISBFOOD"},
+        {"Sezione": "S3 — Bar/Beverage", "Cosa chiediamo": "Conferma codici drink + se BARHOTEL=BAR"},
+        {"Sezione": "S4 — Coperti mapping", "Cosa chiediamo": "Fonte coperti corretta + clienti vs esterni"},
+        {"Sezione": "S5 — Range operativi", "Cosa chiediamo": "Target tuoi food/beverage cost per Panorama"},
+        {"Sezione": "S6 — Anomalie FYI", "Cosa chiediamo": "Conferma rapida ✓/✗ per le 7 osservazioni"},
+        {"Sezione": "S7 — Catch-all", "Cosa chiediamo": "Cosa manca? Codici da aggiungere?"},
+    ])
+    st.dataframe(riepilogo, hide_index=True, use_container_width=True)
+
+    st.header("👉 Apri il Google Form")
+    st.markdown(f"### 📝 [Clicca qui per rispondere]({FORM_URL})")
+    st.caption(
+        "Il link è un placeholder finché non generi la Form via Apps Script "
+        "(`verticals/condges/audit_form.gs`). Una volta creata, aggiorna "
+        "`FORM_URL` in `audit_consumi_dashboard.py`."
+    )
+
+    st.header("Cosa succede dopo")
+    st.markdown(
+        """
+1. Le tue risposte vanno in un Google Sheet collegato alla Form
+2. Stefano legge le risposte
+3. Aggiorniamo il modello F&B (lista codici per vertical, range target)
+4. Round successivo (se serve):
+   - Chef per matrice categoria_prodotto → ricetta (KPI quantità/coperto)
+   - POS Ristocube per separare drink bar/ristorante/banchetti
+
+Grazie!
+"""
+    )
 
 
 if __name__ == "__main__":
