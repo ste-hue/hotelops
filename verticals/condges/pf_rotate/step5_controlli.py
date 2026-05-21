@@ -2,6 +2,8 @@
 
 Reimplementa la logica dei check come funzioni pure su valori sorgente.
 Non dipende da openpyxl `data_only=True` (cache stale dopo edit Python).
+Layout-aware: usa find_layout() per rilevare le posizioni di riga dinamicamente
+(supporta sia ORTI che INTUR che hanno strutture di riga diverse).
 """
 
 from __future__ import annotations
@@ -11,8 +13,11 @@ from dataclasses import dataclass
 from enum import Enum
 
 from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
 
 from verticals.condges.pf_rotate.excel_model import (
+    find_layout,
+    find_month_columns,
     is_formula_with_refs,
     resolve_sheet_name,
 )
@@ -71,155 +76,192 @@ def _read_num(ws, ref: str) -> float | None:
     return None
 
 
+def _read_num_rc(ws, row: int, col: int) -> float | None:
+    """Read a numeric value from a cell by row/col. Returns None if formula-with-refs."""
+    cell = ws.cell(row, col)
+    v = cell.value
+    if v is None:
+        return 0.0
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str) and v.startswith("="):
+        if is_formula_with_refs(cell):
+            return None
+        try:
+            return float(eval(v[1:], {"__builtins__": {}}, {}))  # noqa: S307
+        except Exception:
+            return None
+    return None
+
+
 def _eq(a: float | None, b: float | None) -> bool:
     if a is None or b is None:
         return False
     return math.isclose(a, b, abs_tol=EPS)
 
 
-def _check_C1_c4_hardcoded(wb) -> CheckResult:
+def _check_C1_saldo_iniziale_hardcoded(
+    wb, cutover_col: str, saldo_row: int
+) -> CheckResult:
     pf = wb["Piano Finanziario"]
-    cell = pf["C4"]
+    ref = f"{cutover_col}{saldo_row}"
+    cell = pf[ref]
     bad = is_formula_with_refs(cell)
     return CheckResult(
         "C1",
-        "C4 = saldo iniziale hardcoded (no formula)",
+        f"{ref} = saldo iniziale hardcoded (no formula)",
         CheckOutcome.ERR if bad else CheckOutcome.OK,
-        detail="C4 contiene formula" if bad else "",
+        detail=f"{ref} contiene formula" if bad else "",
     )
 
 
-def _check_C2_d4_eq_c37(wb) -> CheckResult:
+def _check_C2_cascade_link(
+    wb, second_col: str, cutover_col: str, saldo_row: int, saldo_proiettato_row: int
+) -> CheckResult:
     pf = wb["Piano Finanziario"]
-    d4 = _read_num(pf, "D4")
-    c37 = _read_num(pf, "C37")
-    if d4 is None or c37 is None:
+    d_ref = f"{second_col}{saldo_row}"
+    c_ref = f"{cutover_col}{saldo_proiettato_row}"
+    d_val = _read_num(pf, d_ref)
+    c_val = _read_num(pf, c_ref)
+    if d_val is None or c_val is None:
         return CheckResult(
-            "C2", "D4 = C37", CheckOutcome.INDET, "valori non determinabili"
+            "C2",
+            f"{d_ref} = {c_ref} (cascata)",
+            CheckOutcome.INDET,
+            "valori non determinabili",
         )
     return CheckResult(
         "C2",
-        "D4 = C37 (cascata)",
-        CheckOutcome.OK if _eq(d4, c37) else CheckOutcome.ERR,
-        detail=f"D4={d4}, C37={c37}",
+        f"{d_ref} = {c_ref} (cascata)",
+        CheckOutcome.OK if _eq(d_val, c_val) else CheckOutcome.ERR,
+        detail=f"{d_ref}={d_val}, {c_ref}={c_val}",
     )
 
 
-def _check_C3_cascade_chain(wb) -> CheckResult:
-    """Verifica che D4..K4 siano formule di cascata (riferimenti al mese precedente r37).
-
-    Una cella hardcoded in D4..K4 rompe la cascata — check ERR.
-    """
+def _check_C3_cascade_chain(wb, tail_cols: list[str], saldo_row: int) -> CheckResult:
+    """Verifica che tutte le colonne tail (escluso cutover) abbiano formule di cascata a saldo_row."""
     pf = wb["Piano Finanziario"]
-    cols = "CDEFGHIJK"
-    for i in range(1, len(cols)):
-        cur = cols[i]
-        cell = pf[f"{cur}4"]
-        # La cascata richiede una formula con riferimento (al mese precedente r37).
-        # Se la cella è un valore hardcoded (non formula con ref) → cascata rotta.
+    for col in tail_cols:
+        cell = pf[f"{col}{saldo_row}"]
         if not is_formula_with_refs(cell):
             return CheckResult(
                 "C3",
-                "Catena D4:K4 = mese prec r37",
+                f"Catena {tail_cols[0]}{saldo_row}:{tail_cols[-1]}{saldo_row} = mese prec",
                 CheckOutcome.ERR,
-                detail=f"{cur}4={cell.value!r} non è formula di cascata",
+                detail=f"{col}{saldo_row}={cell.value!r} non è formula di cascata",
             )
-    return CheckResult("C3", "Catena D4:K4 = mese prec r37", CheckOutcome.OK)
+    chain_label = (
+        f"{tail_cols[0]}{saldo_row}:{tail_cols[-1]}{saldo_row}" if tail_cols else "—"
+    )
+    return CheckResult("C3", f"Catena {chain_label} = mese prec", CheckOutcome.OK)
 
 
-def _check_totale_entrate(wb) -> list[CheckResult]:
+def _check_totale_entrate(
+    wb, col_letters: list[str], totale_entrate_row: int, entrate_rows: list[int]
+) -> list[CheckResult]:
     pf = wb["Piano Finanziario"]
-    cols = "CDEFGHIJK"
-    results: list[CheckResult] = []
-    for col in cols:
-        total = _read_num(pf, f"{col}12")
-        parts = [_read_num(pf, f"{col}{r}") for r in range(6, 12)]
-        if total is None or any(p is None for p in parts):
-            results.append(
-                CheckResult(
-                    f"E{col}",
-                    f"{col}12 = SUM({col}6:{col}11)",
-                    CheckOutcome.INDET,
-                    f"col {col}",
-                )
-            )
-            continue
-        expected = sum(parts)
-        outcome = CheckOutcome.OK if _eq(total, expected) else CheckOutcome.ERR
-        results.append(
-            CheckResult(
-                f"E{col}",
-                f"{col}12 = SUM({col}6:{col}11)",
-                outcome,
-                f"{total} vs {expected}",
-            )
-        )
-    # Aggregato in un singolo CheckResult per § "Totale Entrate (riga 12)"
-    err_cols = [r for r in results if r.outcome == CheckOutcome.ERR]
-    if err_cols:
-        return [
-            CheckResult(
-                "C4",
-                "Totale Entrate r12 per mesi C:K",
-                CheckOutcome.ERR,
-                detail="; ".join(r.detail for r in err_cols),
-            )
-        ]
-    if any(r.outcome == CheckOutcome.INDET for r in results):
-        return [CheckResult("C4", "Totale Entrate r12", CheckOutcome.INDET)]
-    return [CheckResult("C4", "Totale Entrate r12 per mesi C:K", CheckOutcome.OK)]
-
-
-def _check_totale_uscite(wb) -> list[CheckResult]:
-    pf = wb["Piano Finanziario"]
-    cols = "CDEFGHIJK"
     err = []
     indet = False
-    for col in cols:
-        total = _read_num(pf, f"{col}27")
-        parts = [_read_num(pf, f"{col}{r}") for r in range(14, 27)]
+    for col in col_letters:
+        total = _read_num_rc(pf, totale_entrate_row, _col_idx(col))
+        parts = [_read_num_rc(pf, r, _col_idx(col)) for r in entrate_rows]
         if total is None or any(p is None for p in parts):
             indet = True
             continue
         if not _eq(total, sum(parts)):
-            err.append(f"{col}27={total} vs SUM={sum(parts)}")
+            err.append(f"{col}{totale_entrate_row}={total} vs SUM={sum(parts)}")
     if err:
         return [
-            CheckResult("C5", "Totale Uscite r27", CheckOutcome.ERR, "; ".join(err))
+            CheckResult(
+                "C4",
+                f"Totale Entrate r{totale_entrate_row} per mesi",
+                CheckOutcome.ERR,
+                "; ".join(err),
+            )
         ]
     if indet:
-        return [CheckResult("C5", "Totale Uscite r27", CheckOutcome.INDET)]
-    return [CheckResult("C5", "Totale Uscite r27", CheckOutcome.OK)]
+        return [
+            CheckResult(
+                "C4", f"Totale Entrate r{totale_entrate_row}", CheckOutcome.INDET
+            )
+        ]
+    return [
+        CheckResult(
+            "C4", f"Totale Entrate r{totale_entrate_row} per mesi", CheckOutcome.OK
+        )
+    ]
 
 
-def _check_cashflow(wb) -> list[CheckResult]:
+def _check_totale_uscite(
+    wb, col_letters: list[str], totale_uscite_row: int, uscite_rows: list[int]
+) -> list[CheckResult]:
     pf = wb["Piano Finanziario"]
-    cols = "CDEFGHIJK"
     err = []
     indet = False
-    for col in cols:
-        cf = _read_num(pf, f"{col}29")
-        ent = _read_num(pf, f"{col}12")
-        usc = _read_num(pf, f"{col}27")
+    for col in col_letters:
+        total = _read_num_rc(pf, totale_uscite_row, _col_idx(col))
+        parts = [_read_num_rc(pf, r, _col_idx(col)) for r in uscite_rows]
+        if total is None or any(p is None for p in parts):
+            indet = True
+            continue
+        if not _eq(total, sum(parts)):
+            err.append(f"{col}{totale_uscite_row}={total} vs SUM={sum(parts)}")
+    if err:
+        return [
+            CheckResult(
+                "C5",
+                f"Totale Uscite r{totale_uscite_row}",
+                CheckOutcome.ERR,
+                "; ".join(err),
+            )
+        ]
+    if indet:
+        return [
+            CheckResult("C5", f"Totale Uscite r{totale_uscite_row}", CheckOutcome.INDET)
+        ]
+    return [CheckResult("C5", f"Totale Uscite r{totale_uscite_row}", CheckOutcome.OK)]
+
+
+def _check_cashflow(
+    wb,
+    col_letters: list[str],
+    cashflow_row: int,
+    totale_entrate_row: int,
+    totale_uscite_row: int,
+) -> list[CheckResult]:
+    pf = wb["Piano Finanziario"]
+    err = []
+    indet = False
+    for col in col_letters:
+        cf = _read_num_rc(pf, cashflow_row, _col_idx(col))
+        ent = _read_num_rc(pf, totale_entrate_row, _col_idx(col))
+        usc = _read_num_rc(pf, totale_uscite_row, _col_idx(col))
         if any(v is None for v in (cf, ent, usc)):
             indet = True
             continue
         if not _eq(cf, ent - usc):
-            err.append(f"{col}29={cf} ≠ {ent}-{usc}")
+            err.append(f"{col}{cashflow_row}={cf} ≠ {ent}-{usc}")
     if err:
         return [
             CheckResult(
-                "C6", "Cash Flow r29 = r12 - r27", CheckOutcome.ERR, "; ".join(err)
+                "C6",
+                f"Cash Flow r{cashflow_row} = r{totale_entrate_row} - r{totale_uscite_row}",
+                CheckOutcome.ERR,
+                "; ".join(err),
             )
         ]
     if indet:
-        return [CheckResult("C6", "Cash Flow r29", CheckOutcome.INDET)]
-    return [CheckResult("C6", "Cash Flow r29 = r12 - r27", CheckOutcome.OK)]
+        return [CheckResult("C6", f"Cash Flow r{cashflow_row}", CheckOutcome.INDET)]
+    return [
+        CheckResult(
+            "C6",
+            f"Cash Flow r{cashflow_row} = r{totale_entrate_row} - r{totale_uscite_row}",
+            CheckOutcome.OK,
+        )
+    ]
 
 
 # Voce -> (master_row, detail_sheet_aliases, detail_row).
-# Riga master è una formula =detail!<col><detail_row>. Detail_row è 3 per la
-# maggior parte, 4 per Godimento / Canoni (osservato).
 VOCE_LINKS = [
     ("C7", "Salari", 14, "Salari e Stipendi", 4),
     ("C8", "Utenze", 15, "Utenze", 3),
@@ -234,7 +276,9 @@ VOCE_LINKS = [
 ]
 
 
-def _check_voce_link(wb, check_id, voce_label, master_row, alias_spec, detail_row):
+def _check_voce_link(
+    wb, check_id, voce_label, master_row, alias_spec, detail_row, col_letters: list[str]
+):
     pf = wb["Piano Finanziario"]
     name = resolve_sheet_name(
         wb, [alias_spec] if isinstance(alias_spec, str) else alias_spec
@@ -248,12 +292,12 @@ def _check_voce_link(wb, check_id, voce_label, master_row, alias_spec, detail_ro
         )
     detail = wb[name]
     err_cols = []
-    for col in "CDEFGHIJK":
-        m_val = _read_num(pf, f"{col}{master_row}")
-        d_val = _read_num(detail, f"{col}{detail_row}")
+    for col in col_letters:
+        col_i = _col_idx(col)
+        m_val = _read_num_rc(pf, master_row, col_i)
+        d_val = _read_num_rc(detail, detail_row, col_i)
         if m_val is None or d_val is None:
-            continue  # indeterminate per questa cella
-        # Materie Prime usa MAX(detail, X) — qui tollerante: master >= detail
+            continue
         if voce_label == "Materie Prime":
             if m_val + EPS < d_val:
                 err_cols.append(f"{col}: master={m_val} < detail={d_val}")
@@ -270,88 +314,164 @@ def _check_voce_link(wb, check_id, voce_label, master_row, alias_spec, detail_ro
     return CheckResult(check_id, f"Riga {master_row} — {voce_label}", CheckOutcome.OK)
 
 
-def _check_saldo_proiettato(wb) -> CheckResult:
+def _check_saldo_proiettato_structural(
+    wb, saldo_proiettato_row: int, col_letters: list[str]
+) -> CheckResult:
+    """Verifica strutturale: le celle saldo proiettato devono essere formule con riferimenti."""
     pf = wb["Piano Finanziario"]
     err = []
-    for col in "CDEFGHIJK":
-        r37 = _read_num(pf, f"{col}37")
-        r4 = _read_num(pf, f"{col}4")
-        r29 = _read_num(pf, f"{col}29")
-        if any(v is None for v in (r37, r4, r29)):
-            continue
-        if not _eq(r37, r4 + r29):
-            err.append(f"{col}37={r37} ≠ {r4}+{r29}")
+    for col in col_letters:
+        cell = pf.cell(saldo_proiettato_row, _col_idx(col))
+        if not is_formula_with_refs(cell):
+            err.append(f"{col}{saldo_proiettato_row}={cell.value!r} non è formula")
     if err:
         return CheckResult(
             "C17",
-            "Saldo proiettato r37 = r4 + r29",
+            f"Saldo proiettato r{saldo_proiettato_row} = formula strutturale",
             CheckOutcome.ERR,
             "; ".join(err),
         )
-    return CheckResult("C17", "Saldo proiettato r37 = r4 + r29", CheckOutcome.OK)
+    return CheckResult(
+        "C17",
+        f"Saldo proiettato r{saldo_proiettato_row} = formula strutturale",
+        CheckOutcome.OK,
+    )
 
 
-def _check_colonna_totali(wb) -> list[CheckResult]:
+def _check_colonna_totali(
+    wb,
+    totale_entrate_row: int,
+    totale_uscite_row: int,
+    cashflow_row: int,
+    col_letters: list[str],
+) -> list[CheckResult]:
+    """Controlla la colonna TOTALI se presente. Se non trovata, INDET."""
     pf = wb["Piano Finanziario"]
+    # Cerca colonna con header "TOTALI" in riga 2
+    totali_col = None
+    for c in range(1, pf.max_column + 1):
+        v = pf.cell(2, c).value
+        if isinstance(v, str) and v.strip().upper() == "TOTALI":
+            totali_col = c
+            break
+
+    if totali_col is None:
+        return [
+            CheckResult(
+                "C18",
+                f"L{totale_entrate_row} = SUM(col mesi)",
+                CheckOutcome.INDET,
+                "colonna TOTALI non presente",
+            ),
+            CheckResult(
+                "C19",
+                f"L{totale_uscite_row} = SUM(col mesi)",
+                CheckOutcome.INDET,
+                "colonna TOTALI non presente",
+            ),
+            CheckResult(
+                "C20",
+                f"L{cashflow_row} = L{totale_entrate_row} - L{totale_uscite_row}",
+                CheckOutcome.INDET,
+                "colonna TOTALI non presente",
+            ),
+        ]
+
     results = []
-    # L12 = SUM(C12:K12)
-    l12 = _read_num(pf, "L12")
-    parts = [_read_num(pf, f"{c}12") for c in "CDEFGHIJK"]
-    if l12 is not None and all(p is not None for p in parts):
-        ok = _eq(l12, sum(parts))
+    col_indices = [_col_idx(c) for c in col_letters]
+
+    # C18: totali_col × totale_entrate_row = SUM(col mesi × totale_entrate_row)
+    l_ent = _read_num_rc(pf, totale_entrate_row, totali_col)
+    parts_ent = [_read_num_rc(pf, totale_entrate_row, ci) for ci in col_indices]
+    if l_ent is not None and all(p is not None for p in parts_ent):
+        ok = _eq(l_ent, sum(parts_ent))
         results.append(
             CheckResult(
                 "C18",
-                "L12 = SUM(C12:K12)",
+                f"Totali r{totale_entrate_row}",
                 CheckOutcome.OK if ok else CheckOutcome.ERR,
-                f"L12={l12} vs SUM={sum(parts)}",
+                f"totali={l_ent} vs SUM={sum(parts_ent)}",
             )
         )
     else:
-        results.append(CheckResult("C18", "L12 = SUM(C12:K12)", CheckOutcome.INDET))
-    # L27
-    l27 = _read_num(pf, "L27")
-    parts27 = [_read_num(pf, f"{c}27") for c in "CDEFGHIJK"]
-    if l27 is not None and all(p is not None for p in parts27):
-        ok = _eq(l27, sum(parts27))
+        results.append(
+            CheckResult("C18", f"Totali r{totale_entrate_row}", CheckOutcome.INDET)
+        )
+
+    # C19: totali_col × totale_uscite_row
+    l_usc = _read_num_rc(pf, totale_uscite_row, totali_col)
+    parts_usc = [_read_num_rc(pf, totale_uscite_row, ci) for ci in col_indices]
+    if l_usc is not None and all(p is not None for p in parts_usc):
+        ok = _eq(l_usc, sum(parts_usc))
         results.append(
             CheckResult(
                 "C19",
-                "L27 = SUM(C27:K27)",
+                f"Totali r{totale_uscite_row}",
                 CheckOutcome.OK if ok else CheckOutcome.ERR,
-                f"L27={l27} vs SUM={sum(parts27)}",
+                f"totali={l_usc} vs SUM={sum(parts_usc)}",
             )
         )
     else:
-        results.append(CheckResult("C19", "L27 = SUM(C27:K27)", CheckOutcome.INDET))
-    # L29 = L12 - L27
-    l29 = _read_num(pf, "L29")
-    if l29 is not None and l12 is not None and l27 is not None:
-        ok = _eq(l29, l12 - l27)
+        results.append(
+            CheckResult("C19", f"Totali r{totale_uscite_row}", CheckOutcome.INDET)
+        )
+
+    # C20: totali_col × cashflow_row = totali_ent - totali_usc
+    l_cf = _read_num_rc(pf, cashflow_row, totali_col)
+    if l_cf is not None and l_ent is not None and l_usc is not None:
+        ok = _eq(l_cf, l_ent - l_usc)
         results.append(
             CheckResult(
                 "C20",
-                "L29 = L12 - L27",
+                f"Totali r{cashflow_row} = r{totale_entrate_row} - r{totale_uscite_row}",
                 CheckOutcome.OK if ok else CheckOutcome.ERR,
-                f"L29={l29} vs {l12}-{l27}",
+                f"cf={l_cf} vs {l_ent}-{l_usc}",
             )
         )
     else:
-        results.append(CheckResult("C20", "L29 = L12 - L27", CheckOutcome.INDET))
+        results.append(
+            CheckResult("C20", f"Totali r{cashflow_row}", CheckOutcome.INDET)
+        )
+
     return results
 
 
+def _col_idx(col_letter: str) -> int:
+    """Convert column letter(s) to 1-based index."""
+    from openpyxl.utils import column_index_from_string
+
+    return column_index_from_string(col_letter)
+
+
 def verifica_controlli(wb: Workbook) -> ControlReport:
-    """Esegui i 22 check sul workbook in input. Niente cache, puro Python."""
+    """Esegui i check sul workbook in input. Layout-aware. Niente cache, puro Python."""
+    pf = wb["Piano Finanziario"]
+    layout = find_layout(wb)
+    month_cols = find_month_columns(pf, header_row=2)
+
+    ordered_mesi = sorted(month_cols.keys())
+    col_letters = [get_column_letter(month_cols[m]) for m in ordered_mesi]
+    cutover_col = col_letters[0]
+    tail_cols = col_letters[1:]
+
+    R_S = layout.saldo_iniziale_row
+    R_TE = layout.totale_entrate_row
+    R_TU = layout.totale_uscite_row
+    R_CF = layout.cashflow_row
+    R_SP = layout.saldo_proiettato_row
+
     results: list[CheckResult] = []
-    results.append(_check_C1_c4_hardcoded(wb))
-    results.append(_check_C2_d4_eq_c37(wb))
-    results.append(_check_C3_cascade_chain(wb))
-    results.extend(_check_totale_entrate(wb))
-    results.extend(_check_totale_uscite(wb))
-    results.extend(_check_cashflow(wb))
+    results.append(_check_C1_saldo_iniziale_hardcoded(wb, cutover_col, R_S))
+    if tail_cols:
+        results.append(_check_C2_cascade_link(wb, tail_cols[0], cutover_col, R_S, R_SP))
+    results.append(_check_C3_cascade_chain(wb, tail_cols, R_S))
+    results.extend(_check_totale_entrate(wb, col_letters, R_TE, layout.entrate_rows))
+    results.extend(_check_totale_uscite(wb, col_letters, R_TU, layout.uscite_rows))
+    results.extend(_check_cashflow(wb, col_letters, R_CF, R_TE, R_TU))
     for check_id, label, m_row, alias, d_row in VOCE_LINKS:
-        results.append(_check_voce_link(wb, check_id, label, m_row, alias, d_row))
-    results.append(_check_saldo_proiettato(wb))
-    results.extend(_check_colonna_totali(wb))
+        results.append(
+            _check_voce_link(wb, check_id, label, m_row, alias, d_row, col_letters)
+        )
+    results.append(_check_saldo_proiettato_structural(wb, R_SP, col_letters))
+    results.extend(_check_colonna_totali(wb, R_TE, R_TU, R_CF, col_letters))
     return ControlReport(results=results)

@@ -7,7 +7,7 @@ from datetime import date
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
-from verticals.condges.pf_rotate.excel_model import find_month_columns
+from verticals.condges.pf_rotate.excel_model import find_layout, find_month_columns
 
 
 # Mappa label-banca master → set di chiavi possibili passate in saldi-dict.
@@ -33,7 +33,7 @@ def write_saldi_banca(
     data_saldo: date,
     saldi: dict[str, float],
 ) -> dict[str, object]:
-    """Scrive i saldi nelle celle 31:34 + r4 della colonna del mese chiuso.
+    """Scrive i saldi nelle celle saldi_banca_rows + saldo_iniziale_row della colonna del mese chiuso.
 
     saldi: {nome_banca: importo}. Le banche mancanti non sono toccate.
     Ritorna dict con cellule effettivamente scritte + nuovo totale.
@@ -47,34 +47,37 @@ def write_saldi_banca(
     col = cols[mese_chiuso]
     col_letter = get_column_letter(col)
 
-    # Data in r31, col del mese chiuso
-    pf.cell(31, col, data_saldo.strftime("%d/%m/%Y"))
+    layout = find_layout(wb)
+
+    # Data alla riga immediatamente precedente al primo saldo banca
+    data_row = min(layout.saldi_banca_rows) - 1
+    pf.cell(data_row, col, data_saldo.strftime("%d/%m/%Y"))
 
     written: dict[int, float] = {}
-    # Scansiona r32..r34 leggendo l'etichetta in col A
-    for r in (32, 33, 34):
+    for r in layout.saldi_banca_rows:
         label = pf.cell(r, 1).value
         if not label:
             continue
         match = _match_bank(str(label), saldi)
         if match is None:
-            # banca non passata, lasciamo intatto
             continue
         pf.cell(r, col, float(match))
         written[r] = float(match)
 
-    # Totale: somma dei valori (saldi appena scritti + quelli preesistenti per
-    # banche non sovrascritte). Leggiamo le 3 celle.
+    # Totale: somma effettiva delle righe saldi
     total = 0.0
-    for r in (32, 33, 34):
+    for r in layout.saldi_banca_rows:
         v = pf.cell(r, col).value
         if isinstance(v, (int, float)):
             total += float(v)
-    pf.cell(4, col, total)  # hardcoded — Controllo #1 esige non-formula
+    # Scrivi totale come saldo iniziale — hardcoded (Controllo #1 esige non-formula)
+    pf.cell(layout.saldo_iniziale_row, col, total)
 
     return {
         "col": col_letter,
-        "scritti_r": list(written.keys()),
+        "data_row": data_row,
+        "saldi_rows_scritte": list(written.keys()),
+        "saldo_iniziale_row": layout.saldo_iniziale_row,
         "totale_banche": total,
     }
 

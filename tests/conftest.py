@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from google.cloud import bigquery
 from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
 import pytest
 
 from core.config import PROJECT
@@ -78,8 +79,17 @@ def _build_minimal_pf_orti(mese_chiuso_col: int = 3) -> BytesIO:
     pf = wb.create_sheet("Piano Finanziario")
     pf["A1"] = "ORTI S.R.L."
     pf["C1"] = 2026
-    mesi = ["APRILE", "MAGGIO", "GIUGNO", "LUGLIO", "AGOSTO",
-            "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE"]
+    mesi = [
+        "APRILE",
+        "MAGGIO",
+        "GIUGNO",
+        "LUGLIO",
+        "AGOSTO",
+        "SETTEMBRE",
+        "OTTOBRE",
+        "NOVEMBRE",
+        "DICEMBRE",
+    ]
     for i, m in enumerate(mesi):
         pf.cell(2, 3 + i, m)
     pf["L2"] = "TOTALI"
@@ -92,8 +102,14 @@ def _build_minimal_pf_orti(mese_chiuso_col: int = 3) -> BytesIO:
         pf.cell(4, col, f"={prev_col}37")
 
     # Entrate r6-r11 (hardcoded numeric, mese_chiuso azzerato in step 2)
-    entrate_labels = ["Entrate Hotel ", "Entrate Residence", "Entrate CVM",
-                      "Entrate Supermercato", "Rientro Sospesi", "Caparre Intur"]
+    entrate_labels = [
+        "Entrate Hotel ",
+        "Entrate Residence",
+        "Entrate CVM",
+        "Entrate Supermercato",
+        "Rientro Sospesi",
+        "Caparre Intur",
+    ]
     for i, lbl in enumerate(entrate_labels):
         pf.cell(6 + i, 1, lbl)
         # leave mese_chiuso col empty (closed), put 100 in MAGGIO (col D) for sanity
@@ -191,3 +207,119 @@ def _build_minimal_pf_orti(mese_chiuso_col: int = 3) -> BytesIO:
 def minimal_pf_orti_bytes() -> bytes:
     """ORTI PF minimal: APRILE chiuso, 2 fogli dettaglio (Utenze, Materie Prime)."""
     return _build_minimal_pf_orti().getvalue()
+
+
+def _build_minimal_pf_intur() -> BytesIO:
+    """Construct a minimal INTUR-style PF xlsx in-memory.
+
+    Layout: saldo mese precedente at r3, entrate r5-r10, uscite r14-r22,
+    saldi banca r31-r33, saldo proiettato r38. Month cols: MARZO=D, APRILE=E..DIC=M.
+    Col C = "DATA RILEVAZ" (not a month).
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    # ── Piano Finanziario master ─────────────────────────────────────────
+    pf = wb.create_sheet("Piano Finanziario")
+    pf["A1"] = "INTUR S.R.L."
+    pf["D1"] = 2026
+
+    # Row 2: headers. Col C = DATA RILEVAZ (non-month), D=MARZO, E=APRILE, ...
+    pf["C2"] = "DATA RILEVAZ"
+    mesi = [
+        "MARZO",
+        "APRILE",
+        "MAGGIO",
+        "GIUGNO",
+        "LUGLIO",
+        "AGOSTO",
+        "SETTEMBRE",
+        "OTTOBRE",
+        "NOVEMBRE",
+        "DICEMBRE",
+    ]
+    for i, m in enumerate(mesi):
+        pf.cell(2, 4 + i, m)  # cols D(4)..M(13)
+
+    # r3: SALDO MESE PRECEDENTE — D3 hardcoded, E3..M3 cascade from prev R38
+    pf["A3"] = "SALDO MESE PRECEDENTE"
+    pf["D3"] = 719445.19  # hardcoded cutover (MARZO closed)
+    for i in range(1, 10):  # E3..M3 cascade
+        col_idx = 4 + i  # E=5, F=6, ...
+        prev_col = get_column_letter(col_idx - 1)
+        pf.cell(3, col_idx, f"={prev_col}38")
+
+    # r5-r10: Entrate
+    entrate_labels = [
+        "Fitto Hotel",
+        "Fitto AR",
+        "Entrate Residence",
+        "Ribaltamento Costi",
+        "Entrate Farmacia",
+        "Entrate Spiaggia",
+    ]
+    for i, lbl in enumerate(entrate_labels):
+        pf.cell(5 + i, 1, lbl)
+        # leave MARZO (col D) empty (closed month), put 500 in APRILE (col E)
+        pf.cell(5 + i, 5, 500.0)
+
+    pf["A12"] = "TOTALE ENTRATE"
+    for c in range(4, 14):  # cols D..M
+        cl = get_column_letter(c)
+        pf.cell(12, c, f"=SUM({cl}5:{cl}11)")
+
+    # r14-r22: Uscite (9 voci)
+    uscite_labels = [
+        "Salari e Stipendi",
+        "Utenze",
+        "Materie Prime",
+        "Tasse e Imposte",
+        "Mutui e Finanziamenti",
+        "Consulenze",
+        "Godimento Beni di Terzi",
+        "Varie ed Eventuali",
+        "Canoni e servizi",
+    ]
+    for i, lbl in enumerate(uscite_labels):
+        pf.cell(14 + i, 1, lbl)
+        pf.cell(14 + i, 5, 300.0)  # APRILE
+
+    pf["A27"] = "TOTALE USCITE"
+    for c in range(4, 14):
+        cl = get_column_letter(c)
+        pf.cell(27, c, f"=SUM({cl}14:{cl}26)")
+
+    pf["A29"] = "CASH FLOW"
+    for c in range(4, 14):
+        cl = get_column_letter(c)
+        pf.cell(29, c, f"={cl}12-{cl}27")
+
+    # Saldi banca area
+    pf["A31"] = "Saldo Banca Sella"
+    pf["D31"] = 35186.34
+    pf["A32"] = "Saldo MPS"
+    pf["D32"] = 682801.07
+    pf["A33"] = "Saldo Intesa"
+    pf["D33"] = 1457.78
+
+    pf["A35"] = "TOTALE BANCHE"
+    for c in range(4, 14):
+        cl = get_column_letter(c)
+        pf.cell(35, c, f"=SUM({cl}31:{cl}34)")
+
+    # r38: Saldo di Periodo
+    pf["A38"] = "Saldo di Periodo"
+    for c in range(4, 14):
+        cl = get_column_letter(c)
+        pf.cell(38, c, f"={cl}3+({cl}29+{cl}35)")
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+@pytest.fixture
+def intur_pf_bytes() -> bytes:
+    """INTUR PF minimal: MARZO chiuso, saldo r3, saldi banca r31-33, saldo proiettato r38."""
+    return _build_minimal_pf_intur().getvalue()

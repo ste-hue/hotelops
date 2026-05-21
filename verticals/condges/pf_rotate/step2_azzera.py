@@ -11,6 +11,7 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
 from verticals.condges.pf_rotate.excel_model import (
+    find_layout,
     find_month_columns,
     is_value_cell,
 )
@@ -30,8 +31,6 @@ DETAIL_SHEET_ALIASES = [
     "Canoni e servizi",
 ]
 
-# Range righe-dati per il MASTER (Piano Finanziario): azzera valori in queste righe.
-MASTER_VALUE_ROWS = list(range(6, 12)) + [24]  # entrate r6-r11 + Deposito Fitto r24
 # Detail: from r5 down to row before total (assumed r3) — i.e. r4..max
 DETAIL_VALUE_START_ROW = 4
 
@@ -70,7 +69,11 @@ def azzera_mese(wb: Workbook, mese_chiuso: int) -> list[CellChange]:
         raise ValueError(f"Mese chiuso {mese_chiuso} non trovato nel master.")
     col_master = mese_cols_master[mese_chiuso]
     col_letter = get_column_letter(col_master)
-    for r in MASTER_VALUE_ROWS:
+
+    layout = find_layout(wb)
+    master_value_rows = list(layout.entrate_rows)
+
+    for r in master_value_rows:
         cell = pf.cell(r, col_master)
         if is_value_cell(cell):
             old = cell.value

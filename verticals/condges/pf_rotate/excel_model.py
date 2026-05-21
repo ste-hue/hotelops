@@ -6,6 +6,7 @@ Pure functions on openpyxl Workbook/Worksheet. No I/O, no BQ.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Iterable
 
 from openpyxl.worksheet.worksheet import Worksheet
@@ -84,6 +85,79 @@ def resolve_sheet_name(wb, candidates: Iterable[str]) -> str | None:
         if c in names:
             return c
     return None
+
+
+@dataclass(frozen=True)
+class PFLayout:
+    saldo_iniziale_row: int  # row of "SALDO MESE PREC..." label
+    totale_entrate_row: int  # row of "TOTALE ENTRATE"
+    totale_uscite_row: int  # row of "TOTALE USCITE"
+    cashflow_row: int  # row of "Cash Flow" or "CASH FLOW"
+    saldi_banca_rows: list[int]  # rows of "Saldo <banca>" labels
+    totale_banche_row: int  # row of "TOTALE BANCHE"
+    saldo_proiettato_row: int  # row of "Saldo di Periodo" / "Saldo Proiettato"
+    entrate_rows: list[
+        int
+    ]  # data rows between saldo_iniziale and totale_entrate (exclusive)
+    uscite_rows: list[
+        int
+    ]  # data rows between totale_entrate and totale_uscite (exclusive)
+
+
+def find_layout(wb) -> PFLayout:
+    """Scan 'Piano Finanziario' col A for canonical labels, derive row positions.
+
+    Raises ValueError if any required anchor not found.
+    """
+    if "Piano Finanziario" not in wb.sheetnames:
+        raise ValueError("Foglio 'Piano Finanziario' assente")
+    pf = wb["Piano Finanziario"]
+
+    labels: dict[int, str] = {}  # row -> normalized label
+    for r in range(1, min(pf.max_row + 1, 60)):
+        v = pf.cell(r, 1).value
+        if isinstance(v, str):
+            labels[r] = v.strip().upper()
+
+    def _find(needle: str) -> int:
+        needle_up = needle.upper()
+        for r, lbl in labels.items():
+            if needle_up in lbl:
+                return r
+        raise ValueError(f"Riga con label contenente '{needle}' non trovata in col A")
+
+    saldo_iniziale_row = _find("SALDO MESE PREC")
+    totale_entrate_row = _find("TOTALE ENTRATE")
+    totale_uscite_row = _find("TOTALE USCITE")
+    cashflow_row = _find("CASH FLOW")
+    totale_banche_row = _find("TOTALE BANCHE")
+    saldo_proiettato_row = _find("SALDO DI PERIODO")
+
+    # Saldi banca: righe tra cashflow_row+1 e totale_banche_row-1 con label "SALDO <banca>"
+    saldi_banca_rows = []
+    for r in range(cashflow_row + 1, totale_banche_row):
+        lbl = labels.get(r, "")
+        if lbl.startswith("SALDO ") and "MESE" not in lbl and "PERIODO" not in lbl:
+            saldi_banca_rows.append(r)
+
+    entrate_rows = [
+        r for r in range(saldo_iniziale_row + 1, totale_entrate_row) if labels.get(r)
+    ]
+    uscite_rows = [
+        r for r in range(totale_entrate_row + 1, totale_uscite_row) if labels.get(r)
+    ]
+
+    return PFLayout(
+        saldo_iniziale_row=saldo_iniziale_row,
+        totale_entrate_row=totale_entrate_row,
+        totale_uscite_row=totale_uscite_row,
+        cashflow_row=cashflow_row,
+        saldi_banca_rows=saldi_banca_rows,
+        totale_banche_row=totale_banche_row,
+        saldo_proiettato_row=saldo_proiettato_row,
+        entrate_rows=entrate_rows,
+        uscite_rows=uscite_rows,
+    )
 
 
 _SUM_RANGE_RE = re.compile(r"SUM\(\$?[A-Z]+\$?(\d+):\$?[A-Z]+\$?(\d+)\)")
