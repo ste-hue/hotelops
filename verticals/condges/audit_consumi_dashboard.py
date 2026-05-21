@@ -169,7 +169,127 @@ coperti). I layer 4-6 li costruiamo noi.
 
 def render_b1_breakfast() -> None:
     st.title("🥐 B1 — Breakfast")
-    st.info("Pagina da implementare nel Task 3")
+    st.markdown("Vertical breakfast multi-BU (HOTEL + RESIDENCE + ANGELINA + CVM).")
+
+    # ── Layer 1: Ricavi ──
+    st.header("Layer 1: Ricavi")
+    st.caption("Codici inclusi nel bucket breakfast (proposta da confermare)")
+
+    codici_brk_sql = (
+        "'SCBKFBB', 'SCBKFHB', 'BRKADULT', 'BRKBABY', 'BRKEXT', 'BRKEXTC'"
+    )
+    ricavi = run_query(
+        f"""
+        SELECT codice,
+               ANY_VALUE(descrizione) AS descrizione,
+               STRING_AGG(DISTINCT business_unit_id ORDER BY business_unit_id) AS bu,
+               ROUND(SUM(netto), 0) AS netto_2025
+        FROM `hotelops-suite.hotelops.f_ricavi_fb`
+        WHERE codice IN ({codici_brk_sql})
+          AND anno = 2025
+        GROUP BY codice
+        ORDER BY netto_2025 DESC
+        """
+    )
+    st.dataframe(ricavi, hide_index=True, use_container_width=True)
+    ricavi_totale = float(ricavi["netto_2025"].sum())
+    st.metric("Ricavi breakfast totali 2025", f"€ {ricavi_totale:,.0f}".replace(",", "."))
+
+    # ── Layer 2: Consumi ──
+    st.header("Layer 2: Consumi")
+    st.caption("Reparto economato BRK (mensile per prodotto)")
+
+    cost_brk = run_query(
+        """
+        SELECT anno,
+               COUNT(DISTINCT codice_prodotto) AS n_prodotti,
+               COUNT(*) AS righe,
+               ROUND(SUM(importo), 0) AS cost
+        FROM `hotelops-suite.hotelops.f_consumi_economato`
+        WHERE reparto_id = 'BRK'
+          AND NOT (anno = 2025 AND mese = 5 AND importo < 0)
+        GROUP BY anno
+        ORDER BY anno
+        """
+    )
+    st.dataframe(cost_brk, hide_index=True, use_container_width=True)
+    cost_totale = float(cost_brk[cost_brk["anno"] == 2025]["cost"].iloc[0])
+
+    # ── Layer 3: Coperti ──
+    st.header("Layer 3: Coperti")
+    st.caption("Tipo pasto BRK (tutte BU)")
+
+    coperti = run_query(
+        """
+        SELECT anno, business_unit_id,
+               SUM(n_coperti) AS coperti
+        FROM `hotelops-suite.hotelops.f_coperti_giornalieri`
+        WHERE tipo_pasto = 'BRK'
+          AND anno = 2025
+        GROUP BY anno, business_unit_id
+        ORDER BY coperti DESC
+        """
+    )
+    st.dataframe(coperti, hide_index=True, use_container_width=True)
+    pax_totale = int(coperti["coperti"].sum())
+    st.metric("Coperti breakfast 2025", f"{pax_totale:,}".replace(",", "."))
+
+    # ── Layer 4: KPI ──
+    st.header("Layer 4: KPI normalizzati")
+    col1, col2, col3 = st.columns(3)
+    kpi_cost_pax = cost_totale / pax_totale if pax_totale else 0
+    kpi_ricavo_pax = ricavi_totale / pax_totale if pax_totale else 0
+    kpi_fc = cost_totale / ricavi_totale if ricavi_totale else 0
+    col1.metric("€ cost/coperto", f"€ {kpi_cost_pax:.2f}")
+    col2.metric("€ ricavo/coperto", f"€ {kpi_ricavo_pax:.2f}")
+    col3.metric("Food cost %", f"{kpi_fc*100:.1f}%")
+
+    # ── Layer 5: Range industria ──
+    st.header("Layer 5: Range industria — buffet hotel 4*")
+    range_df = pd.DataFrame([
+        {"Indicatore": "€ cost/pax", "Target": "€4-6", "Warning": "€6-8", "Investigate": ">€8 o <€3"},
+        {"Indicatore": "€ ricavo/pax (scorporo)", "Target": "€8-12", "Warning": "€7-8 o €12-15", "Investigate": "<€7 o >€15"},
+        {"Indicatore": "Food cost %", "Target": "30-50%", "Warning": "50-60%", "Investigate": ">60% o <30%"},
+    ])
+    st.dataframe(range_df, hide_index=True, use_container_width=True)
+
+    # ── Layer 6: Alert ──
+    st.header("Layer 6: Alert vs range")
+    alert_df = pd.DataFrame([
+        {"KPI": "€ cost/pax", "Valore": f"€ {kpi_cost_pax:.2f}",
+         "Status": alert_color(kpi_cost_pax, 4.0, 6.0, 8.0)},
+        {"KPI": "€ ricavo/pax", "Valore": f"€ {kpi_ricavo_pax:.2f}",
+         "Status": alert_color(kpi_ricavo_pax, 8.0, 12.0, 15.0)},
+        {"KPI": "Food cost %", "Valore": f"{kpi_fc*100:.1f}%",
+         "Status": alert_color(kpi_fc*100, 30.0, 50.0, 60.0)},
+    ])
+    st.dataframe(alert_df, hide_index=True, use_container_width=True)
+    st.caption("🟢 nel target · 🟡 warning · 🔴 investigate")
+
+    # ── Andamento mensile ──
+    st.header("Andamento mensile 2025")
+    monthly = run_query(
+        """
+        SELECT mese,
+               ROUND(costo_breakfast, 0) AS cost,
+               pax_breakfast AS pax,
+               ROUND(ricavi_breakfast, 0) AS ricavo
+        FROM `hotelops-suite.hotelops.v_fb_kpi`
+        WHERE anno = 2025 AND mese BETWEEN 4 AND 10
+        ORDER BY mese
+        """
+    )
+    fig = px.bar(
+        monthly.melt(id_vars="mese", value_vars=["cost", "ricavo"]),
+        x="mese", y="value", color="variable", barmode="group",
+        labels={"mese": "Mese 2025", "value": "€", "variable": ""},
+        title="Cost vs Ricavo breakfast — 2025 Apr-Oct",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ── Per la tua valutazione ──
+    st.header("Per la tua valutazione")
+    st.markdown(f"🔗 [Apri il Google Form — sezione B1 Breakfast]({FORM_URL})")
 
 
 def render_b2_ristorante() -> None:
