@@ -40,6 +40,9 @@ BQ_SCHEMA = (
         bigquery.SchemaField("nome_pf", "STRING"),
         bigquery.SchemaField("voce_id", "STRING"),
         bigquery.SchemaField("is_intercompany", "BOOLEAN"),
+        bigquery.SchemaField("is_excluded", "BOOLEAN", mode="NULLABLE"),
+        bigquery.SchemaField("exclude_reason", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("societa_id", "STRING", mode="NULLABLE"),
     ]
     if HAS_BQ
     else []
@@ -64,6 +67,7 @@ def parse_csv(filepath: Path, logger: logging.Logger) -> list[dict]:
             if not codice:
                 continue
             is_ic_raw = row.get("is_intercompany", "False").strip().lower()
+            is_excl_raw = row.get("is_excluded", "False").strip().lower()
             rows.append(
                 {
                     "codice_fornitore": int(codice),
@@ -71,6 +75,9 @@ def parse_csv(filepath: Path, logger: logging.Logger) -> list[dict]:
                     "nome_pf": row.get("nome_pf", "").strip() or None,
                     "voce_id": row.get("voce_id", "").strip() or None,
                     "is_intercompany": is_ic_raw in ("true", "1", "yes"),
+                    "is_excluded": is_excl_raw in ("true", "1", "yes"),
+                    "exclude_reason": row.get("exclude_reason", "").strip() or None,
+                    "societa_id": row.get("societa_id", "").strip() or None,
                 }
             )
 
