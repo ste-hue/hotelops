@@ -436,7 +436,126 @@ def render_b2_ristorante() -> None:
 
 def render_b3_bar() -> None:
     st.title("🍷 B3 — Bar / Beverage")
-    st.info("Pagina da implementare nel Task 5")
+    st.markdown(
+        "Vertical drink: bar standalone + bevande pranzo/cena + drink banchetti. "
+        "Cost dal reparto CANTINA."
+    )
+    st.warning(
+        "⚠️ Il beverage è il vertical più falsato: complimentary, staff drinks, "
+        "eventi, minibar, stock movement, inventario inaccurato. Trattare con cautela."
+    )
+
+    # ── Layer 1: Ricavi ──
+    st.header("Layer 1: Ricavi beverage")
+    codici_bev = (
+        "'BAR', 'BARHOTEL', 'RISLBEVE', 'RISLBEV', 'RISDBEV', 'DINBEV', "
+        "'BANB', 'PROSECCO'"
+    )
+    ricavi = run_query(
+        f"""
+        SELECT codice,
+               ANY_VALUE(descrizione) AS descrizione,
+               STRING_AGG(DISTINCT business_unit_id ORDER BY business_unit_id) AS bu,
+               ROUND(SUM(netto), 0) AS netto_2025
+        FROM `hotelops-suite.hotelops.f_ricavi_fb`
+        WHERE codice IN ({codici_bev})
+          AND anno = 2025
+        GROUP BY codice
+        HAVING SUM(netto) > 0
+        ORDER BY netto_2025 DESC
+        """
+    )
+    st.dataframe(ricavi, hide_index=True, use_container_width=True)
+    ricavi_totale = float(ricavi["netto_2025"].sum())
+    st.metric("Ricavi beverage totali 2025", f"€ {ricavi_totale:,.0f}".replace(",", "."))
+
+    # ── Layer 2: Consumi ──
+    st.header("Layer 2: Consumi reparto CANTINA")
+    cost_cant = run_query(
+        """
+        SELECT anno,
+               COUNT(DISTINCT codice_prodotto) AS n_prodotti,
+               COUNT(*) AS righe,
+               ROUND(SUM(importo), 0) AS cost
+        FROM `hotelops-suite.hotelops.f_consumi_economato`
+        WHERE reparto_id = 'CANTINA'
+          AND NOT (anno = 2025 AND mese = 5 AND importo < 0)
+        GROUP BY anno
+        ORDER BY anno
+        """
+    )
+    st.dataframe(cost_cant, hide_index=True, use_container_width=True)
+    cost_totale = float(cost_cant[cost_cant["anno"] == 2025]["cost"].iloc[0])
+
+    # ── Layer 3: Coperti (proxy) ──
+    st.header("Layer 3: Coperti (proxy lunch + dinner)")
+    st.caption("Il drink al pasto è il caso più frequente — usiamo coperti lunch+dinner come proxy")
+    coperti = run_query(
+        """
+        SELECT anno, tipo_pasto,
+               SUM(n_coperti) AS coperti
+        FROM `hotelops-suite.hotelops.f_coperti_giornalieri`
+        WHERE tipo_pasto IN ('LUNCH', 'DINNER')
+          AND anno = 2025
+        GROUP BY anno, tipo_pasto
+        """
+    )
+    st.dataframe(coperti, hide_index=True, use_container_width=True)
+    pax_totale = int(coperti["coperti"].sum())
+
+    # ── Layer 4: KPI ──
+    st.header("Layer 4: KPI normalizzati")
+    col1, col2, col3 = st.columns(3)
+    kpi_cost_pax = cost_totale / pax_totale if pax_totale else 0
+    kpi_ricavo_pax = ricavi_totale / pax_totale if pax_totale else 0
+    kpi_fc = cost_totale / ricavi_totale if ricavi_totale else 0
+    col1.metric("€ cost/coperto (proxy)", f"€ {kpi_cost_pax:.2f}")
+    col2.metric("€ ricavo/coperto (proxy)", f"€ {kpi_ricavo_pax:.2f}")
+    col3.metric("Beverage cost %", f"{kpi_fc*100:.1f}%")
+
+    # ── Layer 5: Range industria ──
+    st.header("Layer 5: Range industria beverage")
+    range_df = pd.DataFrame([
+        {"Tipo": "💧 Beverage basic (acqua, bevande analcoliche)", "Cost target": "10-15%"},
+        {"Tipo": "🍷 Beverage medio (vino, cocktail standard)", "Cost target": "15-25%"},
+        {"Tipo": "🥃 Top-tier (alcolici premium, vini importanti)", "Cost target": "25-30%"},
+        {"Tipo": "🎯 Target Panorama (atteso hotel mix)", "Cost target": "15-25%"},
+        {"Tipo": "⚠️ Warning", "Cost target": ">30%"},
+        {"Tipo": "🚨 Investigate", "Cost target": ">40% o <10%"},
+    ])
+    st.dataframe(range_df, hide_index=True, use_container_width=True)
+
+    # ── Layer 6: Alert ──
+    st.header("Layer 6: Alert vs range")
+    alert_df = pd.DataFrame([
+        {"KPI": "Beverage cost %", "Valore": f"{kpi_fc*100:.1f}%",
+         "Status": alert_color(kpi_fc*100, 15.0, 25.0, 40.0)},
+    ])
+    st.dataframe(alert_df, hide_index=True, use_container_width=True)
+    st.caption("🟢 nel target · 🟡 warning · 🔴 investigate")
+
+    # ── Andamento mensile ──
+    st.header("Andamento mensile 2025")
+    monthly = run_query(
+        """
+        SELECT mese,
+               ROUND(SUM(CASE WHEN reparto_id='CANTINA' THEN importo END), 0) AS cost
+        FROM `hotelops-suite.hotelops.f_consumi_economato`
+        WHERE anno = 2025 AND mese BETWEEN 4 AND 10
+          AND NOT (anno = 2025 AND mese = 5 AND importo < 0)
+        GROUP BY mese
+        ORDER BY mese
+        """
+    )
+    fig = px.bar(
+        monthly, x="mese", y="cost",
+        labels={"mese": "Mese 2025", "cost": "Cost CANTINA (€)"},
+        title="Cost reparto CANTINA — 2025 Apr-Oct",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.header("Per la tua valutazione")
+    st.markdown(f"🔗 [Apri il Google Form — sezione B3 Bar/Beverage]({FORM_URL})")
 
 
 def render_anomalie() -> None:
