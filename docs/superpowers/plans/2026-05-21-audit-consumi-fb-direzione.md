@@ -1232,7 +1232,16 @@ del primo modello F&B (canonical-transformation-matrix a 6 layer × 3 vertical).
 - Chef → matrice `categoria_prodotto` → ricetta (KPI quantità/coperto)
 - POS Ristocube → separare drink bar/ristorante/banchetti
 - Streamlit Cloud hosting per accesso remoto direttore
-- API HotelCube → modifiche piano dei conti
+
+## Possibili esiti dell'audit (azionabili)
+
+- **Modifiche al piano dei conti HotelCube** (manuali, no API): ricalibrare
+  scorporo SCBKFBB, sospendere codici ufficialmente, aggiungere scorporo cena,
+  riclassificare codici orfani
+- **Modifiche operative**: separazione magazzino banchetti, riduzione waste
+  breakfast, training operatori per UoM, ecc.
+- **Modifiche alla dashboard Looker**: filtri default, nuove pagine "Costi
+  operativi non-F&B", soglie alert calibrate sui target del direttore
 ```
 
 - [ ] **Step 2: Commit**

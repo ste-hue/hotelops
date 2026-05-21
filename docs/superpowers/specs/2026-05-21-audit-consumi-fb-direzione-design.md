@@ -250,4 +250,15 @@ Tabella sintetica:
 - POS Ristocube per decomporre drink bar/ristorante/banchetti
 - Matrice ricetta categoria→articolo (chef)
 - Streamlit Cloud hosting
-- API HotelCube per modifiche piano dei conti
+
+## Possibili esiti operativi (non esclusi)
+
+- **Modifiche al piano dei conti HotelCube**: non abbiamo API, ma le modifiche
+  sono possibili manualmente (via UI HotelCube o richiesta al supporto). Esempi:
+  - Ricalibrare lo scorporo SCBKFBB se la direzione dice che €10/pax non
+    riflette il valore reale del breakfast
+  - Sospendere ufficialmente i 17 codici "da sospendere"
+  - Aggiungere uno scorporo cena per casi specifici
+  - Riclassificare codici orfani (es. ACCFCI)
+- **Cambi operativi**: il direttore può decidere modifiche concrete
+  (es. cucinare meno per breakfast, separare flow magazzino banchetti, ecc.)
