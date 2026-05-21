@@ -1,9 +1,8 @@
 -- v_fb_pasti
--- Conteggio pasti per struttura, grana mensile, YoY.
+-- Coperti pasto — wide, no pre-filter (BQ largo, Looker filtra).
 -- Grana: anno × mese × societa × business_unit_id × tipo_pasto × tipo_ospite.
 -- is_staff = BU 'HQ' (mensa dipendenti) — esposto, mai sommato alla cieca.
 -- BU NULL → '(non assegnato)'.
--- Solo anni >= 2025.
 --
 -- Fonte: f_coperti_giornalieri.
 
@@ -20,7 +19,6 @@ WITH mensile AS (
     COALESCE(business_unit_id, '') = 'HQ' AS is_staff,
     SUM(n_coperti) AS n_coperti
   FROM `hotelops-suite.hotelops.f_coperti_giornalieri`
-  WHERE anno >= 2025
   GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
 )
 SELECT

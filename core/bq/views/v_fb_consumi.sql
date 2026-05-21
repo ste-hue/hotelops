@@ -1,21 +1,22 @@
 -- v_fb_consumi
--- Costo merce F&B per prodotto + scomposizione driver prezzo/volume + YoY.
+-- Costo merce per prodotto — wide, no pre-filter (BQ largo, Looker filtra).
 -- Grana: anno × mese × reparto × codice_prodotto.
--- Solo anni >= 2025 (il 2024 INTUR non categorizzato è escluso).
--- Costo = blocco unico cucina-hotel (nessuna struttura: il magazzino non
--- distingue Residence/CVM).
+-- Tutti i reparti esposti. Flag `is_fb_reparto` per quick filter F&B in Looker.
+-- Tutte le righe esposte (incluse storni negativi maggio 2025).
+-- Flag `is_anomalia` = TRUE per costo<0 in maggio 2025 (storni da confusione
+-- unità di misura acquisto vs consumo — es. caffè kg→g). Looker di default
+-- li esclude.
 --
--- YoY: il LAG su anno è partizionato per IDENTITÀ prodotto
--- (mese, reparto_id, codice_prodotto) — NON per classe/categoria, che sono
--- vuote in tutto il 2024 (era INTUR, non categorizzato) e romperebbero il
--- join YoY. classe/categoria restano come attributi display (ANY_VALUE).
+-- YoY: LAG su anno partizionato per IDENTITÀ prodotto
+-- (mese, reparto_id, codice_prodotto). classe/categoria_prodotto restano
+-- come attributi display (ANY_VALUE).
 --
 -- Driver decomposition (esatta, residuo = 0 per costruzione):
 --   effetto_prezzo = (prezzo - prezzo_ap) * quantita      [ΔP · Q1]
 --   effetto_volume = (quantita - quantita_ap) * prezzo_ap [ΔQ · P0]
 --   effetto_prezzo + effetto_volume = delta_costo
 --
--- Fonte: f_consumi_economato, reparti F&B.
+-- Fonte: f_consumi_economato.
 
 CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_fb_consumi` AS
 WITH base AS (
@@ -24,6 +25,8 @@ WITH base AS (
     mese,
     DATE(anno, mese, 1) AS periodo,
     reparto_id,
+    reparto_id IN ('BRK', 'CUCINA', 'CANTINA', 'BANCHETTI', 'BAR_HOTEL', 'EVENTO')
+      AS is_fb_reparto,
     codice_prodotto,
     ANY_VALUE(classe) AS classe,
     ANY_VALUE(COALESCE(NULLIF(TRIM(categoria_prodotto), ''), '(non classificato)'))
@@ -32,13 +35,7 @@ WITH base AS (
     SUM(quantita)          AS quantita,
     SUM(importo)           AS costo
   FROM `hotelops-suite.hotelops.f_consumi_economato`
-  WHERE reparto_id IN ('BRK', 'CUCINA', 'CANTINA', 'BANCHETTI', 'BAR_HOTEL', 'EVENTO')
-    AND anno >= 2025
-    -- maggio 2025: anomalia nota (15 righe negative, -165k€ di storni).
-    -- Esclusi i negativi di quel mese per normalizzare; i piccoli storni
-    -- legittimi degli altri mesi restano.
-    AND NOT (anno = 2025 AND mese = 5 AND importo < 0)
-  GROUP BY 1, 2, 3, 4, 5
+  GROUP BY 1, 2, 3, 4, 5, 6
 ),
 yoy AS (
   SELECT
@@ -54,8 +51,9 @@ yoy AS (
   )
 )
 SELECT
-  anno, mese, periodo, reparto_id, classe, categoria_prodotto,
-  codice_prodotto, descrizione,
+  anno, mese, periodo, reparto_id, is_fb_reparto,
+  (anno = 2025 AND mese = 5 AND costo < 0) AS is_anomalia,
+  classe, categoria_prodotto, codice_prodotto, descrizione,
   quantita, costo, prezzo_unitario,
   costo_ap, quantita_ap, prezzo_unitario_ap,
   costo - costo_ap                                       AS delta_costo,
