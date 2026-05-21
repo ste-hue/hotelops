@@ -1,320 +1,253 @@
 # Audit consumi F&B per la Direzione — design
 
-**Data**: 2026-05-21
+**Data**: 2026-05-21 (rev. canonical-transformation-matrix)
 **Branch**: `worktree-looker-fb`
-**Stato**: design approvato, in attesa di implementation plan
+**Stato**: design approvato, pronto per implementation plan
 
 ## Contesto
 
-Dopo il re-ingest completo di `f_consumi_economato` (22.763 righe, 33 reparti) e il
-refactor wide delle 4 viste F&B (`v_fb_ricavi`, `v_fb_consumi`, `v_fb_pasti`,
-`v_fb_kpi`), abbiamo individuato **8 anomalie** nella relazione tra consumi
-magazzino e ricavi F&B che non possono essere risolte solo guardando i dati:
-richiedono interpretazione operativa.
+Abbiamo 3 fonti dati F&B su BigQuery:
 
-La conoscenza necessaria vive nel direttore di Hotel Panorama, che conosce
-**l'originale piano dei conti HotelCube** (cosa è ogni codice 01ROOM/02FB/03PARK/…)
-ma non conosce le nostre tabelle BigQuery derivate.
+1. **Ricavi F&B** — `f_ricavi_fb` da Power BI Produzione Netta HotelCube
+2. **Consumi magazzino** — `f_consumi_economato` da Excel Economato (mensile per reparto×prodotto)
+3. **Coperti** — `f_coperti_giornalieri` da Hoxell / Google Sheet RistoCube (giornaliero per BU×tipo_pasto)
 
-Lo scopo dell'audit è ottenere dalla direzione l'interpretazione delle 8
-anomalie, da usare per affinare il modello F&B della dashboard Looker.
+## Mental model: canonical transformation matrix
+
+Il modello F&B non è "report", è una **matrice canonica di trasformazione** in 6 layer:
+
+```
+RICAVI       (domanda — cosa è stato venduto, da dove)
+   ↓
+CONSUMI      (assorbimento materie — quanto magazzino è uscito)
+   ↓
+COPERTI      (volume operativo reale — quante persone servite)
+   ↓
+KPI          (efficienza normalizzata — €/coperto, %, quantità/coperto)
+   ↓
+RANGE        (aspettativa industria — qual è la fascia normale?)
+   ↓
+ALERT        (deviazione — cosa è fuori range e va indagato)
+```
+
+Per ogni vertical (BREAKFAST / RISTORANTE / BAR) i 6 layer sono diversi: fonti, reparti consumo, coperti applicabili, KPI sensati, range industria.
+
+L'obiettivo dell'audit è che la direzione **confermi i componenti dei layer 1-3** (quali codici, quali reparti, quali coperti) per il primo modello operativo. I layer 4-6 li costruiamo noi col modello standard.
 
 ## Obiettivi
 
-1. **Mostrare** alla direzione le 8 anomalie in un formato comprensibile a chi
-   conosce HotelCube ma non le nostre tabelle.
-2. **Raccogliere** le sue risposte in forma strutturata (Google Sheet
-   collegato a Google Form).
-3. **Iterare** il modello F&B basandoci sulle risposte (filtri view, riallocazioni
-   cost-to-revenue, deprecazione codici, ecc.).
+1. **Mostrare** i 3 vertical alla direzione con: codici/reparti/coperti proposti, numeri 2025, KPI calcolati, range industria, alert dove fuori
+2. **Raccogliere** conferma o correzione dei codici per bucket via Google Form (no teorie, solo conferma layer 1-3)
+3. **Iterare** il modello dopo le risposte
 
 ## Non-obiettivi
 
-- Non vogliamo che la direzione **modifichi** dati. Audit pure read-only.
-- Non vogliamo coinvolgere lo chef in questo round (la matrice
-  `categoria_prodotto → meal allocation` è expertise diversa, separata).
-- Non vogliamo produrre output operativo automatico dalle risposte. Le
-  interpretiamo manualmente e le traduciamo in cambi al modello.
+- Non chiediamo allo chef matrice categoria_prodotto → ricetta
+- Non chiediamo teorie sulle cause di anomalie (le indaghiamo noi nei round successivi)
+- Non modifichiamo dati su BQ — audit pure read-only
+
+## I 3 vertical
+
+### Vertical 1 — BREAKFAST
+
+| Layer | Componenti |
+|---|---|
+| **Ricavi** | `SCBKFBB` (HOTEL B&B scorporo) + `SCBKFHB` (CVM HB scorporo) + `BRKADULT` + `BRKBABY` + `BRKEXT` + `BRKEXTC` su **HOTEL + RESIDENCE + ANGELINA + CVM** (multi-BU) |
+| **Consumi** | reparto `BRK` |
+| **Coperti** | `f_coperti_giornalieri.tipo_pasto = 'BRK'` (tutte BU) |
+| **KPI A** | Costo materie prime / coperto = `cost BRK / coperti BRK` |
+| **KPI B** | Ricavo / coperto = `(SCBKFBB + BRK*) / coperti BRK` |
+| **KPI C** | Food cost % = `cost BRK / ricavi breakfast` |
+| **Range industria** | Buffet hotel 4*: cost €4-6/pax, ricavo €8-12/pax, FC 30-50% sensato. <30% sospetto basso, >60% investigate |
+| **Esempio aprile 2026** | cost €4/pax, ricavo €10/pax → FC 40% — sensato |
+
+### Vertical 2 — RISTORANTE (lunch + dinner)
+
+| Layer | Componenti |
+|---|---|
+| **Ricavi food** | `RISLFOOD` + `RISDFOOD` + `RISTLUNC` + `RISTDINN` + `DINFOOD` + `LUNBAR` + **bar food** (`RISBFOOD`) + **banchetti food** (`BAN`) + eventi food (`FERRAD`, `FERRBA`, `PASQAD`, `PARTY`, `BRUNCH`, `APERIDIN`) — _da confermare se eventi qui o bucket separato_ |
+| **Consumi** | reparto `CUCINA` |
+| **Coperti** | `f_coperti_giornalieri.tipo_pasto IN ('LUNCH','DINNER')` + coperti eventi/banchetti se tracciati |
+| **KPI A** | Food cost % = `cost CUCINA / ricavi food ristorante` |
+| **KPI B** | Costo / coperto = `cost CUCINA / (coperti lunch + dinner)` |
+| **KPI C** | Quantità materia prima / coperto (avanzato): es. kg carne/pax, kg pesce/pax, kg verdura/pax, kg pane/pax — _round successivo, richiede category mapping_ |
+| **Range industria** | **Pizzeria**: ~15% · **Ristorante medio**: 25-35% · **Michelin 3\***: 38% · **Target Panorama**: 25-35% · **Warning**: >40% · **Investigate**: >50% |
+| **Cause possibili food cost >50-60%** | pricing sbagliato, porzioni eccessive, furto, sprechi, mix prodotti, menu engineering, eventi sottocosto, ricavi incompleti, consumi caricati male |
+
+### Vertical 3 — BAR / BEVERAGE
+
+| Layer | Componenti |
+|---|---|
+| **Ricavi beverage** | `BAR` (bar generico) + `BARHOTEL` (bar hotel) + `RISLBEVE` + `RISLBEV` + `RISDBEV` + `DINBEV` + `BANB` (banchetti beverage) + `PROSECCO` |
+| **Consumi** | reparto `CANTINA` |
+| **Coperti** | non c'è "coperti bar" diretto. Usabili: coperti lunch+dinner (per drink al pasto) o totale stagione (per bar standalone) |
+| **KPI A** | Beverage cost % = `cost CANTINA / ricavi beverage` |
+| **KPI B** | Quantità / coperto: bottiglie acqua/pax, bicchieri vino/pax, spritz/pax, ecc. — _round successivo, richiede category mapping_ |
+| **Range industria** | Beverage cost classico: 10-30% · Top-tier ristorante: ~30% · Hotel bar mix: tipicamente 15-25% |
+| **Avvertenze** | Il beverage è il più falsato: complimentary, staff drinks, eventi, minibar, stock movement, inventario inaccurato. Trattare i numeri con cautela |
 
 ## Architettura: due artefatti sincronizzati
 
-```
-┌─────────────────────────────────────┐    ┌──────────────────────────────┐
-│  A. Streamlit dashboard             │    │  B. Google Form               │
-│  audit_consumi_dashboard.py         │    │  audit_form (Apps Script)     │
-│                                     │    │                              │
-│  Pagine:                            │    │  Sezioni:                    │
-│  - Primer (1)                       │    │  - Identità (1)               │
-│  - 8 anomalie (8)                   │←──→│  - 8 anomalie (A1...A8)      │
-│  - Riepilogo + link Form (1)        │    │  - Catch-all + note (1)       │
-│                                     │    │                              │
-│  Dati: live da BigQuery             │    │  Risposte: Google Sheet      │
-│  Lettura: ~30 min                   │    │  Compilazione: ~15-20 min     │
-└─────────────────────────────────────┘    └──────────────────────────────┘
+| Artefatto | Cosa fa | Quando |
+|---|---|---|
+| **A. Streamlit `audit_consumi_dashboard.py`** | Read-only viewer: primer + 3 pagine vertical (B1/B2/B3) + 1 pagina anomalie FYI + recap | _Prima_ — direttore vede dati, KPI, range, alert |
+| **B. Google Form (via Apps Script)** | Sezioni di conferma codici/reparti/coperti per vertical (no teorie aperte) | _Dopo_ — direttore conferma layer 1-3 |
 
-Workflow direttore:
-1. Apre Streamlit (link condiviso o run locale)
-2. Legge il Primer (capisce mappe HotelCube ↔ tabelle BQ)
-3. Naviga le 8 anomalie (vede chart/tabelle + ipotesi nostra)
-4. Apre il Google Form (link diretto dalla Streamlit)
-5. Risponde alle 8 sezioni del Form
-```
-
-Sincronizzazione: ogni anomalia ha un ID stabile (`A1`…`A8`) usato nei titoli
-sia in Streamlit che nel Form. Direttore non si perde.
-
-## Artefatto A — Streamlit `audit_consumi_dashboard.py`
+## Artefatto A — Streamlit
 
 ### Path
 
 `verticals/condges/audit_consumi_dashboard.py`
 
-### Run
+### Pagine
 
-```bash
-streamlit run verticals/condges/audit_consumi_dashboard.py
-```
+| # | Pagina | Contenuto |
+|---|---|---|
+| 1 | 🏠 **Primer** | Le 3 fonti dati BQ + mental model 6-layer + cosa sono i 3 vertical |
+| 2 | 🥐 **B1 — Breakfast** | Layer 1-3 (codici/reparto/coperti) come tabelle + KPI A/B/C + range industria + alert se fuori range |
+| 3 | 🍽️ **B2 — Ristorante** | Stesso pattern + range pizzeria/medio/michelin + cause possibili anomalie |
+| 4 | 🍷 **B3 — Bar / Beverage** | Stesso pattern + range beverage + avvertenze su falsità del beverage |
+| 5 | ⚠️ **Anomalie FYI** | Tabella sintetica: storni UoM maggio, BANCHETTI sotto-stimato, BAR_HOTEL vuoto, codici da sospendere, codici orfani, reparti non-F&B, carico magazzino stagionale |
+| 6 | 📋 **Recap + Form** | Link Google Form |
 
-### Dipendenze
-
-`streamlit`, `google-cloud-bigquery`, `plotly`, `pandas`. Già presenti
-in `pyproject.toml` extras `.[dashboard]`.
-
-### Struttura pagine
-
-**Sidebar**:
-- "🏠 Primer — Da dove vengono i dati"
-- "A1 — Breakfast 100% food cost"
-- "A2 — BAR_HOTEL reparto vuoto"
-- "A3 — BANCHETTI sotto-stimato"
-- "A4 — Storni UoM maggio 2025"
-- "A5 — Carico magazzino concentrato"
-- "A6 — Codici da sospendere"
-- "A7 — Reparti operativi non-F&B"
-- "A8 — Codici orfani / mapping legacy"
-- "📋 Riepilogo + Link Form"
-
-### Primer (pagina iniziale)
-
-Sezioni testuali con tabelle, mappa il piano dei conti HotelCube (che il
-direttore conosce) alle nostre tabelle/viste BQ:
-
-1. **Le 4 fonti dati**:
-   - Produzione Netta Dashboard HotelCube → `f_ricavi_fb` (16 mesi, 3 BU, 79
-     codici per HOTEL)
-   - Scarico magazzino HotelCube → `f_consumi_economato` (24 mesi, 33 reparti,
-     ~22.763 righe)
-   - Foglio conta coperti → `f_coperti_giornalieri` (1.635 righe, daily)
-   - Ristocube POS → `f_vendite_fb` (POS daily, segmento cliente)
-
-2. **Mappa codice HotelCube ↔ KPI nostro**:
-   Tabella: codice 02FB principali (SCBKFBB, RISDFOOD, RISLFOOD, BAR, BAN, …)
-   → tabella dove vivono + KPI dove sono usati.
-
-3. **Definizione dei KPI** (in linguaggio direttore):
-   - "Food cost % breakfast" = costo magazzino reparto BRK / scorporo SCBKFBB
-     dalla quota camera B&B
-   - "Food cost % à la carte" = costo magazzino reparti CUCINA+CANTINA /
-     somma ricavi ristorante (RISD/RISL/BAR/BAN/eventi)
-   - "Coperti pasto" = righe del foglio conta coperti, raggruppati per BRK
-     (breakfast), LUNCH (pranzo), DINNER (cena)
-
-### Template per ogni pagina anomalia
+### Template per ogni pagina vertical
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│ # A{N} — {Titolo}                                       │
-│                                                         │
-│ ## Cosa vediamo nei dati                                │
-│ [Chart/tabella con i numeri reali da BQ]                │
-│                                                         │
-│ Sintesi numerica: "Costo X, ricavo Y, ratio Z%"        │
-│                                                         │
-│ ## La nostra ipotesi                                    │
-│ [1-2 paragrafi spiegando cosa secondo noi succede]     │
-│                                                         │
-│ ## Per la tua valutazione                               │
-│ - 🔗 [Vai alla domanda A{N} nel Google Form]            │
-│ - ⏭️  [Prossima anomalia]                                │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│ # Vertical N — {Nome}                                        │
+│ Mental model: 6 layer compatti (testo)                       │
+│                                                             │
+│ ## Layer 1: Ricavi                                          │
+│   - Tabella codici inclusi + netto 2025 + somma             │
+│   - Caveat: cross-BU? Cross-codice?                         │
+│                                                             │
+│ ## Layer 2: Consumi                                         │
+│   - Reparto economato + cost 2025 + n_prodotti              │
+│                                                             │
+│ ## Layer 3: Coperti                                         │
+│   - tipo_pasto + count 2025                                 │
+│                                                             │
+│ ## Layer 4: KPI normalizzati                                │
+│   - Scorecard KPI A (€/coperto), KPI B (ricavo/cop),        │
+│     KPI C (food cost %)                                     │
+│                                                             │
+│ ## Layer 5: Range industria                                 │
+│   - Tabella range con bande target/warning/investigate      │
+│                                                             │
+│ ## Layer 6: Alert                                           │
+│   - Verde se nel target, giallo se warning, rosso se        │
+│     investigate. Numerico per mese + cumulativo.            │
+│                                                             │
+│ ## Andamento mensile                                        │
+│   - Bar chart cost vs revenue per mese 2025                 │
+│                                                             │
+│ ## Per la tua valutazione                                   │
+│   - 🔗 Vai al Google Form — sezione B{N}                     │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Contenuto specifico per anomalia
+### Codici proposti per vertical (da confermare)
 
-| ID | Titolo | Query BQ | Visualizzazione |
+**B1 — Breakfast** (multi-BU):
+- `SCBKFBB` (HOTEL B&B scorporo)
+- `SCBKFHB` (CVM HB scorporo)
+- `BRKADULT`, `BRKBABY`, `BRKEXT`, `BRKEXTC` su HOTEL + RESIDENCE + ANGELINA + CVM
+
+**B2 — Ristorante**:
+- `RISLFOOD`, `RISDFOOD`, `RISTLUNC`, `RISTDINN`, `DINFOOD`, `LUNBAR`
+- `RISBFOOD` (bar food)
+- `BAN` (banchetti food)
+- Eventi food: `FERRAD`, `FERRBA`, `PASQAD`, `PARTY`, `BRUNCH`, `APERIDIN` (da confermare)
+- `ROOMSERV`
+
+**B3 — Bar / Beverage**:
+- `BAR`, `BARHOTEL`
+- `RISLBEVE`, `RISLBEV`, `RISDBEV`, `DINBEV`
+- `BANB` (banchetti beverage)
+- `PROSECCO`
+
+### Pagina anomalie FYI
+
+Tabella sintetica:
+
+| Anomalia | Cosa | Implicazione | Conferma? |
 |---|---|---|---|
-| **A1** | Breakfast 100% food cost | `v_fb_kpi` mesi Apr-Oct 2025, costo_breakfast + ricavi_breakfast | Bar chart mensile cost vs revenue + scorecard cumulativo |
-| **A2** | BAR_HOTEL reparto vuoto | `f_consumi_economato` WHERE reparto_id='BAR_HOTEL' + `f_ricavi_fb` WHERE codice IN ('BAR','BARHOTEL','RISBFOOD') | Tabella 7 righe BAR_HOTEL + scorecard ricavo BAR €76k |
-| **A3** | BANCHETTI sotto-stimato | `f_consumi_economato` WHERE reparto_id='BANCHETTI' + `f_ricavi_fb` WHERE codice IN ('BAN','BANB','FERRAD',…) | Bar chart costo vs revenue per anno |
-| **A4** | Storni UoM maggio 2025 | `f_consumi_economato` WHERE anno=2025 AND mese=5 AND importo<0 | Tabella 15 righe con prodotto, qty, importo |
-| **A5** | Carico magazzino concentrato | `v_fb_kpi` mesi Apr-Oct 2025, costo_breakfast | Line chart trend mensile + scorecard €/coperto medio mensile |
-| **A6** | Codici da sospendere | `f_ricavi_fb` codici APERIDIN, BRUNCH, PASQAD, ecc. | Tabella codice/descrizione/storico netto 2024-2025 |
-| **A7** | Reparti operativi non-F&B | `f_consumi_economato` raggruppato per funzione_id NOT='F&B' | Tabella per funzione + bar chart |
-| **A8** | Codici orfani | `v_fb_ricavi` WHERE classe='(da mappare)' | Tabella codici + descrizioni |
+| Storni UoM maggio 2025 | 15 righe -€166k | Escluse dai KPI (flag) | ✓ confermi? |
+| BANCHETTI reparto €1.2k vs revenue €17k | Mismatch ~7% FC | Cibo banchetti in CUCINA — non spezziamo | ✓ confermi? |
+| BAR_HOTEL reparto €0 vs revenue BAR €76k | Drink bar usa CANTINA | Unifichiamo | ✓ confermi? |
+| Codici da sospendere (17) | da `pianodeicontilavoro.xlsx` | Filtriamo da default Looker | ✓ confermi? |
+| Codici orfani (~1: ACCFCI) | Non in classe nota | Aggiungi a 07DIV o specifica | ✓ confermi? |
+| Reparti operativi non-F&B (~€100k) | DIPEND, HSK*, MAN*, DIREZIONE, D*, DEPERIMENTO | Pagina dashboard separata | ✓ confermi? |
+| Carico magazzino concentrato | Picco BRK luglio €76k | Lettura trimestrale > mensile | ✓ confermi? |
 
-### Pagina riepilogo (ultima)
+## Artefatto B — Google Form
 
-- Lista delle 8 anomalie con stato "✓ vista" se navigata
-- CTA grande: "📋 Apri il Google Form e rispondi qui" (link ai 8 sezioni)
-- Footer: "Risposte salvate automaticamente. Grazie!"
+### Sezioni
 
-## Artefatto B — Google Form via Apps Script
+**S0 — Identità**: nome+ruolo, data
 
-### Path
+**S1 — Conferma codici B1 Breakfast**:
+- Checkbox codici proposti
+- Multiple choice: "Le 4 BU (HOTEL+RES+ANG+CVM) devono essere TUTTE aggregate per breakfast totale? O bucket per BU?"
+- Text area: codici da aggiungere/escludere
 
-`verticals/condges/audit_form.gs` (Google Apps Script, copia in
-`script.google.com`)
+**S2 — Conferma codici B2 Ristorante**:
+- Checkbox codici food
+- Multiple choice: "Gli eventi (FERRAD/FERRBA/PASQAD/PARTY/BRUNCH/APERIDIN) in (a) B2 ristorante (b) bucket eventi separato (c) escluderli?"
+- Multiple choice: "RISBFOOD (Risto bar food) in B2 food o B3 drink?"
+- Text area: aggiunte/note
 
-### Setup
+**S3 — Conferma codici B3 Bar/Beverage**:
+- Checkbox codici drink
+- Multiple choice: "`BARHOTEL` e `BAR` sono lo stesso (fondi) o diversi?"
+- Text area: aggiunte/note
 
-1. Vai su `script.google.com`
-2. Nuovo progetto
-3. Incolla il contenuto di `audit_form.gs`
-4. Esegui la funzione `createAuditForm()`
-5. Ti restituisce l'URL pubblico della Form + l'URL del Google Sheet collegato
+**S4 — Coperti mapping**:
+- Multiple choice: "Coperti BRK includono solo clienti hotel B&B o anche esterni paganti?"
+- Multiple choice: "Coperti lunch e dinner sono separati nettamente o sovrapposti (es. brunch)?"
+- Text area: dove guardare per coperti accurati (Hoxell? Excel? altro?)
 
-### Struttura
+**S5 — Range operativi**:
+- Multiple choice: "Target food cost ristorante Panorama"
+  - Pizzeria-level (~15%)
+  - Ristorante medio (25-35%)
+  - Top-tier (~38%)
+- Multiple choice: "Target beverage cost"
+  - 10-15% (basic)
+  - 15-25% (medio)
+  - 25-30% (top-tier)
+- Text area: target tuoi personali
 
-**Header form**:
-- Titolo: "Audit consumi F&B — Hotel Panorama"
-- Descrizione: "Domande relative alle 8 anomalie mostrate nella Streamlit
-  audit. Aprire prima la Streamlit per contesto. Le risposte verranno usate
-  per affinare la dashboard F&B."
+**S6 — Anomalie FYI**: 7 conferme rapide ✓/✗ + text area opzionale per ognuna
 
-**Sezione 0 — Identità**
-- Domanda 0.1: "Chi sei?" (text)
-- Domanda 0.2: "Data" (date)
+**S7 — Catch-all**: cosa manca?
 
-**Sezioni 1-8 — A1...A8**, ognuna con:
-- Titolo: "Anomalia A{N} — {Titolo}" (allineato a Streamlit)
-- Descrizione breve: 1-2 righe + link permanente alla pagina Streamlit (se
-  hosted) — altrimenti istruzione "torna alla Streamlit pagina A{N}"
-- 1-2 domande (radio + text area)
+## Workflow post-risposte
 
-### Domande per anomalia
-
-**A1 — Breakfast 100% food cost**:
-- Radio: "Quale spiegazione ti sembra più probabile?"
-  - (a) Acquisti BRK includono articoli usati anche per pranzo/cena (es. caffè,
-    latte, prodotti base)
-  - (b) Lo scorporo SCBKFBB attribuisce un valore basso vs il valore reale
-    del breakfast
-  - (c) Il buffet costa davvero ~€10/pax e il margine è effettivamente zero
-  - (d) Altro (specifica)
-- Text area: "Note libere"
-
-**A2 — BAR_HOTEL reparto vuoto**:
-- Radio: "Il bar dell'hotel ha un magazzino dedicato o usa la cantina?"
-  - (a) Usa la CANTINA (no magazzino bar)
-  - (b) Ha magazzino bar fisicamente separato ma non tracciato in HotelCube
-  - (c) Ha magazzino bar tracciato in HotelCube ma con altro codice
-  - (d) Altro
-- Text area: "Quale codice/dove guardare?"
-
-**A3 — BANCHETTI sotto-stimato**:
-- Radio: "Il cibo dei banchetti dove viene contabilizzato come consumo?"
-  - (a) CUCINA (mescolato col ristorante regolare)
-  - (b) BANCHETTI ma con sotto-stima sistematica
-  - (c) Fuori HotelCube
-  - (d) Misto
-- Text area: "Come potremmo separare il cost banchetti dal cost ristorante?"
-
-**A4 — Storni UoM maggio 2025**:
-- Radio: "Confermi causa storni?"
-  - (a) Sì, confusione kg vs g (caffè ecc.)
-  - (b) Solo in parte, altra causa
-  - (c) Causa diversa
-- Radio: "Come trattiamo queste 15 righe?"
-  - (a) Escluse sempre da KPI (flag già implementato)
-  - (b) Cancellate da BQ (irrecuperabili)
-  - (c) Mantenute visibili come anomalia storica
-- Text area: "Altre note"
-
-**A5 — Carico magazzino concentrato**:
-- Radio: "Il picco di cost in luglio è intenzionale?"
-  - (a) Sì, acquistiamo in luglio per servire fino a settembre
-  - (b) Coincidenza, varia ogni anno
-  - (c) Altra causa
-- Radio: "Per i KPI mensili, è meglio…"
-  - (a) Mostrare il singolo mese (acquisto-driven, variabile)
-  - (b) Mostrare media trimestrale (consumo-driven, più stabile)
-  - (c) Entrambi, con flag
-
-**A6 — Codici da sospendere**:
-- Checkbox multipla: "Quali codici vuoi sospendere effettivamente?" (lista
-  APERIDIN, BRUNCH, PASQAD, PARTY, FERRAD, FERRBA, PROSECCO, ecc.)
-- Radio: "Lo storico…"
-  - (a) Resta visibile nei filtri
-  - (b) Nascondi storico
-- Text area: "Note per ognuno"
-
-**A7 — Reparti operativi non-F&B**:
-- Radio: "Come vuoi che siano tracciati?"
-  - (a) KPI separati: una pagina "Costi operativi non-F&B" nella dashboard
-  - (b) Allocati al P&L dei rispettivi BU (HSK_HOTEL → costi reparto HOTEL
-    rooms, ecc.)
-  - (c) Esclusi del tutto dalle dashboard
-  - (d) Misto
-- Text area: "Note"
-
-**A8 — Codici orfani**:
-- Per ogni codice listato (ACCFCI, ecc.):
-  - Multi-text: "Cosa è {codice}? A quale classe lo assegniamo?
-    (01ROOM/02FB/03PARK/07DIV/altro)"
-- Text area: "Note"
-
-**Sezione 9 — Catch-all**:
-- Text area: "C'è qualcosa che dovremmo guardare e non stiamo guardando?
-  Anomalie ti vengono in mente che non abbiamo evidenziato?"
-
-### Output
-
-Google Sheet auto-collegato con timestamp + risposte per ogni sezione.
-Esportabile come CSV.
-
-## Workflow di analisi post-risposte
-
-1. Apri Google Sheet via link Apps Script
-2. Esporta CSV
-3. Incolla in conversazione hotelops con Claude (o in `docs/audit/`)
-4. Claude legge le risposte e propone:
-   - Cambi alle viste (es. include/escludi reparto X dal numeratore A1)
-   - Update al `pianodeicontilavoro.xlsx` (codici da deprecare A6)
-   - Eventuali nuove viste o pagine dashboard (A7 reparti operativi separati)
-5. Stefano approva i cambi → implementation
-
-## Rischi / dipendenze
-
-- **Streamlit hosting**: per ora run locale (`streamlit run`). Se vogliamo
-  che il direttore lo apra senza setup, valutare Streamlit Cloud o tunnel.
-  Out of scope per questo spec.
-- **Google Apps Script**: richiede che chi esegue `createAuditForm()` abbia
-  accesso a Google Drive del workspace panoramagroup.it. Stefano lo farà
-  con il suo account.
-- **Tempo direttore**: 30-45 min totale. Se sembra troppo, ridurre a 4-5
-  anomalie più critiche (A1, A3, A6, A7).
-- **Risposte parziali**: la Form va configurata per permettere risposte
-  parziali (no required fields tranne identità) — meglio risposte
-  incomplete che zero risposte.
+1. Stefano esporta risposte da Google Sheet
+2. Per ogni vertical: aggiorna lista codici nel modello SQL (`v_fb_kpi` v3 con i layer corretti)
+3. Aggiorna range industria nelle scorecard Looker secondo la direzione
+4. Anomalie confermate: applica fix come deciso
+5. Round successivo (se serve):
+   - Chef per categoria_prodotto → ricetta (KPI B quantità/coperto)
+   - POS Ristocube per separare drink bar/ristorante/banchetti
 
 ## Acceptance criteria
 
-- Streamlit aprie senza errori, mostra dati live da BQ produzione
-- Le 8 pagine anomalie mostrano i numeri corretti (confrontati con query SQL
-  manuale)
-- Il primer è leggibile da chi conosce HotelCube ma non BQ (chiede mentale a
-  un colleague non-tech: "capisci di cosa parla?")
-- Apps Script crea Google Form senza errori; le 8 sezioni hanno le domande
-  giuste
-- Una compilazione test del form salva tutte le risposte nel Sheet
-- Il workflow end-to-end (Streamlit → Form → Sheet → analisi) è documentato
-  in `docs/` (1 pagina markdown)
+- Streamlit 6 pagine navigabili senza errori
+- B1/B2/B3 mostrano:
+  - Layer 1-3 (codici/reparto/coperti) come tabelle
+  - Layer 4 (KPI A/B/C) come scorecard
+  - Layer 5 (range industria) come tabella
+  - Layer 6 (alert) come colori semaforo
+- Esempio breakfast aprile 2026 deve mostrare ~€4 cost/pax + ~€10 ricavo/pax + FC ~40%
+- Apps Script crea Form con 8 sezioni (S0-S7) senza errori
+- Una compilazione test salva risposte nel Sheet
 
-## Out of scope (per round successivo)
+## Out of scope (round successivo)
 
-- Matrice `categoria_prodotto → meal allocation` (expertise chef, audit
-  separato)
-- Spec API HotelCube per chiedere modifiche al piano dei conti (es.
-  scorporo cena per pensione)
-- Implementazione automatica dei cambi alle viste basata sulle risposte
-- Storia Streamlit Cloud o tunnel per accesso remoto del direttore
+- KPI B quantità/coperto (richiede mapping categoria_prodotto → bucket)
+- POS Ristocube per decomporre drink bar/ristorante/banchetti
+- Matrice ricetta categoria→articolo (chef)
+- Streamlit Cloud hosting
+- API HotelCube per modifiche piano dei conti
