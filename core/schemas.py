@@ -830,6 +830,54 @@ class ProgettoEvento(BaseModel):
         return self
 
 
+# ── f_ristocube_orders ────────────────────────────────────────────────────────
+
+
+class RistocubeOrderRow(BaseModel):
+    """Schema for f_ristocube_orders — comande RistoCube at item × comanda level.
+
+    Source: "Orders Report RISTOCUBE*.xlsx" — one file per export period.
+    Pattern: APPEND + hash_riga dedup.
+
+    Granularità: una riga per item × comanda. I campi della comanda (tavolo,
+    sala, coperti, segmento, etc.) sono ereditati da ogni item.
+
+    `raw_object_id` is the FK to `f_raw_objects` stamped by the `promote` path.
+    """
+
+    hash_riga: str
+    societa_id: SocietaId
+    business_unit_id: str
+    data: date
+    anno: int
+    mese: int
+    giorno: int
+    orario_apertura: Optional[str] = None
+    orario_chiusura: Optional[str] = None
+    tavolo: Optional[str] = None
+    sala: str
+    comanda_id: int
+    coperti_comanda: Optional[int] = None
+    totale_comanda: Optional[float] = None
+    operatore_apertura: Optional[str] = None
+    modalita_chiusura: Optional[str] = None
+    segmento_cliente: Optional[str] = None
+    importo_pagamento: Optional[float] = None
+    mp: Optional[str] = None
+    note_direzione: Optional[str] = None
+    item_menu: Optional[str] = None
+    item_codice_pos: str
+    item_descrizione: Optional[str] = None
+    item_quantita: Optional[float] = None
+    item_importo_originale: Optional[float] = None
+    item_sconto_tipo: Optional[str] = None
+    item_importo_sconto: Optional[float] = None
+    item_importo_finale: Optional[float] = None
+    file_sorgente: Optional[str] = None
+    raw_object_id: Optional[str] = None
+    data_caricamento: datetime
+
+
 # ── f_pipeline_runs ──────────────────────────────────────────────────────────
 
 

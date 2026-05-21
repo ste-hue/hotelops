@@ -372,6 +372,25 @@ sources:
       bucket: hotelops-raw
       path_template: "powerbi/ricavi_fb/ORTI"
 
+  # ── RistoCube Orders Report — APPEND ─────────────────────────────────────
+  RISTOCUBE_ORDERS_ORTI_APPEND:
+    system: RISTOCUBE
+    dataset: ORDERS
+    dataset_label: "Comande RistoCube POS (Orders Report)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_ristocube_orders
+    parser_module: ingest.flussi.ingest_ristocube_orders
+    hash_basis: hash_riga
+    loop_targets: [food_cost, monthly_close]
+    promotion_policy: AUTO
+    detector_category: ristocube_orders
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "ristocube/orders/ORTI"
+
   POWERBI_CRUSCOTTO_ORTI_APPEND:
     system: POWERBI
     dataset: CRUSCOTTO
