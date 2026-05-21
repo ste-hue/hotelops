@@ -77,6 +77,7 @@ from core.bq.client import get_client  # noqa: E402
 from core.config import PROJECT  # noqa: E402
 from core.datahub_sync import DATAHUB_ROOT  # noqa: E402
 from verticals.reviews.cli_commands import cmd_reviews  # noqa: E402
+from verticals.condges.pf_rotate.cli_handler import add_subparser as add_pf_rotate  # noqa: E402
 from workspace.cli_commands import cmd_workspace  # noqa: E402
 
 # ── Lazy BQ client ──────────────────────────────────────────────────────────
@@ -615,7 +616,7 @@ def cmd_lineage_list(args):
       r.file_name_original
     FROM `{F_RAW_OBJECTS}` r
     LEFT JOIN `{V_RAW_OBJECTS_CURRENT}` c USING (raw_object_id)
-    WHERE {' AND '.join(where)}
+    WHERE {" AND ".join(where)}
     ORDER BY r.intake_at DESC
     LIMIT {limit}
     """
@@ -627,9 +628,7 @@ def cmd_lineage_list(args):
         print("(no raw_objects match filters)")
         return
 
-    print(
-        f"{'raw_object_id':<38} {'status':<12} {'source':<32} {'intake_at':<25} file"
-    )
+    print(f"{'raw_object_id':<38} {'status':<12} {'source':<32} {'intake_at':<25} file")
     print("-" * 130)
     for row in rows:
         print(
@@ -756,9 +755,7 @@ def cmd_capture(args):
     )
 
     if args.dry_run:
-        action = (
-            "intake + promote" if src.promotion_policy == "AUTO" else "intake only"
-        )
+        action = "intake + promote" if src.promotion_policy == "AUTO" else "intake only"
         print(f"\n[DRY-RUN] would {action}")
         return
 
@@ -777,7 +774,9 @@ def cmd_capture(args):
 
     pr = promote_raw_object(ir.raw_object_id, actor="capture")
     reason = f" reason={pr.reason}" if pr.reason else ""
-    print(f"  promote:   status={pr.status} rows={pr.rows_written} noop={pr.noop}{reason}")
+    print(
+        f"  promote:   status={pr.status} rows={pr.rows_written} noop={pr.noop}{reason}"
+    )
     if pr.status == "REJECTED":
         sys.exit(2)
 
@@ -1154,6 +1153,9 @@ def main():
         "--min-score", type=float, default=0.0, help="Score minimo per match (0.0–1.0)"
     )
 
+    # pf-rotate
+    add_pf_rotate(sub)
+
     # ── Lineage subcommands (Phase 1) ──────────────────────────────────────
     p_intake = sub.add_parser(
         "intake",
@@ -1306,7 +1308,11 @@ def main():
         "workspace": cmd_workspace,
     }
 
-    handlers[args.command](args)
+    # Support both old-style handlers dict and new-style set_defaults(func=...)
+    if hasattr(args, "func"):
+        args.func(args)
+    else:
+        handlers[args.command](args)
 
 
 if __name__ == "__main__":
