@@ -311,6 +311,54 @@ class VenditaFbRow(BaseModel):
         return v
 
 
+# ── f_ricavi_fb ──────────────────────────────────────────────────────────────
+
+
+class RicaviFbRow(BaseModel):
+    """Schema for f_ricavi_fb — F&B revenue by structure × month × charge code.
+
+    Source: HotelCube Power BI "Produzione Netta Dashboard" XLSX, one file per
+    struttura × mese. Drill-down of classe 02FB into ~20 charge codes
+    (SCBKFBB, RISLFOOD, DINFOOD, ...).
+
+    Pattern: SNAPSHOT, natural_key (business_unit_id, anno, mese). Re-loading a
+    month replaces that structure-month's rows.
+
+    Lato ricavo del food cost. Si incrocia con f_consumi_economato (costo,
+    globale) tramite mese, e con f_coperti_giornalieri (pasti) tramite mese × BU.
+
+    `raw_object_id` is the FK to `f_raw_objects` stamped by the `promote` path.
+    """
+
+    societa_id: SocietaId
+    business_unit_id: BusinessUnitId
+    anno: int
+    mese: int
+    codice: str
+    descrizione: Optional[str] = None
+    netto: float
+    lordo: float
+    file_sorgente: str
+    hash_riga: str
+    raw_object_id: Optional[str] = None
+    data_caricamento: datetime
+
+    @field_validator("mese")
+    @classmethod
+    def mese_range(cls, v: int) -> int:
+        if not 1 <= v <= 12:
+            raise ValueError(f"mese fuori range: {v}")
+        return v
+
+    @field_validator("codice")
+    @classmethod
+    def codice_not_empty(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("codice vuoto")
+        return v
+
+
 # ── f_ricavi_storici ─────────────────────────────────────────────────────────
 
 
@@ -780,6 +828,54 @@ class ProgettoEvento(BaseModel):
                 f"tipo_evento={self.tipo_evento!r} but metadata.tipo={self.metadata.tipo!r}"
             )
         return self
+
+
+# ── f_ristocube_orders ────────────────────────────────────────────────────────
+
+
+class RistocubeOrderRow(BaseModel):
+    """Schema for f_ristocube_orders — comande RistoCube at item × comanda level.
+
+    Source: "Orders Report RISTOCUBE*.xlsx" — one file per export period.
+    Pattern: APPEND + hash_riga dedup.
+
+    Granularità: una riga per item × comanda. I campi della comanda (tavolo,
+    sala, coperti, segmento, etc.) sono ereditati da ogni item.
+
+    `raw_object_id` is the FK to `f_raw_objects` stamped by the `promote` path.
+    """
+
+    hash_riga: str
+    societa_id: SocietaId
+    business_unit_id: str
+    data: date
+    anno: int
+    mese: int
+    giorno: int
+    orario_apertura: Optional[str] = None
+    orario_chiusura: Optional[str] = None
+    tavolo: Optional[str] = None
+    sala: str
+    comanda_id: int
+    coperti_comanda: Optional[int] = None
+    totale_comanda: Optional[float] = None
+    operatore_apertura: Optional[str] = None
+    modalita_chiusura: Optional[str] = None
+    segmento_cliente: Optional[str] = None
+    importo_pagamento: Optional[float] = None
+    mp: Optional[str] = None
+    note_direzione: Optional[str] = None
+    item_menu: Optional[str] = None
+    item_codice_pos: str
+    item_descrizione: Optional[str] = None
+    item_quantita: Optional[float] = None
+    item_importo_originale: Optional[float] = None
+    item_sconto_tipo: Optional[str] = None
+    item_importo_sconto: Optional[float] = None
+    item_importo_finale: Optional[float] = None
+    file_sorgente: Optional[str] = None
+    raw_object_id: Optional[str] = None
+    data_caricamento: datetime
 
 
 # ── f_pipeline_runs ──────────────────────────────────────────────────────────
