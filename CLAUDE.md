@@ -57,6 +57,26 @@ Quando le tue modifiche creano orfani:
 
 Test: ogni riga modificata deve essere riconducibile direttamente alla richiesta dell'utente.
 
+### Decisive action over exploration
+
+Quando l'utente chiede un fix o un'azione, agisci. Non investigare oltre il necessario.
+
+- Formula un'ipotesi in una frase prima di esplorare.
+- Esegui il minimo comando che conferma o smentisce l'ipotesi.
+- Se dopo 3-4 chiamate Bash non hai progressi, fermati e chiedi una domanda mirata invece di continuare a scavare.
+
+Pattern noto: Stefano interrompe con "niente" / "perché non usiamo l'app?" quando l'esplorazione si trascina oltre il punto utile.
+
+### Check STATUS.md prima di pianificare
+
+Prima di scrivere plan multi-step, cutover, migration, o di toccare scope cross-cutting:
+
+1. Leggi `STATUS.md` per le decisioni recenti e i thread aperti.
+2. Leggi le ultime 1-2 session in `<vault>/HotelOps/sessions/` se l'ultimo task è recente.
+3. Scansiona ADR / docs/architecture/INVARIANTS.md per regole già fissate.
+
+Se trovi contraddizioni tra STATUS.md e il piano che stavi per proporre, **fermati e segnalale** — non procedere assumendo che STATUS.md sia obsoleto.
+
 ## Project Overview
 
 hotelops is the financial data platform for Gruppo Panorama hotel operations. It ingests data from banks, ERP (Esolver), PMS (HotelCube), and manual budgets into BigQuery, then serves the **condges** (Controllo di Gestione) vertical through two complementary lenses: **Rosa (CASSA)** for cash flow forecasts ("quando il soldo entra/esce?") and **Gasparotto (COMPETENZA)** for budget vs actuals ("quanto consumo/genero?"). Every financial event has three temporal dimensions: COMPETENZA, CASSA, IMPEGNO. BigQuery is the source of truth.
@@ -387,6 +407,36 @@ Source CSV: `core/bq/dimensioni/d_voci_piano_finanziario.csv`.
 | INTUR | Cc2 | MPS | Monte dei Paschi |
 | INTUR | Cc3 | INTESA | Intesa Sanpaolo |
 | INTUR | Cc4 | BCP | Banca di Credito Popolare |
+
+## Financial Data / Cashflow
+
+Regole specifiche per le rotation mensili del Piano Finanziario (`hotelops pf-rotate`).
+
+**Layout-aware = obbligatorio.** Esistono due layout strutturalmente diversi del master "Piano Finanziario":
+
+- **ORTI (`snapshot_kind="month-closed"`)**: colonna del mese chiuso (es. C per APR) ospita saldi banche puntuali + saldo iniziale hardcoded.
+- **INTUR (`snapshot_kind="fixed-snapshot"`)**: colonna C è snapshot fisso con `C1="DATA RILEVAZ"`, `C2=<data>`, saldi puntuali in `C31:C33`. La colonna del mese chiuso resta vuota sulle righe saldi.
+
+`PFLayout.snapshot_kind` viene dedotto da `find_layout(wb)` leggendo `pf["C1"]`. Step 1 (saldi), step 2 (azzera) e step 5 (controlli) sono branched per `snapshot_kind`.
+
+**Mai azzerare formule.** Step 2 ("azzera mese chiuso") tocca solo `is_value_cell(cell)` — numero, stringa, o formula-di-costanti (es. `=110000+160000`). **Formule con riferimenti A1-style (`=Utenze!K3`, `=SUM(D5:D11)`, `=C37`) non vengono MAI sovrascritte**. Questo è il vincolo che protegge le cascate cross-sheet (uscite) e i link strutturali.
+
+**File output nuovo, mai mutare l'input.** Naming: `<societa>_PF_<YYYY-MM>_post-rotate_<timestamp>.xlsx`. Se step 5 trova ERR il file riceve suffisso `_FAILED_CHECKS` ma viene comunque scritto (per debug visivo in Excel).
+
+**Smoke verificato end-to-end** prima di dichiarare "rotation funziona":
+- ORTI: `hotelops pf-rotate --societa ORTI --pf <file_pre> --scad <scadenzario> --scad-tipo sintetica --mese-chiuso aprile --data-saldo 2026-04-30 --unmapped-policy skip --out /tmp/pf-out`
+- INTUR: prerequisite `hotelops pf-normalize-intur --pf <intur_pre> --out /tmp/pf-out/intur.normalized.xlsx`, poi `hotelops pf-rotate --societa INTUR --pf /tmp/pf-out/intur.normalized.xlsx ...`
+
+Attesi: ORTI 13/0/7, INTUR 12/0/8 (INDET sono celle-formula non valutabili in puro Python — accettabili).
+
+## Git Conventions
+
+In aggiunta alle regole git globali (vedi `~/.claude/CLAUDE.md`):
+
+- **Mai `git checkout main -- .`** o broad checkouts su working tree dirty. Usa `git stash` prima, o opera su path specifici (`git checkout main -- <path/specifico>`).
+- **Mai `git add .` o `git add -A`** quando il working tree ha file untracked non-cashflow (es. `vault/` stub, `.env`). Stagia solo i file pertinenti al commit per nome.
+- **Commit logicamente atomici, non micro-step**: preferenza per "feat(X): goal completo" piuttosto che "feat(X): step 1", "feat(X): step 2". Eccezione: spec/plan committati separatamente dall'implementazione.
+- **Branch `feat/cashflow`**: pf-rotate sprint. `verticals-v2`: laboratorio frozen, NON toccare. `main`: branch operativo.
 
 ## Governance Rules
 
