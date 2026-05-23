@@ -101,9 +101,35 @@ def _eq(a: float | None, b: float | None) -> bool:
 
 
 def _check_C1_saldo_iniziale_hardcoded(
-    wb, cutover_col: str, saldo_row: int
+    wb, cutover_col: str, saldo_row: int, layout
 ) -> CheckResult:
     pf = wb["Piano Finanziario"]
+    if layout.snapshot_kind == "fixed-snapshot":
+        c2 = pf["C2"].value
+        if not c2:
+            return CheckResult(
+                "C1",
+                "Snapshot C: data rilevazione popolata",
+                CheckOutcome.ERR,
+                "C2 vuota",
+            )
+        bad_rows = [
+            f"C{r}"
+            for r in layout.saldi_banca_rows
+            if pf[f"C{r}"].value is not None and is_formula_with_refs(pf[f"C{r}"])
+        ]
+        if bad_rows:
+            return CheckResult(
+                "C1",
+                "Snapshot C: saldi banca hardcoded",
+                CheckOutcome.ERR,
+                f"celle formula: {', '.join(bad_rows)}",
+            )
+        return CheckResult(
+            "C1",
+            f"Snapshot C: data ({c2!r}) e saldi banca hardcoded",
+            CheckOutcome.OK,
+        )
     ref = f"{cutover_col}{saldo_row}"
     cell = pf[ref]
     bad = is_formula_with_refs(cell)
@@ -443,7 +469,7 @@ def _col_idx(col_letter: str) -> int:
     return column_index_from_string(col_letter)
 
 
-def verifica_controlli(wb: Workbook) -> ControlReport:
+def verifica_controlli(wb: Workbook, *, mese_chiuso: int) -> ControlReport:
     """Esegui i check sul workbook in input. Layout-aware. Niente cache, puro Python."""
     pf = wb["Piano Finanziario"]
     layout = find_layout(wb)
@@ -451,8 +477,11 @@ def verifica_controlli(wb: Workbook) -> ControlReport:
 
     ordered_mesi = sorted(month_cols.keys())
     col_letters = [get_column_letter(month_cols[m]) for m in ordered_mesi]
-    cutover_col = col_letters[0]
-    tail_cols = col_letters[1:]
+    if mese_chiuso not in month_cols:
+        raise ValueError(f"Mese chiuso {mese_chiuso} non trovato nel master.")
+    cutover_idx = ordered_mesi.index(mese_chiuso)
+    cutover_col = col_letters[cutover_idx]
+    tail_cols = col_letters[cutover_idx + 1:]
 
     R_S = layout.saldo_iniziale_row
     R_TE = layout.totale_entrate_row
@@ -461,7 +490,7 @@ def verifica_controlli(wb: Workbook) -> ControlReport:
     R_SP = layout.saldo_proiettato_row
 
     results: list[CheckResult] = []
-    results.append(_check_C1_saldo_iniziale_hardcoded(wb, cutover_col, R_S))
+    results.append(_check_C1_saldo_iniziale_hardcoded(wb, cutover_col, R_S, layout))
     if tail_cols:
         results.append(_check_C2_cascade_link(wb, tail_cols[0], cutover_col, R_S, R_SP))
     results.append(_check_C3_cascade_chain(wb, tail_cols, R_S))

@@ -54,6 +54,7 @@ def _default_policy() -> UnmappedPolicy:
 
 
 def add_subparser(subparsers: argparse._SubParsersAction):
+    _add_normalize_intur_subparser(subparsers)
     p = subparsers.add_parser(
         "pf-rotate", help="Rotation mensile del Piano Finanziario."
     )
@@ -128,3 +129,47 @@ def _handle(args: argparse.Namespace) -> int:
             f"\nFornitori scritti: {result.scadenzario_summary['totale_fornitori_scritti']}"
         )
     return 1 if result.failed else 0
+
+
+def _add_normalize_intur_subparser(subparsers: argparse._SubParsersAction):
+    p = subparsers.add_parser(
+        "pf-normalize-intur",
+        help="Normalizza col A dei fogli dettaglio INTUR (step 0, una tantum).",
+    )
+    p.add_argument("--pf", type=Path, required=True)
+    p.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Default: <pf>.normalized.xlsx accanto al file di input.",
+    )
+    p.add_argument(
+        "--fornitori-csv",
+        type=Path,
+        default=Path("core/bq/dimensioni/d_fornitori.csv"),
+    )
+    p.set_defaults(func=_handle_normalize_intur)
+    return p
+
+
+def _handle_normalize_intur(args: argparse.Namespace) -> int:
+    from verticals.condges.pf_rotate.step0_normalize_intur import normalize_intur
+
+    pf_bytes = args.pf.read_bytes()
+    out_bytes, overwrites, unmapped = normalize_intur(
+        pf_bytes=pf_bytes, fornitori_csv=args.fornitori_csv
+    )
+
+    out_path = args.out or args.pf.with_suffix(".normalized.xlsx")
+    out_path.write_bytes(out_bytes)
+
+    print(f"Output: {out_path}")
+    print(f"Col A overwrites: {len(overwrites)}")
+    print(f"Fornitori non mappati (col A lasciata invariata): {len(unmapped)}")
+    if unmapped:
+        print("\nNon mappati (primi 20):")
+        for u in unmapped[:20]:
+            print(f"  - {u['foglio']!r:30s} r{u['riga']:<4d}  {u['nome_b']!r}")
+        if len(unmapped) > 20:
+            print(f"  ... e altri {len(unmapped) - 20}")
+    return 0

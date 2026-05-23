@@ -86,7 +86,7 @@ def rotate(
 
     # Step 5: controlli sul wb finale
     final_wb = openpyxl.load_workbook(BytesIO(out_bytes), data_only=False)
-    report = verifica_controlli(final_wb)
+    report = verifica_controlli(final_wb, mese_chiuso=mese_chiuso)
     failed = report.n_err > 0
     failed_checks = [
         f"{r.check_id}: {r.title} — {r.detail}"

@@ -44,14 +44,27 @@ def write_saldi_banca(
     cols = find_month_columns(pf, header_row=2)
     if mese_chiuso not in cols:
         raise ValueError(f"Mese chiuso {mese_chiuso} non trovato nel master.")
-    col = cols[mese_chiuso]
-    col_letter = get_column_letter(col)
+    col_mese_chiuso = cols[mese_chiuso]
+    col_mese_chiuso_letter = get_column_letter(col_mese_chiuso)
 
     layout = find_layout(wb)
 
-    # Data alla riga immediatamente precedente al primo saldo banca
-    data_row = min(layout.saldi_banca_rows) - 1
-    pf.cell(data_row, col, data_saldo.strftime("%d/%m/%Y"))
+    if layout.snapshot_kind == "fixed-snapshot":
+        # INTUR-style: saldi banche + data live in fixed column C, regardless of
+        # which month is closed. Do NOT touch the closed-month column on saldi
+        # rows or the saldo_iniziale_row.
+        target_col = 3  # C
+        target_col_letter = "C"
+        # Data goes in C2 (directly under "DATA RILEVAZ" header in C1)
+        data_row = 2
+    else:
+        # ORTI-style: saldi banche go in the closed month column.
+        target_col = col_mese_chiuso
+        target_col_letter = col_mese_chiuso_letter
+        # Data alla riga immediatamente precedente al primo saldo banca
+        data_row = min(layout.saldi_banca_rows) - 1
+
+    pf.cell(data_row, target_col, data_saldo.strftime("%d/%m/%Y"))
 
     written: dict[int, float] = {}
     for r in layout.saldi_banca_rows:
@@ -61,24 +74,27 @@ def write_saldi_banca(
         match = _match_bank(str(label), saldi)
         if match is None:
             continue
-        pf.cell(r, col, float(match))
+        pf.cell(r, target_col, float(match))
         written[r] = float(match)
 
     # Totale: somma effettiva delle righe saldi
     total = 0.0
     for r in layout.saldi_banca_rows:
-        v = pf.cell(r, col).value
+        v = pf.cell(r, target_col).value
         if isinstance(v, (int, float)):
             total += float(v)
-    # Scrivi totale come saldo iniziale — hardcoded (Controllo #1 esige non-formula)
-    pf.cell(layout.saldo_iniziale_row, col, total)
+
+    if layout.snapshot_kind == "month-closed":
+        # Scrivi totale come saldo iniziale — hardcoded (Controllo #1 esige non-formula)
+        pf.cell(layout.saldo_iniziale_row, target_col, total)
 
     return {
-        "col": col_letter,
+        "col": target_col_letter,
         "data_row": data_row,
         "saldi_rows_scritte": list(written.keys()),
         "saldo_iniziale_row": layout.saldo_iniziale_row,
         "totale_banche": total,
+        "snapshot_kind": layout.snapshot_kind,
     }
 
 
@@ -92,9 +108,9 @@ def fetch_saldi_da_bq(societa: str, data_saldo: date) -> dict[str, float]:
     from google.cloud import bigquery
 
     sql = f"""
-        SELECT banca_id, saldo
+        SELECT banca_id, saldo_eur
         FROM `{F_SALDI_BANCA_CHIUSURA_MENSILE}`
-        WHERE societa_id = @soc AND data_saldo = @data
+        WHERE societa_id = @soc AND data_riferimento = @data
     """
     job = get_client().query(
         sql,
@@ -105,4 +121,4 @@ def fetch_saldi_da_bq(societa: str, data_saldo: date) -> dict[str, float]:
             ]
         ),
     )
-    return {row.banca_id: float(row.saldo) for row in job.result()}
+    return {row.banca_id: float(row.saldo_eur) for row in job.result()}

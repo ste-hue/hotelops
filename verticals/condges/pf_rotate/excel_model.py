@@ -102,6 +102,9 @@ class PFLayout:
     uscite_rows: list[
         int
     ]  # data rows between totale_entrate and totale_uscite (exclusive)
+    snapshot_kind: str = (
+        "month-closed"  # "month-closed" | "fixed-snapshot" (C is DATA RILEVAZ)
+    )
 
 
 def find_layout(wb) -> PFLayout:
@@ -147,6 +150,13 @@ def find_layout(wb) -> PFLayout:
         r for r in range(totale_entrate_row + 1, totale_uscite_row) if labels.get(r)
     ]
 
+    # snapshot_kind: INTUR-style files have C1 = "DATA RILEVAZ" (col C is a fixed
+    # snapshot of saldi banche, independent of which month is closed).
+    c1_val = pf["C1"].value
+    snapshot_kind = "month-closed"
+    if isinstance(c1_val, str) and "data rilevaz" in c1_val.strip().lower():
+        snapshot_kind = "fixed-snapshot"
+
     return PFLayout(
         saldo_iniziale_row=saldo_iniziale_row,
         totale_entrate_row=totale_entrate_row,
@@ -157,6 +167,7 @@ def find_layout(wb) -> PFLayout:
         saldo_proiettato_row=saldo_proiettato_row,
         entrate_rows=entrate_rows,
         uscite_rows=uscite_rows,
+        snapshot_kind=snapshot_kind,
     )
 
 

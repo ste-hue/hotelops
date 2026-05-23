@@ -539,7 +539,7 @@ def main():
                 saldi={k: v for k, v in saldi_input.items() if v != 0},
             )
             azzera_mese(wb_pre, mese_chiuso=mese_chiuso)
-            report = verifica_controlli(wb_pre)
+            report = verifica_controlli(wb_pre, mese_chiuso=mese_chiuso)
             buf = BytesIO()
             wb_pre.save(buf)
             st.session_state["pf_bytes_post_step12"] = buf.getvalue()
