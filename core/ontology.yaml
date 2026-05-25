@@ -566,62 +566,84 @@ domains:
 # ══════════════════════════════════════════════════════════════════════════════
 
 debt:
-  snapshot_date: "2024-12-31"
-  totale_erogato: 7175000
-  totale_residuo: 5275968
-  ammortizzato_pct: 26.5
-  dscr_consolidato: 1.58
-  concentrazione: {MPS: 86.4, INTESA: 13.6}
+  snapshot_date: "2026-05-24"  # piani ammortamento aggiornati
+  totale_erogato: 6189994.83
+  totale_residuo: 5132994.08
+  ammortizzato_pct: 17.1
+  concentrazione: {MPS: 93.1, INTESA: 6.9}  # post-cessione ORTI_BPER (INTESA→MPS)
 
   instruments:
-    MPS_ORTI_3.5M:
+    ORTI_MPS_001:
       borrower: ORTI
       lender: MPS
       erogato: 3500000
-      residuo: 3305374
+      residuo: 3224924.79
+      residuo_31_12_2024: 3500000
       tasso: {tipo: fisso, valore: 4.16}
       piano: francese
+      data_erogazione: "2024-12-27"
       scadenza: "2039-12-31"
+      periodicita_rate: SEMESTRALE
+      totale_rate: 2422496.43
       debt_service_annuo: 332352
       note: "Largest debt. Semestrale, 2025 solo interessi, capitale da giu 2026."
 
-    INTESA_ORTI_BPER:
+    ORTI_BPER_001:
       borrower: ORTI
-      lender: INTESA
-      erogato: 1400000
-      residuo: 337484
+      lender: MPS  # ex-BPER → INTESA → MPS (catena cessioni)
+      lender_storico: [BPER, INTESA, MPS]
+      erogato: 414994.83  # post-cessione MPS (originale ~1.4M)
+      residuo: 310283.77
+      residuo_31_12_2024: 414994.83
       tasso: {tipo: variabile, valore: 6.2}
-      scadenza: "2028-09-20"
-      note: "Ex BPER ceduto. Tasso alto — candidato refinanziamento."
+      data_erogazione: "2025-08-01"  # presa in carico MPS
+      scadenza: "2028-08-31"
+      periodicita_rate: MENSILE
+      totale_rate: 442137.61
+      tipo: "Mutuo ipotecario fondiario"
+      note: "Ex BPER ceduto a INTESA poi a MPS. Tasso alto — candidato refinanziamento."
 
-    MPS_INTUR_1.2M:
+    INTUR_MPS_001:
+      borrower: INTUR
+      lender: MPS
+      erogato: 75000
+      residuo: 56429.57
+      residuo_31_12_2024: 75000
+      tasso: {tipo: fisso, valore: 4.14}
+      data_erogazione: "2025-03-06"
+      scadenza: "2030-03-31"
+      periodicita_rate: MENSILE
+      totale_rate: 79352.86
+      debt_service_annuo: 16662
+
+    INTUR_MPS_002:
       borrower: INTUR
       lender: MPS
       erogato: 1200000
-      residuo: 1193963
+      residuo: 1184908.08
+      residuo_31_12_2024: 1200000
       tasso: {tipo: variabile, base: "Euribor 1M + 1.5%", floor: 1.5}
+      data_erogazione: "2026-01-20"
       scadenza: "2036-01-31"
+      periodicita_rate: MENSILE
+      totale_rate: 1436389.19
       preammortamento: 12  # mesi (solo interessi)
       covenant: true
       garanzia: {tipo: "fideiussione + MCC 80%", importo: 1200000}
       note: "Covenant cashflow — penale 0.50% semestrale se breach."
 
-    MPS_INTUR_75K:
-      borrower: INTUR
-      lender: MPS
-      erogato: 75000
-      residuo: 60367
-      tasso: {tipo: fisso, valore: 4.14}
-      scadenza: "2030-03-31"
-      debt_service_annuo: 16662
-
-    INTESA_INTUR_1M:
+    INTUR_INTESA_001:
       borrower: INTUR
       lender: INTESA
       erogato: 1000000
-      residuo: 378781
+      residuo: 356447.87
+      residuo_31_12_2024: 483000
       tasso: {tipo: variabile}
+      data_erogazione: "2015-05-10"
       scadenza: "2031-05-10"
+      periodicita_rate: MENSILE
+      totale_rate: 653500
+      tipo: "Mutuo ipotecario"
       debt_service_annuo: 102000
 
 
