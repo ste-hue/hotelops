@@ -373,3 +373,100 @@ sources:
       Esempio hard gate: dati interessanti, nessun loop dichiarato. Resta
       in raw, no canonical promotion. Flip a AUTO + dichiara loop_target
       quando il consumer sarà pronto.
+
+  # ── HotelCube Power BI — export revman, RAW_ONLY (discovery-first) ────────
+  # Un report-type = una sorgente. Il source_name È il label dell'inventario
+  # raw. Snapshot: ogni export è una foto, si accumulano nel tempo.
+  # canonical_table / parser_module sono PLACEHOLDER d'intento — RAW_ONLY non
+  # promuove mai, quindi non vengono mai importati né eseguiti.
+  POWERBI_BOOKINGS_ORTI_APPEND:
+    system: POWERBI
+    dataset: BOOKINGS
+    dataset_label: "HotelCube Power BI — Detailed Data for Bookings (venduto on-the-books)"
+    societa: ORTI
+    business_unit: null   # struttura nel nome file (Panorama/Angelina/CVM)
+    lifecycle: APPEND
+    canonical_table: f_revman_bookings
+    parser_module: ingest.revman.ingest_bookings
+    hash_basis: hash_riga
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: pms_statistiche
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/bookings/ORTI"
+    notes: |
+      Venduto on-the-books per struttura, grana segmento/canale/tipologia
+      camera. RAW_ONLY finché non si dichiara un loop (pickup/pace o forecast
+      entrate). canonical_table/parser_module placeholder d'intento.
+
+  POWERBI_PRODUZIONE_ORTI_APPEND:
+    system: POWERBI
+    dataset: PRODUZIONE
+    dataset_label: "HotelCube Power BI — Daily Production Report (actuals giornalieri)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_revman_produzione
+    parser_module: ingest.revman.ingest_produzione
+    hash_basis: hash_riga
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: pms_statistiche
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/produzione/ORTI"
+    notes: |
+      Actuals giornalieri: camere totali/OOO/vendibili/occupate, pax, importo.
+      RAW_ONLY. Possibile sovrapposizione futura con f_pms_statistiche — da
+      decidere quando il loop esiste.
+
+  POWERBI_BUDGETFORECAST_ORTI_APPEND:
+    system: POWERBI
+    dataset: BUDGETFORECAST
+    dataset_label: "HotelCube Power BI — Budget Forecast Details (cons vs budget, 2 varianti)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_revman_budget_forecast
+    parser_module: ingest.revman.ingest_budget_forecast
+    hash_basis: hash_riga
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: pms_statistiche
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/budget_forecast/ORTI"
+    notes: |
+      Due varianti nello stesso report: Summary (21 col, Camere/Pax mensile
+      cons-vs-budget) e Detail (23 col, per Classe/Categoria/Addebito). RAW_ONLY.
+
+  # ── Budget manuale (Stefano) — SNAPSHOT, RAW_ONLY ─────────────────────────
+  # Budget ORTI costruito a mano da Stefano. NON è il Master Completo Romita
+  # (quello è ESOLVER_BUDGET_ORTI_SNAPSHOT → f_budget_mensile). Excel "prezioso
+  # lavorato": va catturato nel raw layer GCS prima di esistere un contratto
+  # canonical. canonical_table/parser_module sono PLACEHOLDER d'intento —
+  # RAW_ONLY non promuove mai, quindi non vengono importati né eseguiti.
+  MANUAL_BUDGET_ORTI_SNAPSHOT:
+    system: MANUAL
+    dataset: BUDGET
+    dataset_label: "Budget ORTI costruito a mano da Stefano"
+    societa: ORTI
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_budget_manuale
+    parser_module: ingest.flussi.ingest_budget_manuale
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: manual_budget
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "manual/budget/ORTI"
+    notes: |
+      Excel preziosi lavorati: budget autoriale di Stefano. RAW_ONLY finché
+      non si decide se/come promuoverlo a canonical. canonical_table e
+      parser_module sono placeholder d'intento, non esistono ancora.
