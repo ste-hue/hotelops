@@ -441,6 +441,22 @@ class AnagraficaFornitoreRow(BaseModel):
     data_caricamento: str  # ISO timestamp
 
 
+# ── d_fornitori ─────────────────────────────────────────────────────────────
+
+
+class FornitoreMapRow(BaseModel):
+    """Riga di d_fornitori — mappa fornitore → voce PF + flag esclusione."""
+
+    codice_fornitore: int
+    nome_esolver: str
+    nome_pf: str = ""
+    voce_id: str = ""
+    is_intercompany: bool = False
+    is_excluded: bool = False
+    exclude_reason: str = ""
+    societa_id: str  # ORTI | INTUR
+
+
 # ── d_mapping_piano_finanziario ────────────────────────────────────────────
 
 TipoMapping = Literal["FORNITORE", "CATEGORIA"]

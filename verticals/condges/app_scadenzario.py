@@ -14,7 +14,7 @@ from __future__ import annotations
 import csv
 import re
 import sys
-from datetime import date
+from datetime import date, timedelta
 from io import BytesIO
 from pathlib import Path
 
@@ -26,11 +26,20 @@ import openpyxl
 import pandas as pd
 import streamlit as st
 
+from verticals.condges.pf_rotate.step1_saldi import fetch_saldi_da_bq, write_saldi_banca
+from verticals.condges.pf_rotate.step2_azzera import azzera_mese
+from verticals.condges.pf_rotate.step5_controlli import CheckOutcome, verifica_controlli
 from verticals.condges.scadenze_parse import parse_scadenze
 
 # -- Config --------------------------------------------------------------------
 
-FORNITORI_CSV = Path(__file__).parent.parent.parent / "core" / "bq" / "dimensioni" / "d_fornitori.csv"
+FORNITORI_CSV = (
+    Path(__file__).parent.parent.parent
+    / "core"
+    / "bq"
+    / "dimensioni"
+    / "d_fornitori.csv"
+)
 
 VOCE_TO_SHEET_CANDIDATES = {
     "USCITE_MATERIE_PRIME": ["Materie Prime-Consumo ", "Materie Prime-Conumo "],
@@ -72,14 +81,33 @@ VOCE_LABELS = {
 }
 
 MONTH_NAMES_IT = {
-    "GENNAIO": 1, "FEBBRAIO": 2, "MARZO": 3, "APRILE": 4,
-    "MAGGIO": 5, "GIUGNO": 6, "LUGLIO": 7, "AGOSTO": 8,
-    "SETTEMBRE": 9, "OTTOBRE": 10, "NOVEMBRE": 11, "DICEMBRE": 12,
+    "GENNAIO": 1,
+    "FEBBRAIO": 2,
+    "MARZO": 3,
+    "APRILE": 4,
+    "MAGGIO": 5,
+    "GIUGNO": 6,
+    "LUGLIO": 7,
+    "AGOSTO": 8,
+    "SETTEMBRE": 9,
+    "OTTOBRE": 10,
+    "NOVEMBRE": 11,
+    "DICEMBRE": 12,
 }
 
 MESI_NOMI = [
-    "Gen", "Feb", "Mar", "Apr", "Mag", "Giu",
-    "Lug", "Ago", "Set", "Ott", "Nov", "Dic",
+    "Gen",
+    "Feb",
+    "Mar",
+    "Apr",
+    "Mag",
+    "Giu",
+    "Lug",
+    "Ago",
+    "Set",
+    "Ott",
+    "Nov",
+    "Dic",
 ]
 
 
@@ -123,7 +151,9 @@ def _find_previsionale_row(ws, max_row: int = 200) -> int | None:
 
 
 def _find_total_row_and_range(
-    ws, month_col: dict[int, int], max_row: int = 10,
+    ws,
+    month_col: dict[int, int],
+    max_row: int = 10,
 ) -> tuple[int | None, int, int]:
     """Find the total row with a vertical SUM formula in a month column.
 
@@ -182,7 +212,9 @@ def _find_supplier_row_by_codice(ws, codice: int, max_row: int = 200) -> int | N
 
 
 def read_pf_sheet(
-    wb_values, wb_formulas, sheet_name: str,
+    wb_values,
+    wb_formulas,
+    sheet_name: str,
 ) -> tuple[pd.DataFrame, dict[int, int], int | None, bool]:
     """Read a PF detail sheet.
 
@@ -214,7 +246,9 @@ def read_pf_sheet(
             row_data["codice_fornitore"] = int(codice)
         for month, col in month_col.items():
             val = ws.cell(row=r, column=col).value
-            row_data[f"pf_mese_{month}"] = float(val) if isinstance(val, (int, float)) else 0.0
+            row_data[f"pf_mese_{month}"] = (
+                float(val) if isinstance(val, (int, float)) else 0.0
+            )
         rows.append(row_data)
 
     df = pd.DataFrame(rows)
@@ -258,13 +292,18 @@ def write_pf(
             continue
         voce_id = info["voce_id"]
         nome_pf = info["nome_pf"]
-        scad_by_voce.setdefault(voce_id, []).append({
-            "codice_fornitore": codice,
-            "nome": row["nome"],
-            "nome_pf": nome_pf,
-            "scaduto": float(row.get("scaduto", 0) or 0),
-            **{f"mese_{m}": float(row.get(f"mese_{m}", 0) or 0) for m in bucket_months},
-        })
+        scad_by_voce.setdefault(voce_id, []).append(
+            {
+                "codice_fornitore": codice,
+                "nome": row["nome"],
+                "nome_pf": nome_pf,
+                "scaduto": float(row.get("scaduto", 0) or 0),
+                **{
+                    f"mese_{m}": float(row.get(f"mese_{m}", 0) or 0)
+                    for m in bucket_months
+                },
+            }
+        )
 
     for voce_id, suppliers in scad_by_voce.items():
         sheet_name = resolve_sheet_name(voce_id, wb.sheetnames)
@@ -278,7 +317,9 @@ def write_pf(
         month_col = _build_month_col_map(ws_vals)
         prev_row = _find_previsionale_row(ws_vals)
         month_col_form = _build_month_col_map(ws_form)
-        total_row, sum_start, sum_end = _find_total_row_and_range(ws_form, month_col_form)
+        total_row, sum_start, sum_end = _find_total_row_and_range(
+            ws_form, month_col_form
+        )
         prev_in_sum = False
         if prev_row and total_row:
             prev_in_sum = sum_start <= prev_row <= sum_end
@@ -346,11 +387,13 @@ def write_pf(
                     scad_totals[month] = scad_totals.get(month, 0) + pf_val
 
             if months_written:
-                written.append({
-                    "codice": s["codice_fornitore"],
-                    "nome": s["nome_pf"] or s["nome"],
-                    "months": months_written,
-                })
+                written.append(
+                    {
+                        "codice": s["codice_fornitore"],
+                        "nome": s["nome_pf"] or s["nome"],
+                        "months": months_written,
+                    }
+                )
 
         # Adjust PREVISIONALE if it's inside the SUM range.
         # After writing supplier cells, compute the total of ALL non-prev
@@ -415,18 +458,103 @@ def main():
     pf_bytes = uploaded_pf.getvalue()
 
     # Detect società from PF (cell A1 of "Piano Finanziario" sheet)
-    pf_wb_peek = openpyxl.load_workbook(BytesIO(pf_bytes), data_only=True, read_only=True)
+    pf_wb_peek = openpyxl.load_workbook(
+        BytesIO(pf_bytes), data_only=True, read_only=True
+    )
     societa = ""
     if "Piano Finanziario" in pf_wb_peek.sheetnames:
         a1 = pf_wb_peek["Piano Finanziario"].cell(row=1, column=1).value
         if a1:
-            societa = str(a1).strip().replace(" S.R.L.", "").replace(" s.r.l.", "").upper()
+            societa = (
+                str(a1).strip().replace(" S.R.L.", "").replace(" s.r.l.", "").upper()
+            )
     pf_wb_peek.close()
 
     if societa:
         st.subheader(f"Scadenzario {societa}")
     else:
         st.subheader("Scadenze caricate")
+
+    # === Sezione Chiudi mese precedente (step 1 + 2) ===========================
+    with st.expander("📅 Chiudi mese precedente (step 1 + 2)", expanded=False):
+        col_a, col_b = st.columns(2)
+        with col_a:
+            mese_chiuso = st.selectbox(
+                "Mese chiuso",
+                list(range(1, 13)),
+                index=max(0, date.today().month - 2),
+                format_func=lambda m: [
+                    "GEN",
+                    "FEB",
+                    "MAR",
+                    "APR",
+                    "MAG",
+                    "GIU",
+                    "LUG",
+                    "AGO",
+                    "SET",
+                    "OTT",
+                    "NOV",
+                    "DIC",
+                ][m - 1],
+            )
+        with col_b:
+            data_saldo_input = st.date_input(
+                "Data saldo",
+                value=date.today().replace(day=1) - timedelta(days=1),
+            )
+
+        # Try BQ for saldi pre-fill
+        try:
+            bq_saldi = fetch_saldi_da_bq(societa, data_saldo_input) if societa else {}
+        except Exception:
+            bq_saldi = {}
+
+        st.caption("Saldi banca al cutover (precompilati da BQ se disponibili)")
+        saldi_input: dict[str, float] = {}
+        default_banche = list(bq_saldi.keys()) or (
+            ["MPS", "Intesa", "MPS_KROSS"]
+            if societa == "ORTI"
+            else ["MPS", "Intesa", "Sella", "BCP"]
+        )
+        cols_b = st.columns(min(4, max(2, len(default_banche))))
+        for i, banca in enumerate(default_banche):
+            with cols_b[i % len(cols_b)]:
+                saldi_input[banca] = float(
+                    st.number_input(
+                        f"Saldo {banca}",
+                        value=float(bq_saldi.get(banca, 0.0)),
+                        step=1000.0,
+                        format="%.2f",
+                        key=f"saldo_{banca}",
+                    )
+                )
+
+        if st.button("Applica step 1+2 (rolla + azzera)", type="secondary"):
+            wb_pre = openpyxl.load_workbook(BytesIO(pf_bytes))
+            write_saldi_banca(
+                wb_pre,
+                mese_chiuso=mese_chiuso,
+                data_saldo=data_saldo_input,
+                saldi={k: v for k, v in saldi_input.items() if v != 0},
+            )
+            azzera_mese(wb_pre, mese_chiuso=mese_chiuso)
+            report = verifica_controlli(wb_pre, mese_chiuso=mese_chiuso)
+            buf = BytesIO()
+            wb_pre.save(buf)
+            st.session_state["pf_bytes_post_step12"] = buf.getvalue()
+            st.session_state["pf_controlli_report"] = report
+            st.success(
+                f"Step 1+2 applicati. Controlli: OK={report.n_ok} "
+                f"ERR={report.n_err} INDET={report.n_indet}"
+            )
+
+        # Use post-step12 bytes for subsequent sections
+        if "pf_bytes_post_step12" in st.session_state:
+            pf_bytes = st.session_state["pf_bytes_post_step12"]
+            st.info("Usando il PF post step 1+2 per lo scadenzario.")
+
+    # ===========================================================================
 
     # Parse scadenzario
     scad_df, bucket_months = parse_scadenze(BytesIO(uploaded_scad.getvalue()))
@@ -441,7 +569,13 @@ def main():
         codice = int(row["codice_fornitore"])
         info = fornitori_map.get(codice)
         if info:
-            mapped_rows.append({**row.to_dict(), "voce_id": info["voce_id"], "nome_pf": info["nome_pf"]})
+            mapped_rows.append(
+                {
+                    **row.to_dict(),
+                    "voce_id": info["voce_id"],
+                    "nome_pf": info["nome_pf"],
+                }
+            )
         else:
             unmapped_rows.append(row.to_dict())
 
@@ -450,7 +584,9 @@ def main():
 
     col1, col2 = st.columns(2)
     col1.metric("Mappati (in d_fornitori)", len(mapped_df))
-    col2.metric("Non mappati", len(unmapped_df), help="Fornitori non in d_fornitori.csv")
+    col2.metric(
+        "Non mappati", len(unmapped_df), help="Fornitori non in d_fornitori.csv"
+    )
 
     # Preview per voce — with exclude checkboxes
     if "excluded_suppliers" not in st.session_state:
@@ -466,7 +602,9 @@ def main():
             sheet_name = VOCE_TO_SHEET.get(voce_id, "?")
             voce_df = mapped_df[mapped_df["voce_id"] == voce_id]
 
-            with st.expander(f"{voce_label} ({len(voce_df)} fornitori) -> foglio '{sheet_name}'"):
+            with st.expander(
+                f"{voce_label} ({len(voce_df)} fornitori) -> foglio '{sheet_name}'"
+            ):
                 for _, row in voce_df.iterrows():
                     codice = int(row["codice_fornitore"])
                     nome = row["nome"]
@@ -474,7 +612,8 @@ def main():
                     is_excluded = codice in st.session_state.excluded_suppliers
                     cols = st.columns([0.5, 3, 2] + [2] * len(month_cols_scad) + [2])
                     exclude = cols[0].checkbox(
-                        "x", value=is_excluded,
+                        "x",
+                        value=is_excluded,
                         key=f"excl_{codice}",
                         label_visibility="collapsed",
                     )
@@ -507,7 +646,9 @@ def main():
             if codice in st.session_state.voce_assignments:
                 voce_id = st.session_state.voce_assignments[codice]
                 nome = str(row.get("nome", "")).strip()
-                mapped_rows.append({**row.to_dict(), "voce_id": voce_id, "nome_pf": nome})
+                mapped_rows.append(
+                    {**row.to_dict(), "voce_id": voce_id, "nome_pf": nome}
+                )
                 fornitori_map[codice] = {"voce_id": voce_id, "nome_pf": nome}
             else:
                 still_unmapped.append(row.to_dict())
@@ -519,8 +660,12 @@ def main():
         voce_display = {k: VOCE_LABELS[k] for k in VOCE_LABELS}
         voce_display["-- non assegnato --"] = "-- non assegnato --"
 
-        with st.expander(f"Fornitori non mappati ({len(unmapped_df)}) — assegna voce", expanded=True):
-            st.caption("Scegli la voce PF per ogni fornitore. Clicca 'Conferma' per includerli nella scrittura.")
+        with st.expander(
+            f"Fornitori non mappati ({len(unmapped_df)}) — assegna voce", expanded=True
+        ):
+            st.caption(
+                "Scegli la voce PF per ogni fornitore. Clicca 'Conferma' per includerli nella scrittura."
+            )
 
             for idx, row in unmapped_df.iterrows():
                 cols = st.columns([1, 4, 2, 4])
@@ -539,7 +684,9 @@ def main():
                 new_assignments = {}
                 for _, row in unmapped_df.iterrows():
                     codice = int(row["codice_fornitore"])
-                    choice = st.session_state.get(f"voce_{codice}", "-- non assegnato --")
+                    choice = st.session_state.get(
+                        f"voce_{codice}", "-- non assegnato --"
+                    )
                     if choice != "-- non assegnato --":
                         new_assignments[codice] = choice
                 if new_assignments:
@@ -552,21 +699,29 @@ def main():
         current_month = date.today().month
         gap_rows = []
         # Filter out excluded suppliers for the summary
-        active_df = mapped_df[~mapped_df["codice_fornitore"].isin(st.session_state.get("excluded_suppliers", set()))]
+        active_df = mapped_df[
+            ~mapped_df["codice_fornitore"].isin(
+                st.session_state.get("excluded_suppliers", set())
+            )
+        ]
         # Scaduto total -> current month
         scaduto_total = abs(active_df["scaduto"].sum())
-        gap_rows.append({
-            "Mese": MESI_NOMI[current_month - 1] + " (scaduto)",
-            "Scadenzario": f"{scaduto_total:,.0f}",
-        })
+        gap_rows.append(
+            {
+                "Mese": MESI_NOMI[current_month - 1] + " (scaduto)",
+                "Scadenzario": f"{scaduto_total:,.0f}",
+            }
+        )
         for month in bucket_months:
             col = f"mese_{month}"
             if col in active_df.columns:
                 total = abs(active_df[col].sum())
-                gap_rows.append({
-                    "Mese": MESI_NOMI[month - 1],
-                    "Scadenzario": f"{total:,.0f}",
-                })
+                gap_rows.append(
+                    {
+                        "Mese": MESI_NOMI[month - 1],
+                        "Scadenzario": f"{total:,.0f}",
+                    }
+                )
         st.dataframe(pd.DataFrame(gap_rows), use_container_width=True, hide_index=True)
 
     # Action
@@ -576,12 +731,27 @@ def main():
         "Il PREVISIONALE viene aggiustato per evitare doppio conteggio nel totale."
     )
 
-    if st.button("Aggiorna PF Excel", type="primary"):
+    unmapped_remaining = len(unmapped_df)
+    disable_btn = unmapped_remaining > 0
+    if st.button(
+        "Aggiorna PF Excel",
+        type="primary",
+        disabled=disable_btn,
+        help=(
+            "Disabilitato finché tutti i fornitori non mappati hanno una scelta"
+            if disable_btn
+            else None
+        ),
+    ):
         excluded = st.session_state.get("excluded_suppliers", set())
-        updated_bytes, write_summary = write_pf(pf_bytes, scad_df, bucket_months, fornitori_map, excluded)
+        updated_bytes, write_summary = write_pf(
+            pf_bytes, scad_df, bucket_months, fornitori_map, excluded
+        )
 
         total_written = sum(len(v) for v in write_summary.values())
-        st.success(f"Aggiornati {total_written} fornitori in {len(write_summary)} fogli")
+        st.success(
+            f"Aggiornati {total_written} fornitori in {len(write_summary)} fogli"
+        )
 
         for voce_label, entries in write_summary.items():
             st.caption(f"**{voce_label}**: {len(entries)} fornitori")
@@ -592,6 +762,17 @@ def main():
             file_name=f"{societa + ' ' if societa else ''}PF Scadenzario {date.today().strftime('%b %-d %Y')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+
+        if st.session_state.get("pf_controlli_report"):
+            rep = st.session_state["pf_controlli_report"]
+            st.subheader("Controlli")
+            for r in rep.results:
+                icon = (
+                    "✅"
+                    if r.outcome == CheckOutcome.OK
+                    else ("❌" if r.outcome == CheckOutcome.ERR else "⚠️")
+                )
+                st.text(f"{icon} {r.check_id} — {r.title}  {r.detail}")
 
 
 if __name__ == "__main__":
