@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import calendar
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -37,6 +38,16 @@ def _parse_data(s: str) -> date:
     return datetime.strptime(s, "%Y-%m-%d").date()
 
 
+def _resolve_data_saldo(
+    data_saldo: date | None, anno: int, mese_chiuso: int
+) -> date:
+    """O-D: --data-saldo esplicito è override; altrimenti ultimo giorno di (anno, mese)."""
+    if data_saldo is not None:
+        return data_saldo
+    last_day = calendar.monthrange(anno, mese_chiuso)[1]
+    return date(anno, mese_chiuso, last_day)
+
+
 def _parse_banca_overrides(items: list[str]) -> dict[str, float]:
     out = {}
     for it in items or []:
@@ -67,7 +78,18 @@ def add_subparser(subparsers: argparse._SubParsersAction):
     )
     p.add_argument("--societa", choices=("ORTI", "INTUR"), required=True)
     p.add_argument("--mese-chiuso", type=_parse_mese, required=True)
-    p.add_argument("--data-saldo", type=_parse_data, required=True)
+    p.add_argument(
+        "--data-saldo",
+        type=_parse_data,
+        default=None,
+        help="Override esplicito. Default: ultimo giorno di (--anno, --mese-chiuso).",
+    )
+    p.add_argument(
+        "--anno",
+        type=int,
+        default=None,
+        help="Anno per derivare --data-saldo. Default: anno corrente.",
+    )
     p.add_argument(
         "--banca",
         action="append",
@@ -109,6 +131,8 @@ def _handle(args: argparse.Namespace) -> int:
         if args.unmapped_policy
         else _default_policy()
     )
+    anno = args.anno or date.today().year
+    data_saldo = _resolve_data_saldo(args.data_saldo, anno, args.mese_chiuso)
 
     try:
         result = rotate(
@@ -117,7 +141,7 @@ def _handle(args: argparse.Namespace) -> int:
             bucket_months=bucket_months,
             societa=args.societa,
             mese_chiuso=args.mese_chiuso,
-            data_saldo=args.data_saldo,
+            data_saldo=data_saldo,
             saldi=overrides or None,
             fornitori_csv=args.fornitori_csv,
             out_dir=args.out,
