@@ -212,3 +212,16 @@ file_types:
         required: ["CODICE", "DESCRIZIONE", "QUANTITA"]
       - type: filename
         pattern: "(?i)CONSUMI|ECONOMATO|SITUAZIONECONSUMI"
+
+  ricavi_fb:
+    lifecycle: SNAPSHOT
+    dest_folder: "ricavi_fb"
+    bq_table: f_ricavi_fb
+    pipeline: "ingest.flussi.ingest_ricavi_fb"
+    split_by_societa: false
+    formats: [.xlsx]
+    signatures:
+      - type: sheets
+        required: ["Export"]
+      - type: structure
+        header_0_2: ["Classe", "Codice", "Descrizione Addebito"]

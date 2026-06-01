@@ -939,6 +939,33 @@ def _build_coperti_result(path: Path, confidence: float) -> ClassificationResult
     )
 
 
+def detect_ricavi_fb(path: Path) -> Optional[ClassificationResult]:
+    """HotelCube Power BI 'Produzione Netta Dashboard' — F&B revenue by code.
+
+    Signature: xlsx, sheet 'Export', header first 3 cols exactly
+    ['Classe', 'Codice', 'Descrizione Addebito'].
+    """
+    if path.suffix.lower() != ".xlsx":
+        return None
+    rows, sheet = _read_xlsx_sample(path, sheet_name="Export")
+    if sheet != "Export" or not rows:
+        return None
+    row0 = [str(c or "").strip() for c in rows[0]]
+    if row0[:3] == ["Classe", "Codice", "Descrizione Addebito"]:
+        return ClassificationResult(
+            file_path=path,
+            file_type="ricavi_fb",
+            category="ricavi_fb",
+            lifecycle=LIFECYCLE_SNAPSHOT,
+            societa=None,
+            canonical_name=path.name,
+            dest_folder="ricavi_fb",
+            pipeline_cmd="python -m ingest.flussi.ingest_ricavi_fb --file {dest_file}",
+            confidence=0.95,
+        )
+    return None
+
+
 def detect_economato(path: Path) -> Optional[ClassificationResult]:
     """Consumi economato — XLSX with Codice/Descrizione/Quantita/Euro columns."""
     ext = path.suffix.lower()
@@ -1008,6 +1035,7 @@ DETECTORS = [
     detect_gasparotto,  # XLSX with Budget sheet
     detect_piano_finanziario,  # XLSX with Piano Finanziario sheet
     detect_coperti,  # CSV/XLSX with meal columns
+    detect_ricavi_fb,  # XLSX 'Export' sheet, header Classe/Codice/Descrizione
     detect_economato,  # XLSX with codice/quantita/euro
     detect_banca,  # XLS/XLSX/CSV bank statements — most generic, last
 ]

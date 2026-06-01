@@ -353,6 +353,44 @@ sources:
       File documentale del semantic layer Power BI studiato manualmente.
       Al momento viene registrato come meta-layer RAW_ONLY per lineage.
 
+  # ── Ricavi F&B Produzione Netta — SNAPSHOT ────────────────────────────────
+  POWERBI_RICAVIFB_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: RICAVIFB
+    dataset_label: "Produzione Netta F&B (export Power BI HotelCube)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_ricavi_fb
+    parser_module: ingest.flussi.ingest_ricavi_fb
+    natural_key: [business_unit_id, anno, mese]
+    loop_targets: [food_cost, monthly_close]
+    promotion_policy: AUTO
+    detector_category: ricavi_fb
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/ricavi_fb/ORTI"
+
+  # ── RistoCube Orders Report — APPEND ─────────────────────────────────────
+  RISTOCUBE_ORDERS_ORTI_APPEND:
+    system: RISTOCUBE
+    dataset: ORDERS
+    dataset_label: "Comande RistoCube POS (Orders Report)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_ristocube_orders
+    parser_module: ingest.flussi.ingest_ristocube_orders
+    hash_basis: hash_riga
+    loop_targets: [food_cost, monthly_close]
+    promotion_policy: AUTO
+    detector_category: ristocube_orders
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "ristocube/orders/ORTI"
+
   POWERBI_CRUSCOTTO_ORTI_APPEND:
     system: POWERBI
     dataset: CRUSCOTTO
