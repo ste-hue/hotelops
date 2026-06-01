@@ -32,9 +32,7 @@ except ImportError:
     HAS_BQ = False
 
 DEFAULT_SOURCE = (
-    Path(__file__).resolve().parents[2]
-    / "core"
-    / "bq"
+    Path(__file__).resolve().parents[1]
     / "dimensioni"
     / "d_mapping_piano_finanziario.csv"
 )
