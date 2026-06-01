@@ -3,9 +3,16 @@ from io import BytesIO
 from unittest.mock import MagicMock
 
 import openpyxl
+import pytest
 
 from verticals.condges.pf_rotate.excel_model import find_layout
-from verticals.condges.pf_rotate.step1_saldi import fetch_saldi_da_bq, write_saldi_banca
+from verticals.condges.pf_rotate.step1_saldi import (
+    SaldiIncompletiError,
+    banche_mancanti,
+    fetch_saldi_da_bq,
+    preflight_saldi,
+    write_saldi_banca,
+)
 
 
 def test_write_saldi_writes_to_cutover_column(minimal_pf_orti_bytes):
@@ -172,4 +179,81 @@ def test_fetch_saldi_da_bq_query_columns(monkeypatch):
     assert "saldo_eur" in sql
     assert "data_saldo" not in sql
     assert "SELECT banca_id, saldo " not in sql
+    # ORDER BY banca_id: ordine deterministico → niente heisenbug nel match (vedi
+    # test_write_saldi_no_mps_kross_collision).
+    assert "ORDER BY banca_id" in sql
     assert out == {"MPS": 1234.56, "INTESA": 789.01}
+
+
+def _build_month_closed_wb_with_kross() -> openpyxl.Workbook:
+    """ORTI-style (month-closed) con DUE righe MPS: 'Saldo MPS' + 'Saldo MPS Kross'."""
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    pf = wb.create_sheet("Piano Finanziario")
+    pf["A1"] = "ORTI"
+    # C1 lasciato None → month-closed; APRILE in col C (mese_chiuso=4)
+    pf.cell(2, 3, "APRILE")
+    pf["A4"] = "SALDO MESE PRECEDENTE"
+    pf["A6"] = "Entrate Hotel"
+    pf["A12"] = "TOTALE ENTRATE"
+    pf["A14"] = "Utenze"
+    pf["A27"] = "TOTALE USCITE"
+    pf["A29"] = "CASH FLOW"
+    pf["A32"] = "Saldo MPS"
+    pf["A33"] = "Saldo MPS Kross"
+    pf["A35"] = "TOTALE BANCHE"
+    pf.cell(35, 3, "=SUM(C32:C34)")
+    pf["A37"] = "Saldo di Periodo"
+    return wb
+
+
+def test_write_saldi_no_mps_kross_collision():
+    """'Saldo MPS' → MPS, 'Saldo MPS Kross' → MPS_KROSS. Niente cross-match.
+
+    Col fuzzy-overlap precedente, 'Saldo MPS Kross' (parole {mps,kross}) matchava
+    la chiave 'MPS' ({mps}) e si prendeva il saldo sbagliato — dipendente dall'ordine
+    del dict, quindi heisenbug.
+    """
+    wb = _build_month_closed_wb_with_kross()
+    pf = wb["Piano Finanziario"]
+    write_saldi_banca(
+        wb,
+        mese_chiuso=4,
+        data_saldo=date(2026, 4, 30),
+        saldi={"MPS": 100000.0, "MPS_KROSS": 999.0},
+    )
+    assert pf["C32"].value == 100000.0  # Saldo MPS
+    assert pf["C33"].value == 999.0  # Saldo MPS Kross
+
+
+# ── Preflight gate O-A ──────────────────────────────────────────────────────
+
+
+def test_banche_mancanti_intur_missing_sella():
+    assert banche_mancanti("INTUR", {"MPS": 1, "INTESA": 2}) == ["SELLA"]
+
+
+def test_banche_mancanti_case_insensitive_and_kross_optional():
+    # Kross è opzionale → ORTI completo con solo INTESA+MPS; chiavi case-insensitive.
+    assert banche_mancanti("ORTI", {"intesa": 1, "mps": 2}) == []
+
+
+def test_preflight_saldi_hard_fail_actionable():
+    with pytest.raises(SaldiIncompletiError) as ei:
+        preflight_saldi("INTUR", {"MPS": 1, "INTESA": 2}, date(2026, 5, 31))
+    msg = str(ei.value)
+    assert "INTUR/SELLA/2026-05-31" in msg  # tupla mancante esplicita
+    assert "saldi-ufficiali" in msg  # punta al comando di cattura (O-C)
+
+
+def test_preflight_saldi_allow_partial_returns_missing_no_raise():
+    assert preflight_saldi(
+        "INTUR", {"MPS": 1, "INTESA": 2}, date(2026, 5, 31), allow_partial=True
+    ) == ["SELLA"]
+
+
+def test_preflight_saldi_complete_ok():
+    assert (
+        preflight_saldi("INTUR", {"MPS": 1, "INTESA": 2, "SELLA": 3}, date(2026, 5, 31))
+        == []
+    )

@@ -8,22 +8,65 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
 from verticals.condges.pf_rotate.excel_model import find_layout, find_month_columns
+from verticals.condges.pf_rotate.saldi_registry import banche_richieste
+
+
+class SaldiIncompletiError(RuntimeError):
+    """Conti-saldo obbligatori mancanti in BQ per il fine-mese richiesto (gate O-A)."""
+
+
+def banche_mancanti(societa: str, saldi: dict[str, float]) -> list[str]:
+    """banca_id obbligatori (per la società) assenti dal dict saldi. Case-insensitive."""
+    present = {k.upper() for k in saldi}
+    return sorted(banche_richieste(societa) - present)
+
+
+def preflight_saldi(
+    societa: str,
+    saldi: dict[str, float],
+    data_saldo: date,
+    *,
+    allow_partial: bool = False,
+) -> list[str]:
+    """Gate di completezza: ritorna i banca_id obbligatori mancanti.
+
+    Se ne mancano e ``allow_partial`` è False → hard-fail con errore azionabile
+    (nomina le tuple mancanti + il comando di cattura). Va chiamato in preflight,
+    prima di scrivere saldi/azzerare — non a valle.
+    """
+    mancanti = banche_mancanti(societa, saldi or {})
+    if mancanti and not allow_partial:
+        tuple_str = ", ".join(
+            f"{societa}/{b}/{data_saldo.isoformat()}" for b in mancanti
+        )
+        raise SaldiIncompletiError(
+            f"Saldi banca incompleti per {societa} al {data_saldo.isoformat()}: "
+            f"mancano {tuple_str}. "
+            f"Carica gli estratti: 'hotelops saldi-ufficiali --mese {data_saldo.month}', "
+            f"oppure usa --allow-partial-saldi per un PF parziale marcato _FAILED_CHECKS."
+        )
+    return mancanti
 
 
 # Mappa label-banca master → set di chiavi possibili passate in saldi-dict.
 def _match_bank(label_col_a: str, saldi: dict[str, float]) -> float | None:
-    """Match 'Saldo MPS' / 'Saldo Intesa' / 'Saldo BCP' to a saldi entry.
+    """Match 'Saldo MPS' / 'Saldo Banca Sella' / 'Saldo MPS Kross' to a saldi entry.
 
-    Robust to case, underscore vs space, subset-of-words.
+    Esatto a livello banca: una chiave matcha solo se TUTTI i suoi token sono nella
+    label (subset), e vince la più specifica (più token). Così 'Saldo MPS' non può
+    prendere MPS_KROSS, e 'Saldo MPS Kross' non può prendere MPS — niente più
+    overlap-di-una-parola, niente dipendenza dall'ordine del dict.
     """
     lower = label_col_a.lower().replace("_", " ")
-    # Estrai parole della label, escluso 'saldo'
-    label_words = set(w for w in lower.split() if w not in ("saldo", "saldo:"))
+    label_words = {w for w in lower.split() if w not in ("saldo", "saldo:")}
+    best_ntoken = -1
+    best_val: float | None = None
     for k, v in saldi.items():
         k_words = set(k.lower().replace("_", " ").split())
-        if k_words & label_words:  # almeno una parola in comune
-            return float(v)
-    return None
+        if k_words and k_words <= label_words and len(k_words) > best_ntoken:
+            best_ntoken = len(k_words)
+            best_val = float(v)
+    return best_val
 
 
 def write_saldi_banca(
@@ -111,6 +154,7 @@ def fetch_saldi_da_bq(societa: str, data_saldo: date) -> dict[str, float]:
         SELECT banca_id, saldo_eur
         FROM `{F_SALDI_BANCA_CHIUSURA_MENSILE}`
         WHERE societa_id = @soc AND data_riferimento = @data
+        ORDER BY banca_id
     """
     job = get_client().query(
         sql,

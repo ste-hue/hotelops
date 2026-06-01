@@ -84,6 +84,12 @@ def add_subparser(subparsers: argparse._SubParsersAction):
     p.add_argument(
         "--fornitori-csv", type=Path, default=Path("core/bq/dimensioni/d_fornitori.csv")
     )
+    p.add_argument(
+        "--allow-partial-saldi",
+        action="store_true",
+        help="Genera un PF parziale (marcato _FAILED_CHECKS) anche se mancano conti "
+        "saldo obbligatori, invece di hard-fail.",
+    )
     p.set_defaults(func=_handle)
     return p
 
@@ -91,6 +97,7 @@ def add_subparser(subparsers: argparse._SubParsersAction):
 def _handle(args: argparse.Namespace) -> int:
     from io import BytesIO
 
+    from verticals.condges.pf_rotate.step1_saldi import SaldiIncompletiError
     from verticals.condges.scadenze_parse import parse_scadenze
 
     with args.scad.open("rb") as f:
@@ -103,18 +110,23 @@ def _handle(args: argparse.Namespace) -> int:
         else _default_policy()
     )
 
-    result = rotate(
-        pf_path=args.pf,
-        scad_df=scad_df,
-        bucket_months=bucket_months,
-        societa=args.societa,
-        mese_chiuso=args.mese_chiuso,
-        data_saldo=args.data_saldo,
-        saldi=overrides or None,
-        fornitori_csv=args.fornitori_csv,
-        out_dir=args.out,
-        unmapped_policy=policy,
-    )
+    try:
+        result = rotate(
+            pf_path=args.pf,
+            scad_df=scad_df,
+            bucket_months=bucket_months,
+            societa=args.societa,
+            mese_chiuso=args.mese_chiuso,
+            data_saldo=args.data_saldo,
+            saldi=overrides or None,
+            fornitori_csv=args.fornitori_csv,
+            out_dir=args.out,
+            unmapped_policy=policy,
+            allow_partial_saldi=args.allow_partial_saldi,
+        )
+    except SaldiIncompletiError as e:
+        print(f"ERRORE: {e}", file=sys.stderr)
+        return 2
 
     print(f"Output: {result.out_path}")
     print(
