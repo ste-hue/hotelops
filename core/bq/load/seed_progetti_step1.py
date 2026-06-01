@@ -31,7 +31,6 @@ from core.schemas import (
     Progetto,
     ProgettoEvento,
     ProgettoVoce,
-    Rata,
 )
 
 NOW_ISO = datetime.utcnow().isoformat()

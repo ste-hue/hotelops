@@ -29,7 +29,6 @@ import argparse
 import logging
 import re
 from datetime import datetime, timezone
-from datetime import date as date_type
 from pathlib import Path
 
 from openpyxl import load_workbook

@@ -766,7 +766,7 @@ def cmd_capture(args):
     )
 
     if args.no_promote:
-        print(f"  promote:   skipped (--no-promote)")
+        print("  promote:   skipped (--no-promote)")
         return
     if src.promotion_policy != "AUTO":
         print(f"  promote:   skipped (policy={src.promotion_policy}, manual)")

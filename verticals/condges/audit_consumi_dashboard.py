@@ -14,7 +14,7 @@ import plotly.express as px
 import streamlit as st
 from google.cloud import bigquery
 
-from core.config import DATASET, PROJECT
+from core.config import PROJECT
 
 FORM_URL = "https://forms.gle/PLACEHOLDER"  # update dopo creazione Form via Apps Script
 

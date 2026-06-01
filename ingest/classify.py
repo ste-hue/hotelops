@@ -412,7 +412,7 @@ def _build_scheda_result(
     ext = path.suffix.lower()
     canonical = f"{soc}_SCHEDA_{bnk}_{today}{ext}"
     dest = f"registro_banca_esolver/{soc}" if societa else "registro_banca_esolver"
-    pipeline = f"python -m ingest.flussi.ingest_scheda_contabile --file {{dest_file}}"
+    pipeline = "python -m ingest.flussi.ingest_scheda_contabile --file {dest_file}"
     if societa:
         pipeline += f" --societa {societa}"
     if banca:
@@ -509,7 +509,7 @@ def _build_movimenti_result(
     canonical = f"{soc}_LISTAMOVCONT{ext.upper()}"
     dest = f"movimenti_contabili/{soc}" if societa else "movimenti_contabili"
     pipeline = (
-        f"python -m ingest.flussi.ingest_movimenti_contabili --file {{dest_file}}"
+        "python -m ingest.flussi.ingest_movimenti_contabili --file {dest_file}"
     )
     if societa:
         pipeline += f" --societa {societa}"
@@ -562,7 +562,7 @@ def _build_partite_result(
     today = datetime.now().strftime("%Y%m%d")
     canonical = f"{soc}_PARTITE_FORNITORI_{today}.xlsx"
     dest = f"partite_fornitori/{soc}" if societa else "partite_fornitori"
-    pipeline = f"python -m ingest.flussi.ingest_partite_aperte --file {{dest_file}}"
+    pipeline = "python -m ingest.flussi.ingest_partite_aperte --file {dest_file}"
     if societa:
         pipeline += f" --societa {societa}"
     return ClassificationResult(
@@ -610,7 +610,7 @@ def _build_bilancino_result(
     # Keep original name — it usually has the month
     canonical = path.name
     dest = f"bilancino/{soc}" if societa else "bilancino"
-    pipeline = f"python -m ingest.flussi.ingest_bilancino --file {{dest_file}}"
+    pipeline = "python -m ingest.flussi.ingest_bilancino --file {dest_file}"
     if societa:
         pipeline += f" --societa {societa}"
     return ClassificationResult(
@@ -721,7 +721,7 @@ def _build_pf_result(
     canonical = f"{soc}_Piano_Finanziario_{month_tag}.xlsx"
     dest = f"piani_finanziari/{soc}" if societa else "piani_finanziari"
     pipeline = (
-        f"python -m ingest.flussi.ingest_piano_finanziario_xlsx --file {{dest_file}}"
+        "python -m ingest.flussi.ingest_piano_finanziario_xlsx --file {dest_file}"
     )
     if societa:
         pipeline += f" --societa {societa}"
@@ -821,7 +821,7 @@ def _build_banca_result(
         dest = "homebanking"
     # Bank ingest uses --source dir, not single file — just indicate pipeline
     pipeline = (
-        f"python -m ingest.banca.ingest --datahub {{datahub}} --source {{staging}}"
+        "python -m ingest.banca.ingest --datahub {datahub} --source {staging}"
     )
     return ClassificationResult(
         file_path=path,
@@ -934,7 +934,7 @@ def _build_coperti_result(path: Path, confidence: float) -> ClassificationResult
         societa="ORTI",
         canonical_name=canonical,
         dest_folder="coperti",
-        pipeline_cmd=f"python -m ingest.flussi.ingest_coperti --file {{dest_file}}",
+        pipeline_cmd="python -m ingest.flussi.ingest_coperti --file {dest_file}",
         confidence=confidence,
     )
 
@@ -1005,11 +1005,11 @@ def _build_economato_result(
     today = datetime.now().strftime("%Y%m%d")
     if is_consolidato:
         canonical = f"ECO_Consolidato_{today}.xlsx"
-        pipeline = f"python -m ingest.flussi.ingest_consumi_economato_consolidato --file {{dest_file}}"
+        pipeline = "python -m ingest.flussi.ingest_consumi_economato_consolidato --file {dest_file}"
     else:
         canonical = f"ECO_{today}.xlsx"
         pipeline = (
-            f"python -m ingest.flussi.ingest_consumi_economato --source {{dest_file}}"
+            "python -m ingest.flussi.ingest_consumi_economato --source {dest_file}"
         )
     return ClassificationResult(
         file_path=path,

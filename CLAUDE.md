@@ -2,15 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last checkpoint:** 2026-04-30 | **Version:** 0.6.0
+**Last checkpoint:** 2026-06-01 | **Version:** 0.7.0
 
-> **2026-04-30 session save:**
-> - Sprint 1 chiuso e mergiato su `main`: `bq_write_validated` gate centralizzato (Pydantic + boundary check + lineage), 3 pilot SNAPSHOT validati su BQ produzione (scheda, partite, coperti).
-> - Sprint 2 Phase 1: `f_vendite_fb` (vendite POS Ristocube, 19,806 righe, range 2024-03..2026-04, con `segmento_cliente`). Primo APPEND pilot via gate.
-> - Magazzino aggiornato fino a 2026-03 (+5 file ECO_*). Aspetta APRILE 2026.
-> - Nuove views: `v_food_cost_mensile`, `v_food_cost_categoria` (con segmento esposto). YoY 2024 vs 2025 sbloccato.
-> - Parking lot Sprint 3: file `Stampa Consumi` (giornaliero), file `Ristocube (1)` (consumi giornalieri €), file `Ristocube (4)` (menu engineering: food cost per piatto). `d_prezzi_pensione` da definire (TBD se serve, dato che File 3 ha già segmento `ZRISTINT/EST/RES` per pensione).
-> - Per il rollout dei codici Segmento Cliente: glossario interno richiesto (vuoto, INLE, INTUI, GRLE, GRBU, GRWE, GRSE, FERR25, ZRISTINT, ZRISTEST, ZRISRES). Decodifica downstream nelle views/dashboard.
+> **2026-06-01 checkpoint:** il diario operativo vivo è `STATUS.md` (in corso / decisioni aperte / rotto / prossimi passi) — leggilo prima di pianificare, non duplicarlo qui. Ultimo merge rilevante: **F&B Looker pipeline** (4 viste F&B + audit tool direzione + RistoCube Orders, commit `06abda7`, 2026-05-22) e **GCS raw lineage layer** (Phase 1). Thread aperti principali: doc-refresh sprint, loop minimo `cash_control` end-to-end, refactor `v_fb_kpi` (CANTINA=100%Bar + 9 articoli UoM rotti).
 
 > **For AI agents**: ground truth = repo + BigQuery schema. Read in this order before non-trivial work:
 > 1. `docs/architecture/INVARIANTS.md` — la costituzione (I1–I8, canonical per concept). [migrato dal vault il 2026-04-30]
@@ -18,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > 3. `docs/architecture/LE_3_DIMENSIONI.md` — il concetto temporale più importante del sistema.
 > 4. `CLAUDE.md` (this file) — repo mechanics: commands, schemas, pipeline internals.
 >
-> **Goal di lungo termine**: HotelOps è un **digital twin** delle vere operazioni del business. 3 layer:
+> **Goal di lungo termine**: HotelOps è il **Company OS** — il sistema operativo decisionale delle vere operazioni del business (frame canonico deciso 2026-05-02, supera la vecchia metafora "digital twin"). 3 layer:
 > - **Code** (`core/`, `ingest/`, `verticals/condges/`, `verticals/reviews/`): come opera il twin.
 > - **BigQuery**: cosa il twin osserva.
 > - **Vault `<vault>/HotelOps/`**: meta-knowledge umano della realtà operativa che il twin riflette (people, companies, banks, loans, departments, stories). **Non canonical per fatti tecnici** — può essere stale. Verifica sempre con repo + BQ + utente.
@@ -104,8 +98,8 @@ cli.py      <- CLI entry point (hotelops command)
 - `core/schemas.py` -- Pydantic models + `validate_batch()`. Every BQ write goes through here.
 - `core/config.py` -- Table IDs and BQ constants (PROJECT, DATASET). All table refs as `F_*`, `D_*`, `V_*`.
 - `core/contracts.py` -- `SchemaViolationError`, `validate_columns()`.
-- `core/datahub.py` -- Minimal CSV reader for local fact tables.
-- `core/datahub_sync.py` -- Centralized rclone/Drive sync (7 sites consolidated 2026-04-19).
+- `core/datahub.py` -- Minimal CSV reader (usato da `verticals/condges/reconcile_banca.py`). Nome legacy, modulo ancora vivo.
+- `core/datahub_sync.py` -- **LEGACY** rclone helper (Drive staging pre-GCS). Drive non è più popolato; il Phase 5 cutover rimuoverà questo modulo. Spec: `docs/superpowers/specs/2026-05-05-ingest-lineage-gcs-design.md`.
 - `core/bq/client.py` -- BigQuery client singleton (`get_client()`). 41 call sites consolidated 2026-04-19.
 - `core/parsers/accodamenti.py` -- Shared parser for HotelCube TXT accodamenti (H_/R_/C_ × Corr/Mov/Fatt). Extracted 2026-04-19 from ingest/banca/.
 - `core/pipeline_run.py` -- PipelineRun context manager for pipeline instrumentation.
@@ -123,10 +117,15 @@ cli.py      <- CLI entry point (hotelops command)
 Tabelle: `f_raw_objects` (identity, write-once), `f_lineage_events` (state log, append-only), view `v_raw_objects_current`.
 Spec: `docs/superpowers/specs/2026-05-05-ingest-lineage-gcs-design.md`.
 
-**ingest/** -- Reality Capture (Drive/Excel/CSV -> BigQuery)
-- `ingest/classify.py` -- File classifier + router: 10 file type detectors, infers societa+banca, renames and routes to datahub.
-- `ingest/orchestrate.py` -- Unified pipeline runner. Sync -> classify -> ingest -> manifest. Groups: banca, flussi, dimensioni.
-- `ingest/banca/` -- Bank and PMS pipelines (ingest.py, ingest_accodamenti.py, fetch_drive.py).
+**ingest/** -- Reality Capture (file → GCS staging → BigQuery)
+
+**Target model**: `hotelops intake` (RAW → `f_raw_objects` con URI `gs://`) + `hotelops promote` (RAW → canonical via policy gate). Bucket `gs://hotelops-raw` con Object Versioning. Spec: `docs/superpowers/specs/2026-05-05-ingest-lineage-gcs-design.md`.
+
+**Legacy** (Phase 5 cutover pendente — Drive non è più popolato):
+- `ingest/classify.py` -- File classifier + router: 10 file type detectors, infers societa+banca, renames and routes.
+- `ingest/orchestrate.py` -- Unified pipeline runner (sync → classify → ingest → manifest). Da sostituire con intake+promote.
+- `ingest/banca/fetch_drive.py` -- Rclone fetcher (legacy).
+- `ingest/banca/` -- Bank and PMS pipelines (ingest.py, ingest_accodamenti.py).
 - `ingest/flussi/` -- Recurring accounting pipelines: ingest_movimenti_contabili, ingest_gasparotto, ingest_scheda_contabile, ingest_piano_finanziario_xlsx, ingest_partite_aperte, ingest_bilancino, ingest_consumi_economato, ingest_coperti.
 
 **verticals/condges/** -- Vertical #1: Controllo di Gestione (containerizable)
@@ -187,8 +186,7 @@ hotelops deploy-views                          # Deploy all BQ views from core/b
 hotelops deploy-views --dry-run                # Show deploy order without executing
 hotelops classifica file1.xlsx file2.csv       # Classify files (show type + destination)
 hotelops classifica *.xlsx --route --ingest    # Classify + route + ingest
-hotelops accodamenti                           # Sync da Drive + riconciliazione cassa da TXT HotelCube → Excel su Desktop
-hotelops accodamenti --no-sync --input <dir>   # Skip rclone sync, legge da cartella locale
+hotelops accodamenti --no-sync --input <dir>   # Riconciliazione cassa da TXT HotelCube → Excel su Desktop (Drive non più popolato: usa --no-sync)
 
 # Lineage (Phase 1)
 hotelops intake <file> --source-name X      # Register a file (RAW_INGESTED event)
@@ -319,6 +317,9 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `v_fb_pasti` | Looker F&B: conteggio pasti per BU, mensile, YoY. Anni >= 2025. `core/bq/views/` |
 | `v_fb_ricavi` | Looker F&B: ricavi per BU × codice + scontrino medio + YoY. Anni >= 2025. `core/bq/views/` |
 | `v_fb_kpi` | Looker F&B: bridge mensile globale — €/pasto + incidenza % (food cost). Anni >= 2025. `core/bq/views/` |
+| `v_budget_canonical` | Budget canonico per codice conto: dedup fonte priority (GASPAROTTO > MAPPATURA > INCIDENZA), invariant I8. `core/bq/views/` |
+| `v_raw_objects_current` | Lineage: stato corrente per raw_object (latest event per oggetto). `core/bq/views/` |
+| `v_raw_promotion_status` | Lineage: stato promozione raw objects (RAW→CLASSIFIED→PROMOTABLE→PROMOTED) + freshness. `core/bq/views/` |
 
 ### How the views connect
 
