@@ -47,6 +47,7 @@ def apply_scadenzario(
     societa: str,
     fornitori_csv: Path,
     policy: UnmappedPolicy,
+    extra_excluded: set[int] | None = None,
 ) -> tuple[bytes, dict]:
     """Applica lo scadenzario al PF, ritorna (xlsx bytes, summary dict)."""
     fornitori = load_fornitori(fornitori_csv, societa=societa)
@@ -81,8 +82,11 @@ def apply_scadenzario(
         # SKIP: prosegui
 
     legacy_map = _build_legacy_fornitori_map(fornitori)
-    excluded_set = excluded_codici | (
-        set(unmapped) if policy == UnmappedPolicy.SKIP else set()
+    adhoc_excluded = set(extra_excluded or set())
+    excluded_set = (
+        excluded_codici
+        | (set(unmapped) if policy == UnmappedPolicy.SKIP else set())
+        | adhoc_excluded
     )
 
     updated_bytes, write_summary = write_pf(
@@ -95,6 +99,7 @@ def apply_scadenzario(
     summary = {
         "skipped_unmapped": unmapped if policy == UnmappedPolicy.SKIP else [],
         "excluded_persisted": sorted(excluded_codici),
+        "excluded_adhoc": sorted(adhoc_excluded),
         "voci_aggiornate": list(write_summary.keys()),
         "totale_fornitori_scritti": sum(len(v) for v in write_summary.values()),
     }

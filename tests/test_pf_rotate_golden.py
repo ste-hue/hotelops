@@ -134,6 +134,32 @@ def test_rotate_allow_partial_writes_failed_checks(
     assert any("INTESA" in c for c in result.failed_checks)
 
 
+def test_rotate_exclude_flag_drops_fornitore(
+    minimal_pf_orti_bytes,
+    fornitori_csv_orti,
+    tmp_path,
+):
+    """`extra_excluded={18}` → il fornitore 18 (unico nello scad) non viene scritto."""
+    pf_path = tmp_path / "in.xlsx"
+    pf_path.write_bytes(minimal_pf_orti_bytes)
+
+    result = rotate(
+        pf_path=pf_path,
+        scad_df=_minimal_scad_df(),
+        bucket_months=[5, 6],
+        societa="ORTI",
+        mese_chiuso=4,
+        data_saldo=date(2026, 4, 30),
+        saldi={"MPS": 251897.54, "Intesa": 87439.92},
+        fornitori_csv=fornitori_csv_orti,
+        out_dir=tmp_path / "out",
+        unmapped_policy=UnmappedPolicy.FAIL,
+        extra_excluded={18},
+    )
+    assert result.scadenzario_summary["totale_fornitori_scritti"] == 0
+    assert 18 in result.scadenzario_summary["excluded_adhoc"]
+
+
 def test_rotate_writes_failed_suffix_on_check_failure(
     minimal_pf_orti_bytes,
     fornitori_csv_orti,

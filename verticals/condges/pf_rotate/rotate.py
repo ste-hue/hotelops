@@ -54,6 +54,7 @@ def rotate(
     out_dir: Path,
     unmapped_policy: UnmappedPolicy = UnmappedPolicy.FAIL,
     allow_partial_saldi: bool = False,
+    extra_excluded: set[int] | None = None,
 ) -> RotateResult:
     """Esegui il full ciclo: step 1 → 2 → 3 → 5.
 
@@ -95,6 +96,7 @@ def rotate(
         societa=societa,
         fornitori_csv=fornitori_csv,
         policy=unmapped_policy,
+        extra_excluded=extra_excluded,
     )
 
     # Step 5: controlli sul wb finale

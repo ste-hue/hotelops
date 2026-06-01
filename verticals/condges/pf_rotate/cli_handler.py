@@ -60,6 +60,17 @@ def _parse_banca_overrides(items: list[str]) -> dict[str, float]:
     return out
 
 
+def _parse_exclude(items: list[str]) -> set[int]:
+    """Codici fornitore da escludere ad-hoc: comma-sep e/o ripetibile → set[int]."""
+    out: set[int] = set()
+    for it in items or []:
+        for tok in str(it).split(","):
+            tok = tok.strip()
+            if tok:
+                out.add(int(tok))
+    return out
+
+
 def _default_policy() -> UnmappedPolicy:
     return UnmappedPolicy.INTERACTIVE if sys.stdin.isatty() else UnmappedPolicy.FAIL
 
@@ -107,6 +118,13 @@ def add_subparser(subparsers: argparse._SubParsersAction):
         "--fornitori-csv", type=Path, default=Path("core/bq/dimensioni/d_fornitori.csv")
     )
     p.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        help="Codici fornitore da escludere da questa rotazione (comma-sep o ripetibile, "
+        "es. --exclude 264,48). Si unisce agli is_excluded persistenti.",
+    )
+    p.add_argument(
         "--allow-partial-saldi",
         action="store_true",
         help="Genera un PF parziale (marcato _FAILED_CHECKS) anche se mancano conti "
@@ -133,6 +151,7 @@ def _handle(args: argparse.Namespace) -> int:
     )
     anno = args.anno or date.today().year
     data_saldo = _resolve_data_saldo(args.data_saldo, anno, args.mese_chiuso)
+    extra_excluded = _parse_exclude(args.exclude)
 
     try:
         result = rotate(
@@ -147,6 +166,7 @@ def _handle(args: argparse.Namespace) -> int:
             out_dir=args.out,
             unmapped_policy=policy,
             allow_partial_saldi=args.allow_partial_saldi,
+            extra_excluded=extra_excluded,
         )
     except SaldiIncompletiError as e:
         print(f"ERRORE: {e}", file=sys.stderr)
