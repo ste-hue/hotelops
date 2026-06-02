@@ -49,6 +49,7 @@ mapped AS (
       WHEN societa_id = 'ORTI'  AND cod_partitario = '1' THEN 'INTESA'
       WHEN societa_id = 'ORTI'  AND cod_partitario = '2' THEN 'MPS'
       WHEN societa_id = 'ORTI'  AND cod_partitario = '3' THEN 'MPS_KROSS'
+      WHEN societa_id = 'ORTI'  AND cod_partitario = '4' THEN 'UNICREDIT'
       WHEN societa_id = 'INTUR' AND cod_partitario = '1' THEN 'SELLA'
       WHEN societa_id = 'INTUR' AND cod_partitario = '2' THEN 'MPS'
       WHEN societa_id = 'INTUR' AND cod_partitario = '3' THEN 'INTESA'
