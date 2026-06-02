@@ -48,7 +48,13 @@ SOCIETA = "ORTI"
 
 @st.cache_resource
 def get_bq():
-    if hasattr(st, "secrets") and "gcp_service_account" in st.secrets:
+    # Su Streamlit Cloud i secret esistono → service account. In locale il
+    # secrets.toml non c'è e st.secrets solleva: fallback a ADC (gcloud auth).
+    try:
+        has_sa = "gcp_service_account" in st.secrets
+    except Exception:
+        has_sa = False
+    if has_sa:
         from google.cloud import bigquery
         from google.oauth2 import service_account
 

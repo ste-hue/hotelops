@@ -38,7 +38,7 @@ markers = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "ingest*", "condges*"]
+include = ["core*", "ingest*", "verticals*"]
 
 [tool.setuptools]
 py-modules = ["cli"]
