@@ -1,8 +1,14 @@
 # Produzione PMS Ingest — Design Spec
 
+> ⚠️ **SUPERSEDED (2026-06-05)** da `2026-06-05-produzione-pms-lineage-design.md`.
+> Questa bozza non è mai stata implementata e precede l'era GCS/lineage. Differenze:
+> ingest via lineage (intake/promote) invece di classify/registry; `business_unit_id`
+> riempito dai file per-struttura (non più NULL); lifecycle **SNAPSHOT** (non APPEND).
+> Conservata per storia. **Non implementare da questa.**
+
 **Date:** 2026-04-29
 **Owner:** Stefano (CEO mode — exploratory consolidation)
-**Status:** Draft → user review → writing-plans
+**Status:** Superseded by 2026-06-05-produzione-pms-lineage-design.md
 
 ---
 
