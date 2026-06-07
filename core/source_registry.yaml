@@ -372,6 +372,25 @@ sources:
       bucket: hotelops-raw
       path_template: "powerbi/ricavi_fb/ORTI"
 
+  # ── Produzione PMS giornaliera per classe — SNAPSHOT ──────────────────────
+  POWERBI_PRODUZIONE_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: PRODUZIONE
+    dataset_label: "Produzione giornaliera per classe (Daily Production Report, Imponibile)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_produzione_pms
+    parser_module: ingest.flussi.ingest_produzione_pms
+    natural_key: [business_unit_id, anno]
+    loop_targets: [monthly_close, budget_vs_consuntivo]
+    promotion_policy: AUTO
+    detector_category: produzione_pms
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/produzione/ORTI"
+
   # ── RistoCube Orders Report — APPEND ─────────────────────────────────────
   RISTOCUBE_ORDERS_ORTI_APPEND:
     system: RISTOCUBE
