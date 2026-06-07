@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from core.schemas import OPERATIONS_CUTOVER_DATE, ProduzioneRow
+from core.schemas import OPERATIONS_CUTOVER_DATE, ProduzioneRow, make_hash
 
 
 def _row(**over):
@@ -111,3 +111,71 @@ def test_detect_classe_columns_cvm_no_blank():
     header = ("Classe", "01ROOM", "02FB", "03PARK", "Total")
     cols = detect_classe_columns(header)
     assert cols == {1: "01ROOM", 2: "02FB", 3: "03PARK"}
+
+
+from openpyxl import Workbook
+
+from ingest.flussi.ingest_produzione_pms import build_rows, parse_xlsx
+
+
+def _make_class_xlsx(path, codice_hotel="PANORAMAHT", anno=2026):
+    """3 giorni × {01ROOM, 02FB} con un buco, un negativo, riga Total."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Export"
+    ws.append(["Classe", None, "01ROOM", "02FB", "Total"])
+    ws.append(["Data", "Importo", "Importo", "Importo", "Importo"])
+    ws.append([datetime(anno, 4, 15), None, 8000.0, 500.0, 8500.0])
+    ws.append([datetime(anno, 4, 16), None, 9000.0, None, 9000.0])     # 02FB vuoto
+    ws.append([datetime(anno, 4, 17), None, -43.0, 120.0, 77.0])        # negativo
+    ws.append(["Total", None, 16957.0, 620.0, 17577.0])
+    ws.append([None, None, None, None, None])
+    ws.append([
+        f"Applied filters:\nCodiceHotel is {codice_hotel}\n"
+        f"Descrizione is Imponibile\nAnno is {anno}", None, None, None, None,
+    ])
+    wb.save(path)
+
+
+def test_parse_xlsx_unpivot(tmp_path):
+    p = tmp_path / "HOTEL_prod.xlsx"
+    _make_class_xlsx(p)
+    (bu, anno), rows = parse_xlsx(p)
+    assert bu == "HOTEL"
+    assert anno == 2026
+    # 15: 2 classi, 16: 1 (02FB None skipped), 17: 2 → 5 righe; Total escluso
+    assert len(rows) == 5
+    keys = {(r["data"].isoformat(), r["classe"]) for r in rows}
+    assert ("2026-04-16", "02FB") not in keys      # cella vuota skippata
+    neg = [r for r in rows if r["classe"] == "01ROOM" and r["data"].day == 17]
+    assert neg[0]["importo"] == Decimal("-43.0")   # negativo tenuto
+
+
+def test_parse_xlsx_excludes_total_column_and_row(tmp_path):
+    p = tmp_path / "HOTEL_prod.xlsx"
+    _make_class_xlsx(p)
+    _, rows = parse_xlsx(p)
+    assert all(r["classe"] != "Total" for r in rows)
+    assert all(r["data"].day in (15, 16, 17) for r in rows)
+
+
+def test_build_rows_derives_societa_and_hash(tmp_path):
+    p = tmp_path / "HOTEL_prod.xlsx"
+    _make_class_xlsx(p, anno=2026)
+    period, raw = parse_xlsx(p)
+    out = build_rows(period, raw, p.name, raw_object_id="ro-1")
+    r = out[0]
+    assert r["societa_id"] == "ORTI"               # 2026 → post-cutover
+    assert r["business_unit_id"] == "HOTEL"
+    assert r["anno"] == 2026 and r["mese"] == 4
+    assert r["raw_object_id"] == "ro-1"
+    # hash deterministico su (bu, anno, data, classe)
+    assert r["hash_riga"] == make_hash("HOTEL", "2026", r["data"].isoformat(), r["classe"])
+
+
+def test_build_rows_pre_cutover_is_intur(tmp_path):
+    p = tmp_path / "HOTEL_prod_2025.xlsx"
+    _make_class_xlsx(p, anno=2025)  # 2025-04-15/16/17 are all post-cutover (ORTI)
+    period, raw = parse_xlsx(p)
+    out = build_rows(period, raw, p.name)
+    assert all(r["societa_id"] == "ORTI" for r in out)  # april 2025 > cutover
