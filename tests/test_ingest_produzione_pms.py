@@ -3,10 +3,19 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
+from openpyxl import Workbook
 
 from core.schemas import OPERATIONS_CUTOVER_DATE, ProduzioneRow, make_hash
+from ingest.flussi.ingest_produzione_pms import (
+    build_rows,
+    detect_classe_columns,
+    ingest_file,
+    parse_applied_filters,
+    parse_xlsx,
+)
 
 
 def _row(**over):
@@ -68,11 +77,6 @@ def test_negative_importo_allowed():
     assert r.importo_imponibile == Decimal("-43.00")
 
 
-from ingest.flussi.ingest_produzione_pms import (
-    detect_classe_columns,
-    parse_applied_filters,
-)
-
 FILTER_HOTEL = (
     "Applied filters:\nMis_PB_ShowRow is greater than 0\nCodiceHotel is PANORAMAHT\n"
     "Descrizione is Imponibile\nParamDimAddebiti is Classe\nMese is aprile, maggio, "
@@ -111,11 +115,6 @@ def test_detect_classe_columns_cvm_no_blank():
     header = ("Classe", "01ROOM", "02FB", "03PARK", "Total")
     cols = detect_classe_columns(header)
     assert cols == {1: "01ROOM", 2: "02FB", 3: "03PARK"}
-
-
-from openpyxl import Workbook
-
-from ingest.flussi.ingest_produzione_pms import build_rows, parse_xlsx
 
 
 def _make_class_xlsx(path, codice_hotel="PANORAMAHT", anno=2026):
@@ -179,11 +178,6 @@ def test_build_rows_pre_cutover_is_intur(tmp_path):
     period, raw = parse_xlsx(p)
     out = build_rows(period, raw, p.name)
     assert all(r["societa_id"] == "ORTI" for r in out)  # april 2025 > cutover
-
-
-from unittest.mock import patch
-
-from ingest.flussi.ingest_produzione_pms import ingest_file
 
 
 def test_ingest_file_dry_run_no_write(tmp_path):
