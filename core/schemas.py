@@ -25,6 +25,13 @@ BusinessUnitId = Literal["HOTEL", "RESIDENCE", "CVM", "LIDO", "HQ"]
 TipoCosto = Literal["F", "V", "P", "X", "IP"]
 Sezione = Literal["ENTRATE", "USCITE"]
 
+OPERATIONS_CUTOVER_DATE = date(2025, 4, 1)
+"""Switch operativo HotelCube INTUR → ORTI.
+
+Pre 2025-04-01: INTUR gestiva Hotel+Residence+CVM. Post: ORTI gestisce le
+operations. Deriva societa_id da date HotelCube (produzione, accodamenti, ...).
+"""
+
 
 # ── f_budget_mensile ─────────────────────────────────────────────────────────
 
@@ -357,6 +364,58 @@ class RicaviFbRow(BaseModel):
         if not v:
             raise ValueError("codice vuoto")
         return v
+
+
+class ProduzioneRow(BaseModel):
+    """Schema for f_produzione_pms — daily production by struttura × classe.
+
+    Source: HotelCube Power BI Daily Production Report (taglio classe, Imponibile),
+    one file per struttura × anno. Grana giorno × struttura × classe.
+
+    Pattern: SNAPSHOT, natural_key (business_unit_id, anno). Re-export di una
+    struttura×anno rimpiazza quelle righe (robusto agli storni).
+
+    societa_id derivata da `data` vs OPERATIONS_CUTOVER_DATE.
+    raw_object_id = FK a f_raw_objects, stampato dal path `promote`.
+    """
+
+    societa_id: SocietaId
+    business_unit_id: BusinessUnitId
+    data: date
+    anno: int
+    mese: int
+    classe: str
+    importo_imponibile: Decimal
+    file_sorgente: str
+    hash_riga: str
+    raw_object_id: Optional[str] = None
+    data_caricamento: datetime
+
+    @field_validator("classe")
+    @classmethod
+    def classe_not_empty(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("classe vuoto")
+        return v
+
+    @model_validator(mode="after")
+    def societa_matches_cutover(self) -> "ProduzioneRow":
+        expected = "INTUR" if self.data < OPERATIONS_CUTOVER_DATE else "ORTI"
+        if self.societa_id != expected:
+            raise ValueError(
+                f"societa_id={self.societa_id!r} incoerente con cutover "
+                f"{OPERATIONS_CUTOVER_DATE} per data {self.data}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def anno_mese_match_data(self) -> "ProduzioneRow":
+        if self.data.year != self.anno or self.data.month != self.mese:
+            raise ValueError(
+                f"anno/mese ({self.anno}/{self.mese}) incoerenti con data {self.data}"
+            )
+        return self
 
 
 # ── f_ricavi_storici ─────────────────────────────────────────────────────────
