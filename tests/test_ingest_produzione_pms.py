@@ -66,3 +66,48 @@ def test_classe_empty_rejected():
 def test_negative_importo_allowed():
     r = ProduzioneRow(**_row(importo_imponibile=Decimal("-43.00")))
     assert r.importo_imponibile == Decimal("-43.00")
+
+
+from ingest.flussi.ingest_produzione_pms import (
+    detect_classe_columns,
+    parse_applied_filters,
+)
+
+FILTER_HOTEL = (
+    "Applied filters:\nMis_PB_ShowRow is greater than 0\nCodiceHotel is PANORAMAHT\n"
+    "Descrizione is Imponibile\nParamDimAddebiti is Classe\nMese is aprile, maggio, "
+    "giugno, gennaio, febbraio, marzo\nAnno is 2026"
+)
+
+
+def test_parse_applied_filters_hotel():
+    bu, anno = parse_applied_filters(FILTER_HOTEL)
+    assert bu == "HOTEL"
+    assert anno == 2026
+
+
+def test_parse_applied_filters_rejects_lordo():
+    txt = FILTER_HOTEL.replace("Descrizione is Imponibile", "Descrizione is Lordo")
+    with pytest.raises(ValueError, match="Imponibile"):
+        parse_applied_filters(txt)
+
+
+def test_parse_applied_filters_rejects_unknown_hotel():
+    txt = FILTER_HOTEL.replace("PANORAMAHT", "MYSTERYHT")
+    with pytest.raises(ValueError, match="CodiceHotel"):
+        parse_applied_filters(txt)
+
+
+def test_detect_classe_columns_hotel_with_blank():
+    # HOTEL header has a blank col at index 1
+    header = ("Classe", None, "01ROOM", "02FB", "03PARK", "07DIV", "11FITTO",
+              "80AFFITT", "99ACC", "Total")
+    cols = detect_classe_columns(header)
+    assert cols == {2: "01ROOM", 3: "02FB", 4: "03PARK", 5: "07DIV",
+                    6: "11FITTO", 7: "80AFFITT", 8: "99ACC"}
+
+
+def test_detect_classe_columns_cvm_no_blank():
+    header = ("Classe", "01ROOM", "02FB", "03PARK", "Total")
+    cols = detect_classe_columns(header)
+    assert cols == {1: "01ROOM", 2: "02FB", 3: "03PARK"}
