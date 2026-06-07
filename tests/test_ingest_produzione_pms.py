@@ -179,3 +179,28 @@ def test_build_rows_pre_cutover_is_intur(tmp_path):
     period, raw = parse_xlsx(p)
     out = build_rows(period, raw, p.name)
     assert all(r["societa_id"] == "ORTI" for r in out)  # april 2025 > cutover
+
+
+from unittest.mock import patch
+
+from ingest.flussi.ingest_produzione_pms import ingest_file
+
+
+def test_ingest_file_dry_run_no_write(tmp_path):
+    p = tmp_path / "HOTEL_prod.xlsx"
+    _make_class_xlsx(p)
+    with patch("core.bq.write.bq_write_validated") as mock_write:
+        n = ingest_file(p, dry_run=True)
+    assert n == 5
+    mock_write.assert_not_called()
+
+
+def test_ingest_file_snapshot_natural_key(tmp_path):
+    p = tmp_path / "HOTEL_prod.xlsx"
+    _make_class_xlsx(p)
+    with patch("core.bq.write.bq_write_validated") as mock_write:
+        ingest_file(p, raw_object_id="ro-9", dry_run=False)
+    mock_write.assert_called_once()
+    _, kwargs = mock_write.call_args
+    assert kwargs["mode"] == "snapshot"
+    assert kwargs["natural_key"] == ["business_unit_id", "anno"]
