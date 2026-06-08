@@ -1,6 +1,8 @@
-# Status — 2026-05-21
+# Status — 2026-06-07
 
 ## In corso
+- **Produzione PMS lineage** (branch `feat/produzione-pms-lineage`): nuova pipeline `f_produzione_pms` (giorno×struttura×classe, imponibile, via lineage intake/promote). **Tasks 1–7 implementati** (parser `ingest_produzione_pms`, 18 test verdi, ruff clean, riconciliazione reale OK su 6 file). **Pausa prima del Task 8** (write BQ/GCS): creazione tabella + backfill intake+promote (6 file classe) + intake-only (6 file occupazione). Attende conferma comandi.
+- **cash_control v1** (CASSA, Loop B) -- design completo via grill (BQ-state authority, IMPEGNO-first projection, record-only decision-memory, 4/5 Kernel stages). Foundation in corso: **P0** re-baseline `f_movimenti_contabili` lineage-clean, **P1** load saldi certificati maggio, **P2** memory tables. Tutto bloccato su go esecuzione. Vedi `vault/sessions/2026-06-04_esolver_p0_and_cashflow_evaluation.md`.
 - **F&B Looker pipeline** (mergiata su `main` 2026-05-22, commit `06abda7`): view refactor wide + bug fix v_fb_kpi 6.6x + audit tool (Streamlit+Form) + RistoCube Orders pipeline canonical. Pendente: refactor v_fb_kpi con CANTINA=100%Bar + esclusione 9 articoli UoM rotti.
 - **Audit consumi F&B per direzione**: Streamlit `verticals/condges/audit_consumi_dashboard.py` (6 pagine, canonical-transformation-matrix) + Apps Script `audit_form.gs` (8 sezioni Form). Setup pendente: `createAuditForm()` su script.google.com + aggiornare FORM_URL + condividere col direttore.
 - v_condges_banca_dettaglio: view SQL creata, non ancora materializzata su BQ
@@ -13,6 +15,9 @@
 - **Doc Refresh Sprint**: Step 1+2+2.5 chiusi in working tree. Step 3 (README rewrite) in attesa OK. Step 4-9 in coda.
 
 ## Completato di recente
+- 2026-06-07: **Produzione PMS — spec+plan+Tasks 1–7** -- spec `2026-06-05-produzione-pms-lineage-design.md` (supersedes 2026-04-29), plan `2026-06-07-produzione-pms-lineage.md`, branch `feat/produzione-pms-lineage` (7 commit). Parser `f_produzione_pms` SNAPSHOT per (struttura,anno), cutover 2025-04-01, source `POWERBI_PRODUZIONE_ORTI_SNAPSHOT`, 18 test + riconciliazione reale OK. Verificato `intake`=raw-only. Backfill (Task 8, solo 6 file classe) e cleanup (Task 9) pendenti.
+- 2026-06-04: **Foundation cash_control + diagnosi P0 Esolver** (read-only) -- rotation aprile->maggio verificata (ORTI 13/0/7, INTUR 12/0/8, saldi = certificato); AEGRI scoperta = scheda contabile mis-ingerita in `f_movimenti_contabili`; 0/3863 righe con `raw_object_id` (I9 void); export "Lista movimenti contabili" completi validati come donor. Strategia: re-baseline-through-GCS.
+- 2026-06-03: **Grill cash_control v1** -- 9 branch risolte, verdetto "genuine loop" (memory non control); reframe ipotesi: HotelOps = operational memory system. Vedi `vault/sessions/2026-06-03_cash_control_v1_kernel_loop_grill.md`.
 - 2026-05-22: **Merge worktree-looker-fb su main** (commit `06abda7`, 40 commit, 20 file / 5584 insertions). F&B Looker pipeline completa: 4 viste F&B + audit tool + RistoCube Orders pipeline.
 - 2026-05-21: **RistoCube Orders pipeline canonical** -- schema `RistocubeOrderRow`, tabella `f_ristocube_orders` (DAY partition, cluster sala/segmento/comanda_id), source `RISTOCUBE_ORDERS_ORTI_APPEND` (backend=gcs, APPEND), parser `ingest/flussi/ingest_ristocube_orders.py`. Backfill 8 file via intake+promote: **28.100 item righe, 7.197 comande, EUR271.377, range 16/04/25->21/05/26**.
 - 2026-05-21: **Audit tool F&B per direzione** -- spec+plan canonical-transformation-matrix (6 layer x 3 vertical Breakfast/Ristorante/Bar), Streamlit+Form via subagent-driven 10 task. Range industria espliciti (pizzeria 15% / medio 25-35% / Michelin 38%). Pronto per audit con direttore.
@@ -20,11 +25,11 @@
 - 2026-05-20: **Refactor 4 viste F&B in wide + v_fb_kpi v2 split Breakfast/Lunch/Dinner** -- bug fix critico: `ricavi_fb_totali` sommava tutte le classi gonfiando KPI 6.6x. Fix: filtro codici 02FB. Refactor v_fb_ricavi/v_fb_consumi (+is_anomalia)/v_fb_pasti/v_fb_kpi in wide. ricavi_room_totali (01ROOM) esposto.
 - 2026-05-20: **Re-ingest `f_ricavi_fb` (Produzione Netta)** -- 43 xlsx Power BI (HP+ANG+CVM x 2025+2026), 993 righe, HOTEL 2025 EUR499k -> **EUR3.28M reale** (file precedenti erano filtrati). SNAPSHOT lifecycle.
 - 2026-05-17: **Ripristino view BigQuery + loader deploy** -- dataset aveva solo 4 view su 21. Ri-deployate tutte e 21. Nuovo modulo `core/bq/load/load_views.py` (topological sort, deploy idempotente). CLI `hotelops deploy-views`.
-- 2026-05-10: **Branch consolidation train** -- mergiati su `main`: `delete-digest`, `2026-05-08-m6l1` (raw_object_id FK extension), `docs/vault-sync-bootstrap`. 3 conflitti risolti su m6l1.
-- 2026-05-10: **Workspace Controller v1** -- SA `workspace-controller@hotelops-suite` + DWD per panoramagroup.it. Modulo `workspace/`. CLI `hotelops workspace mine-capex` con `--write-as`.
-- 2026-05-07: **Lineage FK + observability** -- migration `f_banche_movimenti.raw_object_id`. State machine accetta CLASSIFIED transitions. View `v_raw_promotion_status`. CLI `hotelops lineage --list`.
 
 ## Decisioni aperte
+- **SNAPSHOT per (struttura, anno) per produzione** (deciso 2026-06-07): la produzione è fotografia rivedibile (storni) → SNAPSHOT scope-replace, NON APPEND (raddoppierebbe sugli storni). Regola generale: evento immutabile→APPEND, fotografia rivedibile→SNAPSHOT.
+- **`hotelops intake` = raw-only** (verificato 2026-06-07): l'auto-promote `AUTO` vive solo in `hotelops capture`; `intake` registra solo il raw_object. Promote richiede `--raw-object-id` esplicito.
+- **File occupazione produzione = oggetto separato, deferred** (deciso 2026-06-07): NON ingerirli sotto `POWERBI_PRODUZIONE_ORTI_SNAPSHOT` (che ora = taglio classe/Imponibile→`f_produzione_pms`). Evitare ripetizione caso AEGRI (file valido, source semanticamente sbagliato). Da proporre: source separato RAW_ONLY o estensione registry con subtype/report_variant. Non implementato.
 - **BQ largo / Looker filtra** (deciso 2026-05-20): BigQuery espone tutti i dati senza filtri preventivi, ogni filtro vive nel layer dashboard. Pattern da estendere a future view.
 - **No mezza pensione, solo B&B** (chiarito 2026-05-20): Hotel Panorama opera B&B-only con breakfast scorporato (SCBKFBB ~EUR10/pax board value). Nessun "pensione gap" da chiudere.
 - **Canonical-transformation-matrix F&B** (articolato 2026-05-21): framework 6-layer (Ricavi->Consumi->Coperti->KPI->Range->Alert) x 3 vertical. Range industria: pizzeria 15% / medio 25-35% / Michelin 38% / beverage 10-30%.
@@ -46,25 +51,39 @@
 - **GCS come Raw layer immutabile** (deciso 2026-05-02, implementato pilot 2026-05-05): bucket `hotelops-raw`. Resta aperto bulk flip 12 sources + pattern FK additivo.
 - **Bulk flip 12 sources rimanenti -> `backend: gcs`** (emerso 2026-05-05): flip on-demand quando un loop la richiama.
 - **Backfill rows storiche `file://` -> `gs://`** (emerso 2026-05-05): decidere se backfill upload + relink o lasciarle local-only.
-- **Primo loop vivo deciso = cassa giornaliera quadra y/n** -- verdetto persistito (richiede tabella `f_decisioni`).
+- **Primo Kernel loop = cash_control v1** (deciso 2026-06-03, grill). "cassa giornaliera quadra y/n" declassata a *candidate detective control*. Anchor `f_saldi_banca_chiusura_mensile`, IMPEGNO-first projection, record-only memory.
+- **Re-baseline-through-GCS** (deciso 2026-06-04): `f_movimenti_contabili` ripulita via intake->promote (lineage FK) + DELETE chirurgico patchwork; NON dedup-in-place. AEGRI (scheda contabile) rimossa da movimenti, re-routed via `ingest_scheda_contabile`.
+- **f_movimenti_contabili scope = PNC prima nota** (deciso 2026-06-04); registro fatture FT/AFT/COR separato. Kross escluso dall'anchor. INTUR-marzo saldi certificati, tenuti.
+- **Budget baseline scostamento = GASPAROTTO** (da confermare; CONS2025_* = baseline anno scorso, non il piano).
+- **CASSA vs COMPETENZA vs scheda** (articolato 2026-06-04): banca diretta = cassa reale (tutto, real-time, `f_banche_movimenti`); Esolver movimenti = competenza registrata (`f_movimenti_contabili`); scheda contabile/AEGRI = bank ledger registrato (conto 190101, subset in ritardo). Bridge = reconciliation (tesi CM3070 / `reconcile_banca`).
 - **Regola operativa ingest** (articolata 2026-05-02): scope dell'ingest settato dal discrimination need del loop, non dalla disponibilita del dato.
 - **Glossario `segmento_cliente` parziale** (Ristocube): INLE/INTUI/GRLE/GRBU/GRSE/ZRIST* noti. TBD: vuoto, GRWE, FERR25, ZRISRES.
 
 ## Rotto / da fixare
+- **3 file lordo orfani in `f_raw_objects`**: source `POWERBI_PRODUZIONE_ORTI_APPEND` non presente nel registry (copertura→16/05, lordo). Superseded dai file imponibile → da marcare REJECTED (Task 9 produzione).
 - v_fb_kpi non riflette CANTINA=100%Bar: oggi tratta CUCINA+CANTINA come unico bucket. Da rifattorizzare con CANTINA -> Bar bucket separato.
 - 9 articoli UoM rotti in f_consumi_economato: BEV.CAF.00014 + 8 altri. Oltre alla maschera maggio 2025, da escludere sistemica dai KPI.
 - Pipelines stale >36h: `ingest_scheda_contabile` + `ingest_partite_aperte` ultimo OK run 2026-04-30.
+- **f_movimenti_contabili: lineage void** -- 0/3863 righe con `raw_object_id`; `ingest_movimenti_contabili` non ha path GCS-intake (solo `--file`), viola I9. Risolve P0 re-baseline.
+- **AEGRI mis-ingerita** in `f_movimenti_contabili` (scheda contabile conto 190101 via pipeline movimenti sbagliata) -- doppio conteggio leg banca. Da rimuovere + re-route via `ingest_scheda_contabile`.
+- **Previsione cassa maggio ~110k troppo pessimista** (forecast €471k vs certificato €581k) -- ipotesi apertura anticipata (Apr 3 vs 16) + Godimento intercompany €147k. Decomporre post-P0.
 - f_pms_statistiche freshness: dati fermi al 2026-04-11. Da estrarre 60 file Cruscotto giornalieri.
 - Banche stale: INTUR/INTESA 53gg, ORTI/INTESA 32gg, INTUR/MPS 31gg, ORTI/MPS+MPS_KROSS 15gg. Solo INTUR/SELLA fresh.
 - Gap residuo crash totale `send_email` -> `mark_alerts_sent`. Scelta consapevole "alert duplicato > alert perso".
 - Mislabel MPS <-> MPS_KROSS per ORTI in `extract_saldo_mps2026` -- difetto latente confermato, fix deferred (content-detection IBAN autoritativa sul filename).
 
 ## Prossimi passi
+- **Produzione Task 8** (confermato scope ridotto 2026-06-07): creare `f_produzione_pms` + backfill intake+promote dei **6 file taglio-classe** + riconciliazione BQ. Occupazione esclusa. Attende "go".
+- **Produzione Task 9**: REJECTED 3 orfani lordo + docs (CLAUDE.md/STATUS.md). Debiti: overlap 02FB con `f_ricavi_fb`, `d_classi_produzione` TBD, `f_produzione_occupazione` deferred.
+- **Produzione occupazione**: proporre source separato RAW_ONLY o registry subtype/report_variant (post-riconciliazione).
 - **Refactor v_fb_kpi** con CANTINA=100%Bar split + esclusione 9 articoli UoM rotti -- primo step F&B post-merge.
 - **Generare Google Form per audit direzione** via `createAuditForm()` su script.google.com -> aggiornare `FORM_URL` in `verticals/condges/audit_consumi_dashboard.py`.
 - **Condividere audit (Streamlit + Form) col direttore** -- decidere hosting: Streamlit Cloud, localtunnel, o sessione shared.
 - **Capture vault dei 9-10 insights** sessione 2026-05-21 -- flaggati in `vault/sessions/2026-05-21_fb_canonical_model_and_audit_tool.md`.
-- **Tornare a `cash_control v1` su main** -- primo loop minimo end-to-end. Input 3 fonti gia `backend: gcs`. Output: saldo reale + movimenti banca + confronto + freshness + alert.
+- **P0: re-baseline `f_movimenti_contabili`** -- intake->promote export Esolver completi + DELETE patchwork+AEGRI (keystone: sblocca cash delta + BVA + cash_backcheck). Serve go + fresher ORTI export (->31 mag).
+- **P1: load saldi certificati maggio** (5 righe, Kross escluso) -- pre-stage anchor rotation giugno. Verificare loader `f_saldi_banca_chiusura_mensile`.
+- **P2: cash_control memory tables** + moduli evaluation: BVA (COMPETENZA, GASPAROTTO) + `cash_backcheck` (CASSA, PF forecast vs Esolver, backwards check).
+- **Rotation maggio->giugno** ~fine giugno (timing paradigm); inputs staged in `pianfin/{PF,scadenziari}`.
 - **Aggiornare CLAUDE.md** con nuova v_fb_kpi v2 columns, 33 reparti consumi, audit tool entries.
 - **Viste F&B su f_ristocube_orders** (daily granularity) -- sblocca split Lunch/Dinner via orario/sala, scontrino medio per pasto, daily food cost.
 - **Piano dei conti finale per ANG+CVM** in `pianodeicontilavoro.xlsx` (HP fatto 79/79, gli altri skeleton).

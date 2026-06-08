@@ -299,8 +299,58 @@ def parse_scheda_contabile(filepath: Path) -> list[dict]:
 # ── Multi-bank parsing (Esolver "Mastrini banche" all-in-one CSV) ─────────────
 
 
-def is_multibank_csv(filepath: Path) -> bool:
-    """Detect Esolver "Mastrini banche" all-in-one CSV.
+def _normalize_partitario(val) -> str:
+    """Normalize a Partitario cell to a comparison string.
+
+    CSV yields strings ("2"); XLSX yields native ints/floats (2 / 2.0).
+    """
+    if val is None:
+        return ""
+    if isinstance(val, bool):
+        return ""
+    if isinstance(val, int):
+        return str(val)
+    if isinstance(val, float):
+        return str(int(val)) if val.is_integer() else str(val)
+    return str(val).strip()
+
+
+def _iter_scheda_rows(filepath: Path):
+    """Yield field lists for a scheda contabile, CSV or XLSX.
+
+    CSV rows are semicolon-delimited strings; XLSX rows are native cell values
+    (datetime/float/str). Downstream parse_date / parse_italian_number /
+    _normalize_partitario already accept both representations, so the multi-bank
+    detection and parsing logic is identical for either format.
+    """
+    suffix = filepath.suffix.lower()
+    if suffix in (".csv", ".tsv"):
+        for enc in ["utf-8-sig", "latin-1", "cp1252"]:
+            try:
+                with open(filepath, "r", encoding=enc) as f:
+                    content = f.read()
+                break
+            except UnicodeDecodeError:
+                continue
+        else:
+            log.error(f"Cannot decode {filepath.name}")
+            return
+        yield from csv.reader(content.splitlines(), delimiter=";")
+    elif suffix in (".xlsx", ".xls"):
+        if not HAS_OPENPYXL:
+            log.error("openpyxl required for XLSX: pip install openpyxl")
+            return
+        wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
+        ws = wb.active
+        for row in ws.iter_rows(values_only=True):
+            yield list(row)
+        wb.close()
+    else:
+        log.error(f"Unsupported format: {suffix}")
+
+
+def is_multibank(filepath: Path) -> bool:
+    """Detect Esolver "Mastrini banche" all-in-one export (CSV or XLSX).
 
     The file has the same column layout as a per-bank scheda contabile, but
     rows for multiple bank accounts are interleaved chronologically and
@@ -309,28 +359,16 @@ def is_multibank_csv(filepath: Path) -> bool:
     Detection: column 7 ("Partitario") is populated with single-digit numeric
     values {1,2,3,4} on at least 2 distinct values across the data rows.
 
-    Mono-bank scheda CSVs leave Partitario blank (the bank identity is the
+    Mono-bank scheda exports leave Partitario blank (the bank identity is the
     file itself, inferred from filename).
     """
-    if filepath.suffix.lower() not in (".csv", ".tsv"):
-        return False
-    for enc in ["utf-8-sig", "latin-1", "cp1252"]:
-        try:
-            with open(filepath, "r", encoding=enc) as f:
-                content = f.read()
-            break
-        except UnicodeDecodeError:
-            continue
-    else:
-        return False
-    reader = csv.reader(content.splitlines(), delimiter=";")
     distinct_partitari = set()
-    for fields in reader:
+    for fields in _iter_scheda_rows(filepath):
         if len(fields) < 8:
             continue
         if parse_date(fields[0]) is None:
             continue
-        p = (fields[7] or "").strip()
+        p = _normalize_partitario(fields[7])
         if p in ("1", "2", "3", "4"):
             distinct_partitari.add(p)
         if len(distinct_partitari) >= 2:
@@ -338,10 +376,10 @@ def is_multibank_csv(filepath: Path) -> bool:
     return False
 
 
-def parse_mastrino_multibank_csv(
+def parse_mastrino_multibank(
     filepath: Path, societa_id: str
 ) -> list[dict]:
-    """Parse multi-bank Esolver mastrino CSV.
+    """Parse multi-bank Esolver mastrino (CSV or XLSX).
 
     Returns one entry per movement row, with banca_id resolved via
     ESOLVER_CC_MAP[(societa_id, partitario)]. The "Saldo in UdC" column is
@@ -353,26 +391,14 @@ def parse_mastrino_multibank_csv(
     starting point.
     """
     rows = []
-    for enc in ["utf-8-sig", "latin-1", "cp1252"]:
-        try:
-            with open(filepath, "r", encoding=enc) as f:
-                content = f.read()
-            break
-        except UnicodeDecodeError:
-            continue
-    else:
-        log.error(f"Cannot decode {filepath.name}")
-        return []
-
-    reader = csv.reader(content.splitlines(), delimiter=";")
     skipped_unmapped = 0
-    for fields in reader:
-        if len(fields) < 9:
+    for fields in _iter_scheda_rows(filepath):
+        if len(fields) < 8:
             continue
         d = parse_date(fields[0])
         if d is None:
             continue  # header / "Riporto saldi" total row / blanks
-        partitario = (fields[7] or "").strip()
+        partitario = _normalize_partitario(fields[7])
         if partitario not in ("1", "2", "3", "4"):
             continue
         banca_id = ESOLVER_CC_MAP.get((societa_id, partitario))
@@ -387,8 +413,8 @@ def parse_mastrino_multibank_csv(
                 "banca_id": banca_id,
                 "dare": dare,
                 "avere": avere,
-                "causale": fields[2].strip() if len(fields) > 2 else "",
-                "rif_registrazione": fields[1].strip() if len(fields) > 1 else "",
+                "causale": str(fields[2]).strip() if len(fields) > 2 and fields[2] is not None else "",
+                "rif_registrazione": str(fields[1]).strip() if len(fields) > 1 and fields[1] is not None else "",
             }
         )
 
@@ -614,9 +640,9 @@ def process_file(
                 "(non ancora stampato sulle righe — f_saldi_banca_snapshot FK column TBD)"
             )
 
-        if is_multibank_csv(filepath):
+        if is_multibank(filepath):
             log.info("Detected multi-bank Esolver mastrino (Partitario populated)")
-            rows = parse_mastrino_multibank_csv(filepath, societa_id)
+            rows = parse_mastrino_multibank(filepath, societa_id)
             if not rows:
                 log.warning(f"No rows parsed from {filepath.name}")
                 return 0
