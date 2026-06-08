@@ -73,8 +73,8 @@ def test_main_passes_raw_object_id_to_process_societa(monkeypatch):
         bq_client,
         dry_run,
         replace,
-        raw_object_id,
         logger,
+        raw_object_id,
     ):
         captured["societa_id"] = societa_id
         captured["raw_object_id"] = raw_object_id
