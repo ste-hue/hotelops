@@ -275,6 +275,7 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `f_vendite_fb` | Vendite F&B POS (giorno × sala × articolo) da Ristocube. Include `segmento_cliente`. (APPEND, dedup hash_riga) |
 | `f_ricavi_fb` | Ricavi F&B per struttura × mese × codice pasto (Produzione Netta PMS, export Power BI). Drill-down di classe 02FB. Ingerita via lineage (source `POWERBI_RICAVIFB_ORTI_SNAPSHOT`). (SNAPSHOT, natural_key business_unit_id+anno+mese) |
 | `f_ristocube_orders` | Comande RistoCube POS a livello item × comanda. Campi comanda (sala, tavolo, coperti, segmento_cliente, modalita_chiusura) ereditati da ogni item. Ingerita via lineage (source `RISTOCUBE_ORDERS_ORTI_APPEND`). (APPEND, dedup hash_riga, partition DAY su data, cluster sala/segmento/comanda_id) |
+| `f_produzione_pms` | Produzione giornaliera HotelCube per struttura × classe ricavo (Daily Production Report, Imponibile, export Power BI). Drill-down giorno×classe; `societa_id` derivata dal cutover 2025-04-01. Ingerita via lineage (source `POWERBI_PRODUZIONE_ORTI_SNAPSHOT`). (SNAPSHOT, natural_key business_unit_id+anno, partition DAY su data, cluster business_unit_id/classe) |
 
 ### Dimension tables
 

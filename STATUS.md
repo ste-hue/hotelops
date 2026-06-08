@@ -1,7 +1,6 @@
-# Status — 2026-06-07
+# Status — 2026-06-08
 
 ## In corso
-- **Produzione PMS lineage** (branch `feat/produzione-pms-lineage`): nuova pipeline `f_produzione_pms` (giorno×struttura×classe, imponibile, via lineage intake/promote). **Tasks 1–7 implementati** (parser `ingest_produzione_pms`, 18 test verdi, ruff clean, riconciliazione reale OK su 6 file). **Pausa prima del Task 8** (write BQ/GCS): creazione tabella + backfill intake+promote (6 file classe) + intake-only (6 file occupazione). Attende conferma comandi.
 - **cash_control v1** (CASSA, Loop B) -- design completo via grill (BQ-state authority, IMPEGNO-first projection, record-only decision-memory, 4/5 Kernel stages). Foundation in corso: **P0** re-baseline `f_movimenti_contabili` lineage-clean, **P1** load saldi certificati maggio, **P2** memory tables. Tutto bloccato su go esecuzione. Vedi `vault/sessions/2026-06-04_esolver_p0_and_cashflow_evaluation.md`.
 - **F&B Looker pipeline** (mergiata su `main` 2026-05-22, commit `06abda7`): view refactor wide + bug fix v_fb_kpi 6.6x + audit tool (Streamlit+Form) + RistoCube Orders pipeline canonical. Pendente: refactor v_fb_kpi con CANTINA=100%Bar + esclusione 9 articoli UoM rotti.
 - **Audit consumi F&B per direzione**: Streamlit `verticals/condges/audit_consumi_dashboard.py` (6 pagine, canonical-transformation-matrix) + Apps Script `audit_form.gs` (8 sezioni Form). Setup pendente: `createAuditForm()` su script.google.com + aggiornare FORM_URL + condividere col direttore.
@@ -15,7 +14,8 @@
 - **Doc Refresh Sprint**: Step 1+2+2.5 chiusi in working tree. Step 3 (README rewrite) in attesa OK. Step 4-9 in coda.
 
 ## Completato di recente
-- 2026-06-07: **Produzione PMS — spec+plan+Tasks 1–7** -- spec `2026-06-05-produzione-pms-lineage-design.md` (supersedes 2026-04-29), plan `2026-06-07-produzione-pms-lineage.md`, branch `feat/produzione-pms-lineage` (7 commit). Parser `f_produzione_pms` SNAPSHOT per (struttura,anno), cutover 2025-04-01, source `POWERBI_PRODUZIONE_ORTI_SNAPSHOT`, 18 test + riconciliazione reale OK. Verificato `intake`=raw-only. Backfill (Task 8, solo 6 file classe) e cleanup (Task 9) pendenti.
+- 2026-06-08: **Produzione PMS — Task 8+9 (backfill + cleanup)** -- tabella `f_produzione_pms` creata; backfill intake+promote dei **6 file taglio-classe** (HOTEL/CVM/Angelina × 2025+2026, 2789 righe). Riconciliazione BQ **al centesimo** vs totali piano (HOTEL 2025 €3.282.683,39 ... CVM 2026 €53.588,04). 3 orfani lordo (`POWERBI_PRODUZIONE_ORTI_APPEND`) marcati REJECTED (reason NO_LOOP_TARGET). Docs aggiornati. Branch `feat/produzione-pms-lineage` pronto per merge. Occupazione (file `(2)`) NON ingerita — deferred.
+- 2026-06-07: **Produzione PMS — spec+plan+Tasks 1–7** -- spec `2026-06-05-produzione-pms-lineage-design.md` (supersedes 2026-04-29), plan `2026-06-07-produzione-pms-lineage.md`, branch `feat/produzione-pms-lineage` (7 commit). Parser `f_produzione_pms` SNAPSHOT per (struttura,anno), cutover 2025-04-01, source `POWERBI_PRODUZIONE_ORTI_SNAPSHOT`, 18 test + riconciliazione reale OK. Verificato `intake`=raw-only.
 - 2026-06-04: **Foundation cash_control + diagnosi P0 Esolver** (read-only) -- rotation aprile->maggio verificata (ORTI 13/0/7, INTUR 12/0/8, saldi = certificato); AEGRI scoperta = scheda contabile mis-ingerita in `f_movimenti_contabili`; 0/3863 righe con `raw_object_id` (I9 void); export "Lista movimenti contabili" completi validati come donor. Strategia: re-baseline-through-GCS.
 - 2026-06-03: **Grill cash_control v1** -- 9 branch risolte, verdetto "genuine loop" (memory non control); reframe ipotesi: HotelOps = operational memory system. Vedi `vault/sessions/2026-06-03_cash_control_v1_kernel_loop_grill.md`.
 - 2026-05-22: **Merge worktree-looker-fb su main** (commit `06abda7`, 40 commit, 20 file / 5584 insertions). F&B Looker pipeline completa: 4 viste F&B + audit tool + RistoCube Orders pipeline.
@@ -60,7 +60,6 @@
 - **Glossario `segmento_cliente` parziale** (Ristocube): INLE/INTUI/GRLE/GRBU/GRSE/ZRIST* noti. TBD: vuoto, GRWE, FERR25, ZRISRES.
 
 ## Rotto / da fixare
-- **3 file lordo orfani in `f_raw_objects`**: source `POWERBI_PRODUZIONE_ORTI_APPEND` non presente nel registry (copertura→16/05, lordo). Superseded dai file imponibile → da marcare REJECTED (Task 9 produzione).
 - v_fb_kpi non riflette CANTINA=100%Bar: oggi tratta CUCINA+CANTINA come unico bucket. Da rifattorizzare con CANTINA -> Bar bucket separato.
 - 9 articoli UoM rotti in f_consumi_economato: BEV.CAF.00014 + 8 altri. Oltre alla maschera maggio 2025, da escludere sistemica dai KPI.
 - Pipelines stale >36h: `ingest_scheda_contabile` + `ingest_partite_aperte` ultimo OK run 2026-04-30.
@@ -73,9 +72,8 @@
 - Mislabel MPS <-> MPS_KROSS per ORTI in `extract_saldo_mps2026` -- difetto latente confermato, fix deferred (content-detection IBAN autoritativa sul filename).
 
 ## Prossimi passi
-- **Produzione Task 8** (confermato scope ridotto 2026-06-07): creare `f_produzione_pms` + backfill intake+promote dei **6 file taglio-classe** + riconciliazione BQ. Occupazione esclusa. Attende "go".
-- **Produzione Task 9**: REJECTED 3 orfani lordo + docs (CLAUDE.md/STATUS.md). Debiti: overlap 02FB con `f_ricavi_fb`, `d_classi_produzione` TBD, `f_produzione_occupazione` deferred.
-- **Produzione occupazione**: proporre source separato RAW_ONLY o registry subtype/report_variant (post-riconciliazione).
+- **Produzione — merge branch** `feat/produzione-pms-lineage` su main (Task 8+9 chiusi). Debiti residui: overlap 02FB con `f_ricavi_fb` (doppio drill-down stessa classe), `d_classi_produzione` TBD (mapping classe → BU/cod_conto/categoria_ce).
+- **Produzione occupazione** (file `(2)`, deferred): proporre source separato RAW_ONLY o registry subtype/report_variant. Da affrontare quando serve RevPAR/ADR/occupazione camere.
 - **Refactor v_fb_kpi** con CANTINA=100%Bar split + esclusione 9 articoli UoM rotti -- primo step F&B post-merge.
 - **Generare Google Form per audit direzione** via `createAuditForm()` su script.google.com -> aggiornare `FORM_URL` in `verticals/condges/audit_consumi_dashboard.py`.
 - **Condividere audit (Streamlit + Form) col direttore** -- decidere hosting: Streamlit Cloud, localtunnel, o sessione shared.
