@@ -60,6 +60,9 @@
 - **Glossario `segmento_cliente` parziale** (Ristocube): INLE/INTUI/GRLE/GRBU/GRSE/ZRIST* noti. TBD: vuoto, GRWE, FERR25, ZRISRES.
 
 ## Rotto / da fixare
+- **2 test rossi pre-esistenti su main** (debito, NON regressioni produzione — confermati rossi anche su main pre-merge 2026-06-08):
+  - `tests/test_source_registry_pilot.py::test_other_sources_remain_drive` — pilot test stale: il registry ha ~21 source oltre l'atteso (scritto quando solo pochi source erano flippati a gcs). Da aggiornare o rimuovere.
+  - `tests/test_ingest_movimenti_contabili.py::test_main_passes_raw_object_id_to_process_societa` — `TypeError` a `ingest/flussi/ingest_movimenti_contabili.py:608`. Da investigare (probabile drift firma `process_societa`).
 - v_fb_kpi non riflette CANTINA=100%Bar: oggi tratta CUCINA+CANTINA come unico bucket. Da rifattorizzare con CANTINA -> Bar bucket separato.
 - 9 articoli UoM rotti in f_consumi_economato: BEV.CAF.00014 + 8 altri. Oltre alla maschera maggio 2025, da escludere sistemica dai KPI.
 - Pipelines stale >36h: `ingest_scheda_contabile` + `ingest_partite_aperte` ultimo OK run 2026-04-30.
