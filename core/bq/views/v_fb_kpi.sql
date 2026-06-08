@@ -1,33 +1,28 @@
 -- v_fb_kpi
--- Bridge mensile F&B: KPI veri spaccati per momento del pasto.
+-- Bridge mensile F&B: KPI veri spaccati in 3 bucket onesti (breakfast / ristorante / bar).
 -- Grana: anno × mese (un valore per mese — KPI globali, costo non attribuibile per BU).
 --
--- Decomposizione RICAVI 02FB in 6 bucket (breakfast / lunch / dinner / bar / eventi / roomserv):
+-- COSTI per reparto consumo (CANTINA=100%Bar, CUCINA=100%Ristorante, BRK=100%Breakfast):
+--   costo_breakfast   = reparto BRK
+--   costo_ristorante  = reparto CUCINA
+--   costo_bar         = reparto CANTINA  (anche il vino servito al ristorante esce da CANTINA)
+--   Esclusi 9 articoli UoM-rotti (UM g caricata come kg/sacchi → storno mag-2025 + gonfiature
+--   giu-ott). L'esclusione per codice_prodotto sostituisce la vecchia maschera "mag-2025 < 0".
+--
+-- RICAVI 02FB (HOTEL) spaccati food vs beverage per match coerente coi costi:
 --   ricavi_breakfast  = SCBKFBB + BRKADULT + BRKBABY + BRKEXT + BRKEXTC
---   ricavi_lunch      = RISLFOOD + RISLBEVE + RISLBEV + RISTLUNC + LUNBAR
---   ricavi_dinner     = RISDFOOD + RISDBEV + RISTDINN + DINFOOD + DINBEV
---   ricavi_bar        = BAR + BARHOTEL + RISBFOOD
---   ricavi_eventi     = BAN + BANB + FERRAD + FERRBA + PASQAD + PARTY + BRUNCH + APERIDIN + PROSECCO
---   ricavi_roomserv   = ROOMSERV
---   ricavi_fb_totali  = somma dei 6
+--   ricavi_food       = RIS*FOOD + DINFOOD + RISBFOOD + RISTLUNC + RISTDINN + ROOMSERV
+--                       + banqueting/eventi (BAN, BANB, BRUNCH, PASQAD, FERRAD, FERRBA, PARTY)
+--   ricavi_beverage   = BAR + BARHOTEL + RIS*BEV* + DINBEV + LUNBAR + PROSECCO + APERIDIN
 --
--- Decomposizione COSTI per match coerente con i ricavi:
---   costo_breakfast   = reparto BRK (alimentari colazione)
---   costo_alacarte    = reparti CUCINA + CANTINA (cucina ristorante + cantina vini/drink)
---                       Serve LUNCH + DINNER + BAR + EVENTI (non separabile a livello mensile)
+-- COPERTI spaccati per tipo_pasto (HOTEL): pax_breakfast/lunch/dinner.
 --
--- COPERTI spaccati per tipo_pasto (HOTEL):
---   pax_breakfast = BRK
---   pax_lunch     = LUNCH
---   pax_dinner    = DINNER
---
--- KPI derivati (calcolarli in Looker come calculated field su SUM/SUM, NON sommare il pct mensile):
---   food_cost_pct_breakfast = costo_breakfast / ricavi_breakfast
---   food_cost_pct_alacarte  = costo_alacarte / (ricavi_lunch+dinner+bar+eventi+roomserv)
---   €/pax breakfast         = costo_breakfast / pax_breakfast
+-- KPI (calcolarli in Looker come SUM/SUM, NON sommare il pct mensile):
+--   food_cost_pct_breakfast  = costo_breakfast  / ricavi_breakfast
+--   food_cost_pct_ristorante = costo_ristorante / ricavi_food
+--   food_cost_pct_bar        = costo_bar        / ricavi_beverage
 --
 -- Ricavi camere (01ROOM) esposti separatamente come contesto.
--- Storni anomalia maggio 2025 esclusi (UoM acquisto vs consumo).
 -- Tutti gli anni esposti — Looker filtra range.
 
 CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_fb_kpi` AS
@@ -35,14 +30,30 @@ WITH costo_brk AS (
   SELECT anno, mese, SUM(importo) AS costo_breakfast
   FROM `hotelops-suite.hotelops.f_consumi_economato`
   WHERE reparto_id = 'BRK'
-    AND NOT (anno = 2025 AND mese = 5 AND importo < 0)
+    AND codice_prodotto NOT IN (
+      'BEV.CAF.00014','FOO.FRS.00013','FOO.FRS.00011','FOO.FRS.00012','FOO.FRS.00009',
+      'BEV.BOL.00013','FOO.FRS.00008','FOO.FAR.00003','FOO.BUR.00001'
+    )
   GROUP BY 1, 2
 ),
-costo_alc AS (
-  SELECT anno, mese, SUM(importo) AS costo_alacarte
+costo_cuc AS (
+  SELECT anno, mese, SUM(importo) AS costo_ristorante
   FROM `hotelops-suite.hotelops.f_consumi_economato`
-  WHERE reparto_id IN ('CUCINA', 'CANTINA')
-    AND NOT (anno = 2025 AND mese = 5 AND importo < 0)
+  WHERE reparto_id = 'CUCINA'
+    AND codice_prodotto NOT IN (
+      'BEV.CAF.00014','FOO.FRS.00013','FOO.FRS.00011','FOO.FRS.00012','FOO.FRS.00009',
+      'BEV.BOL.00013','FOO.FRS.00008','FOO.FAR.00003','FOO.BUR.00001'
+    )
+  GROUP BY 1, 2
+),
+costo_can AS (
+  SELECT anno, mese, SUM(importo) AS costo_bar
+  FROM `hotelops-suite.hotelops.f_consumi_economato`
+  WHERE reparto_id = 'CANTINA'
+    AND codice_prodotto NOT IN (
+      'BEV.CAF.00014','FOO.FRS.00013','FOO.FRS.00011','FOO.FRS.00012','FOO.FRS.00009',
+      'BEV.BOL.00013','FOO.FRS.00008','FOO.FAR.00003','FOO.BUR.00001'
+    )
   GROUP BY 1, 2
 ),
 coperti AS (
@@ -61,16 +72,12 @@ ricavi AS (
     anno, mese,
     SUM(CASE WHEN codice IN ('SCBKFBB','BRKADULT','BRKBABY','BRKEXT','BRKEXTC')
              THEN netto END) AS ricavi_breakfast,
-    SUM(CASE WHEN codice IN ('RISLFOOD','RISLBEVE','RISLBEV','RISTLUNC','LUNBAR')
-             THEN netto END) AS ricavi_lunch,
-    SUM(CASE WHEN codice IN ('RISDFOOD','RISDBEV','RISTDINN','DINFOOD','DINBEV')
-             THEN netto END) AS ricavi_dinner,
-    SUM(CASE WHEN codice IN ('BAR','BARHOTEL','RISBFOOD')
-             THEN netto END) AS ricavi_bar,
-    SUM(CASE WHEN codice IN ('BAN','BANB','FERRAD','FERRBA','PASQAD','PARTY',
-                             'BRUNCH','APERIDIN','PROSECCO')
-             THEN netto END) AS ricavi_eventi,
-    SUM(CASE WHEN codice = 'ROOMSERV' THEN netto END)       AS ricavi_roomserv
+    SUM(CASE WHEN codice IN ('RISLFOOD','RISDFOOD','DINFOOD','RISBFOOD','RISTLUNC','RISTDINN',
+                             'ROOMSERV','BAN','BANB','BRUNCH','PASQAD','FERRAD','FERRBA','PARTY')
+             THEN netto END) AS ricavi_food,
+    SUM(CASE WHEN codice IN ('BAR','BARHOTEL','RISLBEVE','RISLBEV','RISDBEV','DINBEV',
+                             'LUNBAR','PROSECCO','APERIDIN')
+             THEN netto END) AS ricavi_beverage
   FROM `hotelops-suite.hotelops.f_ricavi_fb`
   WHERE business_unit_id = 'HOTEL'
   GROUP BY 1, 2
@@ -88,7 +95,8 @@ ricavi_room AS (
 ),
 keys AS (
   SELECT anno, mese FROM costo_brk
-  UNION DISTINCT SELECT anno, mese FROM costo_alc
+  UNION DISTINCT SELECT anno, mese FROM costo_cuc
+  UNION DISTINCT SELECT anno, mese FROM costo_can
   UNION DISTINCT SELECT anno, mese FROM coperti
   UNION DISTINCT SELECT anno, mese FROM ricavi
   UNION DISTINCT SELECT anno, mese FROM ricavi_room
@@ -98,21 +106,20 @@ joined AS (
     k.anno, k.mese,
     DATE(k.anno, k.mese, 1)                  AS periodo,
     COALESCE(cb.costo_breakfast, 0)          AS costo_breakfast,
-    COALESCE(ca.costo_alacarte, 0)           AS costo_alacarte,
+    COALESCE(cc.costo_ristorante, 0)         AS costo_ristorante,
+    COALESCE(cn.costo_bar, 0)                AS costo_bar,
     COALESCE(p.pax_breakfast, 0)             AS pax_breakfast,
     COALESCE(p.pax_lunch, 0)                 AS pax_lunch,
     COALESCE(p.pax_dinner, 0)                AS pax_dinner,
     COALESCE(p.pax_totale, 0)                AS coperti_hotel,
     COALESCE(r.ricavi_breakfast, 0)          AS ricavi_breakfast,
-    COALESCE(r.ricavi_lunch, 0)              AS ricavi_lunch,
-    COALESCE(r.ricavi_dinner, 0)             AS ricavi_dinner,
-    COALESCE(r.ricavi_bar, 0)                AS ricavi_bar,
-    COALESCE(r.ricavi_eventi, 0)             AS ricavi_eventi,
-    COALESCE(r.ricavi_roomserv, 0)           AS ricavi_roomserv,
+    COALESCE(r.ricavi_food, 0)               AS ricavi_food,
+    COALESCE(r.ricavi_beverage, 0)           AS ricavi_beverage,
     COALESCE(rr.ricavi_room_totali, 0)       AS ricavi_room_totali
   FROM keys k
   LEFT JOIN costo_brk   cb USING (anno, mese)
-  LEFT JOIN costo_alc   ca USING (anno, mese)
+  LEFT JOIN costo_cuc   cc USING (anno, mese)
+  LEFT JOIN costo_can   cn USING (anno, mese)
   LEFT JOIN coperti     p  USING (anno, mese)
   LEFT JOIN ricavi      r  USING (anno, mese)
   LEFT JOIN ricavi_room rr USING (anno, mese)
@@ -120,25 +127,20 @@ joined AS (
 SELECT
   anno, mese, periodo,
 
-  -- COSTI per match con ricavi
+  -- COSTI per bucket
   costo_breakfast,
-  costo_alacarte,
-  costo_breakfast + costo_alacarte           AS costo_cucina_totale,
+  costo_ristorante,
+  costo_bar,
+  costo_breakfast + costo_ristorante + costo_bar  AS costo_fb_totale,
 
   -- COPERTI per tipo
   pax_breakfast, pax_lunch, pax_dinner, coperti_hotel,
 
   -- RICAVI per bucket
   ricavi_breakfast,
-  ricavi_lunch,
-  ricavi_dinner,
-  ricavi_bar,
-  ricavi_eventi,
-  ricavi_roomserv,
-  ricavi_breakfast + ricavi_lunch + ricavi_dinner
-    + ricavi_bar + ricavi_eventi + ricavi_roomserv AS ricavi_fb_totali,
-  ricavi_lunch + ricavi_dinner + ricavi_bar
-    + ricavi_eventi + ricavi_roomserv              AS ricavi_alacarte_totali,
+  ricavi_food,
+  ricavi_beverage,
+  ricavi_breakfast + ricavi_food + ricavi_beverage AS ricavi_fb_totali,
   ricavi_room_totali,
 
   -- KPI breakfast
@@ -146,31 +148,28 @@ SELECT
   SAFE_DIVIDE(costo_breakfast, NULLIF(pax_breakfast, 0))     AS costo_per_pax_breakfast,
   SAFE_DIVIDE(ricavi_breakfast, NULLIF(pax_breakfast, 0))    AS ricavo_per_pax_breakfast,
 
-  -- KPI à la carte (lunch + dinner + bar + eventi + roomserv vs CUCINA+CANTINA)
-  SAFE_DIVIDE(
-    costo_alacarte,
-    NULLIF(ricavi_lunch + ricavi_dinner + ricavi_bar
-           + ricavi_eventi + ricavi_roomserv, 0)
-  )                                                          AS food_cost_pct_alacarte,
-  SAFE_DIVIDE(costo_alacarte, NULLIF(pax_lunch + pax_dinner, 0)) AS costo_per_pax_alacarte,
+  -- KPI ristorante (CUCINA vs ricavi food)
+  SAFE_DIVIDE(costo_ristorante, NULLIF(ricavi_food, 0))      AS food_cost_pct_ristorante,
+  SAFE_DIVIDE(costo_ristorante, NULLIF(pax_lunch + pax_dinner, 0)) AS costo_per_pax_ristorante,
+
+  -- KPI bar (CANTINA vs ricavi beverage)
+  SAFE_DIVIDE(costo_bar, NULLIF(ricavi_beverage, 0))         AS food_cost_pct_bar,
 
   -- Global (componente di compat con dashboard esistente)
   SAFE_DIVIDE(
-    costo_breakfast + costo_alacarte,
-    NULLIF(ricavi_breakfast + ricavi_lunch + ricavi_dinner
-           + ricavi_bar + ricavi_eventi + ricavi_roomserv, 0)
+    costo_breakfast + costo_ristorante + costo_bar,
+    NULLIF(ricavi_breakfast + ricavi_food + ricavi_beverage, 0)
   )                                                          AS food_cost_pct,
   SAFE_DIVIDE(
-    costo_breakfast + costo_alacarte,
+    costo_breakfast + costo_ristorante + costo_bar,
     NULLIF(coperti_hotel, 0)
   )                                                          AS euro_per_pasto,
 
   -- YoY
-  LAG(costo_breakfast + costo_alacarte)         OVER w  AS costo_cucina_ap,
-  LAG(coperti_hotel)                             OVER w  AS coperti_hotel_ap,
-  LAG(ricavi_breakfast + ricavi_lunch + ricavi_dinner
-      + ricavi_bar + ricavi_eventi + ricavi_roomserv) OVER w AS ricavi_fb_totali_ap,
-  LAG(ricavi_room_totali)                       OVER w  AS ricavi_room_totali_ap
+  LAG(costo_breakfast + costo_ristorante + costo_bar)  OVER w  AS costo_fb_totale_ap,
+  LAG(coperti_hotel)                                   OVER w  AS coperti_hotel_ap,
+  LAG(ricavi_breakfast + ricavi_food + ricavi_beverage) OVER w AS ricavi_fb_totali_ap,
+  LAG(ricavi_room_totali)                              OVER w  AS ricavi_room_totali_ap
 FROM joined
 WINDOW w AS (PARTITION BY mese ORDER BY anno)
 ORDER BY anno, mese;
