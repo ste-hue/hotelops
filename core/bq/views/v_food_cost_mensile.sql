@@ -15,7 +15,7 @@
 -- Per food cost completo serve d_prezzi_pensione (TODO Sprint 3).
 --
 -- Fonti:
---   f_consumi_economato     reparto_id IN ('CUCINA','CANTINA')
+--   f_consumi_economato     reparto_id IN ('CUCINA','CANTINA'), esclusi 9 articoli UoM-rotti (coerente con v_fb_kpi)
 --   f_vendite_fb            sala IN ('BAR','RISTO_LUNCH','RISTO_DINNER')
 --   f_coperti_giornalieri   business_unit_id = 'HOTEL'
 
@@ -30,6 +30,10 @@ m_costi AS (
     SUM(importo)                                AS costo_fb_totale
   FROM `hotelops-suite.hotelops.f_consumi_economato`
   WHERE reparto_id IN ('CUCINA', 'CANTINA')
+    AND codice_prodotto NOT IN (
+      'BEV.CAF.00014','FOO.FRS.00013','FOO.FRS.00011','FOO.FRS.00012','FOO.FRS.00009',
+      'BEV.BOL.00013','FOO.FRS.00008','FOO.FAR.00003','FOO.BUR.00001'
+    )
   GROUP BY 1, 2
 ),
 m_ricavi AS (
