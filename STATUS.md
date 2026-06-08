@@ -2,7 +2,8 @@
 
 ## In corso
 - **cash_control v1** (CASSA, Loop B) -- design completo via grill (BQ-state authority, IMPEGNO-first projection, record-only decision-memory, 4/5 Kernel stages). Foundation in corso: **P0** re-baseline `f_movimenti_contabili` lineage-clean, **P1** load saldi certificati maggio, **P2** memory tables. Tutto bloccato su go esecuzione. Vedi `vault/sessions/2026-06-04_esolver_p0_and_cashflow_evaluation.md`.
-- **F&B Looker pipeline** (mergiata su `main` 2026-05-22, commit `06abda7`): view refactor wide + bug fix v_fb_kpi 6.6x + audit tool (Streamlit+Form) + RistoCube Orders pipeline canonical. Pendente: refactor v_fb_kpi con CANTINA=100%Bar + esclusione 9 articoli UoM rotti.
+- **F&B Looker pipeline** (mergiata su `main` 2026-05-22, commit `06abda7`): view refactor wide + bug fix v_fb_kpi 6.6x + audit tool (Streamlit+Form) + RistoCube Orders pipeline canonical. **v_fb_kpi rifattorizzata 2026-06-08** (3 bucket onesti + 9 UoM esclusi, deployata su BQ, in main). Pendente: aggiornare dashboard Looker F&B al nuovo contratto colonne.
+- **Sistema workstream vault** (pilota F&B, 2026-06-08): hub `workstreams/FB.md` + registry `_INDEX.md` — nuovo asse per isolare/navigare un fronte di lavoro (ortogonale a vertical/loop). Replicabile su pf-rotation/cashflow/ingestion/capex. Spec+plan in main.
 - **Audit consumi F&B per direzione**: Streamlit `verticals/condges/audit_consumi_dashboard.py` (6 pagine, canonical-transformation-matrix) + Apps Script `audit_form.gs` (8 sezioni Form). Setup pendente: `createAuditForm()` su script.google.com + aggiornare FORM_URL + condividere col direttore.
 - v_condges_banca_dettaglio: view SQL creata, non ancora materializzata su BQ
 - v_ledger_movimenti: view SQL creata (`core/bq/views/v_ledger_movimenti.sql`), non ancora materializzata su BQ
@@ -14,6 +15,8 @@
 - **Doc Refresh Sprint**: Step 1+2+2.5 chiusi in working tree. Step 3 (README rewrite) in attesa OK. Step 4-9 in coda.
 
 ## Completato di recente
+- 2026-06-08: **v_fb_kpi refactor — 3 bucket onesti F&B** (merge su main `1a7359b`) -- split costo CANTINA=Bar / CUCINA=Ristorante / BRK=Breakfast; ricavi spaccati food vs beverage dai codici 02FB → `food_cost_pct_ristorante` + `food_cost_pct_bar` separati; 9 articoli UoM rotti esclusi per `codice_prodotto` (sostituisce la maschera mag-2025). Deployata su BQ, validata 2025 (bar 26%, ristorante 35-37% estate, breakfast ~40%). ⚠️ contratto colonne cambiato → Looker F&B da aggiornare.
+- 2026-06-08: **Sistema workstream nel vault (pilota F&B)** -- nuovo asse `workstream` (ortogonale a vertical/loop): hub `workstreams/FB.md` (curato + 5 blocchi Dataview) + registry `_INDEX.md` + link da INDEX. Adottato+riconciliato un hub costruito in parallelo; 4 decisioni F&B promosse a decision-note (CANTINA=Bar, B&B-only, canonical-matrix, D-prefix). Spec+plan in main (`8144c40`); vault pushato (master `e15ace8`).
 - 2026-06-08: **Fix 2 test rossi pre-esistenti** (`fix/stale-tests` → main `ff663a5`) -- `test_other_sources_remain_drive` rimosso (guard fase-pilota obsoleto, bulk-flip on-demand l'ha superato); `test_main_passes_raw_object_id...` fix firma fake (`raw_object_id`/`logger` invertiti). Nessuna modifica codice prod. Suite **603 passed**.
 - 2026-06-08: **Produzione PMS — Task 8+9 (backfill + cleanup)** -- tabella `f_produzione_pms` creata; backfill intake+promote dei **6 file taglio-classe** (HOTEL/CVM/Angelina × 2025+2026, 2789 righe). Riconciliazione BQ **al centesimo** vs totali piano (HOTEL 2025 €3.282.683,39 ... CVM 2026 €53.588,04). 3 orfani lordo (`POWERBI_PRODUZIONE_ORTI_APPEND`) marcati REJECTED (reason NO_LOOP_TARGET). Docs aggiornati. Branch `feat/produzione-pms-lineage` pronto per merge. Occupazione (file `(2)`) NON ingerita — deferred.
 - 2026-06-07: **Produzione PMS — spec+plan+Tasks 1–7** -- spec `2026-06-05-produzione-pms-lineage-design.md` (supersedes 2026-04-29), plan `2026-06-07-produzione-pms-lineage.md`, branch `feat/produzione-pms-lineage` (7 commit). Parser `f_produzione_pms` SNAPSHOT per (struttura,anno), cutover 2025-04-01, source `POWERBI_PRODUZIONE_ORTI_SNAPSHOT`, 18 test + riconciliazione reale OK. Verificato `intake`=raw-only.
@@ -23,7 +26,6 @@
 - 2026-05-21: **RistoCube Orders pipeline canonical** -- schema `RistocubeOrderRow`, tabella `f_ristocube_orders` (DAY partition, cluster sala/segmento/comanda_id), source `RISTOCUBE_ORDERS_ORTI_APPEND` (backend=gcs, APPEND), parser `ingest/flussi/ingest_ristocube_orders.py`. Backfill 8 file via intake+promote: **28.100 item righe, 7.197 comande, EUR271.377, range 16/04/25->21/05/26**.
 - 2026-05-21: **Audit tool F&B per direzione** -- spec+plan canonical-transformation-matrix (6 layer x 3 vertical Breakfast/Ristorante/Bar), Streamlit+Form via subagent-driven 10 task. Range industria espliciti (pizzeria 15% / medio 25-35% / Michelin 38%). Pronto per audit con direttore.
 - 2026-05-21: **Re-ingest `f_consumi_economato` consolidato** -- file `Consumptions F&B Data.xlsx` 22.763 righe vs 15.869 precedenti, 33 reparti vs 25 (+16 nuovi: DIPEND, DEPERIMENTO, HSK_*, MAN_*, EVENTI*, D*=Dotazioni). TRUNCATE+ingest con mapping HC code->canonical reparto_id.
-- 2026-05-20: **Refactor 4 viste F&B in wide + v_fb_kpi v2 split Breakfast/Lunch/Dinner** -- bug fix critico: `ricavi_fb_totali` sommava tutte le classi gonfiando KPI 6.6x. Fix: filtro codici 02FB. Refactor v_fb_ricavi/v_fb_consumi (+is_anomalia)/v_fb_pasti/v_fb_kpi in wide. ricavi_room_totali (01ROOM) esposto.
 - 2026-05-20: **Re-ingest `f_ricavi_fb` (Produzione Netta)** -- 43 xlsx Power BI (HP+ANG+CVM x 2025+2026), 993 righe, HOTEL 2025 EUR499k -> **EUR3.28M reale** (file precedenti erano filtrati). SNAPSHOT lifecycle.
 - 2026-05-17: **Ripristino view BigQuery + loader deploy** -- dataset aveva solo 4 view su 21. Ri-deployate tutte e 21. Nuovo modulo `core/bq/load/load_views.py` (topological sort, deploy idempotente). CLI `hotelops deploy-views`.
 
@@ -34,8 +36,8 @@
 - **BQ largo / Looker filtra** (deciso 2026-05-20): BigQuery espone tutti i dati senza filtri preventivi, ogni filtro vive nel layer dashboard. Pattern da estendere a future view.
 - **No mezza pensione, solo B&B** (chiarito 2026-05-20): Hotel Panorama opera B&B-only con breakfast scorporato (SCBKFBB ~EUR10/pax board value). Nessun "pensione gap" da chiudere.
 - **Canonical-transformation-matrix F&B** (articolato 2026-05-21): framework 6-layer (Ricavi->Consumi->Coperti->KPI->Range->Alert) x 3 vertical. Range industria: pizzeria 15% / medio 25-35% / Michelin 38% / beverage 10-30%.
-- **CANTINA = 100% Bar/Beverage** (chiarito 2026-05-21 da analisi Excel utente): anche il vino servito al ristorante esce da CANTINA -> classificato come Bar cost. CUCINA 100% Ristorante, BRK 100% Breakfast. Da riflettere in v_fb_kpi.
-- **9 articoli UoM rotti**: BEV.CAF.00014 (caffe in grani) + 8 altri caricati con UM g come kg/sacchi, causano -EUR166k storno maggio 2025 + gonfiature Giu-Ott. Da escludere dai KPI come anomalia sistemica.
+- **CANTINA = 100% Bar/Beverage** (chiarito 2026-05-21 da analisi Excel utente): anche il vino servito al ristorante esce da CANTINA -> classificato come Bar cost. CUCINA 100% Ristorante, BRK 100% Breakfast. **Implementato in v_fb_kpi 2026-06-08** + decision-note `decisions/2026-05-21_Cantina_100pct_Bar`.
+- **9 articoli UoM rotti**: BEV.CAF.00014 (caffe in grani) + 8 altri caricati con UM g come kg/sacchi, causano -EUR166k storno maggio 2025 + gonfiature Giu-Ott. **Esclusi da v_fb_kpi 2026-06-08** per codice_prodotto (FOO.FRS.00008-13, FOO.FAR.00003, FOO.BUR.00001, BEV.BOL.00013). NB: dato grezzo in `f_consumi_economato` resta UoM-rotto (escluso solo dai KPI).
 - **D-prefix HotelCube = Dotazioni** (NON Dipendenti): DRECEPTI, DUFFICID, DHSKHOTE, DMANHOTE, DSPIAGGI, DCOLAZIO sono consumabili operativi del reparto host.
 - **Modifiche piano dei conti HotelCube possibili manualmente** (deciso 2026-05-21): no API ma modifiche al piano dei conti via UI HotelCube / supporto. Esiti audit possono includere ricalibrare SCBKFBB, sospendere codici, aggiungere scorporo cena.
 - **Admin SDK in parking lot** (parcheggiato 2026-05-10): seconda SA `workspace-admin` con scope admin readonly. Triggering: quando serve query "quante mailbox attive?" o audit log.
@@ -60,8 +62,6 @@
 - **Regola operativa ingest** (articolata 2026-05-02): scope dell'ingest settato dal discrimination need del loop, non dalla disponibilita del dato.
 - **Glossario `segmento_cliente` parziale** (Ristocube): INLE/INTUI/GRLE/GRBU/GRSE/ZRIST* noti. TBD: vuoto, GRWE, FERR25, ZRISRES.
 
-- v_fb_kpi non riflette CANTINA=100%Bar: oggi tratta CUCINA+CANTINA come unico bucket. Da rifattorizzare con CANTINA -> Bar bucket separato.
-- 9 articoli UoM rotti in f_consumi_economato: BEV.CAF.00014 + 8 altri. Oltre alla maschera maggio 2025, da escludere sistemica dai KPI.
 - Pipelines stale >36h: `ingest_scheda_contabile` + `ingest_partite_aperte` ultimo OK run 2026-04-30.
 - **f_movimenti_contabili: lineage void** -- 0/3863 righe con `raw_object_id`; `ingest_movimenti_contabili` non ha path GCS-intake (solo `--file`), viola I9. Risolve P0 re-baseline.
 - **AEGRI mis-ingerita** in `f_movimenti_contabili` (scheda contabile conto 190101 via pipeline movimenti sbagliata) -- doppio conteggio leg banca. Da rimuovere + re-route via `ingest_scheda_contabile`.
@@ -74,7 +74,7 @@
 ## Prossimi passi
 - **Produzione — merge branch** `feat/produzione-pms-lineage` su main (Task 8+9 chiusi). Debiti residui: overlap 02FB con `f_ricavi_fb` (doppio drill-down stessa classe), `d_classi_produzione` TBD (mapping classe → BU/cod_conto/categoria_ce).
 - **Produzione occupazione** (file `(2)`, deferred): proporre source separato RAW_ONLY o registry subtype/report_variant. Da affrontare quando serve RevPAR/ADR/occupazione camere.
-- **Refactor v_fb_kpi** con CANTINA=100%Bar split + esclusione 9 articoli UoM rotti -- primo step F&B post-merge.
+- **Aggiornare dashboard Looker F&B** al nuovo contratto colonne `v_fb_kpi` (rimosse `*_alacarte`/`ricavi_lunch`/`ricavi_dinner`/`ricavi_eventi`/`ricavi_roomserv`; nuove `costo_ristorante`/`costo_bar`/`ricavi_food`/`ricavi_beverage`/`food_cost_pct_ristorante`/`food_cost_pct_bar`).
 - **Generare Google Form per audit direzione** via `createAuditForm()` su script.google.com -> aggiornare `FORM_URL` in `verticals/condges/audit_consumi_dashboard.py`.
 - **Condividere audit (Streamlit + Form) col direttore** -- decidere hosting: Streamlit Cloud, localtunnel, o sessione shared.
 - **Capture vault dei 9-10 insights** sessione 2026-05-21 -- flaggati in `vault/sessions/2026-05-21_fb_canonical_model_and_audit_tool.md`.
@@ -82,7 +82,7 @@
 - **P1: load saldi certificati maggio** (5 righe, Kross escluso) -- pre-stage anchor rotation giugno. Verificare loader `f_saldi_banca_chiusura_mensile`.
 - **P2: cash_control memory tables** + moduli evaluation: BVA (COMPETENZA, GASPAROTTO) + `cash_backcheck` (CASSA, PF forecast vs Esolver, backwards check).
 - **Rotation maggio->giugno** ~fine giugno (timing paradigm); inputs staged in `pianfin/{PF,scadenziari}`.
-- **Aggiornare CLAUDE.md** con nuova v_fb_kpi v2 columns, 33 reparti consumi, audit tool entries.
+- **Aggiornare CLAUDE.md** con v_fb_kpi v3 (3 bucket onesti, colonne food/beverage), 33 reparti consumi, audit tool entries, sistema workstream vault.
 - **Viste F&B su f_ristocube_orders** (daily granularity) -- sblocca split Lunch/Dinner via orario/sala, scontrino medio per pasto, daily food cost.
 - **Piano dei conti finale per ANG+CVM** in `pianodeicontilavoro.xlsx` (HP fatto 79/79, gli altri skeleton).
 - **d_codici_pms_ricavi dimension table** dopo piano dei conti completo, con Pasto + Tipo per ogni codice.
