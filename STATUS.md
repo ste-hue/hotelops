@@ -14,6 +14,7 @@
 - **Doc Refresh Sprint**: Step 1+2+2.5 chiusi in working tree. Step 3 (README rewrite) in attesa OK. Step 4-9 in coda.
 
 ## Completato di recente
+- 2026-06-08: **Fix 2 test rossi pre-esistenti** (`fix/stale-tests` → main `ff663a5`) -- `test_other_sources_remain_drive` rimosso (guard fase-pilota obsoleto, bulk-flip on-demand l'ha superato); `test_main_passes_raw_object_id...` fix firma fake (`raw_object_id`/`logger` invertiti). Nessuna modifica codice prod. Suite **603 passed**.
 - 2026-06-08: **Produzione PMS — Task 8+9 (backfill + cleanup)** -- tabella `f_produzione_pms` creata; backfill intake+promote dei **6 file taglio-classe** (HOTEL/CVM/Angelina × 2025+2026, 2789 righe). Riconciliazione BQ **al centesimo** vs totali piano (HOTEL 2025 €3.282.683,39 ... CVM 2026 €53.588,04). 3 orfani lordo (`POWERBI_PRODUZIONE_ORTI_APPEND`) marcati REJECTED (reason NO_LOOP_TARGET). Docs aggiornati. Branch `feat/produzione-pms-lineage` pronto per merge. Occupazione (file `(2)`) NON ingerita — deferred.
 - 2026-06-07: **Produzione PMS — spec+plan+Tasks 1–7** -- spec `2026-06-05-produzione-pms-lineage-design.md` (supersedes 2026-04-29), plan `2026-06-07-produzione-pms-lineage.md`, branch `feat/produzione-pms-lineage` (7 commit). Parser `f_produzione_pms` SNAPSHOT per (struttura,anno), cutover 2025-04-01, source `POWERBI_PRODUZIONE_ORTI_SNAPSHOT`, 18 test + riconciliazione reale OK. Verificato `intake`=raw-only.
 - 2026-06-04: **Foundation cash_control + diagnosi P0 Esolver** (read-only) -- rotation aprile->maggio verificata (ORTI 13/0/7, INTUR 12/0/8, saldi = certificato); AEGRI scoperta = scheda contabile mis-ingerita in `f_movimenti_contabili`; 0/3863 righe con `raw_object_id` (I9 void); export "Lista movimenti contabili" completi validati come donor. Strategia: re-baseline-through-GCS.
@@ -59,10 +60,6 @@
 - **Regola operativa ingest** (articolata 2026-05-02): scope dell'ingest settato dal discrimination need del loop, non dalla disponibilita del dato.
 - **Glossario `segmento_cliente` parziale** (Ristocube): INLE/INTUI/GRLE/GRBU/GRSE/ZRIST* noti. TBD: vuoto, GRWE, FERR25, ZRISRES.
 
-## Rotto / da fixare
-- **2 test rossi pre-esistenti su main** (debito, NON regressioni produzione — confermati rossi anche su main pre-merge 2026-06-08):
-  - `tests/test_source_registry_pilot.py::test_other_sources_remain_drive` — pilot test stale: il registry ha ~21 source oltre l'atteso (scritto quando solo pochi source erano flippati a gcs). Da aggiornare o rimuovere.
-  - `tests/test_ingest_movimenti_contabili.py::test_main_passes_raw_object_id_to_process_societa` — `TypeError` a `ingest/flussi/ingest_movimenti_contabili.py:608`. Da investigare (probabile drift firma `process_societa`).
 - v_fb_kpi non riflette CANTINA=100%Bar: oggi tratta CUCINA+CANTINA come unico bucket. Da rifattorizzare con CANTINA -> Bar bucket separato.
 - 9 articoli UoM rotti in f_consumi_economato: BEV.CAF.00014 + 8 altri. Oltre alla maschera maggio 2025, da escludere sistemica dai KPI.
 - Pipelines stale >36h: `ingest_scheda_contabile` + `ingest_partite_aperte` ultimo OK run 2026-04-30.
