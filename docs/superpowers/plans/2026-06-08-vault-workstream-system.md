@@ -1,5 +1,13 @@
 # Vault Workstream System Implementation Plan
 
+> **⚠️ ESEGUITO VIA RICONCILIAZIONE (2026-06-08), non eseguito alla lettera.** Il sistema
+> esisteva già nel vault (hub `workstreams/FB.md` con `type: workstream_hub`, snapshot
+> `threads/F&B_STATE_2026-06-08.md`, note F&B già taggate `workstream: [fb]`), costruito da un
+> agent in parallelo. Esito reale: adottato l'esistente come canonico; corretto il registry
+> `_INDEX.md` alla convenzione `type = "workstream_hub"`; aggiunto il link in `INDEX.md`; taggato
+> `SEGMENTO_CLIENTE`. Task 2 (scrivere FB.md) **non eseguito** — l'hub esistente è più ricco.
+> Vedi la nota retrospettiva nello spec per le convenzioni canoniche.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Aggiungere al vault Obsidian un asse "workstream" — una nota-hub curata con elenchi Dataview live per ogni fronte di lavoro — usando F&B come pilota.

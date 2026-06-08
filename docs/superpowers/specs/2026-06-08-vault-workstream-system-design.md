@@ -1,9 +1,22 @@
 # Vault Workstream System — Design
 
 **Date:** 2026-06-08
-**Status:** approved (brainstorming) → pending plan
+**Status:** IMPLEMENTED — adottato+riconciliato 2026-06-08 (vedi nota sotto)
 **Target repo:** Obsidian vault (`<vault>/HotelOps/`), NOT hotelops code
-**Pilot:** F&B (`workstream id: fb`)
+**Pilot:** F&B (`workstream_id: fb`)
+
+> **⚠️ Nota retrospettiva (2026-06-08).** Mentre questo spec veniva scritto, un agent in
+> parallelo aveva **già implementato** lo stesso sistema nel vault con convenzioni leggermente
+> diverse — adottate come **canoniche** al posto di quelle proposte qui sotto:
+> - tipo dell'hub = `type: workstream_hub` (non `workstream`); id = `workstream_id: <id>` (non `id`)
+> - hub vivo: `workstreams/FB.md` con **5 blocchi Dataview** (Sessioni / Decisioni / Concetti+loop /
+>   Task aperti / Tutto-il-resto), `FROM "HotelOps"` + filtro `type = "..."`
+> - snapshot datato dello stato: `threads/<NOME>_STATE_<data>.md` (`type: thread_dossier_snapshot`,
+>   `superseded_by` l'hub) — pattern non previsto qui, adottato.
+> - tag note invariato: `workstream: [<id>]` (come da spec).
+> Il registry `workstreams/_INDEX.md` è stato riconciliato a `type = "workstream_hub"`.
+> Le sezioni sotto restano come *razionale di design*; per le convenzioni operative reali fa fede
+> il vault.
 
 ## Problem
 
