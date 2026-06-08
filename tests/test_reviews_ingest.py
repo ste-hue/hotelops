@@ -44,6 +44,33 @@ def test_normalize_booking():
     ReviewRow(**row)
 
 
+def test_normalize_booking_hash_stable_across_unstable_id():
+    """Booking actor rigenera `id` a ogni scrape: la stessa review (autore,
+    data, testo) deve produrre lo stesso review_hash anche con id diverso."""
+    base = {
+        "_bu": "HOTEL",
+        "rating": 9.0,
+        "likedText": "Tutto perfetto",
+        "dislikedText": "",
+        "reviewDate": "2026-06-06T08:00:00.000Z",
+        "userName": "Mariusz",
+    }
+    row1 = normalize_booking({**base, "id": "b79f8b7404522dec"})
+    row2 = normalize_booking({**base, "id": "1f240b54e4cd414f"})
+    assert row1["review_hash"] == row2["review_hash"]
+    # review_id grezzo resta distinto per tracciabilità
+    assert row1["review_id"] != row2["review_id"]
+
+
+def test_normalize_booking_hash_distinguishes_reviews():
+    """Reviews diverse (autore o testo diverso) → hash diversi."""
+    base = {"_bu": "HOTEL", "rating": 9.0, "reviewDate": "2026-06-06", "id": "x"}
+    a = normalize_booking({**base, "userName": "Anna", "likedText": "Bellissimo"})
+    b = normalize_booking({**base, "userName": "Bruno", "likedText": "Bellissimo"})
+    c = normalize_booking({**base, "userName": "Anna", "likedText": "Mediocre"})
+    assert len({a["review_hash"], b["review_hash"], c["review_hash"]}) == 3
+
+
 def test_normalize_tripadvisor():
     raw = {
         "_bu": "HOTEL",

@@ -49,8 +49,15 @@ def normalize_booking(item: dict, societa: str = "ORTI") -> dict:
     # utile invece di "N/A".
     hotel_url = PROPERTIES.get(bu, {}).get("BOOKING")
     url_review = f"{hotel_url}#tab-reviews" if hotel_url else None
+    data_review = (item.get("reviewDate") or "")[:10]
+    # L'actor Apify di Booking rigenera `id` a ogni scrape: ancorare il dedup
+    # su review_id duplica la stessa review tra run. Hash content-based su
+    # (autore, data, testo) → stabile tra le scrape. review_id resta sotto per
+    # tracciabilità.
     return {
-        "review_hash": make_hash("BOOKING", review_id),
+        "review_hash": make_hash(
+            "BOOKING", item.get("userName") or "", data_review, testo
+        ),
         "piattaforma": "BOOKING",
         "review_id": review_id,
         "societa_id": societa,
@@ -62,7 +69,7 @@ def normalize_booking(item: dict, societa: str = "ORTI") -> dict:
         "testo_negativo": disliked or None,
         "titolo": item.get("reviewTitle"),
         "lingua": item.get("reviewLanguage", ""),
-        "data_review": (item.get("reviewDate") or "")[:10],
+        "data_review": data_review,
         "data_soggiorno": item.get("checkInDate"),
         "reviewer_nome": item.get("userName"),
         "reviewer_paese": item.get("userLocation"),
