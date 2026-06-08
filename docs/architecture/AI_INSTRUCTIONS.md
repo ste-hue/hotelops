@@ -117,10 +117,13 @@ Regola: **output-based, non exit-code-based**. Success criteria verificabili pri
 | Dedup / row-selection change in canonical view | Count duplicati su chiave prima/dopo → zero residui |
 | Pipeline change (ingest o classify) | Dry-run + sample verificato, contract Pydantic green, pipeline_runs OK |
 | Forecast / proiezione | Stagionalità applicata? (`d_coefficienti_stagionalita` presente in query) |
+| Commit git (sessioni concorrenti) | `git branch --show-current` == branch atteso **prima** di ogni commit — lo snapshot gitStatus di harness è statico, non riflette switch fatti da altre sessioni |
 
 Se non posso eseguire la verifica (credenziali, environment), **lo dichiaro esplicitamente** invece di claim di successo: *"Script eseguito senza errori; non verificato MAX(ingestion_ts) perché fuori ambiente."* Evidence before assertion.
 
 Anti-pattern: *"Ho ingerito le partite aperte"* senza aver interrogato la tabella. *"Ho fixato il dedup"* senza un count-by-key. *"Ho allineato D_fornitori"* senza aver letto sia il vault `ontology/` sia il CSV.
+
+**Multi-sessione (worktree isolation)**: più sessioni Claude sullo stesso working dir condividono **un solo HEAD** — uno `checkout` in una sposta il branch sotto le altre, in silenzio, e un commit atterra sul branch sbagliato. Mitigazione: **un git worktree per sessione concorrente** (`git worktree add ../hotelops-<scope> <branch>`). Recovery se il commit è già finito sul branch sbagliato: worktree del branch giusto → `cherry-pick <commit>` → `reset --hard HEAD~1` sull'altro (pulito se i commit non hanno overlap di file). Vedi `vault/sessions/2026-06-08_produzione_pms_backfill_and_worktree_fix`.
 
 ## Drift detectors obbligatori
 
