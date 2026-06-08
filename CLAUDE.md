@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Last checkpoint:** 2026-06-01 | **Version:** 0.7.0
 
-> **2026-06-01 checkpoint:** il diario operativo vivo è `STATUS.md` (in corso / decisioni aperte / rotto / prossimi passi) — leggilo prima di pianificare, non duplicarlo qui. Ultimo merge rilevante: **F&B Looker pipeline** (4 viste F&B + audit tool direzione + RistoCube Orders, commit `06abda7`, 2026-05-22) e **GCS raw lineage layer** (Phase 1). Thread aperti principali: doc-refresh sprint, loop minimo `cash_control` end-to-end, refactor `v_fb_kpi` (CANTINA=100%Bar + 9 articoli UoM rotti).
+> **2026-06-01 checkpoint:** il diario operativo vivo è `STATUS.md` (in corso / decisioni aperte / rotto / prossimi passi) — leggilo prima di pianificare, non duplicarlo qui. Ultimo merge rilevante: **F&B Looker pipeline** (4 viste F&B + audit tool direzione + RistoCube Orders, commit `06abda7`, 2026-05-22) e **GCS raw lineage layer** (Phase 1). Thread aperti principali: doc-refresh sprint, loop minimo `cash_control` end-to-end. (Refactor `v_fb_kpi` a 3 bucket onesti CANTINA=Bar + esclusione 9 UoM **fatto** 2026-06-08; resta aggiornare i dashboard Looker F&B al nuovo contratto colonne.)
 
 > **For AI agents**: ground truth = repo + BigQuery schema. Read in this order before non-trivial work:
 > 1. `docs/architecture/INVARIANTS.md` — la costituzione (I1–I8, canonical per concept). [migrato dal vault il 2026-04-30]
@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > **Goal di lungo termine**: HotelOps è il **Company OS** — il sistema operativo decisionale delle vere operazioni del business (frame canonico deciso 2026-05-02, supera la vecchia metafora "digital twin"). 3 layer:
 > - **Code** (`core/`, `ingest/`, `verticals/condges/`, `verticals/reviews/`): come opera il twin.
 > - **BigQuery**: cosa il twin osserva.
-> - **Vault `<vault>/HotelOps/`**: meta-knowledge umano della realtà operativa che il twin riflette (people, companies, banks, loans, departments, stories). **Non canonical per fatti tecnici** — può essere stale. Verifica sempre con repo + BQ + utente.
+> - **Vault `<vault>/HotelOps/`**: meta-knowledge umano della realtà operativa che il twin riflette (people, companies, banks, loans, departments, stories). **Non canonical per fatti tecnici** — può essere stale. Verifica sempre con repo + BQ + utente. Per rientrare su un fronte di lavoro (F&B, pf-rotation, cashflow…) usa l'asse **workstream**: `workstreams/<NOME>.md` (hub curato: dove sono / prossimo passo / thread aperti + blocchi Dataview che raccolgono le note `workstream: [<id>]`), registry `workstreams/_INDEX.md`. Ricostruisce lo stato di un filo senza ripartire da zero. Ortogonale a *vertical* (app/audience) e *loop* (processo).
 
 ## Behavioral guidelines
 
@@ -317,7 +317,7 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `v_fb_consumi` | Looker F&B: costo merce per prodotto/categoria + scomposizione prezzo/volume + YoY. Anni >= 2025. `core/bq/views/` |
 | `v_fb_pasti` | Looker F&B: conteggio pasti per BU, mensile, YoY. Anni >= 2025. `core/bq/views/` |
 | `v_fb_ricavi` | Looker F&B: ricavi per BU × codice + scontrino medio + YoY. Anni >= 2025. `core/bq/views/` |
-| `v_fb_kpi` | Looker F&B: bridge mensile globale — €/pasto + incidenza % (food cost). Anni >= 2025. `core/bq/views/` |
+| `v_fb_kpi` | Looker F&B: bridge mensile in **3 bucket onesti** (breakfast / ristorante=CUCINA / bar=CANTINA) — ricavi split food vs beverage, `food_cost_pct_ristorante` + `food_cost_pct_bar` separati, €/pasto. 9 articoli UoM-rotti esclusi per `codice_prodotto`. Anni >= 2025. `core/bq/views/` |
 | `v_budget_canonical` | Budget canonico per codice conto: dedup fonte priority (GASPAROTTO > MAPPATURA > INCIDENZA), invariant I8. `core/bq/views/` |
 | `v_raw_objects_current` | Lineage: stato corrente per raw_object (latest event per oggetto). `core/bq/views/` |
 | `v_raw_promotion_status` | Lineage: stato promozione raw objects (RAW→CLASSIFIED→PROMOTABLE→PROMOTED) + freshness. `core/bq/views/` |
