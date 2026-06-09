@@ -318,19 +318,21 @@ sources:
     business_unit: null
     lifecycle: APPEND
     canonical_table: f_consumi_economato
-    parser_module: ingest.flussi.ingest_consumi_economato
+    parser_module: ingest.flussi.ingest_consumi_economato_consolidato
     hash_basis: hash_riga
-    loop_targets: []
-    promotion_policy: RAW_ONLY
+    loop_targets: [food_cost]
+    promotion_policy: AUTO
     detector_category: pms_statistiche
     raw_storage:
       backend: gcs
       bucket: hotelops-raw
       path_template: "powerbi/consumi/ORTI"
     notes: |
-      Source raw-first per export semantic layer HotelCube/PowerBI su consumi
-      articoli. In questa fase resta RAW_ONLY finché non fissiamo parser e
-      contratto canonical dedicato.
+      Export semantic layer HotelCube/PowerBI su consumi articoli F&B.
+      Ratificata AUTO 2026-06-08: il parser ingest_consumi_economato_consolidato
+      auto-rileva il layout PowerBI (header "Data - Anno"/"CodiceArticolo"/"Importo",
+      mese testuale IT) oltre all'Esolver classico; hash_riga canonico dedupa
+      cross-layout. Cfr. decision "Source-Contract Ingest Model" (PROPOSED).
 
   POWERBI_SEMANTICMODEL_ORTI_APPEND:
     system: POWERBI

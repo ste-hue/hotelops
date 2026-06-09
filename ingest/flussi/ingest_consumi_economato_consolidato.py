@@ -2,9 +2,15 @@
 """
 Ingest file consumi economato CONSOLIDATO (tutti i reparti in un unico xlsx).
 
-Formato: ECO_SituazioneConsumi_DettagliP — colonne:
-  Codice, Descrizione, Data, Reparto, Classe, Categoria, SubCateg.,
-  U.M.A., U.M.C., Coeff Conv, Quantita, Euro
+Due layout supportati (auto-detect da header):
+  - Esolver "ECO_SituazioneConsumi_DettagliP":
+      Codice, Descrizione, Data, Reparto, Classe, Categoria, SubCateg.,
+      U.M.A., U.M.C., Coeff Conv, Quantita, Euro
+  - PowerBI "Consumptions F&B Data" (sheet Export):
+      Data - Anno, Data - Mese, Data - Giorno, Reparto, Classe, Categoria,
+      CodiceArticolo, DescrizioneArticolo, U.M., Quantita, Importo
+L'hash_riga è calcolato sui valori canonici (anno|mese|reparto|codice|qta|importo),
+quindi è identico tra i due layout: i mesi già caricati si dedupano da soli.
 
 Usage:
     python -m ingest.flussi.ingest_consumi_economato_consolidato \\
@@ -30,6 +36,12 @@ from core.config import PROJECT
 
 BQ_TABLE = f"{PROJECT}.hotelops.f_consumi_economato"
 SOCIETA_ID = "ORTI"
+
+# Nome mese italiano → numero (layout PowerBI usa "Data - Mese" testuale)
+MESI_IT = {
+    "gennaio": 1, "febbraio": 2, "marzo": 3, "aprile": 4, "maggio": 5, "giugno": 6,
+    "luglio": 7, "agosto": 8, "settembre": 9, "ottobre": 10, "novembre": 11, "dicembre": 12,
+}
 
 # Mapping codice reparto → dimensioni
 # Fonte: economato_reparti.csv + codici dal file ECO_SituazioneConsumi
@@ -185,14 +197,24 @@ def parse_file(path: Path, logger: logging.Logger) -> list[dict]:
     rows_raw = list(ws.iter_rows(values_only=True))
     wb.close()
 
-    # Find header row (row with "Codice" in col 0)
+    # Find header row + detect layout (Esolver classic vs PowerBI Export)
     header_idx = None
+    layout = None
     for i, row in enumerate(rows_raw):
-        if row and row[0] and str(row[0]).strip().lower() == "codice":
-            header_idx = i
+        if not row:
+            continue
+        cells = [str(c).strip().lower() if c else "" for c in row]
+        if cells[0] == "codice":
+            header_idx, layout = i, "esolver"
+            break
+        if "data - anno" in cells and "codicearticolo" in cells:
+            header_idx, layout = i, "powerbi"
             break
     if header_idx is None:
-        logger.error("Header 'Codice' non trovato nel file")
+        logger.error(
+            "Header non riconosciuto: atteso 'Codice' (Esolver) "
+            "oppure 'Data - Anno'+'CodiceArticolo' (PowerBI Export)"
+        )
         sys.exit(1)
 
     header = [str(c).strip().lower() if c else "" for c in rows_raw[header_idx]]
@@ -203,39 +225,69 @@ def parse_file(path: Path, logger: logging.Logger) -> list[dict]:
                 return i
         return -1
 
-    col_codice = ci("codice")
-    col_desc = ci("descri")
-    col_data = ci("data")
+    def col(name: str) -> int:
+        for i, h in enumerate(header):
+            if h == name.lower():
+                return i
+        return -1
+
+    if layout == "esolver":
+        col_codice = ci("codice")
+        col_desc = ci("descri")
+        col_data = ci("data")
+        col_anno = col_mese = -1
+        col_subcat = ci("subcateg")
+        col_euro = ci("euro")
+    else:  # powerbi
+        col_codice = col("codicearticolo")
+        col_desc = col("descrizionearticolo")
+        col_data = -1
+        col_anno = col("data - anno")
+        col_mese = col("data - mese")
+        col_subcat = -1
+        col_euro = col("importo")
     col_reparto = ci("reparto")
     col_classe = ci("classe")
     col_cat = ci("categor")
-    col_subcat = ci("subcateg")
     col_qtq = ci("quantit")
-    col_euro = ci("euro")
 
     now = datetime.now(timezone.utc)
     records: list[dict] = []
     unknown_reparti: set[str] = set()
 
+    max_col = max(col_codice, col_desc, col_reparto, col_classe, col_cat,
+                  col_subcat, col_qtq, col_euro, col_anno, col_mese, col_data)
+
     for row in rows_raw[header_idx + 1 :]:
-        if not row or not row[col_codice]:
+        if not row or col_codice < 0 or len(row) <= max_col:
+            continue
+        if not row[col_codice]:
             continue
         codice = str(row[col_codice]).strip()
-        if not codice or codice.lower() in ("codice", "totale"):
+        if not codice or codice.lower() in ("codice", "totale", "codicearticolo"):
             continue
 
-        data_cell = row[col_data] if col_data >= 0 else None
+        if layout == "esolver":
+            data_cell = row[col_data] if col_data >= 0 else None
+            if not isinstance(data_cell, datetime):
+                continue
+            anno = data_cell.year
+            mese = data_cell.month
+        else:  # powerbi: anno int + mese testuale, salta riga "Total"
+            anno_raw = row[col_anno] if col_anno >= 0 else None
+            mese_raw = row[col_mese] if col_mese >= 0 else None
+            if not isinstance(anno_raw, int):
+                continue
+            mese = MESI_IT.get(str(mese_raw).strip().lower()) if mese_raw else None
+            if mese is None:
+                continue
+            anno = anno_raw
+
         reparto_raw = (
             str(row[col_reparto]).strip()
             if col_reparto >= 0 and row[col_reparto]
             else ""
         )
-
-        if not isinstance(data_cell, datetime):
-            continue
-
-        anno = data_cell.year
-        mese = data_cell.month
 
         dim = REPARTO_MAP.get(reparto_raw)
         if dim is None:
