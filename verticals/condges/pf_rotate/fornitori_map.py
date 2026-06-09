@@ -7,6 +7,15 @@ from pathlib import Path
 
 from core.schemas import FornitoreMapRow
 
+# Path canonico del CSV mappa fornitori (repo-root/core/bq/dimensioni).
+DEFAULT_FORNITORI_CSV = (
+    Path(__file__).resolve().parents[3]
+    / "core"
+    / "bq"
+    / "dimensioni"
+    / "d_fornitori.csv"
+)
+
 
 def _to_bool(s) -> bool:
     return str(s).strip().lower() in ("true", "1", "yes")

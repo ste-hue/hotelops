@@ -1,7 +1,8 @@
 """Step 3 — applicazione scadenzario sul PF, con policy esplicita su unmapped.
 
-Riusa il motore di scrittura esistente `app_scadenzario.write_pf` ma:
-- usa il nuovo loader filtrato per società (con is_excluded),
+Usa il motore di scrittura unico `placement.write_pf` (estratto da
+`app_scadenzario.py`) e:
+- usa il loader canonico filtrato per società (con is_excluded),
 - impone una policy esplicita per i fornitori non mappati (no silent skip).
 """
 
@@ -12,8 +13,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from verticals.condges.app_scadenzario import write_pf
 from verticals.condges.pf_rotate.fornitori_map import load_fornitori
+from verticals.condges.pf_rotate.placement import write_pf
 
 
 class UnmappedPolicy(str, Enum):
@@ -28,15 +29,6 @@ class UnmappedFornitoriError(RuntimeError):
         super().__init__(f"{len(codici)} fornitori non mappati: {codici[:5]}…")
         self.codici = codici
         self.detail = detail or []
-
-
-def _build_legacy_fornitori_map(fornitori) -> dict[int, dict]:
-    """Convert dict[int, FornitoreMapRow] -> dict[int, {voce_id, nome_pf}] per write_pf."""
-    return {
-        cod: {"voce_id": row.voce_id, "nome_pf": row.nome_pf}
-        for cod, row in fornitori.items()
-        if not row.is_excluded  # excluded → trattati come unmapped/skip da write_pf
-    }
 
 
 def apply_scadenzario(
@@ -81,7 +73,6 @@ def apply_scadenzario(
             )
         # SKIP: prosegui
 
-    legacy_map = _build_legacy_fornitori_map(fornitori)
     adhoc_excluded = set(extra_excluded or set())
     excluded_set = (
         excluded_codici
@@ -89,11 +80,13 @@ def apply_scadenzario(
         | adhoc_excluded
     )
 
+    # Passa la mappa canonica (dict[int, FornitoreMapRow]) direttamente: i
+    # codici is_excluded sono già in excluded_set, quindi write_pf li salta.
     updated_bytes, write_summary = write_pf(
         pf_bytes=pf_bytes,
         scad_df=scad_df,
         bucket_months=bucket_months,
-        fornitori_map=legacy_map,
+        fornitori_map=fornitori,
         excluded=excluded_set,
     )
     summary = {
