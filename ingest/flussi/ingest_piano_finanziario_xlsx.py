@@ -166,44 +166,63 @@ def _detect_societa(ws) -> str | None:
 
 
 def _detect_year_and_month_block(ws) -> tuple[int | None, list[tuple[int, int]]]:
-    """Detect year and build (col, mese) list for the 12-month 2026 block.
+    """Detect year and build (col, mese) list — layout-aware ORTI + INTUR.
 
-    Strategy: scan row 1 for year markers, then find where the 12 months
-    of that year start. Read month names from row 2.
+    I mesi si leggono scansionando la riga 2 per nomi-mese italiani *ovunque*
+    siano: questo copre sia ORTI (riga 1 = anno, mesi da col 3) sia INTUR
+    (riga 1 = "DATA RILEVAZIONE", col 3 = data snapshot, mesi spostati a destra).
+    Mappare il mese dal nome (non da una posizione fissa) evita lo shift che la
+    vecchia fallback introduceva quando i mesi non erano 12.
+
+    L'anno: marker in riga 1 (ORTI); in mancanza, una data in riga 2 (INTUR);
+    altrimenti default 2026.
 
     Returns (anno, [(col, mese), ...])
     """
-    # Find the rightmost year marker in row 1 (that's the budget year)
-    year_col = None
-    anno = None
-    for col in range(3, 20):
-        val = ws.cell(1, col).value
-        if val is not None:
-            try:
-                y = int(float(val))
-                if 2025 <= y <= 2030:
-                    year_col = col
-                    anno = y
-            except (ValueError, TypeError):
-                pass
-
-    if not anno or not year_col:
-        return None, []
-
-    # Read month names from row 2 starting at year_col
-    months = []
-    for col in range(year_col, year_col + 12):
-        month_name = ws.cell(2, col).value
-        if month_name and isinstance(month_name, str):
-            mese = MESI_IT.get(month_name.strip().upper())
+    # Mesi: ogni cella di riga 2 il cui testo è un nome-mese italiano.
+    months: list[tuple[int, int]] = []
+    for col in range(1, 20):
+        v = ws.cell(2, col).value
+        if isinstance(v, str):
+            mese = MESI_IT.get(v.strip().upper())
             if mese:
                 months.append((col, mese))
 
-    if len(months) == 12:
-        return anno, months
+    if not months:
+        return None, []
 
-    # Fallback: 12 consecutive months starting at year_col
-    return anno, [(year_col + i, i + 1) for i in range(12)]
+    # Anno: marker in riga 1 (layout ORTI).
+    anno = None
+    for col in range(1, 20):
+        val = ws.cell(1, col).value
+        try:
+            y = int(float(val))
+            if 2025 <= y <= 2030:
+                anno = y
+                break
+        except (ValueError, TypeError):
+            pass
+
+    # Fallback anno: una data in riga 2 (cella "DATA RILEVAZIONE" INTUR).
+    if anno is None:
+        for col in range(1, 20):
+            v = ws.cell(2, col).value
+            if hasattr(v, "year") and 2025 <= getattr(v, "year", 0) <= 2030:
+                anno = v.year
+                break
+            if isinstance(v, str):
+                for tok in v.replace("-", "/").split("/"):
+                    tok = tok.strip()
+                    if tok.isdigit() and 2025 <= int(tok) <= 2030:
+                        anno = int(tok)
+                        break
+                if anno is not None:
+                    break
+
+    if anno is None:
+        anno = 2026
+
+    return anno, months
 
 
 def setup_logger() -> logging.Logger:
