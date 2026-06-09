@@ -191,7 +191,8 @@ def _detect_year_and_month_block(ws) -> tuple[int | None, list[tuple[int, int]]]
     if not months:
         return None, []
 
-    # Anno: marker in riga 1 (layout ORTI).
+    # Anno: marker in riga 1 (layout ORTI). Il più a destra = anno budget
+    # (i file possono avere una colonna 2025 di confronto prima del 2026).
     anno = None
     for col in range(1, 20):
         val = ws.cell(1, col).value
@@ -199,7 +200,6 @@ def _detect_year_and_month_block(ws) -> tuple[int | None, list[tuple[int, int]]]
             y = int(float(val))
             if 2025 <= y <= 2030:
                 anno = y
-                break
         except (ValueError, TypeError):
             pass
 
