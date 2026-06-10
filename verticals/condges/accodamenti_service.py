@@ -8,7 +8,12 @@ from pathlib import Path
 import pandas as pd
 from google.cloud import bigquery
 
-from verticals.condges.cassa_giornaliera import run_accodamenti_to_excel
+from verticals.condges.cassa_giornaliera import (
+    build_daily_from_bq,
+    build_detail_from_bq,
+    run_accodamenti_to_excel,
+    write_excel,
+)
 from core.bq.client import get_client
 from ingest.banca.ingest_accodamenti import BQ_TABLE, parse_and_transform, write_to_bq
 
@@ -120,76 +125,64 @@ def generate_excel_from_folder(input_dir: Path, output_path: Path) -> dict:
     return run_accodamenti_to_excel(input_dir, output_path)
 
 
+_BU_TO_STRUTTURA = {
+    "HOTEL": "hotel",
+    "RESIDENCE": "residence",
+    "CVM": "cvm",
+    "LIDO": "lido",
+}
+
+
 def generate_cumulative_excel_from_bq(start_date: date, output_path: Path) -> dict:
-    """Export cumulativo da f_accodamenti a partire da una data scelta utente."""
+    """Riconciliazione cassa Gaia (ricca) da f_accodamenti, cumulativa da una data.
+
+    Usa `categoria_cassa` per ricostruire le stesse categorie del path TXT
+    (corrispettivi POS/contanti/storno, caparre incassate/evase, fatture) e scrive
+    l'Excel a 2 fogli identico a quello da TXT — ma cumulativo da BigQuery.
+    """
     client = get_client()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    sql_raw = f"""
-    SELECT
-      data_registrazione,
-      business_unit_id,
-      descrizione,
-      importo,
-      importo_dare,
-      importo_avere,
-      centro_imputazione,
-      documento,
-      file_sorgente,
-      hash_riga
+    sql = f"""
+    SELECT data_registrazione, business_unit_id, importo, importo_dare,
+           importo_avere, documento, categoria_cassa
     FROM `{BQ_TABLE}`
     WHERE data_registrazione >= @start_date
-    ORDER BY data_registrazione, business_unit_id, file_sorgente, hash_riga
+    ORDER BY data_registrazione, business_unit_id
     """
-    raw_job = client.query(
-        sql_raw,
+    result = client.query(
+        sql,
         job_config=bigquery.QueryJobConfig(
             query_parameters=[
-                bigquery.ScalarQueryParameter(
-                    "start_date", "DATE", start_date.isoformat()
-                )
+                bigquery.ScalarQueryParameter("start_date", "DATE", start_date.isoformat())
             ]
         ),
-    )
-    raw_df = raw_job.to_dataframe()
+    ).result()
 
-    if raw_df.empty:
+    rows = [
+        {
+            "categoria_cassa": r.categoria_cassa,
+            "importo": r.importo,
+            "importo_dare": r.importo_dare,
+            "importo_avere": r.importo_avere,
+            "documento": r.documento,
+            "_data": r.data_registrazione.strftime("%d/%m/%Y"),
+            "_struttura": _BU_TO_STRUTTURA.get(r.business_unit_id, "unknown"),
+        }
+        for r in result
+    ]
+
+    if not rows:
         with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
             pd.DataFrame(
                 [{"note": f"Nessun dato in f_accodamenti da {start_date.isoformat()}"}]
             ).to_excel(writer, index=False, sheet_name="Info")
         return {"output": str(output_path), "rows": 0, "start_date": start_date.isoformat()}
 
-    sql_daily = f"""
-    SELECT
-      data_registrazione,
-      business_unit_id,
-      COUNT(*) AS righe,
-      ROUND(SUM(importo), 2) AS importo_netto,
-      ROUND(SUM(importo_dare), 2) AS totale_dare,
-      ROUND(SUM(importo_avere), 2) AS totale_avere
-    FROM `{BQ_TABLE}`
-    WHERE data_registrazione >= @start_date
-    GROUP BY data_registrazione, business_unit_id
-    ORDER BY data_registrazione, business_unit_id
-    """
-    daily_df = client.query(
-        sql_daily,
-        job_config=bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter(
-                    "start_date", "DATE", start_date.isoformat()
-                )
-            ]
-        ),
-    ).to_dataframe()
-
-    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-        daily_df.to_excel(writer, index=False, sheet_name="Riepilogo da BQ")
-        raw_df.to_excel(writer, index=False, sheet_name="Dettaglio da BQ")
+    write_excel(build_daily_from_bq(rows), build_detail_from_bq(rows), output_path)
 
     return {
         "output": str(output_path),
-        "rows": int(len(raw_df)),
+        "rows": len(rows),
         "start_date": start_date.isoformat(),
     }

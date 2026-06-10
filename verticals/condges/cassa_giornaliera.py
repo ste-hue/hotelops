@@ -275,6 +275,63 @@ def build_detail_reconciliation(corr_events, mov_events, fatt_events) -> list[di
     return rows
 
 
+# ── BQ-native: stessa riconciliazione, alimentata da categoria_cassa ──────────
+# Le righe BQ portano `categoria_cassa` (vedi core/parsers/accodamenti.py), quindi
+# la riconciliazione si ricostruisce da BigQuery identica al path TXT — cumulativa.
+
+
+def _accumulate_bq(rows: list[dict], days: dict, key_fn) -> None:
+    """Popola `days` da righe f_accodamenti via categoria_cassa.
+
+    Ogni riga: {categoria_cassa, importo, importo_dare, importo_avere, documento,
+    _data (dd/mm/yyyy), _struttura (hotel|residence|cvm)}.
+    """
+    for r in rows:
+        data = r.get("_data")
+        if not data:
+            continue
+        day = days[key_fn(r, data)]
+        cat = r.get("categoria_cassa") or ""
+        imp = Decimal(str(r.get("importo") or 0))
+        gross = max(
+            Decimal(str(r.get("importo_dare") or 0)),
+            Decimal(str(r.get("importo_avere") or 0)),
+        )
+        if cat == "corrispettivo_pos":
+            day["corrispettivi_pos"] += imp
+        elif cat == "corrispettivo_contanti":
+            day["corrispettivi_contanti"] += imp
+        elif cat == "corrispettivo_storno_caparra":
+            day["corrispettivi_storno_caparra"] += imp
+        elif cat == "caparra_incassata_pos":
+            day["caparre_incassate_pos"] += gross
+        elif cat == "caparra_incassata_contanti":
+            day["caparre_incassate_contanti"] += gross
+        elif cat == "caparra_evasa":
+            day["caparre_evase"] += gross
+        elif cat == "fattura":
+            day["fatture_importo"] += imp
+            doc = r.get("documento")
+            if doc:
+                day["fatture_lista"].append(str(doc))
+
+
+def build_daily_from_bq(rows: list[dict]) -> list[dict]:
+    days: dict = defaultdict(_new_day)
+    _accumulate_bq(rows, days, key_fn=lambda _r, d: d)
+    return [_day_to_row(days[data], data) for data in sorted(days.keys(), key=_sort_key_date)]
+
+
+def build_detail_from_bq(rows: list[dict]) -> list[dict]:
+    days: dict = defaultdict(_new_day)
+    _accumulate_bq(rows, days, key_fn=lambda r, d: (d, r.get("_struttura", "unknown")))
+    out = []
+    for data, struttura in sorted(days.keys(), key=lambda k: (_sort_key_date(k[0]), k[1])):
+        display = _STRUTTURA_DISPLAY.get(struttura, struttura)
+        out.append(_day_to_row(days[(data, struttura)], data, display))
+    return out
+
+
 # ── Excel output ──────────────────────────────────────────────────────────────
 
 _BLU = PatternFill("solid", fgColor="1F4E79")

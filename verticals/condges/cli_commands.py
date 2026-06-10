@@ -815,8 +815,8 @@ def cmd_accodamenti(args):
         DEFAULT_OUTPUT,
         print_ultime_date,
         report_ultime_date,
-        run_accodamenti_to_excel,
     )
+    from verticals.condges.accodamenti_service import generate_excel_from_folder
     from core.datahub_sync import rclone_sync
 
     remote_subpath = "ingresso/accodamenti/ORTI"
@@ -850,7 +850,7 @@ def cmd_accodamenti(args):
         return
 
     print()
-    stats = run_accodamenti_to_excel(input_dir, output_path)
+    stats = generate_excel_from_folder(input_dir, output_path)
 
     print(
         f"\n  ✓ {stats['giorni']} giorni riconciliati "
