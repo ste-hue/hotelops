@@ -43,6 +43,7 @@ from core.config import PROJECT
 from core.datahub_sync import RcloneError, rclone_sync
 from ingest._logging import setup_logging as _setup_logging
 from core.parsers.accodamenti import (
+    categoria_cassa,
     parse_corrispettivi,
     parse_fatture,
     parse_movimenti,
@@ -99,6 +100,7 @@ FACT_HEADER = [
     "file_sorgente",
     "riga_sorgente",
     "hash_riga",
+    "categoria_cassa",
     "raw_object_id",
 ]
 
@@ -124,6 +126,7 @@ BQ_SCHEMA = [
     bigquery.SchemaField("file_sorgente", "STRING"),
     bigquery.SchemaField("riga_sorgente", "INTEGER"),
     bigquery.SchemaField("hash_riga", "STRING"),
+    bigquery.SchemaField("categoria_cassa", "STRING"),
     bigquery.SchemaField("raw_object_id", "STRING"),
 ]
 
@@ -178,6 +181,7 @@ def _make_row(
     conto: str,
     file_name: str,
     line_no: int,
+    etype: str = "",
     documento: str = "",
     metodo: str = "",
 ) -> dict | None:
@@ -218,6 +222,7 @@ def _make_row(
         "hash_riga": _md5(
             societa, bu, data_iso, float(importo), descrizione or "", conto
         ),
+        "categoria_cassa": categoria_cassa(etype, conto),
         "raw_object_id": None,
     }
 
@@ -253,6 +258,7 @@ def events_to_rows(events: list[dict], societa: str) -> list[dict]:
                     conto=gen.get("conto_esolver", ""),
                     file_name=src_file,
                     line_no=src_line,
+                    etype=etype,
                     metodo=gen.get("metodo_pagamento", ""),
                 )
                 if row:
@@ -275,6 +281,7 @@ def events_to_rows(events: list[dict], societa: str) -> list[dict]:
                     conto=gen.get("conto_esolver", ""),
                     file_name=src_file,
                     line_no=src_line,
+                    etype="corrispettivo",
                     metodo=gen.get("metodo_pagamento", ""),
                 )
                 if row:
@@ -304,6 +311,7 @@ def events_to_rows(events: list[dict], societa: str) -> list[dict]:
                 conto="110301",
                 file_name=src_file,
                 line_no=src_line,
+                etype="fattura",
                 documento=str(tes.get("num_doc", "")),
             )
             if row:

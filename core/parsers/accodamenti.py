@@ -29,6 +29,60 @@ def is_caparra_account(conto_esolver: str) -> bool:
     return conto_esolver.replace(".", "") == CAPARRA_ACCOUNT
 
 
+def _esolver_dotted(raw: str) -> str:
+    """Conto compatto (479101) → puntato (47.91.01)."""
+    raw = raw.strip()
+    if "." in raw:
+        return raw
+    if len(raw) == 6:
+        return f"{raw[0:2]}.{raw[2:4]}.{raw[4:6]}"
+    if len(raw) == 8:
+        return f"{raw[0:2]}.{raw[2:4]}.{raw[4:6]}.{raw[6:8]}"
+    return raw
+
+
+def classify_payment_account(conto_esolver: str) -> str:
+    """Classifica un conto Esolver come pos | cash | caparra | '' (riconciliazione cassa)."""
+    if not conto_esolver:
+        return ""
+    if is_caparra_account(conto_esolver):
+        return "caparra"
+    dotted = _esolver_dotted(conto_esolver)
+    if dotted.startswith("19.90"):
+        return "pos"
+    if dotted == "19.03.03":
+        return "cash"
+    return ""
+
+
+def categoria_cassa(etype: str, conto_esolver: str) -> str:
+    """Categoria cassa per riga f_accodamenti, da (tipo evento × conto).
+
+    Porta in BQ la semantica di business che `events_to_rows` altrimenti appiattisce,
+    così la riconciliazione Gaia si ricostruisce direttamente da BigQuery. Le righe
+    '*_contropartita' / 'movimento_generico' / 'altro' NON entrano nei totali cassa.
+    """
+    cls = classify_payment_account(conto_esolver)
+    if etype == "corrispettivo":
+        return {
+            "pos": "corrispettivo_pos",
+            "cash": "corrispettivo_contanti",
+            "caparra": "corrispettivo_storno_caparra",
+        }.get(cls, "corrispettivo_altro")
+    if etype == "incasso_caparra":
+        return {
+            "pos": "caparra_incassata_pos",
+            "cash": "caparra_incassata_contanti",
+        }.get(cls, "caparra_incasso_contropartita")
+    if etype == "giro_caparra":
+        return "caparra_evasa" if cls == "caparra" else "giro_contropartita"
+    if etype == "fattura":
+        return "fattura"
+    if etype == "movimento_generico":
+        return "movimento_generico"
+    return "altro"
+
+
 def _parse_decimal(value: str) -> Decimal:
     """Converte importo Esolver (virgola decimale) in Decimal."""
     if not value or not value.strip():
