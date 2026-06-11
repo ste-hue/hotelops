@@ -153,6 +153,19 @@ def _handle(args: argparse.Namespace) -> int:
     data_saldo = _resolve_data_saldo(args.data_saldo, anno, args.mese_chiuso)
     extra_excluded = _parse_exclude(args.exclude)
 
+    if policy == UnmappedPolicy.INTERACTIVE:
+        from verticals.condges.pf_rotate.interactive_map import (
+            resolve_unmapped_interactive,
+        )
+
+        resolved = resolve_unmapped_interactive(
+            scad_df, args.fornitori_csv, args.societa
+        )
+        if resolved:
+            print(f"{len(resolved)} fornitori mappati in {args.fornitori_csv}")
+        # I non risolti ('s' = salta) devono fermare il run, non sparire in silenzio.
+        policy = UnmappedPolicy.FAIL
+
     try:
         result = rotate(
             pf_path=args.pf,
