@@ -20,10 +20,12 @@ from verticals.condges.parse_pf import ScadenzarioData
 
 
 def parse_scadenze(file_bytes: BinaryIO) -> tuple[pd.DataFrame, list[int]]:
-    """Parse Esolver 'Situazione partite sintetica per fornitori'.
+    """Parse Esolver 'Situazione partite sintetica/dettagliata per fornitori'.
 
-    Each row is an individual invoice with:
+    Layout sintetica (one row per invoice):
       col 11: codice_fornitore, col 12: nome, col 20: importo, col 23: data_scadenza.
+    Layout dettagliata (one row per partita; codice/nome same columns):
+      col 34: data_scadenza, col 37: saldo scadenza in UDC (residuo aperto).
 
     Returns (df, bucket_months) where df has one row per supplier with columns:
       codice_fornitore, nome, totale, scaduto, mese_4, mese_5, ...
@@ -40,12 +42,19 @@ def parse_scadenze(file_bytes: BinaryIO) -> tuple[pd.DataFrame, list[int]]:
         codice = None
         nome = ""
         scad = None
+        importo_col = 20
 
         c11 = ws.cell(row=row_idx, column=11).value
         if c11 and isinstance(c11, (int, float)):
             codice = int(c11)
             nome = str(ws.cell(row=row_idx, column=12).value or "").strip()
             scad = ws.cell(row=row_idx, column=23).value
+            if not hasattr(scad, "month"):
+                # layout dettagliata: scadenza in col 34, residuo in col 37
+                scad_dett = ws.cell(row=row_idx, column=34).value
+                if hasattr(scad_dett, "month"):
+                    scad = scad_dett
+                    importo_col = 37
 
         if codice is None:
             c14 = ws.cell(row=row_idx, column=14).value
@@ -61,7 +70,7 @@ def parse_scadenze(file_bytes: BinaryIO) -> tuple[pd.DataFrame, list[int]]:
         if not hasattr(scad, "month"):
             continue
 
-        importo = ws.cell(row=row_idx, column=20).value or 0
+        importo = ws.cell(row=row_idx, column=importo_col).value or 0
         invoices.append(
             {
                 "codice": int(codice),
