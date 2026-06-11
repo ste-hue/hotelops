@@ -164,6 +164,78 @@ sources:
       bucket: hotelops-raw
       path_template: "registro_banca_esolver/INTUR"
 
+  # ── Registro fatture (righe contropartita) — APPEND ──────────────────────
+  # Export Esolver "Lista fatture acquisto/vendita per numero dettagliata".
+  # Una riga per contropartita con cod_conto + imponibile. Complementare a
+  # f_movimenti_contabili (scope = solo prima nota, decisione 2026-06-04).
+  ESOLVER_FATTUREACQUISTO_ORTI_APPEND:
+    system: ESOLVER
+    dataset: FATTUREACQUISTO
+    dataset_label: "Lista fatture acquisto per numero dettagliata"
+    societa: ORTI
+    lifecycle: APPEND
+    canonical_table: f_fatture_righe
+    parser_module: ingest.flussi.ingest_fatture
+    hash_basis: hash_riga
+    loop_targets: [monthly_close, budget_canonical, cash_control]
+    promotion_policy: AUTO
+    detector_category: fatture_acquisto
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "fatture/ORTI/acquisto"
+
+  ESOLVER_FATTUREACQUISTO_INTUR_APPEND:
+    system: ESOLVER
+    dataset: FATTUREACQUISTO
+    dataset_label: "Lista fatture acquisto per numero dettagliata"
+    societa: INTUR
+    lifecycle: APPEND
+    canonical_table: f_fatture_righe
+    parser_module: ingest.flussi.ingest_fatture
+    hash_basis: hash_riga
+    loop_targets: [monthly_close, budget_canonical, cash_control]
+    promotion_policy: AUTO
+    detector_category: fatture_acquisto
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "fatture/INTUR/acquisto"
+
+  ESOLVER_FATTUREVENDITA_ORTI_APPEND:
+    system: ESOLVER
+    dataset: FATTUREVENDITA
+    dataset_label: "Lista fatture di vendita per numero dettagliata"
+    societa: ORTI
+    lifecycle: APPEND
+    canonical_table: f_fatture_righe
+    parser_module: ingest.flussi.ingest_fatture
+    hash_basis: hash_riga
+    loop_targets: [monthly_close, budget_canonical, cash_control]
+    promotion_policy: AUTO
+    detector_category: fatture_vendita
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "fatture/ORTI/vendita"
+
+  ESOLVER_FATTUREVENDITA_INTUR_APPEND:
+    system: ESOLVER
+    dataset: FATTUREVENDITA
+    dataset_label: "Lista fatture di vendita per numero dettagliata"
+    societa: INTUR
+    lifecycle: APPEND
+    canonical_table: f_fatture_righe
+    parser_module: ingest.flussi.ingest_fatture
+    hash_basis: hash_riga
+    loop_targets: [monthly_close, budget_canonical, cash_control]
+    promotion_policy: AUTO
+    detector_category: fatture_vendita
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "fatture/INTUR/vendita"
+
   # ── Partite aperte — SNAPSHOT ─────────────────────────────────────────────
   ESOLVER_PARTITE_ORTI_SNAPSHOT:
     system: ESOLVER
