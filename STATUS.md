@@ -1,7 +1,9 @@
-# Status — 2026-06-08
+# Status — 2026-06-11
 
 ## In corso
-- **cash_control v1** (CASSA, Loop B) -- design completo via grill (BQ-state authority, IMPEGNO-first projection, record-only decision-memory, 4/5 Kernel stages). Foundation in corso: **P0** re-baseline `f_movimenti_contabili` lineage-clean, **P1** load saldi certificati maggio, **P2** memory tables. Tutto bloccato su go esecuzione. Vedi `vault/sessions/2026-06-04_esolver_p0_and_cashflow_evaluation.md`.
+- **cash_control v1** (CASSA, Loop B) -- design completo via grill (BQ-state authority, IMPEGNO-first projection, record-only decision-memory, 4/5 Kernel stages). **P0 re-baseline `f_movimenti_contabili` CHIUSO 2026-06-11** lato prima nota (FK 100%, AEGRI out) — resta export fatture 6xx (vedi sotto). **P1** load saldi certificati maggio, **P2** memory tables ancora in coda. Vedi `vault/sessions/2026-06-11_bilancini_oracle_and_movimenti_rebaseline.md`.
+- **BVA costi Apr+Mag**: vendite pronte (`f_produzione_pms` YoY: Apr +72%, Mag +46%); costi sbloccati a metà — prima nota in BQ, **mancano fatture acquisto/vendita** (export Esolver tipi 6xx / registri IVA: €262k vs €548k CE da bilancino). Stipendi maggio ORTI non ancora registrati da Rosa.
+- **f_accodamenti ORTI vuota** (roundtrip FK interrotto su promote `VALIDATE_FAIL`): dati al sicuro nei 12 TXT raw object GCS; Gaia si genera dai TXT (decisione B) quindi non urgente. Debug pendente.
 - **F&B Looker pipeline** (mergiata su `main` 2026-05-22, commit `06abda7`): view refactor wide + bug fix v_fb_kpi 6.6x + audit tool (Streamlit+Form) + RistoCube Orders pipeline canonical. **v_fb_kpi rifattorizzata 2026-06-08** (3 bucket onesti + 9 UoM esclusi, deployata su BQ, in main). Pendente: aggiornare dashboard Looker F&B al nuovo contratto colonne.
 - **Sistema workstream vault** (pilota F&B, 2026-06-08): hub `workstreams/FB.md` + registry `_INDEX.md` — nuovo asse per isolare/navigare un fronte di lavoro (ortogonale a vertical/loop). Replicabile su pf-rotation/cashflow/ingestion/capex. Spec+plan in main.
 - **Audit consumi F&B per direzione**: Streamlit `verticals/condges/audit_consumi_dashboard.py` (6 pagine, canonical-transformation-matrix) + Apps Script `audit_form.gs` (8 sezioni Form). Setup pendente: `createAuditForm()` su script.google.com + aggiornare FORM_URL + condividere col direttore.
@@ -15,6 +17,8 @@
 - **Doc Refresh Sprint**: Step 1+2+2.5 chiusi in working tree. Step 3 (README rewrite) in attesa OK. Step 4-9 in coda.
 
 ## Completato di recente
+- 2026-06-11: **Re-baseline `f_movimenti_contabili` 2026 + bilancini come oracolo** (commit `8bec01b`) -- 8 bilancini ingeriti via intake→promote (Apr+Mag × ORTI+INTUR × 2025+2026; source `ESOLVER_BILANCINO_INTUR_SNAPSHOT` nuova; parser dual-layout header-based per griglia Esolver 16-col); oracolo costi: €548k ORTI YTD mag SONO in Esolver → buco era negli export. Re-baseline: 5.742 righe 2026 da 2 export `lista-movimenti`, FK 100%, AEGRI 0, maggio ORTI 749→1.727. ⚠️ export = solo prima nota (7xx); bilancini 2025 = solo SP (re-export con CE per YoY). Skill **`hotelops-ingest`** creata (lineage-first, versionata in `meta/skills/`).
+- 2026-06-10: **Maratona accodamenti + F&B loads** (commit 94b045e…f348a85) -- categoria_cassa in `f_accodamenti`, re-label INTUR→ORTI, vendite_fb tutti-anni imponibile, decisione B (Excel Gaia dai TXT), `d_anagrafica_clienti`. Vedi `vault/sessions/2026-06-10_accodamenti_categoria_cassa_and_fb_loads.md`.
 - 2026-06-08: **v_fb_kpi refactor — 3 bucket onesti F&B** (merge su main `1a7359b`) -- split costo CANTINA=Bar / CUCINA=Ristorante / BRK=Breakfast; ricavi spaccati food vs beverage dai codici 02FB → `food_cost_pct_ristorante` + `food_cost_pct_bar` separati; 9 articoli UoM rotti esclusi per `codice_prodotto` (sostituisce la maschera mag-2025). Deployata su BQ, validata 2025 (bar 26%, ristorante 35-37% estate, breakfast ~40%). ⚠️ contratto colonne cambiato → Looker F&B da aggiornare.
 - 2026-06-08: **Sistema workstream nel vault (pilota F&B)** -- nuovo asse `workstream` (ortogonale a vertical/loop): hub `workstreams/FB.md` (curato + 5 blocchi Dataview) + registry `_INDEX.md` + link da INDEX. Adottato+riconciliato un hub costruito in parallelo; 4 decisioni F&B promosse a decision-note (CANTINA=Bar, B&B-only, canonical-matrix, D-prefix). Spec+plan in main (`8144c40`); vault pushato (master `e15ace8`).
 - 2026-06-08: **Fix 2 test rossi pre-esistenti** (`fix/stale-tests` → main `ff663a5`) -- `test_other_sources_remain_drive` rimosso (guard fase-pilota obsoleto, bulk-flip on-demand l'ha superato); `test_main_passes_raw_object_id...` fix firma fake (`raw_object_id`/`logger` invertiti). Nessuna modifica codice prod. Suite **603 passed**.
@@ -63,8 +67,8 @@
 - **Glossario `segmento_cliente` parziale** (Ristocube): INLE/INTUI/GRLE/GRBU/GRSE/ZRIST* noti. TBD: vuoto, GRWE, FERR25, ZRISRES.
 
 - Pipelines stale >36h: `ingest_scheda_contabile` + `ingest_partite_aperte` ultimo OK run 2026-04-30.
-- **f_movimenti_contabili: lineage void** -- 0/3863 righe con `raw_object_id`; `ingest_movimenti_contabili` non ha path GCS-intake (solo `--file`), viola I9. Risolve P0 re-baseline.
-- **AEGRI mis-ingerita** in `f_movimenti_contabili` (scheda contabile conto 190101 via pipeline movimenti sbagliata) -- doppio conteggio leg banca. Da rimuovere + re-route via `ingest_scheda_contabile`.
+- ~~f_movimenti_contabili lineage void~~ **RISOLTO 2026-06-11**: 2026 re-baseline FK 100% (2025 e precedenti restano pre-lineage, onesto per AI_INSTRUCTIONS §Lineage eras).
+- ~~AEGRI mis-ingerita~~ **RISOLTA 2026-06-11**: eliminata col re-baseline (0 righe AEGRI verificate).
 - **Previsione cassa maggio ~110k troppo pessimista** (forecast €471k vs certificato €581k) -- ipotesi apertura anticipata (Apr 3 vs 16) + Godimento intercompany €147k. Decomporre post-P0.
 - f_pms_statistiche freshness: dati fermi al 2026-04-11. Da estrarre 60 file Cruscotto giornalieri.
 - Banche stale: INTUR/INTESA 53gg, ORTI/INTESA 32gg, INTUR/MPS 31gg, ORTI/MPS+MPS_KROSS 15gg. Solo INTUR/SELLA fresh.
@@ -78,7 +82,10 @@
 - **Generare Google Form per audit direzione** via `createAuditForm()` su script.google.com -> aggiornare `FORM_URL` in `verticals/condges/audit_consumi_dashboard.py`.
 - **Condividere audit (Streamlit + Form) col direttore** -- decidere hosting: Streamlit Cloud, localtunnel, o sessione shared.
 - **Capture vault dei 9-10 insights** sessione 2026-05-21 -- flaggati in `vault/sessions/2026-05-21_fb_canonical_model_and_audit_tool.md`.
-- **P0: re-baseline `f_movimenti_contabili`** -- intake->promote export Esolver completi + DELETE patchwork+AEGRI (keystone: sblocca cash delta + BVA + cash_backcheck). Serve go + fresher ORTI export (->31 mag).
+- **Export fatture acquisto/vendita** (tipi 6xx / registri IVA) ORTI+INTUR 2026 da Rosa -- completa il BVA costi (APPEND+dedup: si aggiunge sopra il re-baseline senza DELETE). Domanda preformulata in `vault/sessions/2026-06-11_*` §Blockers.
+- **Re-export bilancini 2025** Apr+Mag ORTI+INTUR **con sezione CE** -- per YoY costi (attuali = solo SP).
+- **Debug `VALIDATE_FAIL` promote accodamenti** + roundtrip FK (tabella ORTI vuota, TXT in GCS).
+- **Push main → origin** (ahead 4: 94b045e…8bec01b).
 - **P1: load saldi certificati maggio** (5 righe, Kross escluso) -- pre-stage anchor rotation giugno. Verificare loader `f_saldi_banca_chiusura_mensile`.
 - **P2: cash_control memory tables** + moduli evaluation: BVA (COMPETENZA, GASPAROTTO) + `cash_backcheck` (CASSA, PF forecast vs Esolver, backwards check).
 - **Rotation maggio->giugno** ~fine giugno (timing paradigm); inputs staged in `pianfin/{PF,scadenziari}`.
