@@ -215,6 +215,22 @@ sources:
       bucket: hotelops-raw
       path_template: "bilancino/ORTI"
 
+  ESOLVER_BILANCINO_INTUR_SNAPSHOT:
+    system: ESOLVER
+    dataset: BILANCINO
+    societa: INTUR
+    lifecycle: SNAPSHOT
+    canonical_table: f_bilancino
+    parser_module: ingest.flussi.ingest_bilancino
+    natural_key: [data_snapshot, societa_id, codice_conto]
+    loop_targets: [monthly_close, budget_canonical]
+    promotion_policy: AUTO
+    detector_category: bilancino
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "bilancino/INTUR"
+
   # ── Gasparotto budget — SNAPSHOT ──────────────────────────────────────────
   ESOLVER_BUDGET_ORTI_SNAPSHOT:
     system: ESOLVER

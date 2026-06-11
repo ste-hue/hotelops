@@ -80,9 +80,18 @@ FACT_HEADER = [
 ]
 
 MESI_IT = {
-    "GENNAIO": 1, "FEBBRAIO": 2, "MARZO": 3, "APRILE": 4,
-    "MAGGIO": 5, "GIUGNO": 6, "LUGLIO": 7, "AGOSTO": 8,
-    "SETTEMBRE": 9, "OTTOBRE": 10, "NOVEMBRE": 11, "DICEMBRE": 12,
+    "GENNAIO": 1,
+    "FEBBRAIO": 2,
+    "MARZO": 3,
+    "APRILE": 4,
+    "MAGGIO": 5,
+    "GIUGNO": 6,
+    "LUGLIO": 7,
+    "AGOSTO": 8,
+    "SETTEMBRE": 9,
+    "OTTOBRE": 10,
+    "NOVEMBRE": 11,
+    "DICEMBRE": 12,
 }
 
 
@@ -194,10 +203,81 @@ def _parse_xls(filepath: Path, logger: logging.Logger) -> list[dict]:
     return rows
 
 
-def _parse_xlsx(filepath: Path, logger: logging.Logger) -> list[dict]:
-    """Parse new-format XLSX (5 columns: Tipo conto/Sezione, Conto, Partitari, Descrizione, Importo).
+def _parse_xlsx_grid(rows_iter, header: tuple, logger: logging.Logger) -> list[dict]:
+    """Parse Esolver 'griglia' XLSX export — same semantic columns of the XLS format.
 
-    Leaf detection:
+    Columns are resolved by header name (not position) because the export layout
+    varies month to month: importo columns can differ in number/meaning.
+    Mapping mirrors _parse_xls: dare = Importo colonna 1, avere = Importo colonna 2,
+    saldo = last Importo colonna present. Leaf marker: 'Livello di imputazione
+    bilancio' == 'Si'.
+    """
+    hdr = [str(h or "").strip().lower() for h in header]
+
+    def col(prefix: str) -> int | None:
+        for i, h in enumerate(hdr):
+            if h.startswith(prefix):
+                return i
+        return None
+
+    i_codice = col("codice conto")
+    i_descr = col("descrizione conto")
+    i_livello = col("livello di imputazione bilancio")
+    i_tipo = col("tipo conto")
+    i_sezione = col("sezione")
+    importi = [i for i, h in enumerate(hdr) if h.startswith("importo colonna")]
+    if i_codice is None or i_livello is None or not importi:
+        logger.error(f"Header griglia non riconosciuto: {hdr[:8]}")
+        return []
+    i_dare = importi[0] if len(importi) >= 2 else None
+    i_avere = importi[1] if len(importi) >= 2 else None
+    i_saldo = importi[-1]
+
+    def num(row, i) -> float:
+        if i is None:
+            return 0.0
+        v = row[i] if i < len(row) else None
+        return float(v) if v not in (None, "") else 0.0
+
+    rows = []
+    for row in rows_iter:
+        if str(row[i_livello] or "").strip() != "Si":
+            continue
+        codice = str(row[i_codice] or "").strip()
+        if not codice:
+            continue
+        dare = num(row, i_dare)
+        avere = num(row, i_avere)
+        saldo = num(row, i_saldo)
+        if dare == 0.0 and avere == 0.0 and saldo == 0.0:
+            continue
+        rows.append(
+            {
+                "codice_conto": codice,
+                "descrizione": str(row[i_descr] or "").strip()
+                if i_descr is not None
+                else "",
+                "tipo_conto": str(row[i_tipo] or "").strip()
+                if i_tipo is not None
+                else "",
+                "sezione": str(row[i_sezione] or "").strip()
+                if i_sezione is not None
+                else "",
+                "dare": dare,
+                "avere": avere,
+                "saldo": saldo,
+            }
+        )
+    return rows
+
+
+def _parse_xlsx(filepath: Path, logger: logging.Logger) -> list[dict]:
+    """Parse XLSX. Two layouts:
+
+    - Esolver 'griglia' (header col 0 = 'Codice conto…'): delegated to _parse_xlsx_grid.
+    - Legacy 5 columns (Tipo conto/Sezione, Conto, Partitari, Descrizione, Importo).
+
+    Leaf detection (legacy):
     - SP accounts: Partitari = 'S'
     - CE accounts: no 'S' marker, so a code is leaf if no other code starts with it + '.'
     """
@@ -208,11 +288,17 @@ def _parse_xlsx(filepath: Path, logger: logging.Logger) -> list[dict]:
     ws = wb.active
     logger.info(f"Sheet: {ws.title}, rows: {ws.max_row}")
 
-    # First pass: collect all entries
+    rows_iter = ws.iter_rows(values_only=True)
+    header = next(rows_iter, None)
+    if header and str(header[0] or "").strip().lower().startswith("codice conto"):
+        result = _parse_xlsx_grid(rows_iter, header, logger)
+        wb.close()
+        logger.info(f"Layout griglia Esolver: {len(result)} righe leaf")
+        return result
+
+    # First pass: collect all entries (legacy 5-col layout; header already consumed)
     entries = []
-    for i, row in enumerate(ws.iter_rows(values_only=True)):
-        if i == 0:
-            continue
+    for row in rows_iter:
         tipo_sez_raw = str(row[0] or "").strip()
         codice_raw = str(row[1] or "").strip()
         partitari = str(row[2] or "").strip()
