@@ -478,6 +478,7 @@ In aggiunta alle regole git globali (vedi `~/.claude/CLAUDE.md`):
 - **Mai `git add .` o `git add -A`** quando il working tree ha file untracked non-cashflow (es. `vault/` stub, `.env`). Stagia solo i file pertinenti al commit per nome.
 - **Commit logicamente atomici, non micro-step**: preferenza per "feat(X): goal completo" piuttosto che "feat(X): step 1", "feat(X): step 2". Eccezione: spec/plan committati separatamente dall'implementazione.
 - **Branch `feat/cashflow`**: pf-rotate sprint. `verticals-v2`: laboratorio frozen, NON toccare. `main`: branch operativo.
+- **Mai `pip install -e` da dentro un worktree** (ripunta l'install editable sul worktree: alla rimozione l'env si rompe con `ModuleNotFoundError: verticals`). Se serve, rifare `pip install -e ".[dev]"` dal repo principale alla chiusura del worktree.
 
 ## Governance Rules
 
