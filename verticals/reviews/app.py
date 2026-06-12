@@ -47,14 +47,7 @@ def load_reviews(
     return df
 
 
-def main():
-    st.set_page_config(
-        page_title="Reviews Dashboard",
-        page_icon="⭐",
-        layout="wide",
-        initial_sidebar_state="expanded",
-    )
-
+def render():
     # ── Sidebar ──────────────────────────────────────────────────────────────
     with st.sidebar:
         st.header("⭐ Reviews Dashboard")
@@ -179,6 +172,16 @@ def main():
                 st.markdown(f"**Testo:** {row.get('testo', '')}")
                 if row.get("url_review"):
                     st.markdown(f"[Vai alla review]({row['url_review']})")
+
+
+def main():
+    st.set_page_config(
+        page_title="Reviews Dashboard",
+        page_icon="⭐",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+    render()
 
 
 if __name__ == "__main__":
