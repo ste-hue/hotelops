@@ -150,7 +150,7 @@ def fig_food_cost_mensile(df: pd.DataFrame) -> go.Figure:
         fig.add_trace(
             go.Scatter(x=plot["periodo"], y=plot[col], name=label, mode="lines+markers")
         )
-    fig.update_layout(title="Food cost % per bucket", yaxis_tickformat=".0%")
+    fig.update_layout(title="Food & beverage cost % per bucket", yaxis_tickformat=".0%")
     return fig
 
 
@@ -268,7 +268,7 @@ def render_kpi(anno: int) -> None:
         ),
     )
     c2.metric(
-        "Food cost bar",
+        "Beverage cost bar",
         fb_data.kpi_or_nd(
             r["food_cost_pct_bar"], r["costo_fb_totale"], r["coperti_hotel"]
         ),
