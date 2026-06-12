@@ -407,9 +407,23 @@ def write_pf(
                 if val:
                     amounts[month] = amounts.get(month, 0) + val
 
+            # Note credito (saldi positivi) scalate in cascata sul primo mese
+            # con fatture in avanti: il bonifico reale = fatture - NC, e il
+            # totale scritto resta = saldo aperto del fornitore. Una NC
+            # residua oltre l'ultimo mese non viene scritta.
+            netted: dict[int, float] = {}
+            carry = 0.0
+            for month in sorted(amounts):
+                net = amounts[month] + carry
+                if net >= 0:  # credito residuo: scala sul mese successivo
+                    carry = net
+                    continue
+                carry = 0.0
+                netted[month] = net
+
             # Write: flip sign (scadenze negative = debito, PF positive = uscita)
             months_written: dict[int, float] = {}
-            for month, amount in amounts.items():
+            for month, amount in netted.items():
                 col = month_col.get(month)
                 if col:
                     pf_val = round(abs(amount), 2)

@@ -574,3 +574,30 @@ class TestWritePfRotation:
         ws_mp = wb2["Materie Prime-Consumo "]
         giugno = [ws_mp.cell(row=r, column=13).value for r in range(4, 15)]
         assert 5907.99 in giugno
+
+    def test_nota_credito_scalata_in_cascata(self, tmp_path):
+        """NC (importo positivo) si compensa sul primo mese con fatture in
+        avanti: il mese azzerato non viene scritto, il residuo scala sul
+        successivo. Il totale resta esatto (= saldo aperto reale)."""
+        from verticals.condges.app_scadenzario import write_pf
+
+        pf_path = _make_pf_fixture_con_codici(tmp_path)
+        import pandas as pd
+        # Vicart reale: NC scaduta +90.28, FT maggio -85.40, FT giugno -1413.63
+        scad_df = pd.DataFrame({
+            "codice_fornitore": [92], "nome": ["VICART S.R.L."],
+            "totale": [-1408.75], "scaduto": [90.28],
+            "mese_5": [-85.40], "mese_6": [-1413.63],
+        })
+        fornitori_map = {
+            92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"}
+        }
+        out, _ = write_pf(
+            pf_path.read_bytes(), scad_df, [5, 6], fornitori_map,
+            scaduto_month=5, clear_codici={92},
+        )
+        ws = openpyxl.load_workbook(BytesIO(out))["Materie Prime-Consumo "]
+        # maggio: 85.40 coperto dalla NC -> niente uscita
+        assert ws.cell(row=5, column=12).value in (None, 0)
+        # giugno: 1413.63 - 4.88 di NC residua = 1408.75
+        assert ws.cell(row=5, column=13).value == 1408.75
