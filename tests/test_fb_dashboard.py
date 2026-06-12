@@ -1,9 +1,20 @@
 """Test funzioni pure dashboard F&B — nessuna chiamata BQ."""
+from __future__ import annotations
+
 from datetime import date
 
 import pandas as pd
+import plotly.graph_objects as go
+import pytest
 
 from verticals.condges import fb_data
+
+try:
+    import verticals.condges.fb_dashboard as fb_dashboard  # type: ignore[assignment]
+    _FB_DASHBOARD_MISSING = False
+except ImportError:
+    fb_dashboard = None  # type: ignore[assignment]
+    _FB_DASHBOARD_MISSING = True
 
 
 class TestAlignYoyDaily:
@@ -76,3 +87,52 @@ class TestKpiOrNd:
 
     def test_pct_null_con_costi(self):
         assert fb_data.kpi_or_nd(None, 100.0, 10) == "n/d"
+
+
+def _df_stagione() -> pd.DataFrame:
+    return pd.DataFrame({
+        "data": [date(2026, 6, 1), date(2026, 6, 2)],
+        "ricavi_fb_pms": [100.0, 200.0],
+        "vendite_pos": [50.0, 60.0],
+        "coperti": [10.0, 20.0],
+        "ricavi_fb_pms_ap": [90.0, None],
+        "vendite_pos_ap": [40.0, None],
+        "coperti_ap": [8.0, None],
+    })
+
+
+@pytest.mark.skipif(_FB_DASHBOARD_MISSING, reason="fb_dashboard not yet created")
+class TestFigStagione:
+    def test_fig_ricavi_giornalieri(self):
+        fig = fb_dashboard.fig_ricavi_giornalieri(_df_stagione())
+        assert isinstance(fig, go.Figure)
+        assert len(fig.data) == 2  # anno corrente + anno precedente
+
+    def test_fig_cumulato(self):
+        fig = fb_dashboard.fig_cumulato(_df_stagione())
+        assert isinstance(fig, go.Figure)
+        # il cumulato corrente all'ultimo giorno = somma dei ricavi
+        assert fig.data[0].y[-1] == 300.0
+
+    def test_fig_coperti_tipo_pasto(self):
+        df = pd.DataFrame({
+            "data": [date(2026, 6, 1), date(2026, 6, 1)],
+            "tipo_pasto": ["COLAZIONE", "CENA"],
+            "coperti": [50, 30],
+        })
+        fig = fb_dashboard.fig_coperti_tipo_pasto(df)
+        assert isinstance(fig, go.Figure)
+
+    def test_fig_vendite_sala(self):
+        df = pd.DataFrame({
+            "data": [date(2026, 6, 1)],
+            "sala": ["RISTORANTE"],
+            "netto": [500.0],
+        })
+        fig = fb_dashboard.fig_vendite_sala(df)
+        assert isinstance(fig, go.Figure)
+
+    def test_fig_su_df_vuoto_non_esplode(self):
+        vuoto = _df_stagione().iloc[0:0]
+        assert isinstance(fb_dashboard.fig_ricavi_giornalieri(vuoto), go.Figure)
+        assert isinstance(fb_dashboard.fig_cumulato(vuoto), go.Figure)
