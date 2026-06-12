@@ -106,7 +106,6 @@ cli.py      <- CLI entry point (hotelops command)
 - `core/ingest_manager.py` -- `IngestManager`: loop di ingestion incrementale source-adapter → GCS (`SourceAdapter` protocol, checkpoint via start_date). Usato da cli.py.
 - `core/start_date.py` -- Watermark per load incrementali: `START_DATE_MAP` (tabella BQ, colonna data, fallback) → `get_next_start_date()` / `update_last_processed()`.
 - `core/sources/local_folder.py` -- `LocalFolderAdapter`: watch di una cartella locale per nuovi Excel/CSV (adapter per IngestManager).
-- `core/ontology.yaml` -- ⚠️ **ORFANO**: nessun import nel repo (verificato 2026-06-12). Non cancellato — decidere se rimuovere o ricollegare.
 - `core/bq/views/` -- BigQuery view SQL definitions (source of truth). 26 SQL files.
 - `core/bq/dimensioni/` -- Dimension CSV sources (d_voci_piano_finanziario.csv, d_fornitori.csv, d_mapping_piano_finanziario.csv, d_saldi_banca_chiusura_mensile.csv).
 - `core/bq/load/` -- 20 script: loaders (load_voci_piano_finanziario, load_piano_conti, load_categorie, load_fornitori, load_anagrafica_fornitori, load_anagrafica_clienti, load_budget_costi, load_coefficienti_stagionalita, load_mapping_piano_finanziario, load_ricavi_storici, load_saldi_banca_chiusura_mensile, load_pf_rotazioni, load_views, load_lineage_tables, load_v_raw_promotion_status) + one-shot DDL/seed/migrations (create_produzione_table, create_progetti_tables, seed_progetti_step1, migrate_add_lineage_era, migrate_add_raw_object_id_bulk).
