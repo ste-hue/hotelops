@@ -4,7 +4,7 @@
 -- LEFT JOIN:
 --   v_piano_finanziario_consuntivo   → importo_consuntivo
 --   f_budget_mensile                 → importo_budget (via cod_conto LIKE patterns)
---   f_piano_finanziario_input        → addendo a importo_budget (voci MANUALE)
+--   v_pf_corrente (generazione corrente) → addendo a importo_budget (voci MANUALE)
 --
 -- tipo_periodo:
 --   CONSUNTIVO = mese < mese corrente
@@ -128,7 +128,7 @@ input_ranked AS (
         ELSE 7
       END
     ) AS rn
-  FROM `hotelops-suite.hotelops.f_piano_finanziario_input`
+  FROM `hotelops-suite.hotelops.v_pf_corrente`
 ),
 input_manuale AS (
   SELECT
