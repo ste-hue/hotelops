@@ -134,8 +134,19 @@ def _v(x) -> float:
     return 0.0
 
 
-def make_hash(societa_id: str, voce_id: str, anno: int, mese: int, fonte: str) -> str:
+def make_hash(
+    societa_id: str,
+    voce_id: str,
+    anno: int,
+    mese: int,
+    fonte: str,
+    raw_object_id: str | None = None,
+) -> str:
+    # raw_object_id = chiave di generazione: senza, due rotazioni collidono e
+    # load_to_bq scarta la nuova come "già presente". None = hash legacy invariato.
     key = f"{societa_id}|{voce_id}|{anno}|{mese}|{fonte}"
+    if raw_object_id:
+        key += f"|{raw_object_id}"
     return hashlib.md5(key.encode()).hexdigest()
 
 
@@ -548,6 +559,11 @@ def main() -> None:
 
     for r in all_rows:
         r["raw_object_id"] = args.raw_object_id
+        if args.raw_object_id:
+            r["hash_riga"] = make_hash(
+                r["societa_id"], r["voce_id"], r["anno"], r["mese"], r["fonte"],
+                raw_object_id=args.raw_object_id,
+            )
 
     validate_rows(all_rows, logger)
     quality_summary(all_rows, logger)
