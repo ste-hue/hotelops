@@ -162,6 +162,25 @@ def _df_kpi() -> pd.DataFrame:
 
 
 @pytest.mark.skipif(_FB_DASHBOARD_MISSING, reason="fb_dashboard not yet created")
+class TestDeltaEuroPasto:
+    def test_delta_calcolabile(self):
+        r = _df_kpi().iloc[0]  # maggio: tutto popolato
+        out = fb_dashboard.delta_euro_pasto(r)
+        assert out is not None and out.endswith("€ vs AP") and "nan" not in out
+
+    def test_ap_nan_ritorna_none(self):
+        # anno 2025: LAG senza anno precedente -> _ap NaN, mai "+nan"
+        r = _df_kpi().iloc[0].copy()
+        r["coperti_hotel_ap"] = float("nan")
+        r["costo_fb_totale_ap"] = float("nan")
+        assert fb_dashboard.delta_euro_pasto(r) is None
+
+    def test_mese_senza_consumi_ritorna_none(self):
+        r = _df_kpi().iloc[1]  # giugno: costo 0
+        assert fb_dashboard.delta_euro_pasto(r) is None
+
+
+@pytest.mark.skipif(_FB_DASHBOARD_MISSING, reason="fb_dashboard not yet created")
 class TestFigKpi:
     def test_fig_food_cost_mensile(self):
         fig = fb_dashboard.fig_food_cost_mensile(_df_kpi())

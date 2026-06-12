@@ -127,6 +127,21 @@ def fig_coperti_mensili(df: pd.DataFrame) -> go.Figure:
     return fig
 
 
+# --- helpers puri ----------------------------------------------------------
+
+
+def delta_euro_pasto(r: pd.Series) -> str | None:
+    """Delta €/pasto vs anno precedente, None se non calcolabile (es. _ap NaN)."""
+    if not r["costo_fb_totale"]:
+        return None
+    if pd.isna(r["coperti_hotel_ap"]) or pd.isna(r["costo_fb_totale_ap"]):
+        return None
+    if not r["coperti_hotel_ap"]:
+        return None
+    pasto_ap = r["costo_fb_totale_ap"] / r["coperti_hotel_ap"]
+    return f"{r['euro_per_pasto'] - pasto_ap:+.2f} € vs AP"
+
+
 # --- sezioni ---------------------------------------------------------------
 
 
@@ -172,10 +187,7 @@ def render_kpi(anno: int) -> None:
         r["food_cost_pct_breakfast"], r["costo_fb_totale"], r["coperti_hotel"]))
 
     # delta €/pasto vs AP: unico delta calcolabile dalle colonne _ap della vista
-    delta_pasto = None
-    if r["costo_fb_totale"] and r["coperti_hotel_ap"] and r["costo_fb_totale_ap"]:
-        pasto_ap = r["costo_fb_totale_ap"] / r["coperti_hotel_ap"]
-        delta_pasto = f"{r['euro_per_pasto'] - pasto_ap:+.2f} € vs AP"
+    delta_pasto = delta_euro_pasto(r)
     c4.metric(
         "€ / pasto",
         "n/d" if not r["costo_fb_totale"] else f"{r['euro_per_pasto']:.2f} €",
