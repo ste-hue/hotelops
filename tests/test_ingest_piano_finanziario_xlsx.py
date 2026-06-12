@@ -33,3 +33,19 @@ def test_hash_generazionale_diverso_dal_legacy():
         raw_object_id="ro-x",
     )
     assert legacy != gen
+
+
+def test_pf_sources_generazionali():
+    from core.lineage.source_resolver import load_registry
+
+    reg = load_registry()
+    assert reg.get("ESOLVER_PF_ORTI_SNAPSHOT") is None, "rename non applicato"
+    for name, societa in [
+        ("ESOLVER_PF_ORTI_APPEND", "ORTI"),
+        ("ESOLVER_PF_INTUR_APPEND", "INTUR"),
+    ]:
+        sd = reg.get(name)
+        assert sd is not None, f"{name} mancante"
+        assert sd.lifecycle == "APPEND"
+        assert sd.societa == societa
+        assert sd.canonical_table == "f_piano_finanziario_input"

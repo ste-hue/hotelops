@@ -324,13 +324,15 @@ sources:
       Q7 chiusa: system=ESOLVER (la fonte primaria dei dati è l'ERP).
       Il file Master è curato da Romita ma i dati nascono in Esolver.
 
-  # ── Piano finanziario — SNAPSHOT ──────────────────────────────────────────
-  ESOLVER_PF_ORTI_SNAPSHOT:
+  # ── Piano finanziario — APPEND generazionale ──────────────────────────────
+  # Ogni file post-rotate = una generazione (chiave raw_object_id nell'hash).
+  # Presente = v_pf_corrente. Spec: docs/superpowers/specs/2026-06-12-pf-generazionale-design.md
+  ESOLVER_PF_ORTI_APPEND:
     system: ESOLVER
     dataset: PF
     dataset_label: "Piano Finanziario (cash flow voci)"
     societa: ORTI
-    lifecycle: SNAPSHOT
+    lifecycle: APPEND
     canonical_table: f_piano_finanziario_input
     parser_module: ingest.flussi.ingest_piano_finanziario_xlsx
     natural_key: [societa_id, voce_id, anno, mese, fonte]
@@ -341,6 +343,23 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "piani_finanziari/ORTI"
+
+  ESOLVER_PF_INTUR_APPEND:
+    system: ESOLVER
+    dataset: PF
+    dataset_label: "Piano Finanziario (cash flow voci)"
+    societa: INTUR
+    lifecycle: APPEND
+    canonical_table: f_piano_finanziario_input
+    parser_module: ingest.flussi.ingest_piano_finanziario_xlsx
+    natural_key: [societa_id, voce_id, anno, mese, fonte]
+    loop_targets: [cash_control, budget_canonical]
+    promotion_policy: AUTO
+    detector_category: piano_finanziario
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "piani_finanziari/INTUR"
 
   # ── HotelCube accodamenti — APPEND, BU per-file ───────────────────────────
   HOTELCUBE_ACCODAMENTI_ORTI_APPEND:
