@@ -266,8 +266,19 @@ def write_pf(
     bucket_months: list[int],
     fornitori_map: dict[int, dict],
     excluded: set[int] | None = None,
+    scaduto_month: int | None = None,
+    clear_codici: set[int] | None = None,
 ) -> tuple[bytes, dict[str, list]]:
     """Write scadenze into ALL PF detail sheets, return (bytes, summary).
+
+    ``scaduto_month``: mese in cui scrivere il bucket 'scaduto'. Per la
+    rotation passare il primo mese aperto (mese_chiuso+1), così il risultato
+    non dipende dal giorno del run. Default: mese di oggi (path app legacy).
+
+    ``clear_codici``: codici fornitore le cui righe vengono ripulite nei mesi
+    aperti (>= scaduto_month) PRIMA di riscrivere — rende il run idempotente
+    e rimuove scritture stantie di run precedenti. Tocca solo righe con
+    codice fornitore in col A; righe manuali (codici conto PF) restano intatte.
 
     Handles the PREVISIONALE adjustment: if the PREVISIONALE row is inside
     the SUM range of the total row, reduce it by the scadenzario total so
@@ -277,7 +288,7 @@ def write_pf(
     wb_values = openpyxl.load_workbook(BytesIO(pf_bytes), data_only=True)
     wb_formulas = openpyxl.load_workbook(BytesIO(pf_bytes), data_only=False)
 
-    current_month = date.today().month
+    current_month = scaduto_month if scaduto_month is not None else date.today().month
     summary: dict[str, list] = {}
 
     # Group scadenzario suppliers by voce_id
@@ -348,6 +359,16 @@ def write_pf(
             if not a and not b:
                 empty_rows.append(r)
         empty_row_idx = 0
+
+        # Pulizia scritture stantie: righe dei fornitori in clear_codici,
+        # mesi aperti (>= current_month) azzerati prima di riscrivere.
+        if clear_codici:
+            open_cols = [c for m, c in month_col.items() if m >= current_month]
+            for r in range(4, ws.max_row + 1):
+                a = ws_vals.cell(row=r, column=1).value
+                if isinstance(a, (int, float)) and int(a) in clear_codici:
+                    for col in open_cols:
+                        ws.cell(row=r, column=col).value = None
 
         for s in suppliers:
             # Find the supplier row: try codice first, then name

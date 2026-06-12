@@ -88,7 +88,8 @@ def rotate(
     wb.save(buf)
     step12_bytes = buf.getvalue()
 
-    # Step 3: scadenzario
+    # Step 3: scadenzario — scaduto ancorato al primo mese aperto, non a oggi
+    primo_mese_aperto = mese_chiuso % 12 + 1
     out_bytes, scad_summary = apply_scadenzario(
         pf_bytes=step12_bytes,
         scad_df=scad_df,
@@ -97,6 +98,7 @@ def rotate(
         fornitori_csv=fornitori_csv,
         policy=unmapped_policy,
         extra_excluded=extra_excluded,
+        scaduto_month=primo_mese_aperto,
     )
 
     # Step 5: controlli sul wb finale
