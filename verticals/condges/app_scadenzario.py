@@ -316,6 +316,26 @@ def write_pf(
             }
         )
 
+    # Pulizia scritture stantie su TUTTI i fogli voce, anche quelli che non
+    # ricevono scritture in questo run (es. fornitore rimappato a un'altra
+    # voce: la riga nel vecchio foglio va comunque azzerata nei mesi aperti).
+    if clear_codici:
+        for voce_id in VOCE_TO_SHEET_CANDIDATES:
+            sheet_name = resolve_sheet_name(voce_id, wb.sheetnames)
+            if not sheet_name:
+                continue
+            ws_c = wb[sheet_name]
+            ws_cv = wb_values[sheet_name]
+            mc = _build_month_col_map(ws_cv)
+            open_cols = [c for m, c in mc.items() if m >= current_month]
+            if not open_cols:
+                continue
+            for r in range(4, ws_c.max_row + 1):
+                a = ws_cv.cell(row=r, column=1).value
+                if isinstance(a, (int, float)) and int(a) in clear_codici:
+                    for col in open_cols:
+                        ws_c.cell(row=r, column=col).value = None
+
     for voce_id, suppliers in scad_by_voce.items():
         sheet_name = resolve_sheet_name(voce_id, wb.sheetnames)
         if not sheet_name:
@@ -359,16 +379,6 @@ def write_pf(
             if not a and not b:
                 empty_rows.append(r)
         empty_row_idx = 0
-
-        # Pulizia scritture stantie: righe dei fornitori in clear_codici,
-        # mesi aperti (>= current_month) azzerati prima di riscrivere.
-        if clear_codici:
-            open_cols = [c for m, c in month_col.items() if m >= current_month]
-            for r in range(4, ws.max_row + 1):
-                a = ws_vals.cell(row=r, column=1).value
-                if isinstance(a, (int, float)) and int(a) in clear_codici:
-                    for col in open_cols:
-                        ws.cell(row=r, column=col).value = None
 
         for s in suppliers:
             # Find the supplier row: try codice first, then name

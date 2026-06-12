@@ -529,3 +529,48 @@ class TestWritePfRotation:
         assert ws.cell(row=5, column=13).value == 1122.76
         # riga manuale F24 (350301, non in clear_codici) intatta
         assert ws.cell(row=6, column=12).value == 27000
+
+    def test_pulizia_anche_su_fogli_senza_scritture(self, tmp_path):
+        """Fornitore rimappato a un'altra voce: la riga nel vecchio foglio
+        va pulita anche se quel foglio non riceve scritture in questo run."""
+        from verticals.condges.app_scadenzario import write_pf
+
+        wb = openpyxl.Workbook()
+        wb.active.title = "Piano Finanziario"
+        months = ["GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
+                  "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
+                  "NOVEMBRE", "DICEMBRE"]
+        for title in ("Materie Prime-Consumo ", " Varie ed Eventuali"):
+            ws = wb.create_sheet(title)
+            for i, m in enumerate(months):
+                ws.cell(row=2, column=8 + i, value=m)
+            # ancora in fondo: righe 4..9 vuote disponibili per nuovi fornitori
+            ws.cell(row=10, column=1, value="---")
+        # riga stantia di Pregis nel VECCHIO foglio (Varie), maggio
+        ws_var = wb[" Varie ed Eventuali"]
+        ws_var.cell(row=5, column=1, value=123)
+        ws_var.cell(row=5, column=2, value="PREGIS S.P.A.")
+        ws_var.cell(row=5, column=12, value=408.89)
+        pf = tmp_path / "pf_due_fogli.xlsx"
+        wb.save(pf)
+
+        import pandas as pd
+        scad_df = pd.DataFrame({
+            "codice_fornitore": [123], "nome": ["PREGIS S.P.A."],
+            "totale": [-5907.99], "scaduto": [0.0], "mese_6": [-5907.99],
+        })
+        # rimappato a MATERIE_PRIME: il foglio Varie non riceve scritture
+        fornitori_map = {
+            123: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Pregis"}
+        }
+        out, _ = write_pf(
+            pf.read_bytes(), scad_df, [6], fornitori_map,
+            scaduto_month=5, clear_codici={123},
+        )
+        wb2 = openpyxl.load_workbook(BytesIO(out))
+        # vecchio foglio pulito
+        assert wb2[" Varie ed Eventuali"].cell(row=5, column=12).value in (None, 0)
+        # nuovo foglio scritto
+        ws_mp = wb2["Materie Prime-Consumo "]
+        giugno = [ws_mp.cell(row=r, column=13).value for r in range(4, 15)]
+        assert 5907.99 in giugno
