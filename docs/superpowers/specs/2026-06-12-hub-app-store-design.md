@@ -33,6 +33,7 @@ verticals/hub/                  <- layer di presentazione (NON un vertical)
     cassa.py                    <- App 1: Cassa/PF — specchio con memoria
     fb.py                       <- App 2: monta fb_dashboard.render() (worktree fb-looker)
     reviews.py                  <- App 3: monta la dashboard reviews esistente
+    ingest.py                   <- App 4: layer di ingestione (aggiunta 2026-06-12)
 ```
 
 Niente moduli speculativi (vincolo esplicito 2026-06-12): `bva.py`, `auth.py` e `actions.py`
@@ -44,10 +45,13 @@ nascono quando servono, non ora.
    (`cdg_engine`, `pf_mirror`, `fb_dashboard`, query esistenti). Se una pagina cresce,
    il codice scende nel vertical. Ogni app resta staccabile (porta aperta verso
    l'architettura "portale + app separate" se mai servisse).
-2. **Azioni solo via registry (fase 2).** Quando arriveranno, le azioni (pf-rotate, chiudi,
-   health, intake) passeranno da un registry unico `actions.py` (nome → handler → ruolo
-   minimo); i bottoni non chiamano mai i worker direttamente. In fase 1 l'unica cosa
-   action-like è il semaforo health nell'header della home (read-only).
+2. **Azioni solo via registry (fase 2), con un'eccezione dichiarata.** Quando arriveranno,
+   le azioni (pf-rotate, chiudi, health) passeranno da un registry unico `actions.py`
+   (nome → handler → ruolo minimo); i bottoni non chiamano mai i worker direttamente.
+   **Eccezione fase 1: la pagina Ingest** (decisione 2026-06-12) — unica superficie di
+   scrittura, chiama direttamente le stesse funzioni del CLI (`ingest/classify.py`,
+   `ingest/intake.py`, `ingest/promotion.py`). Niente registry per un consumatore solo
+   (simplicity first); `ingest.py` sarà il primo cliente di `actions.py` quando nascerà.
 3. **BigQuery unica fonte dati delle viste.** Lo specchio PF funziona perché ogni
    post-rotate è ingerito come generazione (spec gemella); il hub non sa che esistono file.
 
@@ -56,10 +60,11 @@ nascono quando servono, non ora.
 Header: titolo + stato health complessivo (verde/giallo/rosso da `freshness.py`, con
 drill-down testuale: quali fonti sono stale e da quanto).
 
-Sotto, una card per app montata — **Cassa/PF**, **F&B**, **Reviews** (niente card BVA
-"prossimamente": nasce con `bva.py`). Ogni card: nome, semaforo freshness dei dati che
-quella app legge, un numero chiave (saldo banche certificato totale; food cost ristorante;
-media reviews ultimo mese), click per entrare. Nessun pannello azioni.
+Sotto, una card per app montata — **Cassa/PF**, **F&B**, **Reviews**, **Ingest** (niente
+card BVA "prossimamente": nasce con `bva.py`). Ogni card: nome, semaforo freshness dei
+dati che quella app legge, un numero chiave (saldo banche certificato totale; food cost
+ristorante; media reviews ultimo mese; per Ingest: conteggio raw objects non-PROMOTED),
+click per entrare. Nessun pannello azioni.
 
 ## Pagina Cassa/PF — lo specchio con memoria
 
@@ -90,6 +95,26 @@ Monta `from verticals.condges.fb_dashboard import render` — il modulo in costr
 worktree `fb-looker`, progettato importabile (niente `set_page_config` interno). È il
 monitoraggio operativo di Stefano. L'**audit tool direzione resta superficie separata**
 (`audit_consumi_dashboard.py`), fuori scope; eventualmente seconda pagina in futuro.
+
+## Pagina Ingest — il layer di ingestione (aggiunta 2026-06-12)
+
+La porta d'ingresso visiva dei dati, lineage-first (stesso path della skill
+`hotelops-ingest`: mai parser diretti, mai scritture senza raw_object):
+
+1. **Drop**: `st.file_uploader` multi-file (xlsx, csv, txt).
+2. **Classifica**: per ogni file, i detector di `ingest/classify.py` propongono
+   source + società; l'utente conferma o corregge (select dai source del registry).
+   File non riconosciuto → messaggio esplicito ("source non nel registry — va definito
+   prima, vedi skill hotelops-ingest"); la pagina NON crea source nuovi.
+3. **Intake**: registra il raw_object (upload GCS + `f_raw_objects`), mostra
+   `raw_object_id`. Raw-only, coerente con la decisione 2026-06-07.
+4. **Promote**: bottone esplicito per raw_object; esito visibile, incluso
+   `VALIDATE_FAIL` con l'errore in chiaro (mai fallimenti silenziosi — oggi un
+   VALIDATE_FAIL si scopre solo interrogando gli eventi).
+5. **Inbox**: tabella da `v_raw_objects_current` degli oggetti recenti non-PROMOTED
+   (RAW_ONLY / CLASSIFIED / PROMOTABLE / REJECTED) — la coda di lavoro dell'ingestione.
+
+In fase 2 questa pagina è admin-only per costruzione (è scrittura).
 
 ## Pagina Reviews
 
