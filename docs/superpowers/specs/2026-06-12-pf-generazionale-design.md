@@ -32,7 +32,13 @@ Il "presente" diventa una vista derivata. Nessuna tabella nuova, nessuna memoria
    - **nuovo** source `ESOLVER_PF_INTUR_APPEND` (oggi un source PF INTUR non esiste —
      verificato 2026-06-12). In esecuzione: verificare il parser sul file INTUR
      normalizzato (layout fixed-snapshot) prima del primo promote;
-   - `lifecycle: APPEND`; `natural_key` resta documentata come chiave della *generazione corrente*.
+   - `lifecycle: APPEND`; `natural_key` resta documentata come chiave della *generazione corrente*;
+   - **check rename verificato 2026-06-12**: zero raw_objects esistono con
+     `source_name = 'ESOLVER_PF_ORTI_SNAPSHOT'` (source definito ma mai usato per un intake;
+     le righe storiche sono pre-lineage). Il rename non orfana nulla. Nota generale per
+     future rename: `ingest/promotion.py:145` solleva `KeyError` su source_name fuori
+     registry → un rename con raw_objects esistenti richiede alias deprecated (con
+     detection disattivata: `resolve()` è ambiguity-strict) o decisione esplicita.
 2. **`hash_riga`** in `ingest_piano_finanziario_xlsx` estesa: da
    `societa|voce|anno|mese|fonte` a `societa|voce|anno|mese|fonte|raw_object_id`.
    Senza questa estensione due generazioni collidono e il dedup le collassa.
