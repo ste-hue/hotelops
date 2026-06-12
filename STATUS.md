@@ -14,7 +14,7 @@
 - **condges Rosa->Gasparotto integration**: spec + plan scritti (`c69abc1`, `beddc7e`). 2 task iniziali implementati. Plan in esecuzione.
 - **Projects event-sourced Step 1**: spec scritta `docs/superpowers/specs/2026-04-22-projects-event-sourced-design.md`. Plan TDD da generare, defer a Doc Refresh + cassa loop chiusi.
 - **Vault loops restructure**: 2/12 loop specs scritti (`daily_reconciliation`, `cash_control`). Next candidate: `monthly_close`.
-- **Doc Refresh Sprint**: Step 1+2+2.5 chiusi in working tree. Step 3 (README rewrite) in attesa OK. Step 4-9 in coda.
+- **Doc Refresh Sprint**: Step 1+2+2.5 chiusi in working tree. Step 3 (README rewrite) in attesa OK. Step 4 (CLAUDE.md checkpoint) chiuso 2026-06-12 (`81839bd`). Step 5-9 in coda.
 
 ## Completato di recente
 - 2026-06-12: **Rotation aprile→maggio rigenerata ORTI+INTUR** -- ORTI 13/0/7 (71 fornitori), INTUR 12/0/8 (50 fornitori), output in `pianfin/PF/`. Anchor `f_saldi_banca_chiusura_mensile` corretto (commit `ee6ff55`): MPS ORTI 30/04 245.171,52 certificato (era 251.897,54), riga Kross rimossa, +5 saldi 31/05 nel CSV (erano solo in BQ, loader WRITE_TRUNCATE li avrebbe persi). Patch formule strutturali G37/H37 nel PF ORTI input (zona morta, backup in /tmp). Push main→origin (`d7ad9d1..ee6ff55`).
@@ -90,7 +90,7 @@
 - **Debug `VALIDATE_FAIL` promote accodamenti** + roundtrip FK (tabella ORTI vuota, TXT in GCS).
 - **P2: cash_control memory tables** + moduli evaluation: BVA (COMPETENZA, GASPAROTTO) + `cash_backcheck` (CASSA, PF forecast vs Esolver, backwards check).
 - **Rotation maggio->giugno** ~fine giugno (timing paradigm) -- pura esecuzione: input = file post-rotate 2026-06-12 in `pianfin/PF/`, saldi 31/05 già nell'anchor.
-- **Aggiornare CLAUDE.md** con v_fb_kpi v3 (3 bucket onesti, colonne food/beverage), 33 reparti consumi, audit tool entries, sistema workstream vault.
+- ~~**Aggiornare CLAUDE.md** con v_fb_kpi v3 (3 bucket onesti, colonne food/beverage), 33 reparti consumi, audit tool entries, sistema workstream vault.~~ **FATTO 2026-06-12** (`81839bd`, doc refresh step 4 — tutti e 4 i contenuti verificati nel CLAUDE.md corrente).
 - **Viste F&B su f_ristocube_orders** (daily granularity) -- sblocca split Lunch/Dinner via orario/sala, scontrino medio per pasto, daily food cost.
 - **Piano dei conti finale per ANG+CVM** in `pianodeicontilavoro.xlsx` (HP fatto 79/79, gli altri skeleton).
 - **d_codici_pms_ricavi dimension table** dopo piano dei conti completo, con Pasto + Tipo per ogni codice.
@@ -99,7 +99,7 @@
 - **Smoke test workspace su Drive write** -- verificare impersonation `--write-as`. Cleanup folder orfani prima.
 - **Production run HPAN25PIANO1** -- `hotelops workspace mine-capex --project HPAN25PIANO1`. Dopo smoke verde.
 - **FK end-to-end smoke su MPS file fresh** -- al prossimo export bancario non storico.
-- **Doc Refresh Sprint Step 3-9** -- README rewrite -> CLAUDE.md -> counts/tests -> Cutover decision -> TODO markers -> Agent Epistemology.
+- **Doc Refresh Sprint Step 3 + 5-9** -- README rewrite -> ~~CLAUDE.md~~ (Step 4 fatto 2026-06-12, `81839bd`) -> counts/tests -> Cutover decision -> TODO markers -> Agent Epistemology.
 - **Materializzare** v_ledger_movimenti + v_condges_banca_dettaglio su BQ.
 - **Inviare email a Lara Durisotti** (bozza pronta) -- sblocca revman.
 - **condges Rosa->Gasparotto plan resume** -- continuare esecuzione plan `beddc7e`.
