@@ -37,8 +37,13 @@ Se durante il triage emerge debito di codice, rimanda a tech-lead — non assorb
    hub**: l'hub ha la profondità (keystone, hazard, drift flag) che STATUS comprime in
    una riga.
 3. `git worktree list` + per ogni worktree: branch, ahead/behind vs main, ultimo commit,
-   e **che fronte copre** — deducilo da branch name + `git diff main...<branch> --stat` +
-   hub. Se non deducibile, chiedi. Un worktree È un thread aperto in forma fisica.
+   **working tree dirty** (`git -C <wt> status --short`), e **che fronte copre** —
+   deducilo da branch name + `git diff main...<branch> --stat` + hub. Se non deducibile,
+   chiedi. Un worktree È un thread aperto in forma fisica.
+   **Worktree dirty o con attività recente ≠ thread morto**: i commit vs main non
+   bastano — una sessione viva può avere design/lavoro non committato. Mai proporre
+   prune senza aver letto `status --short` di QUEL worktree (falso positivo reale:
+   `worktree-app-store` dato per morto via `git cherry`, dentro c'era una sessione viva).
 
 Normalizza: `{id, fonte, stato fisico, descrizione 1 riga, dipendenze}`. Segnala drift
 tra le tre fonti (es. STATUS dice "da mergiare" ma il branch è già in main).
@@ -123,6 +128,7 @@ nuovo. Presentare i comandi = invitare a eseguirli.
 ## Red flags — fermati e rileggi la skill
 
 - Stai per creare un worktree e non hai ancora fatto `git worktree list` in QUESTO turno.
+- Stai per proporre il prune di un worktree senza aver letto il suo `status --short`.
 - Stai dando verdetti e non hai aperto nessun file del vault.
 - Stai per chiudere il turno con verdetti solo in chat.
 - Stai per scrivere `git worktree add` dentro `.claude/worktrees/`.
