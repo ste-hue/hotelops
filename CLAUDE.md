@@ -96,7 +96,7 @@ cli.py      <- CLI entry point (hotelops command)
 
 **core/** -- The world model (nothing here imports from verticals)
 - `core/schemas.py` -- Pydantic models + `validate_batch()`. Every BQ write goes through here.
-- `core/config.py` -- Table IDs and BQ constants (PROJECT, DATASET). All table refs as `F_*`, `D_*`, `V_*`.
+- `core/config.py` -- Table IDs and BQ constants (PROJECT, DATASET). All table refs as `F_*`, `D_*`, `V_*`. ⚠️ `V_PROGETTO_VOCI_STATO` (riga 52) è una costante orfana: la vista non esiste né in `core/bq/views/` né su BigQuery (`bq show` → Not found, verificato read-only 2026-06-12), `create_progetti_tables.py` non la crea e nessun codice la referenzia — placeholder del design Projects event-sourced (Step 1 deferred).
 - `core/contracts.py` -- `SchemaViolationError`, `validate_columns()`.
 - `core/datahub.py` -- Minimal CSV reader (usato da `verticals/condges/reconcile_banca.py`). Nome legacy, modulo ancora vivo.
 - `core/datahub_sync.py` -- **LEGACY** rclone helper (Drive staging pre-GCS). Drive non è più popolato; il Phase 5 cutover rimuoverà questo modulo. Spec: `docs/superpowers/specs/2026-05-05-ingest-lineage-gcs-design.md`.
