@@ -1,12 +1,16 @@
 societa_id,data_riferimento,banca_id,saldo_eur,note
 ORTI,2026-03-31,MPS,52799.65,manuale verificato fine mese
 ORTI,2026-03-31,INTESA,63061.22,manuale verificato fine mese
-ORTI,2026-04-30,MPS,251897.54,Rosa 30/04/2026
-ORTI,2026-04-30,MPS_KROSS,33915.06,Rosa 30/04/2026 (non Intesa)
+ORTI,2026-04-30,MPS,245171.52,certificato Stefano 2026-06-12 (corregge Rosa 251897.54)
 ORTI,2026-04-30,INTESA,87439.92,Rosa 30/04/2026 Intesa ORTI
+ORTI,2026-05-31,MPS,469192.55,Rosa 31/05/2026 — Saldi Banca Fine Mese
+ORTI,2026-05-31,INTESA,111933.31,Rosa 31/05/2026 — Saldi Banca Fine Mese
 INTUR,2026-03-31,SELLA,35186.34,da estratto SaldoAData (saldo a data)
 INTUR,2026-04-30,SELLA,49609.01,da estratto SaldoAData (saldo a data)
 INTUR,2026-03-31,MPS,682801.07,da estratto mensile MPS
 INTUR,2026-04-30,MPS,376510.97,da estratto mensile MPS
 INTUR,2026-03-31,INTESA,1457.78,da estratto Intesa Sanpaolo
 INTUR,2026-04-30,INTESA,1696.48,da estratto Intesa Sanpaolo
+INTUR,2026-05-31,SELLA,21230.59,Rosa 31/05/2026 — Saldi Banca Fine Mese
+INTUR,2026-05-31,MPS,316615.91,Rosa 31/05/2026 — Saldi Banca Fine Mese
+INTUR,2026-05-31,INTESA,2116.37,Rosa 31/05/2026 — Saldi Banca Fine Mese
