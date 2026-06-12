@@ -8,6 +8,7 @@
 -- Tutte le altre fonti (CLI, APP, PARTITE, SCADENZIARIO, BVA_2026): pass-through.
 -- La priorità tra fonti NON vive qui — resta in v_piano_finanziario_mensile.
 -- Spec: docs/superpowers/specs/2026-06-12-pf-generazionale-design.md
+CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_pf_corrente` AS
 WITH generazioni AS (
   SELECT
     *,
