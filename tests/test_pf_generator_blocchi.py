@@ -1,7 +1,9 @@
 """Test blocchi generatore PF — funzioni pure, no BQ, no Excel."""
 from __future__ import annotations
 
-from verticals.condges.pf_generator.blocchi import cascata_nc
+import pandas as pd
+
+from verticals.condges.pf_generator.blocchi import blocco_a_per_voce, cascata_nc
 
 
 class TestCascataNc:
@@ -21,3 +23,58 @@ class TestCascataNc:
 
     def test_vuoto(self):
         assert cascata_nc({}) == {}
+
+    def test_carry_multi_mese(self):
+        # crediti a maggio e giugno che si trascinano fino a luglio
+        out = cascata_nc({5: 50.0, 6: 30.0, 7: -100.0})
+        assert out == {7: -20.0}
+
+
+def _scad_df():
+    return pd.DataFrame([
+        {"codice_fornitore": 92, "nome": "AMALFI SEI ESSE S.R.L.",
+         "totale": -1222.76, "scaduto": -100.0, "mese_6": -1122.76},
+        {"codice_fornitore": 71, "nome": "VICART S.R.L.",
+         "totale": -1408.75, "scaduto": 90.28, "mese_5": -85.40,
+         "mese_6": -1413.63},
+        {"codice_fornitore": 9999, "nome": "SCONOSCIUTO SRL",
+         "totale": -500.0, "scaduto": -500.0},
+    ])
+
+
+FORNITORI = {
+    92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"},
+    71: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Vicart"},
+}
+
+
+class TestBloccoA:
+    def test_bucketing_scaduto_e_cascata(self):
+        per_voce, unmapped = blocco_a_per_voce(
+            _scad_df(), [5, 6], FORNITORI, primo_mese_aperto=5
+        )
+        righe = {r["codice"]: r for r in per_voce["USCITE_MATERIE_PRIME"]}
+        # Amalfi: scaduto -> maggio, mese_6 -> giugno (positivizzati)
+        assert righe[92]["mesi"] == {5: 100.0, 6: 1122.76}
+        # Vicart: NC copre maggio, giugno nettato
+        assert righe[71]["mesi"] == {6: 1408.75}
+        # nome dal CSV, non dall'export
+        assert righe[92]["nome"] == "Amalfi sei esse"
+
+    def test_unmapped_separati_mai_persi(self):
+        per_voce, unmapped = blocco_a_per_voce(
+            _scad_df(), [5, 6], FORNITORI, primo_mese_aperto=5
+        )
+        assert len(unmapped) == 1
+        assert unmapped[0]["codice"] == 9999
+        assert unmapped[0]["mesi"] == {5: 500.0}  # scaduto -> primo mese aperto
+
+    def test_quadratura_totale(self):
+        per_voce, unmapped = blocco_a_per_voce(
+            _scad_df(), [5, 6], FORNITORI, primo_mese_aperto=5
+        )
+        tot = sum(v for r in per_voce["USCITE_MATERIE_PRIME"]
+                  for v in r["mesi"].values())
+        tot += sum(v for r in unmapped for v in r["mesi"].values())
+        # |somma scritta| == |somma partite| (NC inclusa nella cascata)
+        assert round(tot, 2) == round(1222.76 + 1408.75 + 500.0, 2)
