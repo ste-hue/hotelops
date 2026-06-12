@@ -3,6 +3,7 @@
 Importabile dal futuro hub (verticals/hub/) e da fb_dashboard.render().
 Spec: docs/superpowers/specs/2026-06-12-fb-dashboard-streamlit-design.md
 """
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -88,9 +89,7 @@ def consumi(anno: int, solo_fb: bool = True) -> pd.DataFrame:
     where = f"anno = {int(anno)}"
     if solo_fb:
         where += " AND is_fb_reparto AND NOT is_anomalia"
-    return _q(
-        f"SELECT * FROM `{V_FB_CONSUMI}` WHERE {where} ORDER BY mese, costo DESC"
-    )
+    return _q(f"SELECT * FROM `{V_FB_CONSUMI}` WHERE {where} ORDER BY mese, costo DESC")
 
 
 def ricavi_codici(anno: int) -> pd.DataFrame:

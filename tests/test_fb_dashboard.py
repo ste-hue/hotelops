@@ -1,4 +1,5 @@
 """Test funzioni pure dashboard F&B — nessuna chiamata BQ."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -11,6 +12,7 @@ from verticals.condges import fb_data
 
 try:
     import verticals.condges.fb_dashboard as fb_dashboard  # type: ignore[assignment]
+
     _FB_DASHBOARD_MISSING = False
 except ImportError:
     fb_dashboard = None  # type: ignore[assignment]
@@ -19,10 +21,12 @@ except ImportError:
 
 class TestAlignYoyDaily:
     def test_same_day_match(self):
-        df = pd.DataFrame([
-            {"data": date(2025, 6, 10), "ricavi": 100.0},
-            {"data": date(2026, 6, 10), "ricavi": 150.0},
-        ])
+        df = pd.DataFrame(
+            [
+                {"data": date(2025, 6, 10), "ricavi": 100.0},
+                {"data": date(2026, 6, 10), "ricavi": 150.0},
+            ]
+        )
         out = fb_data.align_yoy_daily(df)
         r = out[out["data"] == date(2026, 6, 10)].iloc[0]
         assert r["ricavi_ap"] == 100.0
@@ -34,20 +38,24 @@ class TestAlignYoyDaily:
 
     def test_leap_day_dropped(self):
         # 29/02/2024 non ha corrispondente nel 2025: non deve matchare né esplodere
-        df = pd.DataFrame([
-            {"data": date(2024, 2, 29), "ricavi": 80.0},
-            {"data": date(2025, 2, 28), "ricavi": 90.0},
-        ])
+        df = pd.DataFrame(
+            [
+                {"data": date(2024, 2, 29), "ricavi": 80.0},
+                {"data": date(2025, 2, 28), "ricavi": 90.0},
+            ]
+        )
         out = fb_data.align_yoy_daily(df)
         r = out[out["data"] == date(2025, 2, 28)].iloc[0]
         assert pd.isna(r["ricavi_ap"])
 
     def test_preserva_righe_correnti(self):
-        df = pd.DataFrame([
-            {"data": date(2025, 6, 1), "ricavi": 1.0},
-            {"data": date(2026, 6, 1), "ricavi": 2.0},
-            {"data": date(2026, 6, 2), "ricavi": 3.0},
-        ])
+        df = pd.DataFrame(
+            [
+                {"data": date(2025, 6, 1), "ricavi": 1.0},
+                {"data": date(2026, 6, 1), "ricavi": 2.0},
+                {"data": date(2026, 6, 2), "ricavi": 3.0},
+            ]
+        )
         out = fb_data.align_yoy_daily(df)
         assert len(out) == len(df)
 
@@ -90,15 +98,17 @@ class TestKpiOrNd:
 
 
 def _df_stagione() -> pd.DataFrame:
-    return pd.DataFrame({
-        "data": [date(2026, 6, 1), date(2026, 6, 2)],
-        "ricavi_fb_pms": [100.0, 200.0],
-        "vendite_pos": [50.0, 60.0],
-        "coperti": [10.0, 20.0],
-        "ricavi_fb_pms_ap": [90.0, None],
-        "vendite_pos_ap": [40.0, None],
-        "coperti_ap": [8.0, None],
-    })
+    return pd.DataFrame(
+        {
+            "data": [date(2026, 6, 1), date(2026, 6, 2)],
+            "ricavi_fb_pms": [100.0, 200.0],
+            "vendite_pos": [50.0, 60.0],
+            "coperti": [10.0, 20.0],
+            "ricavi_fb_pms_ap": [90.0, None],
+            "vendite_pos_ap": [40.0, None],
+            "coperti_ap": [8.0, None],
+        }
+    )
 
 
 @pytest.mark.skipif(_FB_DASHBOARD_MISSING, reason="fb_dashboard not yet created")
@@ -115,20 +125,24 @@ class TestFigStagione:
         assert fig.data[0].y[-1] == 300.0
 
     def test_fig_coperti_tipo_pasto(self):
-        df = pd.DataFrame({
-            "data": [date(2026, 6, 1), date(2026, 6, 1)],
-            "tipo_pasto": ["COLAZIONE", "CENA"],
-            "coperti": [50, 30],
-        })
+        df = pd.DataFrame(
+            {
+                "data": [date(2026, 6, 1), date(2026, 6, 1)],
+                "tipo_pasto": ["COLAZIONE", "CENA"],
+                "coperti": [50, 30],
+            }
+        )
         fig = fb_dashboard.fig_coperti_tipo_pasto(df)
         assert isinstance(fig, go.Figure)
 
     def test_fig_vendite_sala(self):
-        df = pd.DataFrame({
-            "data": [date(2026, 6, 1)],
-            "sala": ["RISTORANTE"],
-            "netto": [500.0],
-        })
+        df = pd.DataFrame(
+            {
+                "data": [date(2026, 6, 1)],
+                "sala": ["RISTORANTE"],
+                "netto": [500.0],
+            }
+        )
         fig = fb_dashboard.fig_vendite_sala(df)
         assert isinstance(fig, go.Figure)
 
@@ -143,22 +157,24 @@ class TestFigStagione:
 
 
 def _df_kpi() -> pd.DataFrame:
-    return pd.DataFrame({
-        "anno": [2026, 2026],
-        "mese": [5, 6],
-        "periodo": [date(2026, 5, 1), date(2026, 6, 1)],
-        "costo_fb_totale": [24572.9, 0.0],
-        "coperti_hotel": [4377, 1896],
-        "ricavi_breakfast": [38836.4, 0.0],
-        "ricavi_food": [23042.7, 0.0],
-        "ricavi_beverage": [20981.5, 0.0],
-        "food_cost_pct_breakfast": [0.387, None],
-        "food_cost_pct_ristorante": [0.261, None],
-        "food_cost_pct_bar": [0.168, None],
-        "euro_per_pasto": [5.61, 0.0],
-        "costo_fb_totale_ap": [25812.9, 27285.2],
-        "coperti_hotel_ap": [3271, 4461],
-    })
+    return pd.DataFrame(
+        {
+            "anno": [2026, 2026],
+            "mese": [5, 6],
+            "periodo": [date(2026, 5, 1), date(2026, 6, 1)],
+            "costo_fb_totale": [24572.9, 0.0],
+            "coperti_hotel": [4377, 1896],
+            "ricavi_breakfast": [38836.4, 0.0],
+            "ricavi_food": [23042.7, 0.0],
+            "ricavi_beverage": [20981.5, 0.0],
+            "food_cost_pct_breakfast": [0.387, None],
+            "food_cost_pct_ristorante": [0.261, None],
+            "food_cost_pct_bar": [0.168, None],
+            "euro_per_pasto": [5.61, 0.0],
+            "costo_fb_totale_ap": [25812.9, 27285.2],
+            "coperti_hotel_ap": [3271, 4461],
+        }
+    )
 
 
 @pytest.mark.skipif(_FB_DASHBOARD_MISSING, reason="fb_dashboard not yet created")
@@ -207,27 +223,33 @@ class TestFigKpi:
 @pytest.mark.skipif(_FB_DASHBOARD_MISSING, reason="fb_dashboard not yet created")
 class TestFigDettaglio:
     def test_fig_consumi_reparto(self):
-        df = pd.DataFrame({
-            "reparto_id": ["CUCINA", "CUCINA", "CANTINA"],
-            "costo": [100.0, 50.0, 30.0],
-        })
+        df = pd.DataFrame(
+            {
+                "reparto_id": ["CUCINA", "CUCINA", "CANTINA"],
+                "costo": [100.0, 50.0, 30.0],
+            }
+        )
         fig = fb_dashboard.fig_consumi_reparto(df)
         assert isinstance(fig, go.Figure)
 
     def test_fig_ricavi_tipo_pasto(self):
-        df = pd.DataFrame({
-            "tipo_pasto": ["CENA", "BAR"],
-            "categoria_fb": ["FOOD", "BEVERAGE"],
-            "netto": [1000.0, 400.0],
-        })
+        df = pd.DataFrame(
+            {
+                "tipo_pasto": ["CENA", "BAR"],
+                "categoria_fb": ["FOOD", "BEVERAGE"],
+                "netto": [1000.0, 400.0],
+            }
+        )
         fig = fb_dashboard.fig_ricavi_tipo_pasto(df)
         assert isinstance(fig, go.Figure)
 
     def test_fig_pasti_mensili(self):
-        df = pd.DataFrame({
-            "periodo": [date(2026, 5, 1), date(2026, 5, 1)],
-            "tipo_pasto": ["COLAZIONE", "CENA"],
-            "n_coperti": [3000, 400],
-        })
+        df = pd.DataFrame(
+            {
+                "periodo": [date(2026, 5, 1), date(2026, 5, 1)],
+                "tipo_pasto": ["COLAZIONE", "CENA"],
+                "n_coperti": [3000, 400],
+            }
+        )
         fig = fb_dashboard.fig_pasti_mensili(df)
         assert isinstance(fig, go.Figure)
