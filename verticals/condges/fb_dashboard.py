@@ -44,6 +44,21 @@ def _kpi(anno: int) -> pd.DataFrame:
     return fb_data.kpi_mensili(anno)
 
 
+@st.cache_data(ttl=300)
+def _consumi(anno: int) -> pd.DataFrame:
+    return fb_data.consumi(anno)
+
+
+@st.cache_data(ttl=300)
+def _ricavi(anno: int) -> pd.DataFrame:
+    return fb_data.ricavi_codici(anno)
+
+
+@st.cache_data(ttl=300)
+def _pasti(anno: int) -> pd.DataFrame:
+    return fb_data.pasti(anno)
+
+
 # --- figure pure (testabili senza Streamlit) -------------------------------
 
 
@@ -127,6 +142,27 @@ def fig_coperti_mensili(df: pd.DataFrame) -> go.Figure:
     return fig
 
 
+def fig_consumi_reparto(df: pd.DataFrame) -> go.Figure:
+    agg = df.groupby("reparto_id", as_index=False)["costo"].sum()
+    fig = px.bar(agg, x="reparto_id", y="costo", title="Costo merce per reparto")
+    fig.update_layout(yaxis_tickformat=",.0f")
+    return fig
+
+
+def fig_ricavi_tipo_pasto(df: pd.DataFrame) -> go.Figure:
+    agg = df.groupby(["tipo_pasto", "categoria_fb"], as_index=False)["netto"].sum()
+    fig = px.bar(agg, x="tipo_pasto", y="netto", color="categoria_fb",
+                 title="Ricavi per tipo pasto (food vs beverage)")
+    fig.update_layout(yaxis_tickformat=",.0f")
+    return fig
+
+
+def fig_pasti_mensili(df: pd.DataFrame) -> go.Figure:
+    agg = df.groupby(["periodo", "tipo_pasto"], as_index=False)["n_coperti"].sum()
+    return px.bar(agg, x="periodo", y="n_coperti", color="tipo_pasto",
+                  title="Coperti mensili per tipo pasto")
+
+
 # --- helpers puri ----------------------------------------------------------
 
 
@@ -200,7 +236,58 @@ def render_kpi(anno: int) -> None:
 
 
 def render_dettaglio(anno: int) -> None:
-    st.info("Dettaglio mensile — in arrivo (Task 6).")
+    t_cons, t_ric, t_pasti = st.tabs(
+        ["🥩 Consumi", "💶 Ricavi per codice", "🍽️ Pasti"])
+
+    with t_cons:
+        df = _consumi(anno)
+        if df.empty:
+            st.info(f"Nessun consumo F&B per il {anno}.")
+        else:
+            mesi = sorted(df["mese"].unique().tolist())
+            mese = st.selectbox("Mese", mesi, index=len(mesi) - 1,
+                                key="fb_cons_mese")
+            dfm = df[df["mese"] == mese]
+            st.plotly_chart(fig_consumi_reparto(dfm), use_container_width=True)
+            st.markdown("**Top 20 prodotti per costo** — scomposizione "
+                        "Δ = effetto prezzo + effetto volume")
+            top = dfm.nlargest(20, "costo")[
+                ["reparto_id", "codice_prodotto", "descrizione", "costo",
+                 "delta_costo", "effetto_prezzo", "effetto_volume",
+                 "costo_yoy_pct"]]
+            st.dataframe(top, use_container_width=True, hide_index=True)
+
+    with t_ric:
+        df = _ricavi(anno)
+        df = df[df["classe"] == "02FB"]
+        if df.empty:
+            st.info(f"Nessun ricavo F&B per il {anno}.")
+        else:
+            mesi = sorted(df["mese"].unique().tolist())
+            mese = st.selectbox("Mese", mesi, index=len(mesi) - 1,
+                                key="fb_ric_mese")
+            dfm = df[df["mese"] == mese]
+            st.plotly_chart(fig_ricavi_tipo_pasto(dfm), use_container_width=True)
+            st.dataframe(
+                dfm[["codice", "descrizione", "tipo_pasto", "categoria_fb",
+                     "netto", "ricavo_netto_per_coperto", "netto_yoy_pct"]]
+                .sort_values("netto", ascending=False),
+                use_container_width=True, hide_index=True)
+
+    with t_pasti:
+        df = _pasti(anno)
+        if df.empty:
+            st.info(f"Nessun coperto registrato per il {anno}.")
+        else:
+            staff = st.toggle("Includi staff (HQ)", value=False,
+                              key="fb_pasti_staff")
+            if not staff:
+                df = df[~df["is_staff"]]
+            st.plotly_chart(fig_pasti_mensili(df), use_container_width=True)
+            pivot = df.pivot_table(index=["business_unit_id", "tipo_ospite"],
+                                   columns="mese", values="n_coperti",
+                                   aggfunc="sum", fill_value=0)
+            st.dataframe(pivot, use_container_width=True)
 
 
 # --- entry -----------------------------------------------------------------

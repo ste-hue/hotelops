@@ -202,3 +202,32 @@ class TestFigKpi:
         fig = fb_dashboard.fig_coperti_mensili(_df_kpi())
         assert isinstance(fig, go.Figure)
         assert len(fig.data) == 2  # anno corrente + precedente
+
+
+@pytest.mark.skipif(_FB_DASHBOARD_MISSING, reason="fb_dashboard not yet created")
+class TestFigDettaglio:
+    def test_fig_consumi_reparto(self):
+        df = pd.DataFrame({
+            "reparto_id": ["CUCINA", "CUCINA", "CANTINA"],
+            "costo": [100.0, 50.0, 30.0],
+        })
+        fig = fb_dashboard.fig_consumi_reparto(df)
+        assert isinstance(fig, go.Figure)
+
+    def test_fig_ricavi_tipo_pasto(self):
+        df = pd.DataFrame({
+            "tipo_pasto": ["CENA", "BAR"],
+            "categoria_fb": ["FOOD", "BEVERAGE"],
+            "netto": [1000.0, 400.0],
+        })
+        fig = fb_dashboard.fig_ricavi_tipo_pasto(df)
+        assert isinstance(fig, go.Figure)
+
+    def test_fig_pasti_mensili(self):
+        df = pd.DataFrame({
+            "periodo": [date(2026, 5, 1), date(2026, 5, 1)],
+            "tipo_pasto": ["COLAZIONE", "CENA"],
+            "n_coperti": [3000, 400],
+        })
+        fig = fb_dashboard.fig_pasti_mensili(df)
+        assert isinstance(fig, go.Figure)
