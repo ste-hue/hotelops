@@ -2,9 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last checkpoint:** 2026-06-01 | **Version:** 0.7.0
+**Last checkpoint:** 2026-06-12 | **Version:** 0.8.0
 
-> **2026-06-01 checkpoint:** il diario operativo vivo è `STATUS.md` (in corso / decisioni aperte / rotto / prossimi passi) — leggilo prima di pianificare, non duplicarlo qui. Ultimo merge rilevante: **F&B Looker pipeline** (4 viste F&B + audit tool direzione + RistoCube Orders, commit `06abda7`, 2026-05-22) e **GCS raw lineage layer** (Phase 1). Thread aperti principali: doc-refresh sprint, loop minimo `cash_control` end-to-end. (Refactor `v_fb_kpi` a 3 bucket onesti CANTINA=Bar + esclusione 9 UoM **fatto** 2026-06-08; resta aggiornare i dashboard Looker F&B al nuovo contratto colonne.)
+> **2026-06-12 checkpoint:** il diario operativo vivo è `STATUS.md` (in corso / decisioni aperte / rotto / prossimi passi) — leggilo prima di pianificare, non duplicarlo qui. Ultimo merge rilevante: **F&B Looker pipeline** (4 viste F&B + audit tool direzione + RistoCube Orders, commit `06abda7`, 2026-05-22), **GCS raw lineage layer** (Phase 1), refactor `v_fb_kpi` a 3 bucket onesti CANTINA=Bar + esclusione 9 UoM (2026-06-08). Thread aperti principali: loop minimo `cash_control` end-to-end, dashboard Looker F&B da aggiornare al nuovo contratto colonne `v_fb_kpi`.
 
 > **For AI agents**: ground truth = repo + BigQuery schema. Read in this order before non-trivial work:
 > 1. `docs/architecture/INVARIANTS.md` — la costituzione (I1–I8, canonical per concept). [migrato dal vault il 2026-04-30]
@@ -78,11 +78,11 @@ hotelops is the financial data platform for Gruppo Panorama hotel operations. It
 ## Architecture
 
 ```
-core/       <- schemas, config, BQ views, dimensions, ontology loaders
+core/       <- schemas, config, BQ views, dimensions, lineage, ingest manager
   bq/
-    views/       <- 16 SQL view definitions
-    dimensioni/  <- CSV sources (d_voci, d_fornitori, d_mapping)
-    load/        <- dimension loaders (9 scripts -- load rarely-changed tables)
+    views/       <- 26 SQL view definitions
+    dimensioni/  <- CSV sources (d_voci, d_fornitori, d_mapping, d_saldi_banca_chiusura)
+    load/        <- dimension loaders + DDL/migrations one-shot (20 scripts)
 ingest/     <- continuous data flow pipelines
   classify.py    <- file classifier + router (10 detectors)
   orchestrate.py <- unified pipeline runner
@@ -102,10 +102,14 @@ cli.py      <- CLI entry point (hotelops command)
 - `core/datahub_sync.py` -- **LEGACY** rclone helper (Drive staging pre-GCS). Drive non è più popolato; il Phase 5 cutover rimuoverà questo modulo. Spec: `docs/superpowers/specs/2026-05-05-ingest-lineage-gcs-design.md`.
 - `core/bq/client.py` -- BigQuery client singleton (`get_client()`). 41 call sites consolidated 2026-04-19.
 - `core/parsers/accodamenti.py` -- Shared parser for HotelCube TXT accodamenti (H_/R_/C_ × Corr/Mov/Fatt). Extracted 2026-04-19 from ingest/banca/.
-- `core/pipeline_run.py` -- PipelineRun context manager for pipeline instrumentation.
-- `core/bq/views/` -- BigQuery view SQL definitions (source of truth). 16 SQL files.
-- `core/bq/dimensioni/` -- Dimension CSV sources (d_voci_piano_finanziario.csv, d_fornitori.csv, d_mapping_piano_finanziario.csv).
-- `core/bq/load/` -- Dimension loaders: load_voci_piano_finanziario, load_piano_conti, load_categorie, load_fornitori, load_anagrafica_fornitori, load_budget_costi, load_coefficienti_stagionalita, load_mapping_piano_finanziario, load_ricavi_storici.
+- `core/pipeline_run.py` -- PipelineRun context manager for pipeline instrumentation (scrive `f_pipeline_runs`).
+- `core/ingest_manager.py` -- `IngestManager`: loop di ingestion incrementale source-adapter → GCS (`SourceAdapter` protocol, checkpoint via start_date). Usato da cli.py.
+- `core/start_date.py` -- Watermark per load incrementali: `START_DATE_MAP` (tabella BQ, colonna data, fallback) → `get_next_start_date()` / `update_last_processed()`.
+- `core/sources/local_folder.py` -- `LocalFolderAdapter`: watch di una cartella locale per nuovi Excel/CSV (adapter per IngestManager).
+- `core/ontology.yaml` -- ⚠️ **ORFANO**: nessun import nel repo (verificato 2026-06-12). Non cancellato — decidere se rimuovere o ricollegare.
+- `core/bq/views/` -- BigQuery view SQL definitions (source of truth). 26 SQL files.
+- `core/bq/dimensioni/` -- Dimension CSV sources (d_voci_piano_finanziario.csv, d_fornitori.csv, d_mapping_piano_finanziario.csv, d_saldi_banca_chiusura_mensile.csv).
+- `core/bq/load/` -- 20 script: loaders (load_voci_piano_finanziario, load_piano_conti, load_categorie, load_fornitori, load_anagrafica_fornitori, load_anagrafica_clienti, load_budget_costi, load_coefficienti_stagionalita, load_mapping_piano_finanziario, load_ricavi_storici, load_saldi_banca_chiusura_mensile, load_pf_rotazioni, load_views, load_lineage_tables, load_v_raw_promotion_status) + one-shot DDL/seed/migrations (create_produzione_table, create_progetti_tables, seed_progetti_step1, migrate_add_lineage_era, migrate_add_raw_object_id_bulk).
 
 **core/lineage/** -- Per-raw-object lineage layer (Phase 1, additive)
 - `core/lineage/schemas.py` -- Pydantic: SourceDefinition, RawObject, LineageEvent + naming grammar (`<SYSTEM>_<DATASET>_<SOCIETA>_<LIFECYCLE>` strict 4 parts)
@@ -126,7 +130,7 @@ Spec: `docs/superpowers/specs/2026-05-05-ingest-lineage-gcs-design.md`.
 - `ingest/orchestrate.py` -- Unified pipeline runner (sync → classify → ingest → manifest). Da sostituire con intake+promote.
 - `ingest/banca/fetch_drive.py` -- Rclone fetcher (legacy).
 - `ingest/banca/` -- Bank and PMS pipelines (ingest.py, ingest_accodamenti.py).
-- `ingest/flussi/` -- Recurring accounting pipelines: ingest_movimenti_contabili, ingest_gasparotto, ingest_scheda_contabile, ingest_piano_finanziario_xlsx, ingest_partite_aperte, ingest_bilancino, ingest_consumi_economato, ingest_coperti.
+- `ingest/flussi/` -- Recurring accounting pipelines: ingest_movimenti_contabili, ingest_gasparotto, ingest_scheda_contabile, ingest_scheda_190101, ingest_piano_finanziario_xlsx, ingest_partite_aperte, ingest_bilancino, ingest_bilanci_annuali, ingest_consumi_economato (+ ingest_consumi_economato_consolidato), ingest_coperti, ingest_fatture, ingest_vendite_fb, ingest_ricavi_fb, ingest_ristocube_orders, ingest_produzione_pms, ingest_pms_statistiche, budget_orti_xlsx.
 
 **verticals/condges/** -- Vertical #1: Controllo di Gestione (containerizable)
 - `verticals/condges/app_cdg.py` -- Streamlit Controllo di Gestione: CE riclassificato, Budget vs Consuntivo, Tesoreria, Indicatori.
@@ -138,6 +142,20 @@ Spec: `docs/superpowers/specs/2026-05-05-ingest-lineage-gcs-design.md`.
 - `verticals/condges/scadenzario_excel.py` -- Excel bridge: scadenzario fornitori → voci PF.
 - `verticals/condges/app_scadenzario.py` -- Streamlit scadenzario app.
 - `verticals/condges/cassa_giornaliera.py` -- Riconciliazione cassa giornaliera da accodamenti HotelCube. Legge TXT pipe-delimited (H_/R_/C_ × Corr/Mov/Fatt), aggrega per giorno × struttura (POS/contanti/caparre) e produce Excel 2 sheet (Riepilogo + Dettaglio strutture). Porting amputato di `reconciliation_dino` (scartati: IMPPN/TeamSystem, fingerprint state, CSV writer).
+- `verticals/condges/accodamenti_service.py` -- Service layer riconciliazione accodamenti: wrappa cassa_giornaliera per app/CLI (parse TXT → aggregati → Excel, anche cumulativo da BQ).
+- `verticals/condges/app_accodamenti.py` -- Streamlit: upload TXT accodamenti → riconciliazione cassa via accodamenti_service.
+- `verticals/condges/audit_consumi_dashboard.py` -- Streamlit read-only audit consumi F&B per la direzione: canonical-transformation-matrix su 3 vertical (BREAKFAST/RISTORANTE/BAR), 6 layer Ricavi→Consumi→Coperti→KPI→Range industria→Alert. Spec: `docs/superpowers/specs/2026-05-21-audit-consumi-fb-direzione-design.md`.
+- `verticals/condges/tesoreria.py` -- Streamlit tesoreria: cabla parse_pf + bq_data + cashflow + export_excel.
+- `verticals/condges/bq_data.py` -- Query BQ read-only per la app tesoreria Streamlit (cached `@st.cache_data` ttl=300).
+- `verticals/condges/bq_tesoreria_core.py` -- Read BQ tesoreria condivisi tra Streamlit e CLI export (nessun import Streamlit).
+- `verticals/condges/cashflow.py` -- Logica di proiezione cashflow pura (no I/O, no BQ).
+- `verticals/condges/export_excel.py` -- Export Excel tesoreria pulito/stampabile (`generate_tesoreria_excel`).
+- `verticals/condges/gen_tesoreria_xlsx.py` -- CLI: genera Tesoreria Excel da PF (+ scadenzario opzionale), mirror della app Streamlit tesoreria.
+- `verticals/condges/parse_pf.py` -- Parser dei master Excel "Piano Finanziario" di Rosa (varianti ORTI+INTUR) → PFData.
+- `verticals/condges/scadenze_parse.py` -- Parser condivisi scadenzario fornitori Esolver (sintetica / partite) → ScadenzarioData.
+- `verticals/condges/skeleton_shift.py` -- Shift mensile dello skeleton PF: value-cells una colonna a sinistra nel range forward-months, formule lasciate in place.
+- `verticals/condges/materialize_reconciliation.py` -- Materializza stato riconciliazione banca: 1 riga per movimento con stato Pending/AutoMatched/Confirmed/Rejected (CSV in datahub meta/).
+- `verticals/condges/pf_rotate/` -- Package rotation mensile PF (`hotelops pf-rotate`): `rotate.py` orchestratore + step0_normalize_intur, step1_saldi, step2_azzera, step3_scadenzario, step5_controlli, excel_model, fornitori_map, interactive_map, saldi_registry, diff, cli_handler. Regole in "Financial Data / Cashflow".
 
 **verticals/reviews/** -- Vertical #2: Guest Reviews (Apify scrape -> Claude NLP -> BQ -> alert + dashboard)
 - `verticals/reviews/config.py` -- Apify actor IDs, property URLs, thresholds, email recipients.
@@ -151,7 +169,7 @@ Spec: `docs/superpowers/specs/2026-05-05-ingest-lineage-gcs-design.md`.
 - `verticals/reviews/PROPERTIES.md` -- Reference doc: actors, costs, property URLs, env vars.
 
 **Root**
-- `cli.py` -- CLI entry point (`hotelops` command). 16 subcommands. Large handlers in `verticals/condges/cli_commands.py` and `verticals/reviews/cli_commands.py`.
+- `cli.py` -- CLI entry point (`hotelops` command). 28 subcommands (26 in cli.py + `pf-rotate`/`pf-normalize-intur` registrati da `verticals/condges/pf_rotate/cli_handler.py`). Large handlers in `verticals/condges/cli_commands.py` and `verticals/reviews/cli_commands.py`.
 - `core/registry.yaml` -- Pipeline registry: file types, dest folders, BQ tables, signatures.
 
 ## GCP
@@ -239,6 +257,7 @@ python -m core.bq.load.load_mapping_piano_finanziario
 python -m core.bq.load.load_coefficienti_stagionalita
 python -m core.bq.load.load_ricavi_storici
 python -m core.bq.load.load_budget_costi
+python -m core.bq.load.load_saldi_banca_chiusura_mensile   # Saldi certificati fine mese (anchor cash_control)
 
 # Test / lint
 pytest
@@ -260,7 +279,7 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `f_piano_finanziario_input` | Cash flow previsioni: 28 voci x 12 mesi. Fonti: PIANO_FINANZIARIO, SCADENZIARIO, BVA_2026, CLI, APP (SNAPSHOT) |
 | `f_accodamenti` | Vendite da HotelCube PMS: corrispettivi, caparre, fatture attive (APPEND) |
 | `f_bilancino` | Bilancio di verifica Esolver, solo leaf nodes (SNAPSHOT) |
-| `f_consumi_economato` | Consumi materie prime per reparto/prodotto (APPEND) |
+| `f_consumi_economato` | Consumi materie prime per reparto/prodotto — 33 reparti canonici dal re-ingest consolidato 2026-05-21 (APPEND) |
 | `f_coperti_giornalieri` | Coperti pasto giornalieri per BU/tipo_ospite (APPEND) |
 | `f_chiusura_mensile` | Snapshot chiusura mese: previsione vs consuntivo per voce + saldo banca (SNAPSHOT) |
 | `f_saldi_banca_snapshot` | Registro contabile banca da Esolver, end-of-day running balance (APPEND) |
@@ -269,13 +288,19 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `f_ricavi_storici` | Riepilogo Entrate mensili 2023-2025 per BU (APPEND) |
 | `f_coefficienti_consumo` | Coefficienti consumo per reparto/prodotto (APPEND) |
 | `f_pms_statistiche` | Statistiche PMS HotelCube (APPEND) |
-| `f_mastrino_consolidato` | Mastrino consolidato da "Costi Ricavi 2025-2026 Budget.xlsx" (APPEND) |
 | `f_affidamenti` | Affidamenti bancari (linee di credito) -- schema TBD |
 | `f_reviews` | Guest reviews da OTA (Booking, TripAdvisor, Google, Expedia). NLP classified. (APPEND) |
 | `f_vendite_fb` | Vendite F&B POS (giorno × sala × articolo) da Ristocube. Include `segmento_cliente`. (APPEND, dedup hash_riga) |
 | `f_ricavi_fb` | Ricavi F&B per struttura × mese × codice pasto (Produzione Netta PMS, export Power BI). Drill-down di classe 02FB. Ingerita via lineage (source `POWERBI_RICAVIFB_ORTI_SNAPSHOT`). (SNAPSHOT, natural_key business_unit_id+anno+mese) |
 | `f_ristocube_orders` | Comande RistoCube POS a livello item × comanda. Campi comanda (sala, tavolo, coperti, segmento_cliente, modalita_chiusura) ereditati da ogni item. Ingerita via lineage (source `RISTOCUBE_ORDERS_ORTI_APPEND`). (APPEND, dedup hash_riga, partition DAY su data, cluster sala/segmento/comanda_id) |
 | `f_produzione_pms` | Produzione giornaliera HotelCube per struttura × classe ricavo (Daily Production Report, Imponibile, export Power BI). Drill-down giorno×classe; `societa_id` derivata dal cutover 2025-04-01. Ingerita via lineage (source `POWERBI_PRODUZIONE_ORTI_SNAPSHOT`). (SNAPSHOT, natural_key business_unit_id+anno, partition DAY su data, cluster business_unit_id/classe) |
+| `f_fatture_righe` | Registro fatture Esolver acquisto/vendita a livello riga, contropartite con cod_conto. Canale complementare alla prima nota — insieme quadrano col bilancino per classe (vedi `v_ce_macro_mensile`). Parser `ingest/flussi/ingest_fatture.py`, sources `ESOLVER_FATTURE{ACQUISTO,VENDITA}_{ORTI,INTUR}_APPEND`. (APPEND) |
+| `f_saldi_banca_chiusura_mensile` | Saldi banca certificati a fine mese (fonte manuale/tesoreria) — **anchor del loop `cash_control`**: se presente per (societa, data, banca) ha priorità su snapshot Esolver + movimenti in `hotelops chiudi` e nel calcolo saldi CLI. Source: `core/bq/dimensioni/d_saldi_banca_chiusura_mensile.csv` → `core.bq.load.load_saldi_banca_chiusura_mensile` |
+| `f_bilanci_annuali` | Bilanci annuali da XBRL markdown (Registro Imprese): una riga per societa × anno × sezione × voce. Parser `ingest/flussi/ingest_bilanci_annuali.py`. (SNAPSHOT per societa+anno) |
+| `f_apify_runs` | Observability reviews: una riga per run Apify actor (costi scraping). Scritta da `verticals/reviews/scrape.py`. (APPEND) |
+| `f_pipeline_runs` | Observability layer 2: una riga per esecuzione pipeline ("il cron ha girato? è andato a buon fine?"). Scritta da `core/pipeline_run.py`. (APPEND) |
+| `f_progetto_voci` | CapEx: righe di scope per progetto, `voce_id = {progetto_id}.{seq}`. (SNAPSHOT per voce_id) |
+| `f_progetto_eventi` | CapEx: eventi immutabili sul thread di una voce progetto (lifecycle IMPEGNO→COMPETENZA→CASSA→CHIUSURA). (APPEND) |
 
 ### Dimension tables
 
@@ -291,6 +316,7 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `d_personale_mensile` | Costi personale mensili per divisione (78 righe) |
 | `d_coefficienti_stagionalita` | Monthly seasonality multipliers per BU, computed from f_ricavi_storici. Sum=12.0 |
 | `d_periodi_apertura` | Calendario stagionale apertura/chiusura per BU (3 righe) |
+| `d_progetti` | Anagrafica progetti CapEx (progetto_id es. HPAN25PIANO1, SPIAGGIA_LOTTO7). SNAPSHOT per progetto_id |
 
 ### Views
 
@@ -318,6 +344,7 @@ Two lifecycle types: **APPEND** (each file adds rows, MD5 dedup) vs **SNAPSHOT**
 | `v_fb_pasti` | Looker F&B: conteggio pasti per BU, mensile, YoY. Anni >= 2025. `core/bq/views/` |
 | `v_fb_ricavi` | Looker F&B: ricavi per BU × codice + scontrino medio + YoY. Anni >= 2025. `core/bq/views/` |
 | `v_fb_kpi` | Looker F&B: bridge mensile in **3 bucket onesti** (breakfast / ristorante=CUCINA / bar=CANTINA) — ricavi split food vs beverage, `food_cost_pct_ristorante` + `food_cost_pct_bar` separati, €/pasto. 9 articoli UoM-rotti esclusi per `codice_prodotto`. Anni >= 2025. `core/bq/views/` |
+| `v_ce_macro_mensile` | CE mensile per macro classe: unione prima nota (`f_movimenti_contabili`) + registro fatture (`f_fatture_righe`) — insieme quadrano col bilancino per classe (verificato ORTI YTD mag 2026). Corrispettivi PMS esclusi: per i ricavi gestionali completi usare `f_produzione_pms`. `core/bq/views/` |
 | `v_budget_canonical` | Budget canonico per codice conto: dedup fonte priority (GASPAROTTO > MAPPATURA > INCIDENZA), invariant I8. `core/bq/views/` |
 | `v_raw_objects_current` | Lineage: stato corrente per raw_object (latest event per oggetto). `core/bq/views/` |
 | `v_raw_promotion_status` | Lineage: stato promozione raw objects (RAW→CLASSIFIED→PROMOTABLE→PROMOTED) + freshness. `core/bq/views/` |
@@ -435,7 +462,7 @@ Regole specifiche per le rotation mensili del Piano Finanziario (`hotelops pf-ro
 
 **Mai azzerare formule.** Step 2 ("azzera mese chiuso") tocca solo `is_value_cell(cell)` — numero, stringa, o formula-di-costanti (es. `=110000+160000`). **Formule con riferimenti A1-style (`=Utenze!K3`, `=SUM(D5:D11)`, `=C37`) non vengono MAI sovrascritte**. Questo è il vincolo che protegge le cascate cross-sheet (uscite) e i link strutturali.
 
-**File output nuovo, mai mutare l'input.** Naming: `<societa>_PF_<YYYY-MM>_post-rotate_<timestamp>.xlsx`. Se step 5 trova ERR il file riceve suffisso `_FAILED_CHECKS` ma viene comunque scritto (per debug visivo in Excel).
+**File output nuovo, mai mutare l'input.** Naming: `<societa>_PF_<YYYY-MM>_post-rotate_<timestamp>.xlsx`, dove `YYYY-MM` è il **primo mese aperto** (data_saldo + 1 mese): il PF post-rotazione di aprile parte dai saldi al 30/04 ed è il file `2026-05`. Se step 5 trova ERR il file riceve suffisso `_FAILED_CHECKS` ma viene comunque scritto (per debug visivo in Excel).
 
 **Smoke verificato end-to-end** prima di dichiarare "rotation funziona":
 - ORTI: `hotelops pf-rotate --societa ORTI --pf <file_pre> --scad <scadenzario> --scad-tipo sintetica --mese-chiuso aprile --data-saldo 2026-04-30 --unmapped-policy skip --out /tmp/pf-out`
