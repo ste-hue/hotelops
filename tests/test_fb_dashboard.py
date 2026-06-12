@@ -136,3 +136,50 @@ class TestFigStagione:
         vuoto = _df_stagione().iloc[0:0]
         assert isinstance(fb_dashboard.fig_ricavi_giornalieri(vuoto), go.Figure)
         assert isinstance(fb_dashboard.fig_cumulato(vuoto), go.Figure)
+        vuoto_coperti = pd.DataFrame({"data": [], "tipo_pasto": [], "coperti": []})
+        vuoto_sala = pd.DataFrame({"data": [], "sala": [], "netto": []})
+        assert isinstance(fb_dashboard.fig_coperti_tipo_pasto(vuoto_coperti), go.Figure)
+        assert isinstance(fb_dashboard.fig_vendite_sala(vuoto_sala), go.Figure)
+
+
+def _df_kpi() -> pd.DataFrame:
+    return pd.DataFrame({
+        "anno": [2026, 2026],
+        "mese": [5, 6],
+        "periodo": [date(2026, 5, 1), date(2026, 6, 1)],
+        "costo_fb_totale": [24572.9, 0.0],
+        "coperti_hotel": [4377, 1896],
+        "ricavi_breakfast": [38836.4, 0.0],
+        "ricavi_food": [23042.7, 0.0],
+        "ricavi_beverage": [20981.5, 0.0],
+        "food_cost_pct_breakfast": [0.387, None],
+        "food_cost_pct_ristorante": [0.261, None],
+        "food_cost_pct_bar": [0.168, None],
+        "euro_per_pasto": [5.61, 0.0],
+        "costo_fb_totale_ap": [25812.9, 27285.2],
+        "coperti_hotel_ap": [3271, 4461],
+    })
+
+
+@pytest.mark.skipif(_FB_DASHBOARD_MISSING, reason="fb_dashboard not yet created")
+class TestFigKpi:
+    def test_fig_food_cost_mensile(self):
+        fig = fb_dashboard.fig_food_cost_mensile(_df_kpi())
+        assert isinstance(fig, go.Figure)
+        assert len(fig.data) == 3  # breakfast / ristorante / bar
+
+    def test_food_cost_maschera_mesi_senza_consumi(self):
+        # giugno: costo_fb_totale 0 -> il punto deve essere None, non 0%
+        fig = fb_dashboard.fig_food_cost_mensile(_df_kpi())
+        for trace in fig.data:
+            assert trace.y[-1] is None or pd.isna(trace.y[-1])
+
+    def test_fig_ricavi_split(self):
+        fig = fb_dashboard.fig_ricavi_split(_df_kpi())
+        assert isinstance(fig, go.Figure)
+        assert len(fig.data) == 3  # breakfast / food / beverage
+
+    def test_fig_coperti_mensili(self):
+        fig = fb_dashboard.fig_coperti_mensili(_df_kpi())
+        assert isinstance(fig, go.Figure)
+        assert len(fig.data) == 2  # anno corrente + precedente

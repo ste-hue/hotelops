@@ -39,6 +39,11 @@ def _freshness() -> pd.DataFrame:
     return fb_data.freshness()
 
 
+@st.cache_data(ttl=300)
+def _kpi(anno: int) -> pd.DataFrame:
+    return fb_data.kpi_mensili(anno)
+
+
 # --- figure pure (testabili senza Streamlit) -------------------------------
 
 
@@ -80,6 +85,48 @@ def fig_vendite_sala(df: pd.DataFrame) -> go.Figure:
     return fig
 
 
+_BUCKETS_FC = {
+    "food_cost_pct_breakfast": "Breakfast",
+    "food_cost_pct_ristorante": "Ristorante",
+    "food_cost_pct_bar": "Bar",
+}
+
+
+def fig_food_cost_mensile(df: pd.DataFrame) -> go.Figure:
+    """Food cost % per bucket. Mesi senza consumi caricati -> buco, mai 0%."""
+    plot = df.copy()
+    senza_consumi = plot["costo_fb_totale"] == 0
+    for col in _BUCKETS_FC:
+        plot.loc[senza_consumi, col] = None
+    fig = go.Figure()
+    for col, label in _BUCKETS_FC.items():
+        fig.add_trace(go.Scatter(x=plot["periodo"], y=plot[col], name=label,
+                                 mode="lines+markers"))
+    fig.update_layout(title="Food cost % per bucket", yaxis_tickformat=".0%")
+    return fig
+
+
+def fig_ricavi_split(df: pd.DataFrame) -> go.Figure:
+    fig = go.Figure()
+    for col, label in [("ricavi_breakfast", "Breakfast"),
+                       ("ricavi_food", "Food"),
+                       ("ricavi_beverage", "Beverage")]:
+        fig.add_trace(go.Bar(x=df["periodo"], y=df[col], name=label))
+    fig.update_layout(barmode="stack", title="Ricavi F&B per componente",
+                      yaxis_tickformat=",.0f")
+    return fig
+
+
+def fig_coperti_mensili(df: pd.DataFrame) -> go.Figure:
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=df["periodo"], y=df["coperti_hotel"],
+                         name="anno corrente"))
+    fig.add_trace(go.Bar(x=df["periodo"], y=df["coperti_hotel_ap"],
+                         name="anno precedente"))
+    fig.update_layout(barmode="group", title="Coperti hotel per mese")
+    return fig
+
+
 # --- sezioni ---------------------------------------------------------------
 
 
@@ -108,7 +155,36 @@ def render_stagione(anno: int, oggi: date) -> None:
 
 
 def render_kpi(anno: int) -> None:
-    st.info("KPI mensili — in arrivo (Task 5).")
+    df = _kpi(anno)
+    if df.empty:
+        st.info(f"Nessun KPI mensile per il {anno}.")
+        return
+    mesi = df["mese"].tolist()
+    mese = st.selectbox("Mese", mesi, index=len(mesi) - 1, key="fb_kpi_mese")
+    r = df[df["mese"] == mese].iloc[0]
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Food cost ristorante", fb_data.kpi_or_nd(
+        r["food_cost_pct_ristorante"], r["costo_fb_totale"], r["coperti_hotel"]))
+    c2.metric("Food cost bar", fb_data.kpi_or_nd(
+        r["food_cost_pct_bar"], r["costo_fb_totale"], r["coperti_hotel"]))
+    c3.metric("Food cost breakfast", fb_data.kpi_or_nd(
+        r["food_cost_pct_breakfast"], r["costo_fb_totale"], r["coperti_hotel"]))
+
+    # delta €/pasto vs AP: unico delta calcolabile dalle colonne _ap della vista
+    delta_pasto = None
+    if r["costo_fb_totale"] and r["coperti_hotel_ap"] and r["costo_fb_totale_ap"]:
+        pasto_ap = r["costo_fb_totale_ap"] / r["coperti_hotel_ap"]
+        delta_pasto = f"{r['euro_per_pasto'] - pasto_ap:+.2f} € vs AP"
+    c4.metric(
+        "€ / pasto",
+        "n/d" if not r["costo_fb_totale"] else f"{r['euro_per_pasto']:.2f} €",
+        delta=delta_pasto, delta_color="inverse")
+
+    st.plotly_chart(fig_food_cost_mensile(df), use_container_width=True)
+    col1, col2 = st.columns(2)
+    col1.plotly_chart(fig_ricavi_split(df), use_container_width=True)
+    col2.plotly_chart(fig_coperti_mensili(df), use_container_width=True)
 
 
 def render_dettaglio(anno: int) -> None:
