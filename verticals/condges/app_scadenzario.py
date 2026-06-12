@@ -26,6 +26,7 @@ import openpyxl
 import pandas as pd
 import streamlit as st
 
+from verticals.condges.pf_generator.blocchi import cascata_nc
 from verticals.condges.pf_rotate.step1_saldi import fetch_saldi_da_bq, write_saldi_banca
 from verticals.condges.pf_rotate.step2_azzera import azzera_mese
 from verticals.condges.pf_rotate.step5_controlli import CheckOutcome, verifica_controlli
@@ -407,19 +408,8 @@ def write_pf(
                 if val:
                     amounts[month] = amounts.get(month, 0) + val
 
-            # Note credito (saldi positivi) scalate in cascata sul primo mese
-            # con fatture in avanti: il bonifico reale = fatture - NC, e il
-            # totale scritto resta = saldo aperto del fornitore. Una NC
-            # residua oltre l'ultimo mese non viene scritta.
-            netted: dict[int, float] = {}
-            carry = 0.0
-            for month in sorted(amounts):
-                net = amounts[month] + carry
-                if net >= 0:  # credito residuo: scala sul mese successivo
-                    carry = net
-                    continue
-                carry = 0.0
-                netted[month] = net
+            # Note credito scalate in cascata (debiti negativi, NC positiva).
+            netted = cascata_nc(amounts)
 
             # Write: flip sign (scadenze negative = debito, PF positive = uscita)
             months_written: dict[int, float] = {}
