@@ -118,8 +118,11 @@ def rotate(
             + ", ".join(saldi_mancanti),
         )
 
-    # File output
-    anno_mese = f"{data_saldo.year}-{data_saldo.month:02d}"
+    # File output — il nome indica il primo mese aperto (data_saldo + 1 mese):
+    # il PF post-rotazione di aprile parte dai saldi al 30/04 ed è il file "di maggio".
+    anno = data_saldo.year + (1 if data_saldo.month == 12 else 0)
+    mese_aperto = data_saldo.month % 12 + 1
+    anno_mese = f"{anno}-{mese_aperto:02d}"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = _output_path(out_dir, societa, anno_mese, failed)
     out_path.write_bytes(out_bytes)
