@@ -21,15 +21,21 @@ def test_csv_parse_e_validate():
     assert len(rows) >= 5
     validate_batch(rows, SaldoBancaChiusuraMensileRow, "f_saldi_banca_chiusura_mensile")
     mps_apr = next(
-        r for r in rows if r["banca_id"] == "MPS" and r["data_riferimento"] == "2026-04-30"
+        r
+        for r in rows
+        if r["societa_id"] == "ORTI"
+        and r["banca_id"] == "MPS"
+        and r["data_riferimento"] == "2026-04-30"
     )
-    assert mps_apr["saldo_eur"] == 251897.54
-    kross_apr = next(
-        r for r in rows if r["banca_id"] == "MPS_KROSS" and r["data_riferimento"] == "2026-04-30"
-    )
-    assert kross_apr["saldo_eur"] == 33915.06
+    assert mps_apr["saldo_eur"] == 245171.52  # certificato 2026-06-12, corregge 251897.54
+    # Kross fuori dall'anchor (deciso 2026-06-12, commit ee6ff55)
+    assert not any(r["banca_id"] == "MPS_KROSS" for r in rows)
     intesa_apr = next(
-        r for r in rows if r["banca_id"] == "INTESA" and r["data_riferimento"] == "2026-04-30"
+        r
+        for r in rows
+        if r["societa_id"] == "ORTI"
+        and r["banca_id"] == "INTESA"
+        and r["data_riferimento"] == "2026-04-30"
     )
     assert intesa_apr["saldo_eur"] == 87439.92
 
