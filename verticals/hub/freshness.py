@@ -25,8 +25,10 @@ def carica_freshness() -> dict:
     client = get_client()
     out: dict = {}
 
+    # Grain mensile (anno, mese): giorni dalla fine dell'ultimo mese coperto.
     q_fb = """
-    SELECT DATE_DIFF(CURRENT_DATE('Europe/Rome'), MAX(data), DAY) AS giorni
+    SELECT GREATEST(0, DATE_DIFF(CURRENT_DATE('Europe/Rome'),
+                                 LAST_DAY(MAX(DATE(anno, mese, 1)), MONTH), DAY)) AS giorni
     FROM `hotelops-suite.hotelops.f_consumi_economato`
     """
     out["fb"] = {"giorni": next(iter(client.query(q_fb).result())).giorni}

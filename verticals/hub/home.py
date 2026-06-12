@@ -18,26 +18,28 @@ def render():
         st.error(f"Dati non disponibili (BigQuery): {e}")
         return
 
-    peggiore = max(
-        (v["giorni"] if v.get("giorni") is not None else 99)
-        for v in fresh.values()
-        if "giorni" in v
-    )
-    st.caption(f"Stato dati: {semaforo(peggiore)} · refresh ogni 5 min")
+    g_fb = fresh["fb"]["giorni"]
+    g_rev = fresh["reviews"]["giorni"]
+    n_coda = fresh["ingest"]["in_coda"]
+    # ogni fonte ha la sua scala (mensile/settimanale): il semaforo di testata
+    # è il peggiore dei semafori per-card, non dei giorni grezzi
+    s_fb = semaforo(g_fb, soglia_attenzione=35, soglia_allarme=70)
+    s_rev = semaforo(g_rev, 7, 14)
+    s_ing = "🟢" if n_coda == 0 else "🟡"
+    semafori = [s_fb, s_rev, s_ing]
+    peggiore = "🔴" if "🔴" in semafori else ("🟡" if "🟡" in semafori else "🟢")
+    st.caption(f"Stato dati: {peggiore} · refresh ogni 5 min")
 
     col_fb, col_rev, col_ing = st.columns(3)
     with col_fb:
-        g = fresh["fb"]["giorni"]
-        st.subheader(f"🍽 F&B {semaforo(g)}")
-        st.metric("Ultimo consumo", f"{g} gg fa" if g is not None else "n/d")
+        st.subheader(f"🍽 F&B {s_fb}")
+        st.metric("Ultimo mese coperto", f"{g_fb} gg fa" if g_fb is not None else "n/d")
     with col_rev:
-        g = fresh["reviews"]["giorni"]
-        st.subheader(f"⭐ Reviews {semaforo(g, 7, 14)}")
+        st.subheader(f"⭐ Reviews {s_rev}")
         st.metric("Media mese", fresh["reviews"]["media_mese"] or "n/d")
     with col_ing:
-        n = fresh["ingest"]["in_coda"]
-        st.subheader(f"📥 Ingest {'🟢' if n == 0 else '🟡'}")
-        st.metric("Raw objects in coda", n)
+        st.subheader(f"📥 Ingest {s_ing}")
+        st.metric("Raw objects in coda", n_coda)
 
     st.caption(
         "💶 Cassa/PF arriva con la migrazione PF generazionale "
