@@ -951,6 +951,20 @@ def cmd_ingest_stream(args):
     manager.run(poll_interval=args.poll_interval, dry_run=args.dry_run)
 
 
+def cmd_publish_export(args):
+    from datetime import datetime, timezone
+
+    from verticals.hub.publish.export import export_all
+
+    site = args.out or "verticals/hub/publish/site"
+    gen = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    payloads = export_all(site, gen, dry_run=args.dry_run)
+    for name, p in payloads.items():
+        detail = f"serie {len(p['serie'])}" if "serie" in p else "meta"
+        print(f"{name}.json  ({detail})")
+    print("DRY-RUN (nessun file scritto)" if args.dry_run else f"scritti in {site}/data/")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="hotelops",
@@ -1214,6 +1228,17 @@ def main():
         help="Lineage: promuovi raw_object a canonical (parser + bq_write_validated)",
     )
     p_promote.add_argument("--raw-object-id", required=True)
+
+    p_pub = sub.add_parser(
+        "publish-export",
+        help="Export read-only BQ→JSON per il viewer static-edge",
+    )
+    p_pub.add_argument(
+        "--out", default=None,
+        help="Dir del sito (default verticals/hub/publish/site)",
+    )
+    p_pub.add_argument("--dry-run", action="store_true")
+    p_pub.set_defaults(func=cmd_publish_export)
 
     p_capture = sub.add_parser(
         "capture",
