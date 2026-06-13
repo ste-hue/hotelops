@@ -91,3 +91,64 @@ def test_spot_row_valid():
         data_caricamento=_now(),
     )
     assert s.type == "umbrella"
+
+
+from datetime import date as _date
+
+from ingest.flussi.ingest_spiaggia import (
+    extract_table,
+    find_prefix,
+    method_label,
+    to_bool,
+    to_float,
+    to_int,
+    to_str,
+    unix_to_date,
+    unix_to_ts,
+)
+
+
+def test_coercion_helpers():
+    assert to_int(None) is None
+    assert to_int("") is None
+    assert to_int(5) == 5
+    assert to_float("35.00") == 35.0
+    assert to_float("-10.50") == -10.5
+    assert to_float(None) is None
+    assert to_float("") is None
+    assert to_bool(1) is True
+    assert to_bool(0) is False
+    assert to_bool(None) is False
+    assert to_str("  x ") == "x"
+    assert to_str("") is None
+    assert to_str(None) is None
+
+
+def test_unix_conversions():
+    assert unix_to_date(1592524800) == _date(2020, 6, 19)
+    assert unix_to_date(0) is None
+    assert unix_to_date(None) is None
+    assert unix_to_ts(0) is None
+    assert unix_to_ts(1652133848).year == 2022
+
+
+def test_method_label():
+    assert method_label(None) == "sconosciuto"
+    assert method_label(1) == "metodo_1"
+    assert method_label(14) == "metodo_14"
+
+
+def test_find_prefix_and_extract():
+    dump = {
+        "it-sa-84010-panorama-beach_reservations": {
+            "columns": ["id", "spot_name", "amount"],
+            "rows": [[1, "7", "35.00"], [2, "8", "40.00"]],
+        }
+    }
+    prefix = find_prefix(dump)
+    assert prefix == "it-sa-84010-panorama-beach_"
+    recs = extract_table(dump, prefix, "reservations")
+    assert recs == [
+        {"id": 1, "spot_name": "7", "amount": "35.00"},
+        {"id": 2, "spot_name": "8", "amount": "40.00"},
+    ]
