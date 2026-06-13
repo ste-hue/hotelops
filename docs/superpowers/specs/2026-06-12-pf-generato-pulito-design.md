@@ -1,8 +1,36 @@
 # PF generato pulito — design
 
-**Data:** 2026-06-12
+**Data:** 2026-06-12 (modello corretto 2026-06-13)
 **Stato:** bozza per review Stefano
 **Contesto:** sessione debug scadenzario 2026-06-12 (fix `93f6184`…`47f14e1`); supersede l'approccio "patcha il master" dello step 3 di pf-rotate.
+
+## Modello (chiarito da Stefano 2026-06-13) — il PF è PURA PROIEZIONE
+
+Il file NON è "consuntivo + previsione". È **tutto futuro**, forward-only:
+
+> "Maggio" = al 1° maggio, partendo dal **saldo banca reale al 30 aprile**, ecco
+> cosa prevedo entri ed esca dalle casse mese per mese. Tutto il resto è **saldo
+> proiettato**.
+
+Conseguenze sul design:
+- **Nessun consuntivo nel file.** Il passato non si conserva: si cancella. Il
+  file di maggio parte da maggio; le colonne dei mesi passati restano (layout a
+  12 mesi) ma **vuote**.
+- **L'unica cosa reale è l'àncora**: il saldo banca certificato a fine mese
+  precedente (30/04 per il file di maggio), da `f_saldi_banca_chiusura_mensile`.
+- **Il deliverable è il saldo proiettato**: cascata `saldo_iniziale + entrate −
+  uscite = saldo_proiettato`, dove il proiettato di un mese è l'iniziale del
+  successivo. NON è un extra "iterazione dopo" — è il punto del file.
+- Lo "scaduto → primo mese aperto" (quello che non hai pagato ad aprile si
+  sposta su maggio e si somma a quello che già devi) è il cuore già implementato.
+
+**Layer 2 — "trascendere" (spec separata):** il file Excel butta il passato; il
+SISTEMA no. Ogni `pf-genera` cattura la **vintage** di previsione in BQ (append
+con vintage_ts, non sovrascrive `f_piano_finanziario_input` che è SNAPSHOT), così
+si accumulano tutte le previsioni e i loro aggiustamenti per confrontarli con gli
+actual (Esolver/HotelCube). `v_previsione_cassa` + `f_chiusura_mensile` già
+coprono parte di questo; il gap è la serie storica delle vintage. → spec a parte,
+DOPO il generatore Excel.
 
 ## Problema
 
@@ -38,8 +66,8 @@ Il file precedente resta input (per le previsioni), mai output.
 |---|---|---|
 | `d_fornitori.csv` | righe fornitore: codice Esolver + nome + voce | codice↔nome↔voce |
 | Export "situazione partite" Esolver | importi per fornitore × mese (scadenza) | il debito aperto |
-| File PF precedente (quello rivisto da Rosa) | blocco PREVISIONI per voce + valori dei mesi chiusi | le proiezioni umane |
-| BQ `f_saldi_banca_chiusura_mensile` (step 1 esistente) | saldi banca al cutover | la cassa |
+| File PF precedente (quello rivisto da Rosa) | blocco PREVISIONI per voce (solo mesi aperti) | le proiezioni umane |
+| BQ `f_saldi_banca_chiusura_mensile` (step 1 esistente) | **àncora**: saldo banca certificato a fine mese precedente | la cassa reale |
 
 ### Layout di ogni foglio voce (standard ORTI, due blocchi)
 
@@ -61,15 +89,32 @@ il contributo del blocco B viene ridotto: `prev_eff = max(0, prev - partite)` �
 promossa a regola del generatore, calcolata per fornitore (match per codice
 quando la riga previsione ha un codice, per nome normalizzato altrimenti).
 
-I **mesi chiusi** (consuntivi) si copiano dal file precedente as-is, blocchi
-inclusi: il generatore non riscrive il passato.
+I **mesi passati** (colonne prima del primo mese aperto) restano **vuoti**: il
+file è tutto futuro, niente consuntivi per fornitore. Nessuna copia del passato.
 
-### Foglio "Piano Finanziario" (riepilogo)
+### Foglio "Piano Finanziario" (riepilogo) — la cascata di proiezione
 
-Generato con formule cross-sheet verso i totali dei fogli voce (stile
-`=Utenze!K3` — mai valori battuti), saldi banca dal motore step 1, struttura
-identica all'attuale ORTI. Convenzione colori esistente di `genera_excel`:
-nero = consuntivo, blu = previsione, verde = formula.
+È la spina dorsale, non un sommario. Per ogni mese aperto, in colonna:
+
+```
+SALDO INIZIALE        = saldo proiettato del mese precedente
+                        (per il PRIMO mese aperto = àncora reale da BQ,
+                         saldo banca certificato a fine mese precedente)
++ TOTALE ENTRATE      = SUM(righe entrate)            [previsione]
+− TOTALE USCITE       = Σ formule cross-sheet ='<voce>'!<col>3  [previsione]
+= SALDO PROIETTATO    = SALDO INIZIALE + ENTRATE − USCITE
+```
+
+Il SALDO PROIETTATO di un mese diventa il SALDO INIZIALE del mese dopo: catena
+di formule che proietta la cassa da maggio a dicembre. L'unico numero "duro" è
+l'àncora del primo mese (BQ); tutto il resto è formula viva.
+
+Uscite = formule cross-sheet verso i TOTALE dei fogli voce (`='Utenze'!K3`),
+mai valori battuti. Colori: blu = previsione (entrate, righe manuali), verde =
+formula (totali, saldi proiettati). Mesi passati vuoti / grigi.
+
+(La versione v1 dei task precedenti — entrate/uscite/cashflow SENZA la cascata
+saldi — è superata da questa: la cascata è obbligatoria.)
 
 ### Unmapped: mai silenziosi
 
