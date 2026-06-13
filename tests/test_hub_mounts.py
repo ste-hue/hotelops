@@ -52,6 +52,22 @@ def test_mutui_page_importabile():
     assert mutui.MUTUI_URL.startswith("https://")
 
 
+def test_spiaggia_page_importabile():
+    from verticals.hub.pages_ import spiaggia
+
+    assert callable(spiaggia.render)
+
+
+def test_spiaggia_render_non_chiama_set_page_config():
+    # contratto hub-bind: set_page_config solo nel main() standalone, non in render().
+    import inspect
+
+    from verticals.spiaggia import app
+
+    # Cerca la CHIAMATA (`st.set_page_config`), non il token: la docstring lo nomina.
+    assert "st.set_page_config" not in inspect.getsource(app.render)
+
+
 def test_home_render_audience_param():
     from verticals.hub import home
 
