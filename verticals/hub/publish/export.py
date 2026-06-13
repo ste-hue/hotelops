@@ -52,6 +52,20 @@ def shape_meta(generated_at: str, fresh: dict) -> dict:
     }
 
 
+def shape_reviews(serie: list[dict], piattaforme: list[dict], recenti: list[dict]) -> dict:
+    """Aggregati reviews → contratto JSON: trend mensile + per piattaforma + recenti."""
+    return {
+        "schema": 1,
+        "serie": [{"periodo": r.get("periodo"), "n": r.get("n"), "media": r.get("media")}
+                  for r in serie],
+        "piattaforme": [{"piattaforma": r.get("piattaforma"), "n": r.get("n"),
+                         "media": r.get("media")} for r in piattaforme],
+        "recenti": [{k: r.get(k) for k in (
+            "data_review", "piattaforma", "punteggio_norm", "titolo",
+            "riassunto_nlp", "sentiment_nlp")} for r in recenti],
+    }
+
+
 def _jsonable(v):
     if isinstance(v, decimal.Decimal):
         return float(v)
@@ -69,6 +83,25 @@ def _fb_rows_from_bq(client) -> list[dict]:
             for r in client.query(q).result()]
 
 
+def _reviews_from_bq(client) -> tuple[list[dict], list[dict], list[dict]]:
+    P = "hotelops-suite.hotelops.f_reviews"
+    rows = lambda q: [{k: _jsonable(v) for k, v in dict(r.items()).items()}  # noqa: E731
+                      for r in client.query(q).result()]
+    serie = rows(f"""
+        SELECT FORMAT_DATE('%Y-%m-01', DATE_TRUNC(PARSE_DATE('%Y-%m-%d', data_review), MONTH)) AS periodo,
+               COUNT(*) AS n, ROUND(AVG(punteggio_norm), 1) AS media
+        FROM `{P}` WHERE data_review IS NOT NULL
+        GROUP BY 1 ORDER BY 1 DESC LIMIT 18""")
+    piattaforme = rows(f"""
+        SELECT piattaforma, COUNT(*) AS n, ROUND(AVG(punteggio_norm), 1) AS media
+        FROM `{P}` WHERE PARSE_DATE('%Y-%m-%d', data_review) >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH)
+        GROUP BY 1 ORDER BY n DESC""")
+    recenti = rows(f"""
+        SELECT data_review, piattaforma, punteggio_norm, titolo, riassunto_nlp, sentiment_nlp
+        FROM `{P}` WHERE data_review IS NOT NULL ORDER BY data_review DESC LIMIT 12""")
+    return list(reversed(serie)), piattaforme, recenti
+
+
 def export_all(out_dir: str, generated_at: str, dry_run: bool = False) -> dict:
     """Genera tutti i JSON. Ritorna {nome: dict} per ispezione/dry-run."""
     from core.bq.client import get_client
@@ -79,6 +112,7 @@ def export_all(out_dir: str, generated_at: str, dry_run: bool = False) -> dict:
     payloads = {
         "_meta": shape_meta(generated_at, fresh),
         "fb": shape_fb(_fb_rows_from_bq(client)),
+        "reviews": shape_reviews(*_reviews_from_bq(client)),
     }
     if not dry_run:
         data_dir = Path(out_dir) / "data"

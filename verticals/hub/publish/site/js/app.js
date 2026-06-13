@@ -4,7 +4,8 @@
 const BANCHE_URL =
   "https://lookerstudio.google.com/reporting/2a7a4c25-56f2-44d4-986f-9a9cc27a03cd/page/TlJ0C";
 
-const NAVY = "#003764", AZURE = "#00a8e1", CORAL = "#ff7f2f", GOLD = "#ffd13f", SAND = "#f3eee6";
+const NAVY = "#003764", AZURE = "#00a8e1", TEAL = "#00bfd6", CORAL = "#ff7f2f", GOLD = "#ffd13f", SAND = "#f3eee6";
+const PLAT_COLORS = [NAVY, AZURE, TEAL, GOLD, CORAL];
 
 const eur = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 const pct = (v) => (v == null ? "—" : (v * 100).toFixed(1).replace(".", ",") + "%");
@@ -86,6 +87,45 @@ function renderFb(fb) {
   });
 }
 
+function renderReviews(rev) {
+  const serie = rev.serie || [];
+  const labels = serie.map((r) => meseLabel(r.periodo));
+  new Chart(document.getElementById("chart-rev-trend"), {
+    type: "bar",
+    data: { labels, datasets: [
+      { type: "line", label: "Media", yAxisID: "y", borderColor: NAVY, tension: 0.3,
+        data: serie.map((r) => r.media) },
+      { label: "N. recensioni", yAxisID: "y1", backgroundColor: SAND,
+        data: serie.map((r) => r.n) },
+    ] },
+    options: { responsive: true, plugins: { legend: { position: "bottom" } },
+      scales: {
+        y: { position: "left", min: 0, max: 10, title: { display: true, text: "media" } },
+        y1: { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "n." } },
+      } },
+  });
+
+  const plat = rev.piattaforme || [];
+  new Chart(document.getElementById("chart-rev-plat"), {
+    type: "bar",
+    data: { labels: plat.map((p) => p.piattaforma), datasets: [
+      { label: "N. recensioni", data: plat.map((p) => p.n),
+        backgroundColor: plat.map((_, i) => PLAT_COLORS[i % PLAT_COLORS.length]) },
+    ] },
+    options: { responsive: true, plugins: { legend: { display: false },
+      tooltip: { callbacks: { afterLabel: (c) => `media ${plat[c.dataIndex].media}` } } } },
+  });
+
+  document.querySelector("#rev-tabella tbody").innerHTML = (rev.recenti || [])
+    .map((r) => {
+      const v = r.punteggio_norm;
+      const col = v != null && v < 7 ? ` style="color:${CORAL}"` : "";
+      const txt = (r.riassunto_nlp || r.titolo || "").slice(0, 90);
+      return `<tr><td>${r.data_review || ""}</td><td>${r.piattaforma || ""}</td>` +
+        `<td${col}>${v ?? "—"}</td><td style="text-align:left">${txt}</td></tr>`;
+    }).join("");
+}
+
 (async () => {
   try {
     renderMeta(await load("_meta"));
@@ -94,5 +134,10 @@ function renderFb(fb) {
     renderFb(await load("fb"));
   } catch (e) {
     document.getElementById("fb-error").innerHTML = `<div class="err">F&B: ${e.message}</div>`;
+  }
+  try {
+    renderReviews(await load("reviews"));
+  } catch (e) {
+    document.getElementById("rev-error").innerHTML = `<div class="err">Reviews: ${e.message}</div>`;
   }
 })();

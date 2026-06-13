@@ -2,7 +2,7 @@
 
 import json
 
-from verticals.hub.publish.export import shape_fb, shape_meta
+from verticals.hub.publish.export import shape_fb, shape_meta, shape_reviews
 
 
 def test_shape_fb_contract():
@@ -24,6 +24,21 @@ def test_shape_fb_contract():
 def test_shape_fb_tollera_campi_mancanti():
     out = shape_fb([{"anno": 2025, "mese": 1}])
     assert out["serie"][0]["food_cost_pct_bar"] is None
+    json.dumps(out)
+
+
+def test_shape_reviews_contract():
+    out = shape_reviews(
+        serie=[{"periodo": "2026-06-01", "n": 48, "media": 8.0}],
+        piattaforme=[{"piattaforma": "BOOKING", "n": 340, "media": 8.1}],
+        recenti=[{"data_review": "2026-06-12", "piattaforma": "BOOKING",
+                  "punteggio_norm": 6.0, "titolo": "X", "riassunto_nlp": "Y",
+                  "sentiment_nlp": "negativo"}],
+    )
+    assert out["schema"] == 1
+    assert out["serie"][0]["media"] == 8.0
+    assert out["piattaforme"][0]["piattaforma"] == "BOOKING"
+    assert out["recenti"][0]["punteggio_norm"] == 6.0
     json.dumps(out)
 
 

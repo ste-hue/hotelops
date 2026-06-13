@@ -23,12 +23,12 @@
         <div class="sub" id="card-fb-sub">food cost ristorante (ultimo mese)</div>
         <div class="arrow">Vedi sotto ↓</div>
       </a>
-      <div class="card">
+      <a class="card" href="#reviews">
         <h3>⭐ Reputation</h3>
         <div class="metric" id="card-rev-metric">—</div>
         <div class="sub">media recensioni (mese)</div>
-        <div class="arrow" style="opacity:.6">dettaglio in arrivo</div>
-      </div>
+        <div class="arrow">Vedi sotto ↓</div>
+      </a>
       <a class="card" id="card-banche" href="#" target="_blank" rel="noopener">
         <h3>🏛 Banche</h3>
         <div class="metric">Looker</div>
@@ -58,6 +58,27 @@
       <div class="chart-box">
         <h3>Ultimo mese consuntivato</h3>
         <table id="fb-tabella"><tbody></tbody></table>
+      </div>
+    </section>
+
+    <section id="reviews">
+      <div class="eyebrow">Reputation</div>
+      <h2>Recensioni ospiti</h2>
+      <div id="rev-error"></div>
+      <div class="chart-box">
+        <h3>Media e volume — nel tempo</h3>
+        <canvas id="chart-rev-trend" height="110"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3>Per piattaforma — ultimi 12 mesi</h3>
+        <canvas id="chart-rev-plat" height="110"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3>Ultime recensioni</h3>
+        <table id="rev-tabella">
+          <thead><tr><th>Data</th><th>Piattaforma</th><th>Voto</th><th>Riassunto</th></tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
     </section>
 
