@@ -52,6 +52,54 @@ def test_policy_fail_raises_on_unmapped(minimal_pf_orti_bytes, tmp_fornitori_csv
     assert 999 in exc.value.codici
 
 
+def test_skip_writes_da_mappare_and_esclusi(minimal_pf_orti_bytes, tmp_path):
+    """SKIP non deve più far sparire i fornitori: i non-mappati vanno in
+    DA MAPPARE, gli esclusi (is_excluded) in ESCLUSI — niente perso in silenzio."""
+    csv = tmp_path / "d_fornitori.csv"
+    csv.write_text(
+        "codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclude_reason,societa_id\n"
+        "100,KNOWN SPA,Known,USCITE_UTENZE,False,False,,ORTI\n"
+        "264,PANORAMA COMPANY,Panorama Company,,True,True,intercompany gruppo,ORTI\n"
+    )
+    # debiti negativi (convenzione reale export partite)
+    scad_df = pd.DataFrame(
+        [
+            {"codice_fornitore": c, "nome": f"Forn{c}", "totale": -1000.0,
+             "scaduto": 0.0, "mese_5": -1000.0, "mese_6": 0.0}
+            for c in (100, 999, 264)
+        ]
+    )
+    buckets = [5, 6]
+    out_bytes, summary = apply_scadenzario(
+        pf_bytes=minimal_pf_orti_bytes,
+        scad_df=scad_df,
+        bucket_months=buckets,
+        societa="ORTI",
+        fornitori_csv=csv,
+        policy=UnmappedPolicy.SKIP,
+        scaduto_month=5,
+    )
+    assert summary["da_mappare"] == [999]
+    assert summary["esclusi"] == [264]
+    wb = openpyxl.load_workbook(BytesIO(out_bytes))
+    assert "DA MAPPARE" in wb.sheetnames
+    assert "ESCLUSI" in wb.sheetnames
+    dm = "\n".join(
+        str(c.value)
+        for row in wb["DA MAPPARE"].iter_rows()
+        for c in row
+        if c.value is not None
+    )
+    assert "999" in dm
+    es = "\n".join(
+        str(c.value)
+        for row in wb["ESCLUSI"].iter_rows()
+        for c in row
+        if c.value is not None
+    )
+    assert "264" in es and "intercompany gruppo" in es
+
+
 def test_policy_skip_writes_known_only(minimal_pf_orti_bytes, tmp_fornitori_csv):
     scad_df, buckets = _make_scad_df([100, 999])
     out_bytes, summary = apply_scadenzario(

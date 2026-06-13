@@ -8,12 +8,17 @@ Riusa il motore di scrittura esistente `app_scadenzario.write_pf` ma:
 from __future__ import annotations
 
 from enum import Enum
+from io import BytesIO
 from pathlib import Path
 
+import openpyxl
 import pandas as pd
 
 from verticals.condges.app_scadenzario import write_pf
+from verticals.condges.pf_generator.blocchi import blocco_a_per_voce
+from verticals.condges.pf_generator.template import scrivi_da_mappare, scrivi_esclusi
 from verticals.condges.pf_rotate.fornitori_map import load_fornitori
+from verticals.condges.skeleton_shift import hide_past_columns_rotation
 
 
 class UnmappedPolicy(str, Enum):
@@ -104,8 +109,37 @@ def apply_scadenzario(
         scaduto_month=scaduto_month,
         clear_codici=set(legacy_map.keys()),
     )
+
+    # Niente perso in silenzio: i non-mappati vanno nel foglio DA MAPPARE, gli
+    # esclusi (is_excluded) nel foglio ESCLUSI. Riusa il motore del generatore
+    # per calcolare le righe (codice/nome/mesi/reason) con stesso bucketing+NC.
+    fornitori_full = {
+        cod: {
+            "voce_id": r.voce_id,
+            "nome_pf": r.nome_pf,
+            "is_excluded": r.is_excluded,
+            "exclude_reason": r.exclude_reason,
+        }
+        for cod, r in fornitori.items()
+    }
+    primo = scaduto_month or min(bucket_months)
+    _per_voce, unmapped_rows, esclusi_rows = blocco_a_per_voce(
+        scad_df, bucket_months, fornitori_full, primo_mese_aperto=primo
+    )
+    wb = openpyxl.load_workbook(BytesIO(updated_bytes))
+    scrivi_da_mappare(wb, unmapped_rows)
+    scrivi_esclusi(wb, esclusi_rows)
+    # Nasconde i mesi passati (vuoti) così il file parte visivamente dal mese
+    # aperto, senza perdere dati/formule/bussola.
+    hide_past_columns_rotation(wb, primo)
+    buf = BytesIO()
+    wb.save(buf)
+    updated_bytes = buf.getvalue()
+
     summary = {
         "skipped_unmapped": unmapped if policy == UnmappedPolicy.SKIP else [],
+        "da_mappare": sorted(r["codice"] for r in unmapped_rows),
+        "esclusi": sorted(r["codice"] for r in esclusi_rows),
         "excluded_persisted": sorted(excluded_codici),
         "excluded_adhoc": sorted(adhoc_excluded),
         "voci_aggiornate": list(write_summary.keys()),
