@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import openpyxl
+from io import BytesIO
 from openpyxl.utils import get_column_letter
 
 from verticals.condges.app_scadenzario import _build_month_col_map
@@ -224,7 +225,7 @@ def _pf_precedente_bytes() -> bytes:
     # riga rettifica di un run precedente: MAI estratta
     ws.cell(row=8, column=2, value="RETTIFICA PARTITE/PREVISIONI")
     ws.cell(row=8, column=13, value=-1030.64)
-    buf = __import__("io").BytesIO()
+    buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()
 
@@ -254,8 +255,6 @@ class TestGeneraPf:
         return {92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"}}
 
     def test_genera_workbook_completo(self, tmp_path):
-        from io import BytesIO
-
         out_bytes, report = genera_pf(
             pf_prev_bytes=_pf_precedente_bytes(),
             scad_df=self._scad_df(),
@@ -274,8 +273,6 @@ class TestGeneraPf:
         assert report["fornitori_scritti"] >= 1
 
     def test_idempotenza_due_run_stesso_input(self, tmp_path):
-        from io import BytesIO
-
         kwargs = dict(
             pf_prev_bytes=_pf_precedente_bytes(),
             scad_df=self._scad_df(),
