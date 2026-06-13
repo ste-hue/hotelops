@@ -520,3 +520,22 @@ sources:
       Esempio hard gate: dati interessanti, nessun loop dichiarato. Resta
       in raw, no canonical promotion. Flip a AUTO + dichiara loop_target
       quando il consumer sarà pronto.
+
+  # ── Spiagge.it Panorama Beach — SNAPSHOT ─────────────────────────────────
+  SPIAGGEIT_SPIAGGIA_INTUR_SNAPSHOT:
+    system: SPIAGGEIT
+    dataset: SPIAGGIA
+    dataset_label: "Dump completo prenotazioni Spiagge.it (Panorama Beach)"
+    societa: INTUR
+    business_unit: LIDO
+    lifecycle: SNAPSHOT
+    canonical_table: f_spiaggia_reservations
+    parser_module: ingest.flussi.ingest_spiaggia
+    natural_key: [societa_id]
+    loop_targets: [cash_control]
+    promotion_policy: MANUAL
+    detector_category: spiaggia_dump
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "spiaggeit/spiaggia/INTUR"
