@@ -2,12 +2,7 @@
 
 import json
 
-from verticals.hub.publish.export import (
-    shape_fb,
-    shape_meta,
-    shape_reviews,
-    shape_spiaggia,
-)
+from verticals.hub.publish.export import shape_fb, shape_meta, shape_reviews
 
 
 def test_shape_fb_contract():
@@ -44,17 +39,6 @@ def test_shape_reviews_contract():
     assert out["serie"][0]["media"] == 8.0
     assert out["piattaforme"][0]["piattaforma"] == "BOOKING"
     assert out["recenti"][0]["punteggio_norm"] == 6.0
-    json.dumps(out)
-
-
-def test_shape_spiaggia_contract():
-    out = shape_spiaggia([
-        {"anno": 2025, "n_prenotazioni": 5940, "incassato": 29114.0,
-         "incasso_medio": 4.9, "quota_online": 0.098, "quota_hotel": 0.994},
-    ])
-    assert out["schema"] == 1
-    assert out["per_anno"][0]["anno"] == 2025
-    assert out["per_anno"][0]["incassato"] == 29114.0
     json.dumps(out)
 
 
