@@ -107,25 +107,12 @@ def genera_pf(
     voci_attive: list[str] = []
     for voce_id in VOCE_SHEET_NAME:
         blocco_a = per_voce.get(voce_id, [])
-        prev = estratto.get(voce_id, {}).get("previsioni", [])
-        cons = estratto.get(voce_id, {}).get("consuntivi", {})
+        prev = estratto.get(voce_id, [])
 
-        # Fornitori con SOLO storico chiuso (no partita aperta): aggiungi stub row
-        # così scrivi_foglio_voce può mergiare i loro consuntivi. Codici non in
-        # fornitori (non mappati con storico) vengono ignorati — limitazione v1.
-        codici_in_blocco_a = {r["codice"] for r in blocco_a}
-        for codice, _ in cons.items():
-            if codice in codici_in_blocco_a:
-                continue
-            entry = fornitori.get(codice)
-            if entry is None or entry.get("voce_id") != voce_id:
-                continue
-            nome_pf = entry.get("nome_pf") or str(codice)
-            blocco_a.append({"codice": codice, "nome": nome_pf, "mesi": {}})
         # Ordine deterministico (idempotenza)
         blocco_a.sort(key=lambda r: (r["nome"].lower(), r["codice"]))
 
-        if not blocco_a and not prev and not cons:
+        if not blocco_a and not prev:
             continue
         rett = rettifica_doppio_conteggio(blocco_a, prev)
         scrivi_foglio_voce(
@@ -133,7 +120,6 @@ def genera_pf(
             voce_id=voce_id,
             blocco_a=blocco_a,
             previsioni=prev,
-            consuntivi=cons,
             rettifica=rett,
             primo_mese_aperto=primo_mese_aperto,
         )

@@ -62,7 +62,6 @@ def scrivi_foglio_voce(
     voce_id: str,
     blocco_a: list[dict],
     previsioni: list[dict],
-    consuntivi: dict[int, dict[int, float]],
     rettifica: dict[int, float],
     primo_mese_aperto: int,
 ) -> str:
@@ -80,9 +79,7 @@ def scrivi_foglio_voce(
 
     r = PRIMA_RIGA_BLOCCO_A
     for riga in blocco_a:
-        mesi = dict(riga["mesi"])
-        mesi.update(consuntivi.get(riga["codice"], {}))  # mesi chiusi as-is
-        _scrivi_riga(ws, r, riga["codice"], riga["nome"], mesi)
+        _scrivi_riga(ws, r, riga["codice"], riga["nome"], riga["mesi"])
         r += 1
 
     r += 1  # riga vuota di separazione

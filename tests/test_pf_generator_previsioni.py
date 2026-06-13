@@ -60,7 +60,7 @@ class TestEstraiPrevisioni:
             codici_partite={92},
             primo_mese_aperto=5,
         )
-        righe = out["USCITE_MATERIE_PRIME"]["previsioni"]
+        righe = out["USCITE_MATERIE_PRIME"]
         nomi = [r["nome"] for r in righe]
         assert "Noleggio Tesla" in nomi
         assert "Scorte extra stagione" in nomi
@@ -72,18 +72,7 @@ class TestEstraiPrevisioni:
             _pf_precedente_bytes(), codici_partite={92}, primo_mese_aperto=5
         )
         tesla = next(
-            r
-            for r in out["USCITE_MATERIE_PRIME"]["previsioni"]
-            if r["nome"] == "Noleggio Tesla"
+            r for r in out["USCITE_MATERIE_PRIME"] if r["nome"] == "Noleggio Tesla"
         )
         assert tesla["mesi"] == {m: 1030.64 for m in range(5, 13)}
         assert tesla["codice"] == 1076
-
-    def test_consuntivi_mesi_chiusi_per_codice(self):
-        out = estrai_previsioni(
-            _pf_precedente_bytes(), codici_partite={92}, primo_mese_aperto=5
-        )
-        cons = out["USCITE_MATERIE_PRIME"]["consuntivi"]
-        # mesi < 5 della riga fornitore 92: aprile 350. Giugno (999, mese
-        # aperto = scrittura motore vecchia) NON è consuntivo.
-        assert cons[92] == {4: 350.0}
