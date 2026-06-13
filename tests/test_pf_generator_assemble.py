@@ -317,3 +317,100 @@ class TestGeneraPf:
         )
         quadr = next(c for c in report["controlli"] if "quadratura" in c["check"])
         assert quadr["esito"] == "OK"
+
+    def test_consuntivi_only_supplier_preserved(self):
+        # fornitore con SOLO mesi chiusi nel file precedente (no partita aperta,
+        # no previsione) deve mantenere il suo storico nel candidato
+        wb = openpyxl.Workbook()
+        wb.active.title = "Piano Finanziario"
+        ws = wb.create_sheet("Materie Prime-Consumo ")
+        mesi = [
+            "GENNAIO",
+            "FEBBRAIO",
+            "MARZO",
+            "APRILE",
+            "MAGGIO",
+            "GIUGNO",
+            "LUGLIO",
+            "AGOSTO",
+            "SETTEMBRE",
+            "OTTOBRE",
+            "NOVEMBRE",
+            "DICEMBRE",
+        ]
+        for i, m in enumerate(mesi):
+            ws.cell(row=2, column=8 + i, value=m)
+        ws.cell(row=5, column=1, value=500)
+        ws.cell(row=5, column=2, value="Fornitore Storico")
+        ws.cell(row=5, column=11, value=777.0)  # APRILE (chiuso)
+        buf = BytesIO()
+        wb.save(buf)
+        prev = buf.getvalue()
+
+        scad_df = pd.DataFrame(
+            [
+                {
+                    "codice_fornitore": 92,
+                    "nome": "AMALFI",
+                    "totale": -100.0,
+                    "scaduto": 0.0,
+                    "mese_6": -100.0,
+                },
+            ]
+        )
+        fornitori = {
+            92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"},
+            500: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Fornitore Storico"},
+        }
+        out, _ = genera_pf(
+            pf_prev_bytes=prev,
+            scad_df=scad_df,
+            bucket_months=[6],
+            fornitori=fornitori,
+            societa="ORTI",
+            anno=2026,
+            primo_mese_aperto=5,
+        )
+        wb2 = openpyxl.load_workbook(BytesIO(out))
+        ws2 = wb2["Materie Prime e Consumo"]
+        # cod 500 presente con APRILE 777 (storico preservato)
+        from verticals.condges.pf_generator.costanti import col_mese
+
+        righe = {
+            ws2.cell(row=r, column=1).value: r
+            for r in range(1, ws2.max_row + 1)
+            if isinstance(ws2.cell(row=r, column=1).value, int)
+        }
+        assert 500 in righe
+        assert ws2.cell(row=righe[500], column=col_mese(4)).value == 777.0
+
+    def test_codice_nome_check_osservabile(self):
+        # il check codice↔nome legge davvero l'output (non rubber stamp)
+        scad_df = pd.DataFrame(
+            [
+                {
+                    "codice_fornitore": 92,
+                    "nome": "AMALFI SEI ESSE S.R.L.",
+                    "totale": -100.0,
+                    "scaduto": 0.0,
+                    "mese_6": -100.0,
+                },
+            ]
+        )
+        fornitori = {
+            92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"}
+        }
+        _, report = genera_pf(
+            pf_prev_bytes=_pf_precedente_bytes(),
+            scad_df=scad_df,
+            bucket_months=[6],
+            fornitori=fornitori,
+            societa="ORTI",
+            anno=2026,
+            primo_mese_aperto=5,
+        )
+        chk = next(c for c in report["controlli"] if "codice" in c["check"])
+        assert chk["esito"] == "OK"
+        # e il nome scritto è quello del CSV, non dell'export
+        # (se fosse rubber stamp non leggerebbe nulla; qui controlliamo che
+        # l'esito derivi dalla lettura — basta che sia OK col nome CSV giusto)

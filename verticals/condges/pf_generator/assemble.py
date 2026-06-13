@@ -11,7 +11,10 @@ from verticals.condges.pf_generator.blocchi import (
     blocco_a_per_voce,
     rettifica_doppio_conteggio,
 )
-from verticals.condges.pf_generator.costanti import VOCE_SHEET_NAME
+from verticals.condges.pf_generator.costanti import (
+    PRIMA_RIGA_BLOCCO_A,
+    VOCE_SHEET_NAME,
+)
 from verticals.condges.pf_generator.previsioni import estrai_previsioni
 from verticals.condges.pf_generator.template import (
     scrivi_controlli,
@@ -19,6 +22,42 @@ from verticals.condges.pf_generator.template import (
     scrivi_foglio_voce,
     scrivi_riepilogo,
 )
+
+
+def _check_codice_nome(wb: openpyxl.Workbook, fornitori: dict[int, dict]) -> dict:
+    """Legge le righe blocco-A dai fogli voce e verifica che ogni
+    (codice, nome) coincida con fornitori[codice]['nome_pf'].
+    Esito OK solo se tutti corrispondono — non è un rubber stamp.
+    """
+    mismatches: list[str] = []
+    for voce_id, sheet_name in VOCE_SHEET_NAME.items():
+        if sheet_name not in wb.sheetnames:
+            continue
+        ws = wb[sheet_name]
+        # Le righe blocco-A vanno da PRIMA_RIGA_BLOCCO_A fino alla riga
+        # di intestazione sezione B (prima riga vuota o etichetta di sezione).
+        for r in range(PRIMA_RIGA_BLOCCO_A, ws.max_row + 1):
+            codice = ws.cell(row=r, column=1).value
+            if not isinstance(codice, int):
+                break  # fine blocco A (riga vuota o sezione B)
+            nome = ws.cell(row=r, column=2).value or ""
+            entry = fornitori.get(codice)
+            if entry is None:
+                continue  # stub non in CSV: non verificabile
+            atteso = entry.get("nome_pf") or str(codice)
+            if nome != atteso:
+                mismatches.append(f"{codice}: got '{nome}' want '{atteso}'")
+    if not mismatches:
+        return {
+            "check": "codice↔nome vs CSV",
+            "esito": "OK",
+            "dettaglio": f"{sum(1 for s in wb.sheetnames if s in VOCE_SHEET_NAME.values())} fogli verificati",
+        }
+    return {
+        "check": "codice↔nome vs CSV",
+        "esito": "ERR",
+        "dettaglio": f"{len(mismatches)} mismatch; primo: {mismatches[0]}",
+    }
 
 
 def _check_quadratura(scad_df: pd.DataFrame, per_voce, unmapped) -> dict:
@@ -70,7 +109,23 @@ def genera_pf(
         blocco_a = per_voce.get(voce_id, [])
         prev = estratto.get(voce_id, {}).get("previsioni", [])
         cons = estratto.get(voce_id, {}).get("consuntivi", {})
-        if not blocco_a and not prev:
+
+        # Fornitori con SOLO storico chiuso (no partita aperta): aggiungi stub row
+        # così scrivi_foglio_voce può mergiare i loro consuntivi. Codici non in
+        # fornitori (non mappati con storico) vengono ignorati — limitazione v1.
+        codici_in_blocco_a = {r["codice"] for r in blocco_a}
+        for codice, _ in cons.items():
+            if codice in codici_in_blocco_a:
+                continue
+            entry = fornitori.get(codice)
+            if entry is None or entry.get("voce_id") != voce_id:
+                continue
+            nome_pf = entry.get("nome_pf") or str(codice)
+            blocco_a.append({"codice": codice, "nome": nome_pf, "mesi": {}})
+        # Ordine deterministico (idempotenza)
+        blocco_a.sort(key=lambda r: (r["nome"].lower(), r["codice"]))
+
+        if not blocco_a and not prev and not cons:
             continue
         rett = rettifica_doppio_conteggio(blocco_a, prev)
         scrivi_foglio_voce(
@@ -98,13 +153,7 @@ def genera_pf(
     scrivi_da_mappare(wb, unmapped)
 
     controlli.append(_check_quadratura(scad_df, per_voce, unmapped))
-    controlli.append(
-        {
-            "check": "codice↔nome vs CSV",
-            "esito": "OK",  # per costruzione: nomi presi SOLO da d_fornitori
-            "dettaglio": "nomi blocco A da d_fornitori.csv",
-        }
-    )
+    controlli.append(_check_codice_nome(wb, fornitori))
     controlli.append(
         {
             "check": "fornitori non mappati",
