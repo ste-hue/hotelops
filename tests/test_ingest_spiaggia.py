@@ -1,4 +1,8 @@
+import json as _json
 from datetime import date, datetime, timezone
+from datetime import date as _date
+from datetime import datetime as _dt
+from datetime import timezone as _tz
 
 import pytest
 
@@ -7,6 +11,23 @@ from core.schemas import (
     SpiaggiaReservationRow,
     SpiaggiaSpotRow,
 )
+from ingest.flussi.ingest_spiaggia import (
+    build_cash_flow_rows,
+    build_reservation_rows,
+    build_spot_rows,
+    extract_table,
+    find_prefix,
+    ingest_file,
+    method_label,
+    to_bool,
+    to_float,
+    to_int,
+    to_str,
+    unix_to_date,
+    unix_to_ts,
+)
+
+_NOW = _dt(2026, 6, 13, tzinfo=_tz.utc)
 
 
 def _now():
@@ -93,22 +114,6 @@ def test_spot_row_valid():
     assert s.type == "umbrella"
 
 
-from datetime import date as _date
-
-from ingest.flussi.ingest_spiaggia import (
-    extract_table,
-    find_prefix,
-    method_label,
-    to_bool,
-    to_float,
-    to_int,
-    to_str,
-    unix_to_date,
-    unix_to_ts,
-)
-
-
-
 def test_coercion_helpers():
     assert to_int(None) is None
     assert to_int("") is None
@@ -153,18 +158,6 @@ def test_find_prefix_and_extract():
         {"id": 1, "spot_name": "7", "amount": "35.00"},
         {"id": 2, "spot_name": "8", "amount": "40.00"},
     ]
-
-
-from datetime import datetime as _dt
-from datetime import timezone as _tz
-
-from ingest.flussi.ingest_spiaggia import (
-    build_cash_flow_rows,
-    build_reservation_rows,
-    build_spot_rows,
-)
-
-_NOW = _dt(2026, 6, 13, tzinfo=_tz.utc)
 
 
 def test_build_reservation_rows():
@@ -223,11 +216,6 @@ def test_build_spot_rows():
     assert s.oggetto_id == "7"          # name
     assert s.type == "umbrella"
     assert s.business_unit_id == "LIDO"
-
-
-import json as _json
-
-from ingest.flussi.ingest_spiaggia import ingest_file
 
 
 def test_ingest_file_dry_run(tmp_path):
