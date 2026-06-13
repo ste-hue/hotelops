@@ -1,0 +1,9 @@
+# Panorama Group — tema base (token dal design system).
+# Il grosso del look vive in verticals/hub/theme.py (CSS + Google Fonts);
+# qui solo i token che Streamlit applica nativamente a widget e chrome.
+[theme]
+primaryColor = "#00a8e1"            # azure — bottoni, focus, accenti
+backgroundColor = "#fbf9f5"         # ivory — limestone Mediterranea
+secondaryBackgroundColor = "#f3eee6" # sand — sidebar, card
+textColor = "#3a4750"               # slate — non nero puro
+font = "sans serif"                 # override a Jost via CSS in theme.py

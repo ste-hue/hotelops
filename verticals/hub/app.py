@@ -17,8 +17,10 @@ import streamlit as st  # noqa: E402
 
 from verticals.hub import home  # noqa: E402
 from verticals.hub.pages_ import fb, ingest, reviews  # noqa: E402
+from verticals.hub.theme import inject_brand  # noqa: E402
 
 st.set_page_config(page_title="HotelOps Hub", page_icon="🏨", layout="wide")
+inject_brand()  # admin: chrome Streamlit visibile
 
 pg = st.navigation(
     [
