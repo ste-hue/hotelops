@@ -17,9 +17,10 @@ def _minimal_scad_df() -> pd.DataFrame:
             {
                 "codice_fornitore": 18,
                 "nome": "Acqua Ausino",
-                "totale": 500.0,
+                # convenzione parse_scadenze: debiti negativi (avere)
+                "totale": -500.0,
                 "scaduto": 0.0,
-                "mese_5": 500.0,
+                "mese_5": -500.0,
                 "mese_6": 0.0,
             },
         ]
@@ -52,9 +53,10 @@ def test_rotate_end_to_end_orti(
             {
                 "codice_fornitore": 18,
                 "nome": "Acqua Ausino",
-                "totale": 500.0,
+                # convenzione parse_scadenze: debiti negativi (avere)
+                "totale": -500.0,
                 "scaduto": 0.0,
-                "mese_5": 500.0,
+                "mese_5": -500.0,
                 "mese_6": 0.0,
             },
         ]

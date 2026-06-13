@@ -26,6 +26,7 @@ import openpyxl
 import pandas as pd
 import streamlit as st
 
+from verticals.condges.pf_generator.blocchi import cascata_nc
 from verticals.condges.pf_rotate.step1_saldi import fetch_saldi_da_bq, write_saldi_banca
 from verticals.condges.pf_rotate.step2_azzera import azzera_mese
 from verticals.condges.pf_rotate.step5_controlli import CheckOutcome, verifica_controlli
@@ -266,8 +267,19 @@ def write_pf(
     bucket_months: list[int],
     fornitori_map: dict[int, dict],
     excluded: set[int] | None = None,
+    scaduto_month: int | None = None,
+    clear_codici: set[int] | None = None,
 ) -> tuple[bytes, dict[str, list]]:
     """Write scadenze into ALL PF detail sheets, return (bytes, summary).
+
+    ``scaduto_month``: mese in cui scrivere il bucket 'scaduto'. Per la
+    rotation passare il primo mese aperto (mese_chiuso+1), così il risultato
+    non dipende dal giorno del run. Default: mese di oggi (path app legacy).
+
+    ``clear_codici``: codici fornitore le cui righe vengono ripulite nei mesi
+    aperti (>= scaduto_month) PRIMA di riscrivere — rende il run idempotente
+    e rimuove scritture stantie di run precedenti. Tocca solo righe con
+    codice fornitore in col A; righe manuali (codici conto PF) restano intatte.
 
     Handles the PREVISIONALE adjustment: if the PREVISIONALE row is inside
     the SUM range of the total row, reduce it by the scadenzario total so
@@ -277,7 +289,7 @@ def write_pf(
     wb_values = openpyxl.load_workbook(BytesIO(pf_bytes), data_only=True)
     wb_formulas = openpyxl.load_workbook(BytesIO(pf_bytes), data_only=False)
 
-    current_month = date.today().month
+    current_month = scaduto_month if scaduto_month is not None else date.today().month
     summary: dict[str, list] = {}
 
     # Group scadenzario suppliers by voce_id
@@ -304,6 +316,26 @@ def write_pf(
                 },
             }
         )
+
+    # Pulizia scritture stantie su TUTTI i fogli voce, anche quelli che non
+    # ricevono scritture in questo run (es. fornitore rimappato a un'altra
+    # voce: la riga nel vecchio foglio va comunque azzerata nei mesi aperti).
+    if clear_codici:
+        for voce_id in VOCE_TO_SHEET_CANDIDATES:
+            sheet_name = resolve_sheet_name(voce_id, wb.sheetnames)
+            if not sheet_name:
+                continue
+            ws_c = wb[sheet_name]
+            ws_cv = wb_values[sheet_name]
+            mc = _build_month_col_map(ws_cv)
+            open_cols = [c for m, c in mc.items() if m >= current_month]
+            if not open_cols:
+                continue
+            for r in range(4, ws_c.max_row + 1):
+                a = ws_cv.cell(row=r, column=1).value
+                if isinstance(a, (int, float)) and int(a) in clear_codici:
+                    for col in open_cols:
+                        ws_c.cell(row=r, column=col).value = None
 
     for voce_id, suppliers in scad_by_voce.items():
         sheet_name = resolve_sheet_name(voce_id, wb.sheetnames)
@@ -376,9 +408,12 @@ def write_pf(
                 if val:
                     amounts[month] = amounts.get(month, 0) + val
 
+            # Note credito scalate in cascata (debiti negativi, NC positiva).
+            netted = cascata_nc(amounts)
+
             # Write: flip sign (scadenze negative = debito, PF positive = uscita)
             months_written: dict[int, float] = {}
-            for month, amount in amounts.items():
+            for month, amount in netted.items():
                 col = month_col.get(month)
                 if col:
                     pf_val = round(abs(amount), 2)

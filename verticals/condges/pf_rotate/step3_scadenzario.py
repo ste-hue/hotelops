@@ -48,8 +48,14 @@ def apply_scadenzario(
     fornitori_csv: Path,
     policy: UnmappedPolicy,
     extra_excluded: set[int] | None = None,
+    scaduto_month: int | None = None,
 ) -> tuple[bytes, dict]:
-    """Applica lo scadenzario al PF, ritorna (xlsx bytes, summary dict)."""
+    """Applica lo scadenzario al PF, ritorna (xlsx bytes, summary dict).
+
+    ``scaduto_month``: primo mese aperto della rotation — il bucket 'scaduto'
+    finisce lì (non nel mese di oggi) e le righe dei fornitori mappati vengono
+    ripulite nei mesi >= scaduto_month prima della riscrittura (idempotenza).
+    """
     fornitori = load_fornitori(fornitori_csv, societa=societa)
     known_codici = set(fornitori.keys())
     excluded_codici = {c for c, r in fornitori.items() if r.is_excluded}
@@ -95,6 +101,8 @@ def apply_scadenzario(
         bucket_months=bucket_months,
         fornitori_map=legacy_map,
         excluded=excluded_set,
+        scaduto_month=scaduto_month,
+        clear_codici=set(legacy_map.keys()),
     )
     summary = {
         "skipped_unmapped": unmapped if policy == UnmappedPolicy.SKIP else [],

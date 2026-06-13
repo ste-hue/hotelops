@@ -67,3 +67,35 @@ def test_dettagliata_riga_senza_scadenza_skippata():
     )
     df, _ = parse_scadenze(buf)
     assert list(df["codice_fornitore"]) == [42]
+
+
+def test_cutoff_esplicito_decide_scaduto():
+    """primo_mese_aperto ancora lo scaduto alla rotation, non a date.today().
+
+    Cutoff (2026, 5): scadenze < maggio 2026 -> scaduto; maggio resta mese_5
+    anche se oggi e' giugno o oltre.
+    """
+    buf = _wb_bytes(
+        [
+            {11: 92, 12: "AMALFI SEI ESSE", 20: -100.0, 23: date(2026, 4, 30)},
+            {11: 92, 12: "AMALFI SEI ESSE", 20: -200.0, 23: date(2026, 5, 31)},
+            {11: 92, 12: "AMALFI SEI ESSE", 20: -300.0, 23: date(2026, 6, 30)},
+        ]
+    )
+    df, buckets = parse_scadenze(buf, primo_mese_aperto=(2026, 5))
+    row = df.iloc[0]
+    assert row["scaduto"] == -100.0
+    assert row["mese_5"] == -200.0
+    assert row["mese_6"] == -300.0
+    assert buckets == [5, 6]
+
+
+def test_nome_completo_da_due_colonne():
+    """Ragione sociale 1 (col 12) + Ragione sociale 2 (col 13) concatenate."""
+    buf = _wb_bytes(
+        [
+            {11: 417, 12: "CIMINI", 13: "FILOMENA", 20: -51.48, 23: FUTURE},
+        ]
+    )
+    df, _ = parse_scadenze(buf)
+    assert df.iloc[0]["nome"] == "CIMINI FILOMENA"

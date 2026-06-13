@@ -140,8 +140,15 @@ def _handle(args: argparse.Namespace) -> int:
     from verticals.condges.pf_rotate.step1_saldi import SaldiIncompletiError
     from verticals.condges.scadenze_parse import parse_scadenze
 
+    anno_cutoff = args.anno or date.today().year
+    if args.mese_chiuso == 12:
+        cutoff = (anno_cutoff + 1, 1)
+    else:
+        cutoff = (anno_cutoff, args.mese_chiuso + 1)
     with args.scad.open("rb") as f:
-        scad_df, bucket_months = parse_scadenze(BytesIO(f.read()))
+        scad_df, bucket_months = parse_scadenze(
+            BytesIO(f.read()), primo_mese_aperto=cutoff
+        )
 
     overrides = _parse_banca_overrides(args.banca)
     policy = (

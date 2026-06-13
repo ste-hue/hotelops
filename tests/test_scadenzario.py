@@ -1,4 +1,6 @@
 """Tests for scadenzario Excel bridge."""
+from io import BytesIO
+
 import openpyxl
 
 
@@ -447,3 +449,155 @@ class TestBuildMonthColMap:
         # Forward months
         assert col_map[4] == 11  # APRILE
         assert col_map[5] == 12  # MAGGIO
+
+
+def _make_pf_fixture_con_codici(tmp_path):
+    """PF minimale con codici fornitore in col A (layout reale dei detail sheet)."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Piano Finanziario"
+
+    ws_mp = wb.create_sheet("Materie Prime-Consumo ")
+    months_2026 = [
+        "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
+        "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
+        "NOVEMBRE", "DICEMBRE",
+    ]
+    for i, m in enumerate(months_2026):
+        ws_mp.cell(row=2, column=8 + i, value=m)
+    ws_mp.cell(row=4, column=2, value="Materie Prime e Consumo")
+    # riga fornitore mappato con scrittura stantia a MAGGIO (col 12)
+    ws_mp.cell(row=5, column=1, value=92)
+    ws_mp.cell(row=5, column=2, value="Amalfi sei esse")
+    ws_mp.cell(row=5, column=12, value=74.61)
+    # riga manuale (codice conto PF, non fornitore) con valore a MAGGIO
+    ws_mp.cell(row=6, column=1, value=350301)
+    ws_mp.cell(row=6, column=2, value="F24")
+    ws_mp.cell(row=6, column=12, value=27000)
+
+    out = tmp_path / "PF_codici.xlsx"
+    wb.save(out)
+    return out
+
+
+class TestWritePfRotation:
+    def _scad_df(self, **extra_cols):
+        import pandas as pd
+        base = {
+            "codice_fornitore": [92],
+            "nome": ["AMALFI SEI ESSE S.R.L."],
+            "totale": [-1222.76],
+            "scaduto": [-100.0],
+        }
+        base.update(extra_cols)
+        return pd.DataFrame(base)
+
+    def test_scaduto_va_nel_mese_indicato_non_oggi(self, tmp_path):
+        from verticals.condges.app_scadenzario import write_pf
+
+        pf_path = _make_pf_fixture_con_codici(tmp_path)
+        scad_df = self._scad_df(mese_6=[-1122.76])
+        fornitori_map = {
+            92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"}
+        }
+        out, _ = write_pf(
+            pf_path.read_bytes(), scad_df, [6], fornitori_map, scaduto_month=5
+        )
+        ws = openpyxl.load_workbook(BytesIO(out))["Materie Prime-Consumo "]
+        # scaduto (100) -> MAGGIO (col 12), non nel mese di oggi
+        assert ws.cell(row=5, column=12).value == 100.0
+        # GIUGNO (col 13) = bucket mese_6
+        assert ws.cell(row=5, column=13).value == 1122.76
+
+    def test_pulizia_scritture_stantie_nei_mesi_aperti(self, tmp_path):
+        from verticals.condges.app_scadenzario import write_pf
+
+        pf_path = _make_pf_fixture_con_codici(tmp_path)
+        # niente scaduto, solo giugno: la cella stantia di maggio deve sparire
+        scad_df = self._scad_df(scaduto=[0.0], mese_6=[-1122.76])
+        fornitori_map = {
+            92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"}
+        }
+        out, _ = write_pf(
+            pf_path.read_bytes(), scad_df, [6], fornitori_map,
+            scaduto_month=5, clear_codici={92},
+        )
+        ws = openpyxl.load_workbook(BytesIO(out))["Materie Prime-Consumo "]
+        # MAGGIO stantio (74.61) pulito
+        assert ws.cell(row=5, column=12).value in (None, 0)
+        # GIUGNO scritto
+        assert ws.cell(row=5, column=13).value == 1122.76
+        # riga manuale F24 (350301, non in clear_codici) intatta
+        assert ws.cell(row=6, column=12).value == 27000
+
+    def test_pulizia_anche_su_fogli_senza_scritture(self, tmp_path):
+        """Fornitore rimappato a un'altra voce: la riga nel vecchio foglio
+        va pulita anche se quel foglio non riceve scritture in questo run."""
+        from verticals.condges.app_scadenzario import write_pf
+
+        wb = openpyxl.Workbook()
+        wb.active.title = "Piano Finanziario"
+        months = ["GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
+                  "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
+                  "NOVEMBRE", "DICEMBRE"]
+        for title in ("Materie Prime-Consumo ", " Varie ed Eventuali"):
+            ws = wb.create_sheet(title)
+            for i, m in enumerate(months):
+                ws.cell(row=2, column=8 + i, value=m)
+            # ancora in fondo: righe 4..9 vuote disponibili per nuovi fornitori
+            ws.cell(row=10, column=1, value="---")
+        # riga stantia di Pregis nel VECCHIO foglio (Varie), maggio
+        ws_var = wb[" Varie ed Eventuali"]
+        ws_var.cell(row=5, column=1, value=123)
+        ws_var.cell(row=5, column=2, value="PREGIS S.P.A.")
+        ws_var.cell(row=5, column=12, value=408.89)
+        pf = tmp_path / "pf_due_fogli.xlsx"
+        wb.save(pf)
+
+        import pandas as pd
+        scad_df = pd.DataFrame({
+            "codice_fornitore": [123], "nome": ["PREGIS S.P.A."],
+            "totale": [-5907.99], "scaduto": [0.0], "mese_6": [-5907.99],
+        })
+        # rimappato a MATERIE_PRIME: il foglio Varie non riceve scritture
+        fornitori_map = {
+            123: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Pregis"}
+        }
+        out, _ = write_pf(
+            pf.read_bytes(), scad_df, [6], fornitori_map,
+            scaduto_month=5, clear_codici={123},
+        )
+        wb2 = openpyxl.load_workbook(BytesIO(out))
+        # vecchio foglio pulito
+        assert wb2[" Varie ed Eventuali"].cell(row=5, column=12).value in (None, 0)
+        # nuovo foglio scritto
+        ws_mp = wb2["Materie Prime-Consumo "]
+        giugno = [ws_mp.cell(row=r, column=13).value for r in range(4, 15)]
+        assert 5907.99 in giugno
+
+    def test_nota_credito_scalata_in_cascata(self, tmp_path):
+        """NC (importo positivo) si compensa sul primo mese con fatture in
+        avanti: il mese azzerato non viene scritto, il residuo scala sul
+        successivo. Il totale resta esatto (= saldo aperto reale)."""
+        from verticals.condges.app_scadenzario import write_pf
+
+        pf_path = _make_pf_fixture_con_codici(tmp_path)
+        import pandas as pd
+        # Vicart reale: NC scaduta +90.28, FT maggio -85.40, FT giugno -1413.63
+        scad_df = pd.DataFrame({
+            "codice_fornitore": [92], "nome": ["VICART S.R.L."],
+            "totale": [-1408.75], "scaduto": [90.28],
+            "mese_5": [-85.40], "mese_6": [-1413.63],
+        })
+        fornitori_map = {
+            92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"}
+        }
+        out, _ = write_pf(
+            pf_path.read_bytes(), scad_df, [5, 6], fornitori_map,
+            scaduto_month=5, clear_codici={92},
+        )
+        ws = openpyxl.load_workbook(BytesIO(out))["Materie Prime-Consumo "]
+        # maggio: 85.40 coperto dalla NC -> niente uscita
+        assert ws.cell(row=5, column=12).value in (None, 0)
+        # giugno: 1413.63 - 4.88 di NC residua = 1408.75
+        assert ws.cell(row=5, column=13).value == 1408.75

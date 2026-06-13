@@ -19,23 +19,34 @@ import pandas as pd
 from verticals.condges.parse_pf import ScadenzarioData
 
 
-def parse_scadenze(file_bytes: BinaryIO) -> tuple[pd.DataFrame, list[int]]:
+def parse_scadenze(
+    file_bytes: BinaryIO,
+    *,
+    primo_mese_aperto: tuple[int, int] | None = None,
+) -> tuple[pd.DataFrame, list[int]]:
     """Parse Esolver 'Situazione partite sintetica/dettagliata per fornitori'.
 
     Layout sintetica (one row per invoice):
-      col 11: codice_fornitore, col 12: nome, col 20: importo, col 23: data_scadenza.
+      col 11: codice_fornitore, col 12+13: nome (Ragione sociale 1+2),
+      col 20: importo, col 23: data_scadenza.
     Layout dettagliata (one row per partita; codice/nome same columns):
       col 34: data_scadenza, col 37: saldo scadenza in UDC (residuo aperto).
 
     Returns (df, bucket_months) where df has one row per supplier with columns:
       codice_fornitore, nome, totale, scaduto, mese_4, mese_5, ...
-    Invoices with scadenza before current month are aggregated into 'scaduto'.
+    Invoices with scadenza before ``primo_mese_aperto`` (anno, mese) are
+    aggregated into 'scaduto'. Default: il mese corrente di oggi — per la
+    rotation passare SEMPRE il primo mese aperto, così il risultato non
+    dipende dal giorno in cui gira lo script.
     """
     wb = openpyxl.load_workbook(file_bytes, data_only=True)
     ws = wb.active
 
-    current_month = date.today().month
-    current_year = date.today().year
+    if primo_mese_aperto is not None:
+        current_year, current_month = primo_mese_aperto
+    else:
+        current_month = date.today().month
+        current_year = date.today().year
 
     invoices: list[dict] = []
     for row_idx in range(1, ws.max_row + 1):
@@ -47,7 +58,10 @@ def parse_scadenze(file_bytes: BinaryIO) -> tuple[pd.DataFrame, list[int]]:
         c11 = ws.cell(row=row_idx, column=11).value
         if c11 and isinstance(c11, (int, float)):
             codice = int(c11)
-            nome = str(ws.cell(row=row_idx, column=12).value or "").strip()
+            nome1 = str(ws.cell(row=row_idx, column=12).value or "").strip()
+            v13 = ws.cell(row=row_idx, column=13).value
+            nome2 = v13.strip() if isinstance(v13, str) else ""
+            nome = f"{nome1} {nome2}".strip()
             scad = ws.cell(row=row_idx, column=23).value
             if not hasattr(scad, "month"):
                 # layout dettagliata: scadenza in col 34, residuo in col 37
