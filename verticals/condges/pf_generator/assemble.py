@@ -19,6 +19,7 @@ from verticals.condges.pf_generator.previsioni import estrai_previsioni
 from verticals.condges.pf_generator.template import (
     scrivi_controlli,
     scrivi_da_mappare,
+    scrivi_esclusi,
     scrivi_foglio_voce,
     scrivi_riepilogo,
 )
@@ -64,12 +65,16 @@ def _check_codice_nome(wb: openpyxl.Workbook, fornitori: dict[int, dict]) -> dic
     }
 
 
-def _check_quadratura(scad_df: pd.DataFrame, per_voce, unmapped) -> dict:
-    """|somma scritta blocchi A + DA MAPPARE| == |somma partite export|."""
+def _check_quadratura(scad_df: pd.DataFrame, per_voce, unmapped, esclusi) -> dict:
+    """|somma scritta blocchi A + DA MAPPARE + ESCLUSI| == |somma partite export|.
+
+    Gli esclusi sono fuori dalla cassa ma restano partite reali dell'export: vanno
+    contati nella quadratura, altrimenti il delta esplode (es. PANORAMA 446k)."""
     scritto = sum(
         v for righe in per_voce.values() for r in righe for v in r["mesi"].values()
     )
     scritto += sum(v for r in unmapped for v in r["mesi"].values())
+    scritto += sum(v for r in esclusi for v in r["mesi"].values())
     # Solo i debiti (totale < 0) contano come importo dovuto; i crediti netti
     # non vengono scritti nel PF, quindi non devono gonfiare atteso.
     atteso = float(-scad_df.loc[scad_df["totale"] < 0, "totale"].sum())
@@ -93,7 +98,7 @@ def genera_pf(
     entrate: list[dict] | None = None,
     saldo_iniziale: float = 0.0,
 ) -> tuple[bytes, dict]:
-    per_voce, unmapped = blocco_a_per_voce(
+    per_voce, unmapped, esclusi = blocco_a_per_voce(
         scad_df,
         bucket_months,
         fornitori,
@@ -145,8 +150,9 @@ def genera_pf(
         saldo_iniziale=saldo_iniziale,
     )
     scrivi_da_mappare(wb, unmapped)
+    scrivi_esclusi(wb, esclusi)
 
-    controlli.append(_check_quadratura(scad_df, per_voce, unmapped))
+    controlli.append(_check_quadratura(scad_df, per_voce, unmapped, esclusi))
     controlli.append(_check_codice_nome(wb, fornitori))
     controlli.append(
         {
@@ -155,6 +161,15 @@ def genera_pf(
             "dettaglio": f"{len(unmapped)} nel foglio DA MAPPARE",
         }
     )
+    if esclusi:
+        tot_escl = sum(v for r in esclusi for v in r["mesi"].values())
+        controlli.append(
+            {
+                "check": "fornitori esclusi dalla cassa",
+                "esito": "OK",
+                "dettaglio": f"{len(esclusi)} nel foglio ESCLUSI ({tot_escl:,.2f} EUR fuori cassa)",
+            }
+        )
     scrivi_controlli(wb, controlli)
 
     buf = BytesIO()
@@ -162,6 +177,7 @@ def genera_pf(
     report = {
         "fornitori_scritti": fornitori_scritti,
         "unmapped": sorted(r["codice"] for r in unmapped),
+        "esclusi": sorted(r["codice"] for r in esclusi),
         "voci": voci_attive,
         "controlli": controlli,
     }

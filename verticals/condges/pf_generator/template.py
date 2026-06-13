@@ -130,6 +130,33 @@ def scrivi_da_mappare(wb: Workbook, unmapped: list[dict]) -> None:
     ws.column_dimensions["B"].width = 44
 
 
+def scrivi_esclusi(wb: Workbook, esclusi: list[dict]) -> None:
+    """Fornitori esclusi dalla cassa per scelta (is_excluded) — fuori dal saldo
+    proiettato. NON una worklist: il motivo è tracciato in colonna Motivo."""
+    if not esclusi:
+        return
+    ws = wb.create_sheet("ESCLUSI")
+    col_motivo = col_mese(12) + 1  # dopo DICEMBRE
+    ws.cell(
+        row=1,
+        column=1,
+        value=(
+            "Fornitori ESCLUSI dalla cassa per scelta (is_excluded) — fuori dal "
+            "saldo proiettato. NON sono un TODO: il motivo è in colonna Motivo."
+        ),
+    ).font = Font(bold=True)
+    ws.cell(row=2, column=1, value="Cod").font = Font(bold=True)
+    ws.cell(row=2, column=2, value="Nome (da CSV)").font = Font(bold=True)
+    for m, nome in enumerate(MESI, start=1):
+        ws.cell(row=2, column=col_mese(m), value=nome).font = Font(bold=True)
+    ws.cell(row=2, column=col_motivo, value="Motivo").font = Font(bold=True)
+    for i, r in enumerate(sorted(esclusi, key=lambda x: x["nome"].lower()), start=3):
+        _scrivi_riga(ws, i, r["codice"], r["nome"], r["mesi"])
+        ws.cell(row=i, column=col_motivo, value=r.get("reason") or "")
+    ws.column_dimensions["B"].width = 44
+    ws.column_dimensions[get_column_letter(col_motivo)].width = 32
+
+
 def scrivi_riepilogo(
     wb: Workbook,
     *,

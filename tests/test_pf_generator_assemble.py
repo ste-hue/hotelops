@@ -337,6 +337,61 @@ class TestGeneraPf:
         ]
         assert celle1 == celle2  # criterio di successo #1 dello spec
 
+    def test_escluso_va_in_foglio_esclusi_non_da_mappare(self):
+        scad_df = pd.DataFrame(
+            [
+                {
+                    "codice_fornitore": 92,
+                    "nome": "AMALFI SEI ESSE S.R.L.",
+                    "totale": -1122.76,
+                    "scaduto": 0.0,
+                    "mese_6": -1122.76,
+                },
+                {
+                    "codice_fornitore": 264,
+                    "nome": "PANORAMA COMPANY S.R.L.",
+                    "totale": -446425.69,
+                    "scaduto": 0.0,
+                    "mese_6": -446425.69,
+                },
+            ]
+        )
+        fornitori = {
+            92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"},
+            264: {
+                "voce_id": "",
+                "nome_pf": "Panorama Company",
+                "is_excluded": True,
+                "exclude_reason": "intercompany gruppo",
+            },
+        }
+        out_bytes, report = genera_pf(
+            pf_prev_bytes=_pf_precedente_bytes(),
+            scad_df=scad_df,
+            bucket_months=[6],
+            fornitori=fornitori,
+            societa="ORTI",
+            anno=2026,
+            primo_mese_aperto=5,
+        )
+        wb = openpyxl.load_workbook(BytesIO(out_bytes))
+        assert "ESCLUSI" in wb.sheetnames
+        # 264 escluso, NON tra i non mappati
+        assert 264 not in report["unmapped"]
+        assert report["esclusi"] == [264]
+        # il foglio ESCLUSI contiene 264 con la sua ragione
+        esclusi_txt = "\n".join(
+            str(c.value)
+            for row in wb["ESCLUSI"].iter_rows()
+            for c in row
+            if c.value is not None
+        )
+        assert "264" in esclusi_txt
+        assert "intercompany gruppo" in esclusi_txt
+        # quadratura regge anche includendo gli esclusi
+        quadr = next(c for c in report["controlli"] if "quadratura" in c["check"])
+        assert quadr["esito"] == "OK"
+
     def test_quadratura_check_in_report(self):
         _, report = genera_pf(
             pf_prev_bytes=_pf_precedente_bytes(),

@@ -28,16 +28,22 @@ def blocco_a_per_voce(
     fornitori: dict[int, dict],
     *,
     primo_mese_aperto: int,
-) -> tuple[dict[str, list[dict]], list[dict]]:
+) -> tuple[dict[str, list[dict]], list[dict], list[dict]]:
     """Partite aperte raggruppate per voce: righe pronte per il foglio.
 
-    Ritorna (per_voce, unmapped). Riga = {codice, nome, mesi: {mese: importo
-    POSITIVO}}. scaduto -> primo_mese_aperto; cascata NC applicata; nome dal
-    CSV (authority), MAI dall'export. Gli unmapped NON si perdono: vanno nel
-    foglio DA MAPPARE (nome dall'export, è l'unico che abbiamo).
+    Ritorna (per_voce, unmapped, esclusi). Riga = {codice, nome, mesi: {mese:
+    importo POSITIVO}}. scaduto -> primo_mese_aperto; cascata NC applicata; nome
+    dal CSV (authority), MAI dall'export.
+
+    - unmapped: fornitore non in d_fornitori.csv → foglio DA MAPPARE (worklist,
+      nome dall'export, è l'unico che abbiamo). NON si perdono.
+    - esclusi: fornitore in CSV con is_excluded=True → noto e voluto fuori dalla
+      cassa (es. intercompany del gruppo). Riga aggiunge {reason}. Fuori dalla
+      cascata uscite ma tracciato nel foglio ESCLUSI — NON è un TODO.
     """
     per_voce: dict[str, list[dict]] = {}
     unmapped: list[dict] = []
+    esclusi: list[dict] = []
     for _, row in scad_df.iterrows():
         codice = int(row["codice_fornitore"])
         amounts: dict[int, float] = {}
@@ -58,16 +64,24 @@ def blocco_a_per_voce(
         if info is None:
             unmapped.append({"codice": codice, "nome": str(row["nome"]), "mesi": mesi})
             continue
+        nome = info.get("nome_pf") or str(row["nome"])
+        if info.get("is_excluded"):
+            esclusi.append(
+                {
+                    "codice": codice,
+                    "nome": nome,
+                    "mesi": mesi,
+                    "reason": info.get("exclude_reason") or "",
+                }
+            )
+            continue
         per_voce.setdefault(info["voce_id"], []).append(
-            {
-                "codice": codice,
-                "nome": info["nome_pf"] or str(row["nome"]),
-                "mesi": mesi,
-            }
+            {"codice": codice, "nome": nome, "mesi": mesi}
         )
     for righe in per_voce.values():
         righe.sort(key=lambda r: (r["nome"].lower(), r["codice"]))
-    return per_voce, unmapped
+    esclusi.sort(key=lambda r: (r["nome"].lower(), r["codice"]))
+    return per_voce, unmapped, esclusi
 
 
 def _chiave_norm(nome: str) -> str:

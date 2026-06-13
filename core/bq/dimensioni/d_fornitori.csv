@@ -27,7 +27,7 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 158,GALLO GIOVANNI & C. SNC,Gallo Giovanni,USCITE_MATERIE_PRIME,False,False,,ORTI
 161,DI SARNO COFFEE SERVICE DI TERMINIELLO ROSA,Di Sarno Coffee,USCITE_MATERIE_PRIME,False,False,,ORTI
 186,L'EUROPEA - ORGANIZZAZIONE NAZIONALE SRL,L'Europea,USCITE_MATERIE_PRIME,False,False,,ORTI
-264,PANORAMA COMPANY S.R.L.,Fitto Ramo d' Azienda,USCITE_CANONE_PASSIVO,True,True,,ORTI
+264,PANORAMA COMPANY S.R.L.,Fitto Ramo d' Azienda,,True,True,intercompany gruppo - fitto ramo azienda - no pressione cassa,ORTI
 315,CENTRO SERVICE SNC DI VOCCIA MASSIMO & ANTONIO,Centro service Snc,USCITE_MATERIE_PRIME,False,False,,ORTI
 412,Alberto D Urso S.a.s. di Tecla Apicella,Alberto D'Urso,USCITE_MATERIE_PRIME,False,False,,ORTI
 414,NEXI PAYMENTS S.p.A.,,USCITE_COMMISSIONI,False,False,,ORTI

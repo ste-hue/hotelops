@@ -162,9 +162,13 @@ def _handle(args: argparse.Namespace) -> int:
     # --- fornitori ---
     fornitori_rows = load_fornitori(args.fornitori_csv, societa=args.societa)
     fornitori = {
-        cod: {"voce_id": r.voce_id, "nome_pf": r.nome_pf}
+        cod: {
+            "voce_id": r.voce_id,
+            "nome_pf": r.nome_pf,
+            "is_excluded": r.is_excluded,
+            "exclude_reason": r.exclude_reason,
+        }
         for cod, r in fornitori_rows.items()
-        if not r.is_excluded
     }
 
     # --- genera ---
@@ -191,6 +195,7 @@ def _handle(args: argparse.Namespace) -> int:
         f"Fornitori scritti: {report['fornitori_scritti']}"
         f" | voci: {len(report['voci'])}"
         f" | DA MAPPARE: {len(report['unmapped'])}"
+        f" | ESCLUSI: {len(report['esclusi'])}"
     )
     print(f"saldo_iniziale usato: {saldo_iniziale:,.2f} EUR")
     for c in report["controlli"]:

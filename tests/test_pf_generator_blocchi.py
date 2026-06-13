@@ -71,7 +71,7 @@ FORNITORI = {
 
 class TestBloccoA:
     def test_bucketing_scaduto_e_cascata(self):
-        per_voce, unmapped = blocco_a_per_voce(
+        per_voce, unmapped, _esclusi = blocco_a_per_voce(
             _scad_df(), [5, 6], FORNITORI, primo_mese_aperto=5
         )
         righe = {r["codice"]: r for r in per_voce["USCITE_MATERIE_PRIME"]}
@@ -83,7 +83,7 @@ class TestBloccoA:
         assert righe[92]["nome"] == "Amalfi sei esse"
 
     def test_unmapped_separati_mai_persi(self):
-        per_voce, unmapped = blocco_a_per_voce(
+        per_voce, unmapped, _esclusi = blocco_a_per_voce(
             _scad_df(), [5, 6], FORNITORI, primo_mese_aperto=5
         )
         assert len(unmapped) == 1
@@ -91,7 +91,7 @@ class TestBloccoA:
         assert unmapped[0]["mesi"] == {5: 500.0}  # scaduto -> primo mese aperto
 
     def test_quadratura_totale(self):
-        per_voce, unmapped = blocco_a_per_voce(
+        per_voce, unmapped, _esclusi = blocco_a_per_voce(
             _scad_df(), [5, 6], FORNITORI, primo_mese_aperto=5
         )
         tot = sum(
@@ -100,6 +100,58 @@ class TestBloccoA:
         tot += sum(v for r in unmapped for v in r["mesi"].values())
         # |somma scritta| == |somma partite| (NC inclusa nella cascata)
         assert round(tot, 2) == round(1222.76 + 1408.75 + 500.0, 2)
+
+
+class TestBloccoAEsclusi:
+    """Fornitori is_excluded: noti e voluti fuori cassa → sezione ESCLUSI,
+    NON DA MAPPARE (che è la worklist dei davvero-non-mappati)."""
+
+    def _df(self):
+        return pd.DataFrame(
+            [
+                {
+                    "codice_fornitore": 264,
+                    "nome": "PANORAMA COMPANY S.R.L.",
+                    "totale": -446425.69,
+                    "scaduto": 0.0,
+                    "mese_5": -146998.53,
+                    "mese_6": -299427.16,
+                },
+                {
+                    "codice_fornitore": 92,
+                    "nome": "AMALFI SEI ESSE S.R.L.",
+                    "totale": -1122.76,
+                    "scaduto": 0.0,
+                    "mese_6": -1122.76,
+                },
+            ]
+        )
+
+    FORN = {
+        264: {
+            "voce_id": "",
+            "nome_pf": "Panorama Company",
+            "is_excluded": True,
+            "exclude_reason": "intercompany gruppo",
+        },
+        92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"},
+    }
+
+    def test_escluso_in_esclusi_non_unmapped_non_per_voce(self):
+        per_voce, unmapped, esclusi = blocco_a_per_voce(
+            self._df(), [5, 6], self.FORN, primo_mese_aperto=5
+        )
+        assert all(r["codice"] != 264 for r in unmapped)
+        assert all(
+            r["codice"] != 264 for righe in per_voce.values() for r in righe
+        )
+        assert len(esclusi) == 1
+        assert esclusi[0]["codice"] == 264
+        assert esclusi[0]["nome"] == "Panorama Company"  # nome dal CSV
+        assert esclusi[0]["mesi"] == {5: 146998.53, 6: 299427.16}
+        assert esclusi[0]["reason"] == "intercompany gruppo"
+        # il fornitore normale resta in per_voce
+        assert per_voce["USCITE_MATERIE_PRIME"][0]["codice"] == 92
 
 
 class TestRettifica:
