@@ -531,7 +531,7 @@ sources:
     lifecycle: SNAPSHOT
     canonical_table: f_spiaggia_reservations
     parser_module: ingest.flussi.ingest_spiaggia
-    natural_key: [societa_id]
+    natural_key: [societa_id]   # delete-scope SNAPSHOT: tutte le righe sono INTUR → DELETE svuota la tabella = full-replace (NON è l'identità di riga, che è `id`)
     loop_targets: [cash_control]
     promotion_policy: MANUAL
     detector_category: spiaggia_dump

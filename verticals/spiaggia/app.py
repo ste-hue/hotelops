@@ -68,7 +68,7 @@ if anno_sel is not None:
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Prenotazioni", int(k["n_prenotazioni"].sum()))
     c2.metric("Ricavo", f"€ {k['ricavo'].sum():,.0f}")
-    c3.metric("Incassato", f"€ {k['incassato'].sum():,.0f}")
+    c3.metric("Incassato", f"€ {k['incassato'].fillna(0).sum():,.0f}")
     online_pct = (k["quota_online"] * k["n_prenotazioni"]).sum() / k["n_prenotazioni"].sum() if not k.empty else 0
     hotel_pct = (k["quota_hotel"] * k["n_prenotazioni"]).sum() / k["n_prenotazioni"].sum() if not k.empty else 0
     c4.metric("Online %", f"{online_pct*100:,.0f}%")

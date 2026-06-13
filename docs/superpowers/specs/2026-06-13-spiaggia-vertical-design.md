@@ -96,7 +96,7 @@ SPIAGGEIT_SPIAGGIA_INTUR_SNAPSHOT:
   lifecycle: SNAPSHOT
   canonical_table: f_spiaggia_reservations   # primaria; il parser scrive anche cash_flows + spots
   parser_module: ingest.flussi.ingest_spiaggia
-  natural_key: [id]
+  natural_key: [societa_id]                  # delete-scope del SNAPSHOT = full-replace (vedi sotto)
   loop_targets: [cash_control]               # la cassa spiaggia alimenta il controllo cassa INTUR
   promotion_policy: MANUAL
   detector_category: spiaggia_dump
@@ -110,6 +110,14 @@ SPIAGGEIT_SPIAGGIA_INTUR_SNAPSHOT:
   `loop_targets == [] ⇔ promotion_policy == RAW_ONLY`).
 - `canonical_table` dichiara la primaria; il fan-out a 3 tabelle è legittimo perché `promote`
   verifica solo l'exit code del parser, non quale tabella scrive.
+- **`natural_key` ≠ identità di riga.** L'identità di riga (dedup logico) di ogni tabella è `id`
+  — vedi gli header delle sezioni sotto. Il `natural_key` del registry è invece lo **scope del
+  DELETE** che `bq_write_validated(mode="snapshot")` esegue prima dell'INSERT. Usiamo
+  `[societa_id]`: siccome ogni riga di ogni dump è `societa_id='INTUR'`, il DELETE
+  (`WHERE societa_id IN ('INTUR')`) cancella **l'intera tabella** → full-replace. È la
+  strategia voluta per "ogni dump = DB completo". ⚠️ Limite noto: se un dump futuro avesse
+  **zero righe** per una tabella, il gate salta il batch vuoto (no-op) e il DELETE non parte →
+  le righe vecchie resterebbero. Per la fase 1 i dump sono sempre completi e popolati.
 
 ## 2. Tabelle canonical (fan-out 1→3, full-replace)
 
