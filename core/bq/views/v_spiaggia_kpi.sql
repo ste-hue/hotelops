@@ -1,12 +1,14 @@
 -- v_spiaggia_kpi
--- KPI mensili: prenotazioni, ricavo, cassa, scontrino medio, quota online/hotel.
+-- KPI mensili: prenotazioni, incassato (cash_flows), incasso medio, quota online/hotel.
+-- NB: gross_booking_value di Spiagge.it è quasi sempre nullo (valorizzato solo
+-- sporadicamente nel 2025) → niente "ricavo"/"scontrino medio": il segnale di denaro
+-- affidabile è `incassato` da f_spiaggia_cash_flows.
 CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_spiaggia_kpi` AS
 WITH pren AS (
   SELECT
     EXTRACT(YEAR FROM start_date) AS anno,
     EXTRACT(MONTH FROM start_date) AS mese,
     COUNT(*) AS n_prenotazioni,
-    SUM(gross_booking_value) AS ricavo,
     COUNTIF(online) AS n_online,
     COUNTIF(hotel IS NOT NULL AND hotel != '') AS n_hotel
   FROM `hotelops-suite.hotelops.f_spiaggia_reservations`
@@ -30,9 +32,8 @@ SELECT
   p.anno,
   p.mese,
   p.n_prenotazioni,
-  p.ricavo,
   c.incassato,
-  SAFE_DIVIDE(p.ricavo, p.n_prenotazioni) AS scontrino_medio,
+  SAFE_DIVIDE(c.incassato, p.n_prenotazioni) AS incasso_medio,
   SAFE_DIVIDE(p.n_online, p.n_prenotazioni) AS quota_online,
   SAFE_DIVIDE(p.n_hotel, p.n_prenotazioni) AS quota_hotel
 FROM pren p

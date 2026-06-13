@@ -60,17 +60,22 @@ def render() -> None:
 
     kpi = load_kpi()
     anni = sorted(kpi["anno"].dropna().unique().tolist(), reverse=True) if not kpi.empty else []
-    anno_sel = st.sidebar.selectbox("Anno", anni, index=0) if anni else None
+    # Default sull'ultimo anno con incasso: evita di aprire su un anno futuro ancora vuoto.
+    anni_cassa = sorted(kpi[kpi["incassato"].fillna(0) > 0]["anno"].unique().tolist(), reverse=True)
+    default_idx = anni.index(anni_cassa[0]) if anni_cassa else 0
+    anno_sel = st.sidebar.selectbox("Anno", anni, index=default_idx) if anni else None
 
     # --- Header KPI (anno selezionato) ---
     if anno_sel is not None:
         k = kpi[kpi["anno"] == anno_sel]
+        n_pren = int(k["n_prenotazioni"].sum())
+        incassato = k["incassato"].fillna(0).sum()
         c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Prenotazioni", int(k["n_prenotazioni"].sum()))
-        c2.metric("Ricavo", f"€ {k['ricavo'].sum():,.0f}")
-        c3.metric("Incassato", f"€ {k['incassato'].fillna(0).sum():,.0f}")
-        online_pct = (k["quota_online"] * k["n_prenotazioni"]).sum() / k["n_prenotazioni"].sum() if not k.empty else 0
-        hotel_pct = (k["quota_hotel"] * k["n_prenotazioni"]).sum() / k["n_prenotazioni"].sum() if not k.empty else 0
+        c1.metric("Prenotazioni", n_pren)
+        c2.metric("Incassato", f"€ {incassato:,.0f}")
+        c3.metric("Incasso medio/pren.", f"€ {incassato / n_pren:,.0f}" if n_pren else "—")
+        online_pct = (k["quota_online"] * k["n_prenotazioni"]).sum() / k["n_prenotazioni"].sum() if n_pren else 0
+        hotel_pct = (k["quota_hotel"] * k["n_prenotazioni"]).sum() / k["n_prenotazioni"].sum() if n_pren else 0
         c4.metric("Online %", f"{online_pct*100:,.0f}%")
         c5.metric("Hotel-linked %", f"{hotel_pct*100:,.0f}%")
 
