@@ -32,6 +32,7 @@ function renderMeta(meta) {
   const sems = Object.values(meta.surfaces).map((s) => s.semaforo);
   const worst = sems.includes("🔴") ? "🔴" : sems.includes("🟡") ? "🟡" : "🟢";
   const fb = meta.surfaces.fb, rev = meta.surfaces.reviews;
+  document.getElementById("card-rev-metric").textContent = rev.media_mese ?? "n/d";
   document.getElementById("stato-dati").textContent =
     `Stato dati: ${worst} · F&B ${fb.semaforo} (${fb.giorni} gg fa) · Reviews ${rev.semaforo} (media ${rev.media_mese ?? "n/d"})`;
 }
