@@ -953,6 +953,120 @@ class RistocubeOrderRow(BaseModel):
     data_caricamento: datetime
 
 
+# ── f_spiaggia_* ─────────────────────────────────────────────────────────────
+
+# Type alias: needed because SpiaggiaCashFlowRow has a field named `date` which
+# would shadow the built-in `date` type within Pydantic v2 class body resolution.
+_Date = date
+
+
+class SpiaggiaReservationRow(BaseModel):
+    """Schema per f_spiaggia_reservations — prenotazioni ombrellone Spiagge.it.
+
+    Source: dump JSON completo Spiagge.it (Panorama Beach), tabella reservations.
+    Lifecycle SNAPSHOT full-replace (natural_key societa_id: ogni dump è il DB
+    intero, il DELETE chirurgico su societa_id='INTUR' svuota la tabella).
+    raw_object_id = FK a f_raw_objects, stampato dal path `promote`.
+    """
+
+    societa_id: SocietaId
+    business_unit_id: BusinessUnitId
+    location_id: Optional[str] = None
+    oggetto_id: Optional[str] = None
+    funzione_id: Optional[str] = None
+    id: int
+    license_code: Optional[str] = None
+    spot_type: Optional[str] = None
+    spot_name: Optional[str] = None
+    status: Optional[int] = None
+    seasonal: bool = False
+    deleted: bool = False
+    online: bool = False
+    hotel: Optional[str] = None
+    hotel_room: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    beds: Optional[int] = None
+    chairs: Optional[int] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    list_total: Optional[float] = None
+    paid_total: Optional[float] = None
+    gross_booking_value: Optional[float] = None
+    discount: Optional[float] = None
+    channel: Optional[str] = None
+    invoice_number: Optional[str] = None
+    invoice_company: Optional[str] = None
+    utm_source: Optional[str] = None
+    utm_medium: Optional[str] = None
+    utm_campaign: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    raw_object_id: Optional[str] = None
+    file_sorgente: str
+    hash_riga: str
+    data_caricamento: datetime
+
+
+class SpiaggiaCashFlowRow(BaseModel):
+    """Schema per f_spiaggia_cash_flows — movimenti cassa Spiagge.it.
+
+    amount: float con segno (negativo = storno). method = codice intero grezzo,
+    method_label = decodifica best-effort (legenda Spiagge.it ignota, vedi
+    METHOD_LABELS nel parser). Lifecycle SNAPSHOT full-replace come reservations.
+    """
+
+    societa_id: SocietaId
+    business_unit_id: BusinessUnitId
+    location_id: Optional[str] = None
+    oggetto_id: Optional[str] = None
+    funzione_id: Optional[str] = None
+    id: int
+    reservation_id: Optional[int] = None
+    method: Optional[int] = None
+    method_label: Optional[str] = None
+    amount: Optional[float] = None
+    date: Optional[_Date] = None
+    receipt_id: Optional[int] = None
+    invoice_id: Optional[int] = None
+    deleted: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    raw_object_id: Optional[str] = None
+    file_sorgente: str
+    hash_riga: str
+    data_caricamento: datetime
+
+
+class SpiaggiaSpotRow(BaseModel):
+    """Schema per f_spiaggia_spots — mappa postazioni (ombrelloni + elementi).
+
+    Tabella-dimensione: la mappa fisica della spiaggia. Lifecycle SNAPSHOT
+    full-replace come reservations.
+    """
+
+    societa_id: SocietaId
+    business_unit_id: BusinessUnitId
+    location_id: Optional[str] = None
+    oggetto_id: Optional[str] = None
+    funzione_id: Optional[str] = None
+    id: int
+    uuid: Optional[str] = None
+    name: Optional[str] = None
+    type: Optional[str] = None
+    sector: Optional[int] = None
+    price_list_id: Optional[int] = None
+    pos_x: Optional[int] = None
+    pos_y: Optional[int] = None
+    element_type: Optional[str] = None
+    raw_object_id: Optional[str] = None
+    file_sorgente: str
+    hash_riga: str
+    data_caricamento: datetime
+
+
 # ── f_pipeline_runs ──────────────────────────────────────────────────────────
 
 
