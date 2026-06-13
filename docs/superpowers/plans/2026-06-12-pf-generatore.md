@@ -1410,58 +1410,105 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 9: Validazione reale ORTI (migrazione, manuale + assistita)
+### Task 9: Validazione semantica ORTI (gate utente)
 
-**Files:** nessun file di codice — verifica con dati reali. Eventuali fix
-emersi: TDD come sopra.
+**Criterio fissato da Stefano (2026-06-13). NON "pytest verde quindi ok".**
+La domanda a cui rispondere: **il file prodotto è semanticamente uguale o
+migliore del file corretto da Rosa?**
 
-- [ ] **Step 1: Estrazione previsioni dal file di Rosa** (il Drive rivisto,
-  copia locale):
+**Input della validazione:**
+- `ORTI_PF_2026_04.xlsx` (aprile) = **file precedente/sorgente** → `--pf-prev`.
+  NON usare il file di Rosa come sorgente: sarebbe circolare (le sue previsioni
+  rientrerebbero come input). Aprile è lo stato genuino "prima".
+- `/tmp/ROSA_RIVISTO.xlsx` (maggio corretto da Rosa) = **ground truth umano**,
+  solo termine di confronto, mai input.
+- output `pf-genera` = **candidato**.
 
-```bash
-hotelops pf-genera --societa ORTI \
-  --pf-prev /tmp/ROSA_RIVISTO.xlsx \
-  --scad "/Users/stefanodellapietra/Desktop/situazionepartitefornitoriscadenzeORTI.xlsx" \
-  --mese-chiuso aprile --anno 2026 --mostra-previsioni
-```
+**Files:** crea `verticals/condges/pf_generator/valida.py` (tool di diff
+semantico riusabile, NON solo uno script usa-e-getta) + verifica reale.
 
-Expected: lista per voce delle righe previsione (Tesla 1.030,64×8, Alba
-Leasing 423,39×8, Gallo 85 giu+lug, F24/SALARI/imposte/energia, ecc.).
-**STOP: mostrare l'output a Stefano per conferma riga per riga** (è il gate
-di migrazione dello spec). Righe indesiderate → si correggono nel file di
-Rosa o si annota l'esclusione, POI si rigenera.
-
-- [ ] **Step 2: Generazione completa**
+- [ ] **Step 1: Genera il candidato da APRILE**
 
 ```bash
 hotelops pf-genera --societa ORTI \
-  --pf-prev /tmp/ROSA_RIVISTO.xlsx \
+  --pf-prev "/Users/stefanodellapietra/Desktop/WORK/condges/pianfin/PF/ORTI_PF_2026_04.xlsx" \
   --scad "/Users/stefanodellapietra/Desktop/situazionepartitefornitoriscadenzeORTI.xlsx" \
   --mese-chiuso aprile --anno 2026 --out /tmp/pf-genera
 ```
 
-Expected: exit 0; controlli OK (quadratura al centesimo); DA MAPPARE con i
-6 noti (CLC, Centro Maglio, Clima Service, Francesca Fusco, Pietra di Luna,
-TUR.COM) finché non vengono mappati.
+Expected: exit 0; controlli OK; DA MAPPARE coi non mappati noti.
 
-- [ ] **Step 3: Verifica incrociata coi casi della sessione 2026-06-12**
-  (script di confronto come quelli usati nel debug): Vicart mag 0/giu
-  1.408,75 · Fabbrocino giu 543,40 · Ninni mag 114/giu 35,01 · Tecno Piscine
-  mag 2.274,08 · Tesla: blocco B 1.030,64×8 + RETTIFICA −1.030,64 a giugno.
-  Aprire il file in Excel: formule totale vive, freeze panes, colori blocchi.
+- [ ] **Step 2: Tool di diff semantico** `valida.py` — funzione
+  `confronta_pf(candidato_bytes, ground_truth_bytes, *, primo_mese_aperto) -> Report`.
+  Due livelli di confronto (entrambi richiesti dal criterio):
 
-- [ ] **Step 4: Commit di eventuali fix + aggiorna STATUS.md** — sezione
-  "In corso": il generatore sostituisce lo step 3 del pf-rotate per ORTI
-  (pf-rotate resta per INTUR fino al file ristrutturato); sezione "Prossimi
-  passi": cutover INTUR + integrazione saldi banca nel riepilogo generato +
-  TUI fornitori.
+  1. **Per voce/foglio × mese**: totale di ogni voce per mese, candidato vs
+     ground truth. Delta per cella.
+  2. **Per fornitore/codice × mese**: match per codice (fallback nome
+     normalizzato), importo candidato vs ground truth.
+
+  Ogni differenza **classificata** in:
+  - **ATTESA** (non è un errore, è il nuovo design):
+    - riga presente solo nel candidato perché nel layout nuovo (sezioni,
+      RETTIFICA, blocco separato);
+    - importo che differisce per effetto della rettifica anti-doppio-conteggio;
+    - previsione manuale che Rosa ha **aggiunto a maggio** ma non era in aprile
+      (il motore non può inventarla → assente nel candidato = atteso, NON
+      "persa"). Etichetta: `PREVISIONE_AGGIUNTA_DA_ROSA`.
+    - fornitore spostato di voce per via di una rimappatura CSV.
+  - **ERRORE** (rompe la semantica):
+    - `IMPORTO_SPOSTATO`: stesso fornitore, importo giusto ma mese sbagliato.
+    - `FORNITORE_SBAGLIATO`: codice↔nome non corrispondono.
+    - `DOPPIO_CONTEGGIO`: stesso importo in partite E previsioni senza rettifica.
+    - `PREVISIONE_PERSA`: previsione presente in APRILE (sorgente) ma sparita
+      nel candidato (questa sì è una perdita, distinta da quelle aggiunte a maggio).
+    - `PARTITA_PERSA`: fornitore con partita aperta nell'export assente dal
+      candidato (e non in DA MAPPARE).
+
+- [ ] **Step 3: Report leggibile** (stdout + file markdown
+  `/tmp/pf-genera/REPORT_VALIDAZIONE.md`). Struttura:
+
+```
+## Validazione ORTI maggio — candidato vs Rosa
+Verdetto: UGUALE | MIGLIORE | PEGGIORE | DA_RIVEDERE
+
+### Errori (N) — da risolvere prima del cutover
+- [IMPORTO_SPOSTATO] <voce> <fornitore>: candidato mag=X, Rosa giu=X
+...
+
+### Differenze attese (M)
+- [PREVISIONE_AGGIUNTA_DA_ROSA] Consulenze "Polizza Q3" giu 9000 — non in aprile
+- [RETTIFICA] Materie Prime Tesla giu: -1030.64 (anti-doppio-conteggio)
+...
+
+### Quadrature
+- Σ uscite candidato vs Rosa per mese: mag Δ=..., giu Δ=...
+```
+
+  **Verdetto "MIGLIORE"** ammesso quando le uniche differenze sono: errori di
+  Rosa che il motore corregge (es. doppioni D'Urso/Gallo visti il 2026-06-12,
+  codici↔nomi disallineati) + differenze attese. **STOP: il report va letto da
+  Stefano** — è lui che dice se "atteso" è davvero atteso.
+
+- [ ] **Step 4: Test del tool** `tests/test_pf_valida.py` — su workbook
+  sintetici (NON i file reali): un caso per ogni classe di errore + un caso
+  "uguale" + un caso "migliore" (Rosa duplicata, motore no). Il tool che
+  classifica deve essere esso stesso testato.
+
+- [ ] **Step 5: Eventuali fix** emersi (TDD) + commit. Poi aggiorna STATUS.md
+  (In corso: generatore sostituisce step3 pf-rotate per ORTI; Prossimi passi:
+  cutover INTUR, saldi banca nel riepilogo, TUI fornitori).
 
 ```bash
-git add STATUS.md
-git commit -m "docs(status): pf-genera validato su ORTI reale, cutover INTUR in coda
+git add verticals/condges/pf_generator/valida.py tests/test_pf_valida.py STATUS.md
+git commit -m "feat(pf-gen): tool di validazione semantica + report ORTI maggio vs Rosa
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
+
+> **Nota:** il flag `--mostra-previsioni` (Task 8) resta utile per ispezionare
+> cosa il motore estrae da aprile prima di generare; usalo se il report
+> segnala troppe `PREVISIONE_PERSA` (potrebbe essere estrazione, non perdita).
 
 ---
 
