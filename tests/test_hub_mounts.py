@@ -42,3 +42,24 @@ def test_ingest_page_importabile():
     from verticals.hub.pages_ import ingest
 
     assert callable(ingest.render)
+
+
+def test_home_render_audience_param():
+    from verticals.hub import home
+
+    import inspect
+
+    sig = inspect.signature(home.render)
+    assert "audience" in sig.parameters
+
+
+def test_viewer_app_no_ingest_page():
+    # l'app viewer non deve MONTARE la pagina Ingest (superficie di scrittura).
+    # Controlla import effettivo + assenza di st.Page(ingest...), non la docstring.
+    from pathlib import Path
+
+    src = Path("verticals/hub/app_viewer.py").read_text(encoding="utf-8")
+    code = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("#"))
+    assert "import fb" in code and "reviews" in code
+    assert "ingest.render" not in code
+    assert "import ingest" not in code and "pages_ import fb, ingest" not in code
