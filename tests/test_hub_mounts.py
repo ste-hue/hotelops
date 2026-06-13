@@ -44,6 +44,14 @@ def test_ingest_page_importabile():
     assert callable(ingest.render)
 
 
+def test_mutui_page_importabile():
+    # caso B1: embed di un artifact esterno (Worker Cloudflare) in iframe.
+    from verticals.hub.pages_ import mutui
+
+    assert callable(mutui.render)
+    assert mutui.MUTUI_URL.startswith("https://")
+
+
 def test_home_render_audience_param():
     from verticals.hub import home
 

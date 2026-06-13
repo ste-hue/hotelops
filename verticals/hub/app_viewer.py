@@ -19,7 +19,7 @@ if _ROOT not in sys.path:
 import streamlit as st  # noqa: E402
 
 from verticals.hub import home  # noqa: E402
-from verticals.hub.pages_ import fb, reviews  # noqa: E402
+from verticals.hub.pages_ import fb, mutui, reviews  # noqa: E402
 from verticals.hub.theme import inject_brand  # noqa: E402
 
 st.set_page_config(page_title="Panorama · HotelOps", page_icon="🏨", layout="wide")
@@ -35,6 +35,7 @@ pg = st.navigation(
         st.Page(_home_viewer, title="Home", icon="🏨", default=True, url_path="home"),
         st.Page(fb.render, title="F&B", icon="🍽", url_path="fb"),
         st.Page(reviews.render, title="Reviews", icon="⭐", url_path="reviews"),
+        st.Page(mutui.render, title="Mutui", icon="🏦", url_path="mutui"),
     ]
 )
 pg.run()
