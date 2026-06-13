@@ -78,6 +78,7 @@ from core.config import PROJECT  # noqa: E402
 from core.datahub_sync import DATAHUB_ROOT  # noqa: E402
 from verticals.reviews.cli_commands import cmd_reviews  # noqa: E402
 from verticals.condges.pf_rotate.cli_handler import add_subparser as add_pf_rotate  # noqa: E402
+from verticals.condges.pf_generator.cli_handler import build_parser as add_pf_genera  # noqa: E402
 from workspace.cli_commands import cmd_workspace  # noqa: E402
 
 # ── Lazy BQ client ──────────────────────────────────────────────────────────
@@ -928,18 +929,27 @@ def cmd_ingest_stream(args):
     dest_bucket = os.getenv("GCS_BUCKET_DEST")
     service_account = os.getenv("GCS_SERVICE_ACCOUNT_JSON") or None
     if not gcs_project or not dest_bucket:
-        raise RuntimeError("GCS_PROJECT and GCS_BUCKET_DEST must be set in the environment")
+        raise RuntimeError(
+            "GCS_PROJECT and GCS_BUCKET_DEST must be set in the environment"
+        )
 
-    manager = IngestManager(gcs_project=gcs_project, dest_bucket=dest_bucket, service_account_json=service_account)
+    manager = IngestManager(
+        gcs_project=gcs_project,
+        dest_bucket=dest_bucket,
+        service_account_json=service_account,
+    )
 
     # Register local folder source if provided
     if args.local_folder:
         if not os.path.isdir(args.local_folder):
             raise RuntimeError(f"Local folder does not exist: {args.local_folder}")
-        manager.register("local_folder", LocalFolderAdapter("generic", args.local_folder))
+        manager.register(
+            "local_folder", LocalFolderAdapter("generic", args.local_folder)
+        )
 
     # Future: register other adapters (e.g., GCS bucket, HTTP endpoint)
     manager.run(poll_interval=args.poll_interval, dry_run=args.dry_run)
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -1184,6 +1194,9 @@ def main():
     # pf-rotate
     add_pf_rotate(sub)
 
+    # pf-genera
+    add_pf_genera(sub)
+
     # ── Lineage subcommands (Phase 1) ──────────────────────────────────────
     p_intake = sub.add_parser(
         "intake",
@@ -1251,8 +1264,7 @@ def main():
     )
 
     p_lin = sub.add_parser(
-        "lineage",
-        help="Lineage: ispeziona raw_object o lista con filtri"
+        "lineage", help="Lineage: ispeziona raw_object o lista con filtri"
     )
     p_lin.add_argument(
         "raw_object_id",
