@@ -25,6 +25,11 @@ logs/
 # Runtime state (pending alert flags, etc.)
 .hotelops_state/
 
+# Hub static-edge viewer: i JSON sono generati (rigenerabili), ma il sito sì.
+# (*.html sopra ignorerebbe index.html → negazione esplicita)
+verticals/hub/publish/site/data/*.json
+!verticals/hub/publish/site/index.html
+
 # Personal working docs (not for commit)
 /Scadenzario_PF_*.xlsx
 /docs/superpowers/specs/2026-04-07-app-cdg-design.md
