@@ -108,6 +108,7 @@ from ingest.flussi.ingest_spiaggia import (
 )
 
 
+
 def test_coercion_helpers():
     assert to_int(None) is None
     assert to_int("") is None
@@ -152,3 +153,73 @@ def test_find_prefix_and_extract():
         {"id": 1, "spot_name": "7", "amount": "35.00"},
         {"id": 2, "spot_name": "8", "amount": "40.00"},
     ]
+
+
+from datetime import datetime as _dt
+from datetime import timezone as _tz
+
+from ingest.flussi.ingest_spiaggia import (
+    build_cash_flow_rows,
+    build_reservation_rows,
+    build_spot_rows,
+)
+
+_NOW = _dt(2026, 6, 13, tzinfo=_tz.utc)
+
+
+def test_build_reservation_rows():
+    recs = [{
+        "id": 4402425, "license_code": "it-sa-84010-panorama-beach",
+        "spot_type": "umbrella", "spot_name": "7", "status": 1,
+        "seasonal": 0, "deleted": 0, "online": 1, "hotel": "",
+        "hotel_room": None, "start_date": 1592524800, "end_date": 1592524800,
+        "beds": 2, "chairs": 0, "first_name": "Jessica", "last_name": "Neely",
+        "email": "jess@example.com", "phone_area_code": None,
+        "phone_number": "6128192966", "list_total": None, "paid_total": None,
+        "gross_booking_value": 35, "discount": None, "channel": "",
+        "invoice_number": None, "invoice_company": None,
+        "utm_source": None, "utm_medium": None, "utm_campaign": None,
+        "created_at": 1652133848, "updated_at": None,
+    }]
+    rows = build_reservation_rows(recs, "dump.json", "raw-1", _NOW)
+    assert len(rows) == 1
+    r = rows[0]
+    assert r.id == 4402425
+    assert r.societa_id == "INTUR"
+    assert r.business_unit_id == "LIDO"
+    assert r.oggetto_id == "7"          # spot_name
+    assert r.online is True
+    assert r.seasonal is False
+    assert r.start_date.year == 2020
+    assert r.phone == "6128192966"
+    assert r.gross_booking_value == 35.0
+    assert r.raw_object_id == "raw-1"
+
+
+def test_build_cash_flow_rows_negative():
+    recs = [{
+        "id": 3055414, "reservation_id": 4402426, "method": None,
+        "amount": "-35.00", "date": 1591786050, "receipt_id": None,
+        "invoice_id": None, "deleted": 1, "created_at": 1652133848,
+        "updated_at": None,
+    }]
+    rows = build_cash_flow_rows(recs, "dump.json", "raw-1", _NOW)
+    c = rows[0]
+    assert c.amount == -35.0
+    assert c.method_label == "sconosciuto"
+    assert c.deleted is True
+    assert c.societa_id == "INTUR"
+
+
+def test_build_spot_rows():
+    recs = [{
+        "id": 1394619, "uuid": "abc", "name": "7", "type": "umbrella",
+        "sector": 0, "price_list_id": None, "pos_x": 617, "pos_y": 73,
+        "element_type": "passerella",
+    }]
+    rows = build_spot_rows(recs, "dump.json", "raw-1", _NOW)
+    s = rows[0]
+    assert s.id == 1394619
+    assert s.oggetto_id == "7"          # name
+    assert s.type == "umbrella"
+    assert s.business_unit_id == "LIDO"
