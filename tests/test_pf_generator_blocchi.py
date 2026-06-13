@@ -1,9 +1,14 @@
 """Test blocchi generatore PF — funzioni pure, no BQ, no Excel."""
+
 from __future__ import annotations
 
 import pandas as pd
 
-from verticals.condges.pf_generator.blocchi import blocco_a_per_voce, cascata_nc
+from verticals.condges.pf_generator.blocchi import (
+    blocco_a_per_voce,
+    cascata_nc,
+    rettifica_doppio_conteggio,
+)
 
 
 class TestCascataNc:
@@ -31,15 +36,31 @@ class TestCascataNc:
 
 
 def _scad_df():
-    return pd.DataFrame([
-        {"codice_fornitore": 92, "nome": "AMALFI SEI ESSE S.R.L.",
-         "totale": -1222.76, "scaduto": -100.0, "mese_6": -1122.76},
-        {"codice_fornitore": 71, "nome": "VICART S.R.L.",
-         "totale": -1408.75, "scaduto": 90.28, "mese_5": -85.40,
-         "mese_6": -1413.63},
-        {"codice_fornitore": 9999, "nome": "SCONOSCIUTO SRL",
-         "totale": -500.0, "scaduto": -500.0},
-    ])
+    return pd.DataFrame(
+        [
+            {
+                "codice_fornitore": 92,
+                "nome": "AMALFI SEI ESSE S.R.L.",
+                "totale": -1222.76,
+                "scaduto": -100.0,
+                "mese_6": -1122.76,
+            },
+            {
+                "codice_fornitore": 71,
+                "nome": "VICART S.R.L.",
+                "totale": -1408.75,
+                "scaduto": 90.28,
+                "mese_5": -85.40,
+                "mese_6": -1413.63,
+            },
+            {
+                "codice_fornitore": 9999,
+                "nome": "SCONOSCIUTO SRL",
+                "totale": -500.0,
+                "scaduto": -500.0,
+            },
+        ]
+    )
 
 
 FORNITORI = {
@@ -73,8 +94,42 @@ class TestBloccoA:
         per_voce, unmapped = blocco_a_per_voce(
             _scad_df(), [5, 6], FORNITORI, primo_mese_aperto=5
         )
-        tot = sum(v for r in per_voce["USCITE_MATERIE_PRIME"]
-                  for v in r["mesi"].values())
+        tot = sum(
+            v for r in per_voce["USCITE_MATERIE_PRIME"] for v in r["mesi"].values()
+        )
         tot += sum(v for r in unmapped for v in r["mesi"].values())
         # |somma scritta| == |somma partite| (NC inclusa nella cascata)
         assert round(tot, 2) == round(1222.76 + 1408.75 + 500.0, 2)
+
+
+class TestRettifica:
+    def test_previsione_coperta_da_partite(self):
+        blocco_a = [{"codice": 1076, "nome": "Noleggio Tesla", "mesi": {6: 1030.64}}]
+        blocco_b = [
+            {
+                "codice": 1076,
+                "nome": "Noleggio Tesla",
+                "mesi": {5: 1030.64, 6: 1030.64, 7: 1030.64},
+            }
+        ]
+        rett = rettifica_doppio_conteggio(blocco_a, blocco_b)
+        # giugno: prev 1030.64 e partite 1030.64 -> rettifica -1030.64
+        assert rett == {6: -1030.64}
+
+    def test_match_per_nome_se_manca_codice(self):
+        blocco_a = [{"codice": 158, "nome": "Gallo Giovanni", "mesi": {7: 85.0}}]
+        blocco_b = [
+            {"codice": None, "nome": "gallo giovanni ", "mesi": {6: 85.0, 7: 85.0}}
+        ]
+        rett = rettifica_doppio_conteggio(blocco_a, blocco_b)
+        assert rett == {7: -85.0}
+
+    def test_prev_maggiore_delle_partite(self):
+        blocco_a = [{"codice": 1, "nome": "X", "mesi": {6: 100.0}}]
+        blocco_b = [{"codice": 1, "nome": "X", "mesi": {6: 300.0}}]
+        assert rettifica_doppio_conteggio(blocco_a, blocco_b) == {6: -100.0}
+
+    def test_nessuna_sovrapposizione(self):
+        blocco_a = [{"codice": 1, "nome": "X", "mesi": {6: 100.0}}]
+        blocco_b = [{"codice": 2, "nome": "Y", "mesi": {6: 300.0}}]
+        assert rettifica_doppio_conteggio(blocco_a, blocco_b) == {}

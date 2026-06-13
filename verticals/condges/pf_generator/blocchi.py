@@ -66,5 +66,40 @@ def blocco_a_per_voce(
             }
         )
     for righe in per_voce.values():
-        righe.sort(key=lambda r: r["nome"].lower())
+        righe.sort(key=lambda r: (r["nome"].lower(), r["codice"]))
     return per_voce, unmapped
+
+
+def _chiave_norm(nome: str) -> str:
+    return " ".join(str(nome).lower().split())
+
+
+def rettifica_doppio_conteggio(
+    blocco_a: list[dict], blocco_b: list[dict]
+) -> dict[int, float]:
+    """Riga RETTIFICA: per ogni fornitore presente in entrambi i blocchi
+    (match per codice, fallback nome normalizzato) e per ogni mese,
+    -min(previsione, partite). Implementa prev_eff = max(0, prev - partite)
+    senza toccare le celle previsione originali (spec, nota di design).
+    """
+    a_per_codice: dict[int, dict[int, float]] = {}
+    a_per_nome: dict[str, dict[int, float]] = {}
+    for r in blocco_a:
+        a_per_codice[r["codice"]] = r["mesi"]
+        a_per_nome[_chiave_norm(r["nome"])] = r["mesi"]
+
+    rett: dict[int, float] = {}
+    for r in blocco_b:
+        mesi_a = None
+        if r.get("codice") is not None:
+            mesi_a = a_per_codice.get(int(r["codice"]))
+        if mesi_a is None:
+            mesi_a = a_per_nome.get(_chiave_norm(r["nome"]))
+        if not mesi_a:
+            continue
+        for mese, prev in r["mesi"].items():
+            partite = mesi_a.get(mese, 0.0)
+            taglio = min(float(prev), float(partite))
+            if taglio > 0:
+                rett[mese] = round(rett.get(mese, 0.0) - taglio, 2)
+    return rett
