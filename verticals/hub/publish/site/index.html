@@ -29,6 +29,12 @@
         <div class="sub">media recensioni (mese)</div>
         <div class="arrow">Vedi sotto ↓</div>
       </a>
+      <a class="card" href="#spiaggia">
+        <h3>🏖️ Spiaggia</h3>
+        <div class="metric" id="card-spiaggia-metric">—</div>
+        <div class="sub" id="card-spiaggia-sub">incassato (ultimo anno)</div>
+        <div class="arrow">Vedi sotto ↓</div>
+      </a>
       <a class="card" id="card-banche" href="#" target="_blank" rel="noopener">
         <h3>🏛 Banche</h3>
         <div class="metric">Looker</div>
@@ -79,6 +85,20 @@
           <thead><tr><th>Data</th><th>Piattaforma</th><th>Voto</th><th>Riassunto</th></tr></thead>
           <tbody></tbody>
         </table>
+      </div>
+    </section>
+
+    <section id="spiaggia">
+      <div class="eyebrow">Panorama Beach</div>
+      <h2>Spiaggia — cassa &amp; prenotazioni</h2>
+      <div id="spiaggia-error"></div>
+      <div class="chart-box">
+        <h3>Incassato e prenotazioni — per anno</h3>
+        <canvas id="chart-spiaggia" height="110"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3>Ultimo anno con cassa</h3>
+        <table id="spiaggia-tabella"><tbody></tbody></table>
       </div>
     </section>
 

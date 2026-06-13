@@ -66,6 +66,16 @@ def shape_reviews(serie: list[dict], piattaforme: list[dict], recenti: list[dict
     }
 
 
+def shape_spiaggia(per_anno: list[dict]) -> dict:
+    """Aggregati Spiaggia per anno → contratto JSON."""
+    return {
+        "schema": 1,
+        "per_anno": [{k: r.get(k) for k in (
+            "anno", "n_prenotazioni", "incassato", "incasso_medio",
+            "quota_online", "quota_hotel")} for r in per_anno],
+    }
+
+
 def _jsonable(v):
     if isinstance(v, decimal.Decimal):
         return float(v)
@@ -102,6 +112,21 @@ def _reviews_from_bq(client) -> tuple[list[dict], list[dict], list[dict]]:
     return list(reversed(serie)), piattaforme, recenti
 
 
+def _spiaggia_from_bq(client) -> list[dict]:
+    q = """
+    SELECT anno,
+           SUM(n_prenotazioni) AS n_prenotazioni,
+           ROUND(SUM(incassato), 0) AS incassato,
+           ROUND(SAFE_DIVIDE(SUM(incassato), SUM(n_prenotazioni)), 1) AS incasso_medio,
+           ROUND(SAFE_DIVIDE(SUM(quota_online * n_prenotazioni), SUM(n_prenotazioni)), 3) AS quota_online,
+           ROUND(SAFE_DIVIDE(SUM(quota_hotel * n_prenotazioni), SUM(n_prenotazioni)), 3) AS quota_hotel
+    FROM `hotelops-suite.hotelops.v_spiaggia_kpi`
+    GROUP BY anno ORDER BY anno
+    """
+    return [{k: _jsonable(v) for k, v in dict(r.items()).items()}
+            for r in client.query(q).result()]
+
+
 def export_all(out_dir: str, generated_at: str, dry_run: bool = False) -> dict:
     """Genera tutti i JSON. Ritorna {nome: dict} per ispezione/dry-run."""
     from core.bq.client import get_client
@@ -113,6 +138,7 @@ def export_all(out_dir: str, generated_at: str, dry_run: bool = False) -> dict:
         "_meta": shape_meta(generated_at, fresh),
         "fb": shape_fb(_fb_rows_from_bq(client)),
         "reviews": shape_reviews(*_reviews_from_bq(client)),
+        "spiaggia": shape_spiaggia(_spiaggia_from_bq(client)),
     }
     if not dry_run:
         data_dir = Path(out_dir) / "data"

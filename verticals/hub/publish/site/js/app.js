@@ -126,6 +126,39 @@ function renderReviews(rev) {
     }).join("");
 }
 
+function renderSpiaggia(sp) {
+  const anni = sp.per_anno || [];
+  const labels = anni.map((r) => String(r.anno));
+  const cons = [...anni].reverse().find((r) => (r.incassato || 0) > 0);
+  if (cons) {
+    document.getElementById("card-spiaggia-metric").textContent = eur.format(cons.incassato);
+    document.getElementById("card-spiaggia-sub").textContent = `incassato · ${cons.anno}`;
+    const rows = [
+      ["Prenotazioni", new Intl.NumberFormat("it-IT").format(cons.n_prenotazioni)],
+      ["Incassato", eur.format(cons.incassato)],
+      ["Incasso medio/pren.", `€ ${(cons.incasso_medio ?? 0).toFixed(1).replace(".", ",")}`],
+      ["Online %", pct(cons.quota_online)],
+      ["Hotel-linked %", pct(cons.quota_hotel)],
+    ];
+    document.querySelector("#spiaggia-tabella tbody").innerHTML =
+      rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+  }
+  new Chart(document.getElementById("chart-spiaggia"), {
+    type: "bar",
+    data: { labels, datasets: [
+      { label: "Incassato", yAxisID: "y", backgroundColor: TEAL,
+        data: anni.map((r) => r.incassato) },
+      { type: "line", label: "Prenotazioni", yAxisID: "y1", borderColor: NAVY, tension: 0.3,
+        data: anni.map((r) => r.n_prenotazioni) },
+    ] },
+    options: { responsive: true, plugins: { legend: { position: "bottom" } },
+      scales: {
+        y: { position: "left", ticks: { callback: (v) => eur.format(v) } },
+        y1: { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "pren." } },
+      } },
+  });
+}
+
 (async () => {
   try {
     renderMeta(await load("_meta"));
@@ -139,5 +172,10 @@ function renderReviews(rev) {
     renderReviews(await load("reviews"));
   } catch (e) {
     document.getElementById("rev-error").innerHTML = `<div class="err">Reviews: ${e.message}</div>`;
+  }
+  try {
+    renderSpiaggia(await load("spiaggia"));
+  } catch (e) {
+    document.getElementById("spiaggia-error").innerHTML = `<div class="err">Spiaggia: ${e.message}</div>`;
   }
 })();
