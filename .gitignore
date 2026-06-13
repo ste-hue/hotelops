@@ -29,6 +29,7 @@ logs/
 # (*.html sopra ignorerebbe index.html → negazione esplicita)
 verticals/hub/publish/site/data/*.json
 !verticals/hub/publish/site/index.html
+.wrangler/
 
 # Personal working docs (not for commit)
 /Scadenzario_PF_*.xlsx

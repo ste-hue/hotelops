@@ -952,6 +952,7 @@ def cmd_ingest_stream(args):
 
 
 def cmd_publish_export(args):
+    import subprocess
     from datetime import datetime, timezone
 
     from verticals.hub.publish.export import export_all
@@ -963,6 +964,12 @@ def cmd_publish_export(args):
         detail = f"serie {len(p['serie'])}" if "serie" in p else "meta"
         print(f"{name}.json  ({detail})")
     print("DRY-RUN (nessun file scritto)" if args.dry_run else f"scritti in {site}/data/")
+
+    if args.deploy and not args.dry_run:
+        publish_dir = str(Path(site).parent)
+        print(f"\nDeploy Cloudflare (wrangler) da {publish_dir}…")
+        subprocess.run(["npx", "--yes", "wrangler@latest", "deploy"],
+                       cwd=publish_dir, check=True)
 
 
 def main():
@@ -1238,6 +1245,8 @@ def main():
         help="Dir del sito (default verticals/hub/publish/site)",
     )
     p_pub.add_argument("--dry-run", action="store_true")
+    p_pub.add_argument("--deploy", action="store_true",
+                       help="Dopo l'export, deploya il sito su Cloudflare (wrangler)")
     p_pub.set_defaults(func=cmd_publish_export)
 
     p_capture = sub.add_parser(
