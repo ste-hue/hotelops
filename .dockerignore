@@ -1,0 +1,16 @@
+.git
+.github
+.worktrees
+.wrangler
+**/.wrangler
+**/__pycache__
+*.pyc
+.venv
+node_modules
+tests
+docs
+ingest/*.xlsx
+verticals/hub/publish
+*.md
+.env
+.DS_Store
