@@ -223,3 +223,30 @@ def test_build_spot_rows():
     assert s.oggetto_id == "7"          # name
     assert s.type == "umbrella"
     assert s.business_unit_id == "LIDO"
+
+
+import json as _json
+
+from ingest.flussi.ingest_spiaggia import ingest_file
+
+
+def test_ingest_file_dry_run(tmp_path):
+    dump = {
+        "it-sa-84010-panorama-beach_reservations": {
+            "columns": ["id", "spot_name", "start_date", "seasonal",
+                        "deleted", "online", "gross_booking_value"],
+            "rows": [[1, "7", 1592524800, 0, 0, 1, 35]],
+        },
+        "it-sa-84010-panorama-beach_cash_flows": {
+            "columns": ["id", "reservation_id", "method", "amount", "date", "deleted"],
+            "rows": [[10, 1, 1, "35.00", 1591786050, 0]],
+        },
+        "it-sa-84010-panorama-beach_spots": {
+            "columns": ["id", "name", "type", "sector"],
+            "rows": [[100, "7", "umbrella", 0]],
+        },
+    }
+    f = tmp_path / "dump.json"
+    f.write_text(_json.dumps(dump))
+    counts = ingest_file(f, raw_object_id=None, dry_run=True)
+    assert counts == {"reservations": 1, "cash_flows": 1, "spots": 1}

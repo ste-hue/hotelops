@@ -238,3 +238,78 @@ def build_spot_rows(
             data_caricamento=now,
         ))
     return out
+
+
+# (table_name, builder, target table) per il fan-out 1→3.
+_TABLES = [
+    ("reservations", build_reservation_rows, F_SPIAGGIA_RESERVATIONS),
+    ("cash_flows", build_cash_flow_rows, F_SPIAGGIA_CASH_FLOWS),
+    ("spots", build_spot_rows, F_SPIAGGIA_SPOTS),
+]
+
+
+def ingest_file(
+    path: Path, raw_object_id: Optional[str] = None, dry_run: bool = False
+) -> dict[str, int]:
+    """Parsa un dump JSON e fa full-replace SNAPSHOT delle 3 tabelle.
+
+    Ritorna {table_name: n_righe}. Full-replace via natural_key=["societa_id"]:
+    ogni riga è INTUR ⇒ il DELETE del gate svuota la tabella prima del re-insert.
+    """
+    with open(path, encoding="utf-8") as fh:
+        dump = json.load(fh)
+    prefix = find_prefix(dump)
+    now = datetime.now(timezone.utc)
+
+    counts: dict[str, int] = {}
+    for table_name, builder, target in _TABLES:
+        recs = extract_table(dump, prefix, table_name)
+        rows = builder(recs, path.name, raw_object_id, now)
+        if rows:
+            validate_batch(
+                [r.model_dump() for r in rows],
+                type(rows[0]),
+                context=f"spiaggia {table_name} {path.name}",
+            )
+        counts[table_name] = len(rows)
+
+        if dry_run:
+            log.info("[DRY-RUN] %s → %s : %d righe", table_name, target, len(rows))
+            continue
+
+        from core.bq.write import bq_write_validated
+
+        bq_write_validated(
+            target,
+            rows,
+            mode="snapshot",
+            natural_key=["societa_id"],
+        )
+        log.info("OK %s → %s : %d righe (full-replace)", table_name, target, len(rows))
+
+    return counts
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Ingest dump Spiagge.it → 3 tabelle canonical")
+    ap.add_argument("--file", required=True, type=Path, help="dump JSON Spiagge.it")
+    ap.add_argument(
+        "--raw-object-id",
+        default=None,
+        help="FK a f_raw_objects — passato da `hotelops promote`",
+    )
+    ap.add_argument(
+        "--societa",
+        default=None,
+        help="Ignorato — la spiaggia è sempre INTUR. Accettato da `hotelops promote`.",
+    )
+    ap.add_argument("--dry-run", action="store_true", help="parse senza scrivere")
+    args = ap.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    counts = ingest_file(args.file, raw_object_id=args.raw_object_id, dry_run=args.dry_run)
+    log.info("Totale: %s", counts)
+
+
+if __name__ == "__main__":
+    main()
