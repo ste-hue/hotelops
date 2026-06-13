@@ -77,3 +77,16 @@ thead th { text-transform: uppercase; letter-spacing: .1em; font-size: .68rem; c
   padding: 1rem 1.2rem; color: var(--pg-coral); }
 footer { margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--pg-sand);
   font-size: .78rem; color: var(--pg-slate); opacity: .7; }
+
+/* Mobile — il direttore apre dal telefono. Card a colonna singola, header compatto. */
+@media (max-width: 600px) {
+  .wrap { padding: 1.2rem 1rem 3rem; }
+  .pg-wordmark { font-size: 1.3rem; }
+  .pg-descriptor { font-size: 1.3rem; display: block; margin-left: 0; margin-top: .2rem; }
+  .cards { grid-template-columns: 1fr; gap: .8rem; }
+  .card .metric { font-size: 1.6rem; }
+  .chart-box { padding: 1rem; overflow-x: auto; }
+  section > h2 { font-size: 1.3rem; }
+  table { font-size: .85rem; }
+  th, td { padding: .4rem .4rem; }
+}
