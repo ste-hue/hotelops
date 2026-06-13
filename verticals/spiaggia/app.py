@@ -2,7 +2,9 @@
 
 Ricerca prenotazioni + KPI cassa/occupazione. Read-only su viste v_spiaggia_*.
 
-Run: streamlit run verticals/spiaggia/app.py
+Standalone: `streamlit run verticals/spiaggia/app.py`
+Hub: `from verticals.spiaggia.app import render` → `st.Page(render, ...)`
+     (render() NON chiama set_page_config — lo fa l'hub una volta sola).
 """
 from __future__ import annotations
 
@@ -10,25 +12,20 @@ import pandas as pd
 import streamlit as st
 
 from core.bq.client import get_client
-from core.config import PROJECT, DATASET
+from core.config import DATASET, PROJECT
 
-st.set_page_config(page_title="Panorama Beach", page_icon="🏖️", layout="wide")
-
-# --- Brand Panorama Beach (approssimazione CSS, non il Design System web) ---
-st.markdown(
-    """
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500&display=swap');
-    html, body, [class*="css"] { font-family: 'Jost', sans-serif; }
-    .stApp { background-color: #fbf9f5; }
-    h1, h2, h3 { font-family: 'Cinzel', serif; color: #003764; }
-    .pb-sub { font-family: 'Cormorant Garamond', serif; color: #57c1e8; font-size: 1.2rem; }
-    [data-testid="stMetricValue"] { color: #003764; font-family: 'Cinzel', serif; }
-    .stButton>button { background-color: #57c1e8; color: #003764; border: none; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+# Brand Panorama Beach (approssimazione CSS, non il Design System web).
+_BRAND_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500&display=swap');
+html, body, [class*="css"] { font-family: 'Jost', sans-serif; }
+.stApp { background-color: #fbf9f5; }
+h1, h2, h3 { font-family: 'Cinzel', serif; color: #003764; }
+.pb-sub { font-family: 'Cormorant Garamond', serif; color: #57c1e8; font-size: 1.2rem; }
+[data-testid="stMetricValue"] { color: #003764; font-family: 'Cinzel', serif; }
+.stButton>button { background-color: #57c1e8; color: #003764; border: none; }
+</style>
+"""
 
 
 def _q(sql: str) -> pd.DataFrame:
@@ -55,69 +52,77 @@ def load_occupazione() -> pd.DataFrame:
     return _q(f"SELECT * FROM `{PROJECT}.{DATASET}.v_spiaggia_occupazione` ORDER BY giorno")
 
 
-st.title("Panorama Beach")
-st.markdown('<div class="pb-sub">Prenotazioni · Cassa · Occupazione</div>', unsafe_allow_html=True)
+def render() -> None:
+    """Render la pagina Panorama Beach. Montabile nell'hub (no set_page_config)."""
+    st.markdown(_BRAND_CSS, unsafe_allow_html=True)
+    st.title("Panorama Beach")
+    st.markdown('<div class="pb-sub">Prenotazioni · Cassa · Occupazione</div>', unsafe_allow_html=True)
 
-kpi = load_kpi()
-anni = sorted(kpi["anno"].dropna().unique().tolist(), reverse=True) if not kpi.empty else []
-anno_sel = st.sidebar.selectbox("Anno", anni, index=0) if anni else None
+    kpi = load_kpi()
+    anni = sorted(kpi["anno"].dropna().unique().tolist(), reverse=True) if not kpi.empty else []
+    anno_sel = st.sidebar.selectbox("Anno", anni, index=0) if anni else None
 
-# --- Header KPI (anno selezionato) ---
-if anno_sel is not None:
-    k = kpi[kpi["anno"] == anno_sel]
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Prenotazioni", int(k["n_prenotazioni"].sum()))
-    c2.metric("Ricavo", f"€ {k['ricavo'].sum():,.0f}")
-    c3.metric("Incassato", f"€ {k['incassato'].fillna(0).sum():,.0f}")
-    online_pct = (k["quota_online"] * k["n_prenotazioni"]).sum() / k["n_prenotazioni"].sum() if not k.empty else 0
-    hotel_pct = (k["quota_hotel"] * k["n_prenotazioni"]).sum() / k["n_prenotazioni"].sum() if not k.empty else 0
-    c4.metric("Online %", f"{online_pct*100:,.0f}%")
-    c5.metric("Hotel-linked %", f"{hotel_pct*100:,.0f}%")
+    # --- Header KPI (anno selezionato) ---
+    if anno_sel is not None:
+        k = kpi[kpi["anno"] == anno_sel]
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Prenotazioni", int(k["n_prenotazioni"].sum()))
+        c2.metric("Ricavo", f"€ {k['ricavo'].sum():,.0f}")
+        c3.metric("Incassato", f"€ {k['incassato'].fillna(0).sum():,.0f}")
+        online_pct = (k["quota_online"] * k["n_prenotazioni"]).sum() / k["n_prenotazioni"].sum() if not k.empty else 0
+        hotel_pct = (k["quota_hotel"] * k["n_prenotazioni"]).sum() / k["n_prenotazioni"].sum() if not k.empty else 0
+        c4.metric("Online %", f"{online_pct*100:,.0f}%")
+        c5.metric("Hotel-linked %", f"{hotel_pct*100:,.0f}%")
 
-# --- Ricerca prenotazioni ---
-st.header("Cerca prenotazioni")
-pren = load_prenotazioni()
-fc1, fc2, fc3 = st.columns(3)
-q_cliente = fc1.text_input("Cliente / email / telefono")
-q_ombrellone = fc2.text_input("Ombrellone (spot_name)")
-q_anno = fc3.selectbox("Anno prenotazione", ["(tutti)"] + [str(a) for a in anni]) if anni else "(tutti)"
+    # --- Ricerca prenotazioni ---
+    st.header("Cerca prenotazioni")
+    pren = load_prenotazioni()
+    fc1, fc2, fc3 = st.columns(3)
+    q_cliente = fc1.text_input("Cliente / email / telefono")
+    q_ombrellone = fc2.text_input("Ombrellone (spot_name)")
+    q_anno = fc3.selectbox("Anno prenotazione", ["(tutti)"] + [str(a) for a in anni]) if anni else "(tutti)"
 
-view = pren.copy()
-if q_anno not in ("(tutti)", "") and "anno" in view:
-    view = view[view["anno"] == int(q_anno)]
-if q_ombrellone:
-    view = view[view["spot_name"].fillna("").str.contains(q_ombrellone, case=False)]
-if q_cliente:
-    mask = (
-        view["first_name"].fillna("").str.contains(q_cliente, case=False)
-        | view["last_name"].fillna("").str.contains(q_cliente, case=False)
-        | view["email"].fillna("").str.contains(q_cliente, case=False)
-        | view["phone"].fillna("").str.contains(q_cliente, case=False)
+    view = pren.copy()
+    if q_anno not in ("(tutti)", "") and "anno" in view:
+        view = view[view["anno"] == int(q_anno)]
+    if q_ombrellone:
+        view = view[view["spot_name"].fillna("").str.contains(q_ombrellone, case=False)]
+    if q_cliente:
+        mask = (
+            view["first_name"].fillna("").str.contains(q_cliente, case=False)
+            | view["last_name"].fillna("").str.contains(q_cliente, case=False)
+            | view["email"].fillna("").str.contains(q_cliente, case=False)
+            | view["phone"].fillna("").str.contains(q_cliente, case=False)
+        )
+        view = view[mask]
+
+    st.caption(f"{len(view)} prenotazioni")
+    st.dataframe(
+        view[[
+            "id", "start_date", "end_date", "spot_name", "first_name", "last_name",
+            "email", "phone", "beds", "chairs", "gross_booking_value", "channel",
+            "online", "hotel_linked",
+        ]],
+        use_container_width=True,
+        height=400,
     )
-    view = view[mask]
 
-st.caption(f"{len(view)} prenotazioni")
-st.dataframe(
-    view[[
-        "id", "start_date", "end_date", "spot_name", "first_name", "last_name",
-        "email", "phone", "beds", "chairs", "gross_booking_value", "channel",
-        "online", "hotel_linked",
-    ]],
-    use_container_width=True,
-    height=400,
-)
+    # --- Grafici ---
+    st.header("Andamenti")
+    g1, g2 = st.columns(2)
+    occ = load_occupazione()
+    if not occ.empty and anno_sel is not None:
+        occ_y = occ[occ["anno"] == anno_sel]
+        g1.subheader("Occupazione ombrelloni")
+        g1.line_chart(occ_y.set_index("giorno")["occupazione_pct"])
+    cassa = load_cassa()
+    if not cassa.empty and anno_sel is not None:
+        cassa_y = cassa[cassa["anno"] == anno_sel]
+        per_metodo = cassa_y.groupby("method_label")["importo_netto"].sum()
+        g2.subheader("Cassa per metodo")
+        g2.bar_chart(per_metodo)
 
-# --- Grafici ---
-st.header("Andamenti")
-g1, g2 = st.columns(2)
-occ = load_occupazione()
-if not occ.empty and anno_sel is not None:
-    occ_y = occ[occ["anno"] == anno_sel]
-    g1.subheader("Occupazione ombrelloni")
-    g1.line_chart(occ_y.set_index("giorno")["occupazione_pct"])
-cassa = load_cassa()
-if not cassa.empty and anno_sel is not None:
-    cassa_y = cassa[cassa["anno"] == anno_sel]
-    per_metodo = cassa_y.groupby("method_label")["importo_netto"].sum()
-    g2.subheader("Cassa per metodo")
-    g2.bar_chart(per_metodo)
+
+if __name__ == "__main__":
+    st.set_page_config(page_title="Panorama Beach", page_icon="🏖️", layout="wide")
+    render()
