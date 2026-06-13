@@ -44,9 +44,13 @@ def _check_codice_nome(wb: openpyxl.Workbook, fornitori: dict[int, dict]) -> dic
             entry = fornitori.get(codice)
             if entry is None:
                 continue  # stub non in CSV: non verificabile
-            atteso = entry.get("nome_pf") or str(codice)
-            if nome != atteso:
-                mismatches.append(f"{codice}: got '{nome}' want '{atteso}'")
+            nome_pf = (entry.get("nome_pf") or "").strip()
+            # Salta se nome_pf è vuoto, puramente numerico, o troppo corto:
+            # in questi casi blocco_a ha scritto il fallback legittimo (nome export).
+            if not nome_pf or nome_pf.isdigit() or len(nome_pf) < 3:
+                continue
+            if nome != nome_pf:
+                mismatches.append(f"{codice}: got '{nome}' want '{nome_pf}'")
     if not mismatches:
         return {
             "check": "codice↔nome vs CSV",
@@ -66,7 +70,9 @@ def _check_quadratura(scad_df: pd.DataFrame, per_voce, unmapped) -> dict:
         v for righe in per_voce.values() for r in righe for v in r["mesi"].values()
     )
     scritto += sum(v for r in unmapped for v in r["mesi"].values())
-    atteso = float(scad_df["totale"].abs().sum())
+    # Solo i debiti (totale < 0) contano come importo dovuto; i crediti netti
+    # non vengono scritti nel PF, quindi non devono gonfiare atteso.
+    atteso = float(-scad_df.loc[scad_df["totale"] < 0, "totale"].sum())
     delta = round(abs(scritto) - atteso, 2)
     return {
         "check": "quadratura blocchi A vs export partite",
