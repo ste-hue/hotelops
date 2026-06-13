@@ -141,10 +141,13 @@ class TestFogliAccessori:
             entrate=[{"nome": "Entrate Hotel", "mesi": {6: 150000.0}}],
             voci_attive=["USCITE_UTENZE"],
             primo_mese_aperto=5,
+            saldo_iniziale=134647.0,
         )
         ws = wb["Piano Finanziario"]
+        col5 = get_column_letter(col_mese(5))
         col6 = get_column_letter(col_mese(6))
-        # almeno una formula che punta al totale del foglio Utenze
+
+        # (a) almeno una formula che punta al totale del foglio Utenze
         formule = [
             ws.cell(row=r, column=col_mese(6)).value
             for r in range(1, ws.max_row + 1)
@@ -153,6 +156,38 @@ class TestFogliAccessori:
         assert any(
             "Utenze" in f and f"{col6}{RIGA_TOTALE}" in f.replace("'", "")
             for f in formule
+        ), "cross-sheet uscita formula not found"
+
+        # (b) SALDO PROIETTATO = formula referencing entrate e uscite totals
+        proiettato_row = next(
+            r
+            for r in range(1, ws.max_row + 1)
+            if "SALDO PROIETTATO" in str(ws.cell(row=r, column=2).value or "").upper()
+        )
+        sal_prot_cell = ws.cell(row=proiettato_row, column=col_mese(5)).value
+        assert isinstance(sal_prot_cell, str) and sal_prot_cell.startswith("="), (
+            f"SALDO PROIETTATO should be a formula, got: {sal_prot_cell!r}"
+        )
+        # deve contenere riferimenti ad entrate e uscite
+        assert "+" in sal_prot_cell and "-" in sal_prot_cell, (
+            f"SALDO PROIETTATO formula should have +/-, got: {sal_prot_cell!r}"
+        )
+
+        # (c) SALDO INIZIALE del primo mese aperto (5) == 134647.0 (l'ancora)
+        saldo_iniziale_row = next(
+            r
+            for r in range(1, ws.max_row + 1)
+            if "SALDO INIZIALE" in str(ws.cell(row=r, column=2).value or "").upper()
+        )
+        anchor_val = ws.cell(row=saldo_iniziale_row, column=col_mese(5)).value
+        assert anchor_val == 134647.0, (
+            f"First open month SALDO INIZIALE should be 134647.0, got: {anchor_val!r}"
+        )
+
+        # (d) SALDO INIZIALE del secondo mese aperto (6) = formula -> SALDO PROIETTATO[5]
+        saldo_iniziale_m6 = ws.cell(row=saldo_iniziale_row, column=col_mese(6)).value
+        assert isinstance(saldo_iniziale_m6, str) and col5 in saldo_iniziale_m6, (
+            f"SALDO INIZIALE[6] should reference col of month 5, got: {saldo_iniziale_m6!r}"
         )
 
     def test_controlli(self, tmp_path):

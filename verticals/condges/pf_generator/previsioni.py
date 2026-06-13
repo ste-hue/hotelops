@@ -28,6 +28,9 @@ _LABEL_SKIP = {
     "PREVISIONALE",
 }
 
+# Label fragments that mark non-entrate rows in the riepilogo sheet
+_ENTRATE_SKIP_FRAGMENTS = {"SALDO", "TOTALE", "DATA", "BANCHE"}
+
 
 def _risolvi_foglio(voce_id: str, sheetnames: list[str]) -> str | None:
     candidati = [VOCE_SHEET_NAME[voce_id]] + VOCE_TO_SHEET_CANDIDATES.get(voce_id, [])
@@ -44,6 +47,67 @@ def _skip_label(nome: str) -> bool:
     if any(lbl in up for lbl in _LABEL_SKIP):
         return True
     return up.startswith("TOTALE") or up.startswith("MATERIE PRIME")
+
+
+def estrai_entrate(
+    pf_bytes: bytes,
+    *,
+    primo_mese_aperto: int,
+) -> list[dict]:
+    """Estrae le righe ENTRATE dal foglio 'Piano Finanziario' del file precedente.
+
+    Legge il foglio il cui nome contiene "Piano Finanziario" (con fallback al
+    primo foglio disponibile). Restituisce le righe SOPRA "TOTALE ENTRATE" che
+    hanno un'etichetta non vuota e almeno un valore numerico nei mesi aperti
+    (>= primo_mese_aperto), escludendo righe con label che contengono:
+    SALDO, TOTALE, DATA, BANCHE.
+
+    Ritorna: [{"nome": <label>, "mesi": {mese: valore}}], solo mesi aperti.
+    """
+    wb = openpyxl.load_workbook(BytesIO(pf_bytes), data_only=True)
+
+    # Trova il foglio riepilogo
+    ws = None
+    for name in wb.sheetnames:
+        if "piano finanziario" in name.lower():
+            ws = wb[name]
+            break
+    if ws is None:
+        ws = wb.worksheets[0]
+
+    mc = _build_month_col_map(ws)
+
+    # Trova la riga "TOTALE ENTRATE"
+    riga_tot_entrate = None
+    for r in range(1, ws.max_row + 1):
+        label = str(ws.cell(row=r, column=2).value or "").strip().upper()
+        if "TOTALE ENTRATE" in label:
+            riga_tot_entrate = r
+            break
+
+    if riga_tot_entrate is None:
+        return []
+
+    result: list[dict] = []
+    for r in range(1, riga_tot_entrate):
+        label = str(ws.cell(row=r, column=2).value or "").strip()
+        if not label:
+            continue
+        upper = label.upper()
+        if any(frag in upper for frag in _ENTRATE_SKIP_FRAGMENTS):
+            continue
+        mesi_aperti: dict[int, float] = {}
+        for m, col in mc.items():
+            if m < primo_mese_aperto:
+                continue
+            v = ws.cell(row=r, column=col).value
+            if isinstance(v, (int, float)) and round(float(v), 2) != 0:
+                mesi_aperti[m] = round(float(v), 2)
+        if not mesi_aperti:
+            continue
+        result.append({"nome": label, "mesi": mesi_aperti})
+
+    return result
 
 
 def estrai_previsioni(

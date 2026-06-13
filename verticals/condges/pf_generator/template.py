@@ -138,14 +138,16 @@ def scrivi_riepilogo(
     entrate: list[dict],
     voci_attive: list[str],
     primo_mese_aperto: int,
+    saldo_iniziale: float = 0.0,
 ) -> None:
-    """Foglio 'Piano Finanziario': entrate carried + uscite come formule
-    cross-sheet verso il TOTALE (riga 3) dei fogli voce.
+    """Foglio 'Piano Finanziario': spina di proiezione della cassa.
 
-    NOTA SCOPE v1 SEMPLIFICATO: questo riepilogo contiene entrate, uscite e
-    cash flow. Saldi banche / SALDO MESE PRECED / affidamenti del layout di
-    Rosa entrano in iterazione successiva (Task 8 o successivo) — il foglio
-    legacy resta consultabile nel file precedente.
+    Per ogni mese aperto:
+        SALDO INIZIALE + TOTALE ENTRATE − TOTALE USCITE = SALDO PROIETTATO
+
+    Il SALDO PROIETTATO del mese M è il SALDO INIZIALE del mese M+1.
+    Il primo mese aperto ha SALDO INIZIALE = saldo_iniziale (ancora reale da BQ).
+    Mesi passati: colonne grigie, nessun valore né formula.
     """
     ws = wb.create_sheet("Piano Finanziario", 0)
     ws.cell(row=1, column=2, value=f"{societa} — Piano Finanziario {anno}").font = Font(
@@ -159,7 +161,15 @@ def scrivi_riepilogo(
     ws.freeze_panes = ws.cell(row=RIGA_HEADER_MESI + 1, column=3)
     ws.column_dimensions["B"].width = 34
 
-    r = 4
+    r = 3  # prima riga dopo header mesi
+
+    # SALDO INIZIALE row — memorizza per dopo (per la cascata)
+    riga_saldo_iniziale = r
+    c_label = ws.cell(row=r, column=2, value="SALDO INIZIALE")
+    c_label.font = Font(bold=True)
+    r += 1
+
+    # ENTRATE block
     ws.cell(row=r, column=2, value="ENTRATE").font = Font(bold=True)
     r += 1
     prima_entrata = r
@@ -167,43 +177,85 @@ def scrivi_riepilogo(
         _scrivi_riga(ws, r, None, e["nome"], e["mesi"], blu=True)
         r += 1
     riga_tot_entrate = r
-    for m in range(1, 13):
+    for m in range(primo_mese_aperto, 13):
         col = get_column_letter(col_mese(m))
-        ws.cell(
-            row=r, column=col_mese(m), value=f"=SUM({col}{prima_entrata}:{col}{r - 1})"
-        ).font = Font(bold=True)
+        cell = ws.cell(
+            row=r,
+            column=col_mese(m),
+            value=f"=SUM({col}{prima_entrata}:{col}{r - 1})",
+        )
+        cell.font = Font(bold=True)
+        cell.number_format = NUMFMT_CONTABILE
     ws.cell(row=r, column=2, value="TOTALE ENTRATE").font = Font(bold=True)
+    r += 1
 
-    r += 2
+    # USCITE block
     ws.cell(row=r, column=2, value="USCITE").font = Font(bold=True)
     r += 1
     prima_uscita = r
     for voce_id in voci_attive:
         nome_foglio = VOCE_SHEET_NAME[voce_id]
         ws.cell(row=r, column=2, value=nome_foglio)
-        for m in range(1, 13):
+        for m in range(primo_mese_aperto, 13):
             col = get_column_letter(col_mese(m))
-            ws.cell(
-                row=r, column=col_mese(m), value=f"='{nome_foglio}'!{col}{RIGA_TOTALE}"
+            cell = ws.cell(
+                row=r,
+                column=col_mese(m),
+                value=f"='{nome_foglio}'!{col}{RIGA_TOTALE}",
             )
+            cell.number_format = NUMFMT_CONTABILE
         r += 1
     riga_tot_uscite = r
-    for m in range(1, 13):
+    for m in range(primo_mese_aperto, 13):
         col = get_column_letter(col_mese(m))
-        ws.cell(
-            row=r, column=col_mese(m), value=f"=SUM({col}{prima_uscita}:{col}{r - 1})"
-        ).font = Font(bold=True)
-    ws.cell(row=r, column=2, value="TOTALE USCITE").font = Font(bold=True)
-
-    r += 2
-    ws.cell(row=r, column=2, value="CASH FLOW").font = Font(bold=True)
-    for m in range(1, 13):
-        col = get_column_letter(col_mese(m))
-        ws.cell(
+        cell = ws.cell(
             row=r,
             column=col_mese(m),
-            value=f"={col}{riga_tot_entrate}-{col}{riga_tot_uscite}",
+            value=f"=SUM({col}{prima_uscita}:{col}{r - 1})",
         )
+        cell.font = Font(bold=True)
+        cell.number_format = NUMFMT_CONTABILE
+    ws.cell(row=r, column=2, value="TOTALE USCITE").font = Font(bold=True)
+    r += 1
+
+    # SALDO PROIETTATO row
+    riga_saldo_proiettato = r
+    c_label = ws.cell(row=r, column=2, value="SALDO PROIETTATO")
+    c_label.font = Font(bold=True)
+    for m in range(primo_mese_aperto, 13):
+        col = get_column_letter(col_mese(m))
+        col_si = get_column_letter(col_mese(m))  # same column, different rows
+        cell = ws.cell(
+            row=r,
+            column=col_mese(m),
+            value=(
+                f"={col_si}{riga_saldo_iniziale}"
+                f"+{col_si}{riga_tot_entrate}"
+                f"-{col_si}{riga_tot_uscite}"
+            ),
+        )
+        cell.font = Font(bold=True)
+        cell.number_format = NUMFMT_CONTABILE
+
+    # Now fill SALDO INIZIALE: first open month = anchor value,
+    # subsequent months = formula -> SALDO PROIETTATO of previous month
+    prev_col: str | None = None
+    for m in range(primo_mese_aperto, 13):
+        col = get_column_letter(col_mese(m))
+        if prev_col is None:
+            # Anchor: real certified balance
+            cell = ws.cell(
+                row=riga_saldo_iniziale, column=col_mese(m), value=saldo_iniziale
+            )
+        else:
+            # Formula: SALDO PROIETTATO of previous month
+            cell = ws.cell(
+                row=riga_saldo_iniziale,
+                column=col_mese(m),
+                value=f"={prev_col}{riga_saldo_proiettato}",
+            )
+        cell.number_format = NUMFMT_CONTABILE
+        prev_col = col
 
 
 def scrivi_controlli(wb: Workbook, righe: list[dict]) -> None:

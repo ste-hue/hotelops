@@ -85,6 +85,7 @@ def genera_pf(
     anno: int,
     primo_mese_aperto: int,
     entrate: list[dict] | None = None,
+    saldo_iniziale: float = 0.0,
 ) -> tuple[bytes, dict]:
     per_voce, unmapped = blocco_a_per_voce(
         scad_df,
@@ -135,6 +136,7 @@ def genera_pf(
         entrate=entrate or [],
         voci_attive=voci_attive,
         primo_mese_aperto=primo_mese_aperto,
+        saldo_iniziale=saldo_iniziale,
     )
     scrivi_da_mappare(wb, unmapped)
 
