@@ -183,8 +183,12 @@ def hide_past_months(
             break
     if target_col is None:
         return
+    # Nasconde SOLO le colonne-mese passate; lascia visibili le colonne non-mese
+    # (es. lo snapshot INTUR 'DATA RILEVAZ' in C, che porta l'anchor).
     for c in range(first_col, target_col):
-        ws.column_dimensions[get_column_letter(c)].hidden = True
+        v = ws.cell(row=2, column=c).value
+        if v and str(v).strip().upper() in MONTHS_IT:
+            ws.column_dimensions[get_column_letter(c)].hidden = True
 
 
 def hide_past_columns_rotation(wb, primo_mese_aperto: int) -> None:

@@ -34,6 +34,21 @@ def test_hide_past_months_master():
     assert ws.cell(row=6, column=3).value == 1000
 
 
+def test_hide_past_months_preserva_colonna_snapshot():
+    """Layout INTUR fixed-snapshot: C è lo snapshot (DATA RILEVAZ, non un mese),
+    i mesi partono da D. La colonna snapshot NON va nascosta."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.cell(row=2, column=3, value="30/04/2026")  # C = snapshot, non un mese
+    for i, lab in enumerate(["MARZO", "APRILE", "MAGGIO", "GIUGNO"]):
+        ws.cell(row=2, column=4 + i, value=lab)  # D=MARZO ... F=MAGGIO
+    hide_past_months(ws, 3, 18, primo_mese_aperto=5)
+    assert ws.column_dimensions["C"].hidden is False  # snapshot preservato
+    assert ws.column_dimensions["D"].hidden is True  # MARZO passato
+    assert ws.column_dimensions["E"].hidden is True  # APRILE passato
+    assert ws.column_dimensions["F"].hidden is False  # MAGGIO aperto
+
+
 def test_hide_past_months_no_target_noop():
     # nessun header MAGGIO → no-op, niente nascosto
     wb = openpyxl.Workbook()
