@@ -1,7 +1,9 @@
 """Template e assemblaggio workbook generato."""
+
 from __future__ import annotations
 
 import openpyxl
+from openpyxl.utils import get_column_letter
 
 from verticals.condges.app_scadenzario import _build_month_col_map
 from verticals.condges.pf_generator.costanti import (
@@ -10,7 +12,12 @@ from verticals.condges.pf_generator.costanti import (
     RIGA_TOTALE,
     col_mese,
 )
-from verticals.condges.pf_generator.template import scrivi_foglio_voce
+from verticals.condges.pf_generator.template import (
+    scrivi_controlli,
+    scrivi_da_mappare,
+    scrivi_foglio_voce,
+    scrivi_riepilogo,
+)
 
 
 def _blocco_a():
@@ -22,8 +29,11 @@ def _blocco_a():
 
 def _previsioni():
     return [
-        {"codice": 1076, "nome": "Noleggio Tesla",
-         "mesi": {m: 1030.64 for m in range(5, 13)}},
+        {
+            "codice": 1076,
+            "nome": "Noleggio Tesla",
+            "mesi": {m: 1030.64 for m in range(5, 13)},
+        },
     ]
 
 
@@ -63,10 +73,12 @@ class TestFoglioVoce:
     def test_previsioni_e_totale_formula(self, tmp_path):
         ws = _scrivi(tmp_path)["Materie Prime e Consumo"]
         # previsione presente con valore ORIGINALE
-        trovato = [r for r in range(1, ws.max_row + 1)
-                   if ws.cell(row=r, column=2).value == "Noleggio Tesla"]
-        assert trovato and ws.cell(
-            row=trovato[0], column=col_mese(6)).value == 1030.64
+        trovato = [
+            r
+            for r in range(1, ws.max_row + 1)
+            if ws.cell(row=r, column=2).value == "Noleggio Tesla"
+        ]
+        assert trovato and ws.cell(row=trovato[0], column=col_mese(6)).value == 1030.64
         # riga totale = formula SUM che copre entrambi i blocchi
         f = ws.cell(row=RIGA_TOTALE, column=col_mese(6)).value
         assert isinstance(f, str) and f.startswith("=SUM(")
@@ -75,11 +87,90 @@ class TestFoglioVoce:
         wb = openpyxl.Workbook()
         wb.remove(wb.active)
         scrivi_foglio_voce(
-            wb, voce_id="USCITE_MATERIE_PRIME", blocco_a=_blocco_a(),
-            previsioni=_previsioni(), consuntivi={},
-            rettifica={6: -1030.64}, primo_mese_aperto=5,
+            wb,
+            voce_id="USCITE_MATERIE_PRIME",
+            blocco_a=_blocco_a(),
+            previsioni=_previsioni(),
+            consuntivi={},
+            rettifica={6: -1030.64},
+            primo_mese_aperto=5,
         )
         ws = wb["Materie Prime e Consumo"]
-        riga = [r for r in range(1, ws.max_row + 1)
-                if ws.cell(row=r, column=2).value == LABEL_RETTIFICA]
+        riga = [
+            r
+            for r in range(1, ws.max_row + 1)
+            if ws.cell(row=r, column=2).value == LABEL_RETTIFICA
+        ]
         assert riga and ws.cell(row=riga[0], column=col_mese(6)).value == -1030.64
+
+
+class TestFogliAccessori:
+    def test_da_mappare(self, tmp_path):
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)
+        scrivi_da_mappare(
+            wb,
+            [
+                {
+                    "codice": 125,
+                    "nome": "CENTRO DISTRIBUZIONI MAGLIO",
+                    "mesi": {6: 1086.80},
+                },
+            ],
+        )
+        ws = wb["DA MAPPARE"]
+        assert ws.cell(row=3, column=1).value == 125
+        assert ws.cell(row=3, column=col_mese(6)).value == 1086.80
+
+    def test_riepilogo_formule_cross_sheet(self, tmp_path):
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)
+        scrivi_foglio_voce(
+            wb,
+            voce_id="USCITE_UTENZE",
+            blocco_a=[],
+            previsioni=[
+                {"codice": None, "nome": "Stima bollette", "mesi": {6: 4250.0}}
+            ],
+            consuntivi={},
+            rettifica={},
+            primo_mese_aperto=5,
+        )
+        scrivi_riepilogo(
+            wb,
+            societa="ORTI",
+            anno=2026,
+            entrate=[{"nome": "Entrate Hotel", "mesi": {6: 150000.0}}],
+            voci_attive=["USCITE_UTENZE"],
+            primo_mese_aperto=5,
+        )
+        ws = wb["Piano Finanziario"]
+        col6 = get_column_letter(col_mese(6))
+        # almeno una formula che punta al totale del foglio Utenze
+        formule = [
+            ws.cell(row=r, column=col_mese(6)).value
+            for r in range(1, ws.max_row + 1)
+            if isinstance(ws.cell(row=r, column=col_mese(6)).value, str)
+        ]
+        assert any(
+            "Utenze" in f and f"{col6}{RIGA_TOTALE}" in f.replace("'", "")
+            for f in formule
+        )
+
+    def test_controlli(self, tmp_path):
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)
+        scrivi_controlli(
+            wb,
+            [
+                {"check": "codice↔nome vs CSV", "esito": "OK", "dettaglio": ""},
+                {
+                    "check": "quadratura export",
+                    "esito": "ERR",
+                    "dettaglio": "delta 12.30",
+                },
+            ],
+        )
+        ws = wb["Controlli"]
+        esiti = [ws.cell(row=r, column=2).value for r in range(2, 4)]
+        assert "OK" in esiti and "ERR" in esiti
