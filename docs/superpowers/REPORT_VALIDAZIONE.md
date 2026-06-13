@@ -1,0 +1,107 @@
+## Validazione ORTI maggio — candidato vs Rosa
+Verdetto: **PEGGIORE**
+
+### Errori (8) — da risolvere prima del cutover
+- [IMPORTO_SPOSTATO] Materie Prime e Consumo — Alnumar di Garofalo Massimiliano: stesso tot 1650.48, mesi diversi — m5: cand=0.0 rosa=1650.48, m6: cand=1650.48 rosa=0.0
+- [PARTITA_PERSA] Materie Prime e Consumo — Centro Distribuzione Maglio: cod 125 con partita aperta, in Rosa tot 1086.0, assente dal candidato
+- [IMPORTO_SPOSTATO] Materie Prime e Consumo — De Luca: stesso tot 768.94, mesi diversi — m5: cand=17.79 rosa=768.94, m6: cand=751.15 rosa=0.0
+- [FORNITORE_SBAGLIATO] Materie Prime e Consumo — cod 71: candidato 'Vicart' vs Rosa 'Valgarda Srl'
+- [FORNITORE_SBAGLIATO] Materie Prime e Consumo — cod 1306: candidato 'VITAGLIANO MAURIZIO' vs Rosa 'Vicart'
+- [PARTITA_PERSA] Materie Prime e Consumo — Vitagliano: cod 1222 con partita aperta, in Rosa tot 753.48, assente dal candidato
+- [FORNITORE_SBAGLIATO] Materie Prime e Consumo — cod 138: candidato 'SAL DE RISO COSTA D AMALFI S.R.L.' vs Rosa 'Romano Ciro'
+- [PARTITA_PERSA] Materie Prime e Consumo — SOCIETA' INGROSSO TELEVISORI ELETTRODOMESTICI AFFINI S.R.L.: cod 1602 con partita aperta, in Rosa tot 443.82, assente dal candidato
+
+### Differenze attese (38)
+- [SOLO_CANDIDATO_STRUTTURA] Godimento Beni di Terzi — Serverplan: presente solo nel candidato, tot 1663.1
+- [DOPPIO_CONTEGGIO] Consulenze — Team Work: Rosa 6832.0 ≈ 2× candidato 3416.0 (doppione di Rosa, candidato corretto)
+- [DOPPIO_CONTEGGIO] Consulenze — Hospitality Project: Rosa 6832.0 ≈ 2× candidato 3416.0 (doppione di Rosa, candidato corretto)
+- [SOLO_CANDIDATO_STRUTTURA] Consulenze — STUDIO QUATTRO S.R.L.: presente solo nel candidato, tot 1091.9
+- [DOPPIO_CONTEGGIO] Materie Prime e Consumo — Alberto D'Urso: Rosa 1752.84 ≈ 2× candidato 876.42 (doppione di Rosa, candidato corretto)
+- [RIMAPPATURA] Materie Prime e Consumo — Amalfi Web: nel candidato è in 'Canoni e servizi'
+- [DOPPIO_CONTEGGIO] Materie Prime e Consumo — Gallo Giovanni: Rosa 170.0 ≈ 2× candidato 85.0 (doppione di Rosa, candidato corretto)
+- [RIMAPPATURA] Materie Prime e Consumo — Hospitality Project: nel candidato è in 'Consulenze'
+- [RIMAPPATURA] Materie Prime e Consumo — IPEI SRL: nel candidato è in 'Varie ed Eventuali'
+- [RIMAPPATURA] Materie Prime e Consumo — Serverplan srl: nel candidato è in 'Godimento Beni di Terzi'
+- [RIMAPPATURA] Materie Prime e Consumo — Studio quattro: nel candidato è in 'Consulenze'
+- [PREVISIONE_AGGIUNTA_DA_ROSA] Materie Prime e Consumo — Sistemi ESolver: non in aprile/export (6=1332.68)
+- [PREVISIONE_AGGIUNTA_DA_ROSA] Materie Prime e Consumo — ACQUAVERDE SRL: non in aprile/export (5=13.86)
+- [SOLO_CANDIDATO_STRUTTURA] Materie Prime e Consumo — Casalinghi Sicignano: presente solo nel candidato, tot 514.16
+- [RETTIFICA] Canoni e servizi — RETTIFICA PARTITE/PREVISIONI: -378.2 (anti-doppio-conteggio)
+- [SOLO_CANDIDATO_STRUTTURA] Canoni e servizi — Amalfiweb S.r.l.s.: presente solo nel candidato, tot 4349.3
+- [SOLO_CANDIDATO_STRUTTURA] Canoni e servizi — Aruba: presente solo nel candidato, tot 14.52
+- [SOLO_CANDIDATO_STRUTTURA] Canoni e servizi — GOOGLE CLOUD ITALY S.R.L.: presente solo nel candidato, tot 6.96
+- [RETTIFICA] Utenze — RETTIFICA PARTITE/PREVISIONI: -10500.0 (anti-doppio-conteggio)
+- [PREVISIONE_AGGIUNTA_DA_ROSA] Utenze — Gas: non in aprile/export (5=6435.95)
+- [PREVISIONE_AGGIUNTA_DA_ROSA] Varie ed Eventuali — A. MIGLIORE S.R.L.: non in aprile/export (5=20000.0, 6=20000.0, 7=20000.0)
+- [RIMAPPATURA] Varie ed Eventuali — FEIO S.R.L.: nel candidato è in 'Materie Prime e Consumo'
+- [PREVISIONE_AGGIUNTA_DA_ROSA] Varie ed Eventuali — H & M HENNES & MAURITZ S.R.L.: non in aprile/export (5=299.13)
+- [PREVISIONE_AGGIUNTA_DA_ROSA] Varie ed Eventuali — Mana  srls: non in aprile/export (5=825.0)
+- [PREVISIONE_AGGIUNTA_DA_ROSA] Varie ed Eventuali — ROSANTO S.R.L.: non in aprile/export (5=160.0, 6=160.0)
+- [DOPPIO_CONTEGGIO] Varie ed Eventuali — DIECI S.R.L.S.: Rosa 396.02 ≈ 2× candidato 198.01 (doppione di Rosa, candidato corretto)
+- [DOPPIO_CONTEGGIO] Varie ed Eventuali — HAIR GALLERY EUROPE SRL: Rosa 31.68 ≈ 2× candidato 15.84 (doppione di Rosa, candidato corretto)
+- [RIMAPPATURA] Varie ed Eventuali — FERRIGNO MARIA C S N C: nel candidato è in 'Materie Prime e Consumo'
+- [PREVISIONE_AGGIUNTA_DA_ROSA] Varie ed Eventuali — Nola Ferramenta Srl: non in aprile/export (5=100.02)
+- [PREVISIONE_AGGIUNTA_DA_ROSA] Varie ed Eventuali — Re Denari di Marco Oliva & C. Sas: non in aprile/export (5=140.0)
+- [PREVISIONE_AGGIUNTA_DA_ROSA] Varie ed Eventuali — READYPRINT DI PIPITONE BRUNO: non in aprile/export (5=11.49)
+- [DOPPIO_CONTEGGIO] Varie ed Eventuali — Leroy Merlin Italia srl: Rosa 163.76 ≈ 2× candidato 81.88 (doppione di Rosa, candidato corretto)
+- [DOPPIO_CONTEGGIO] Varie ed Eventuali — MEDIAMARKET S.P.A. CON SOCIO UNICO: Rosa 427.76 ≈ 2× candidato 213.88 (doppione di Rosa, candidato corretto)
+- [RIMAPPATURA] Varie ed Eventuali — PREGIS S.P.A.: nel candidato è in 'Materie Prime e Consumo'
+- [RIMAPPATURA] Varie ed Eventuali — ADRA S.R.L.: nel candidato è in 'Materie Prime e Consumo'
+- [SOLO_CANDIDATO_STRUTTURA] Varie ed Eventuali — Apple Retail Italia: presente solo nel candidato, tot 22.5
+- [SOLO_CANDIDATO_STRUTTURA] Varie ed Eventuali — D.L. Brothers: presente solo nel candidato, tot 296.56
+- [SOLO_CANDIDATO_STRUTTURA] Varie ed Eventuali — IPEI srl: presente solo nel candidato, tot 681.98
+
+### Da chiarire (43) — lettura umana richiesta
+- [DIVERSO_DA_CHIARIRE] Godimento Beni di Terzi — Fitto Ramo d' Azienda: tot cand=150000.0 rosa=568425.69 — m5: cand=0.0 rosa=146998.53, m6: cand=50000.0 rosa=299427.16, m7: cand=0.0 rosa=122000.0, m11: cand=100000.0 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Godimento Beni di Terzi — Fitto AR: tot cand=150000.0 rosa=120000.0 — m6: cand=50000.0 rosa=0.0, m8: cand=0.0 rosa=120000.0, m11: cand=100000.0 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Godimento Beni di Terzi — Fitto CVM: tot cand=150000.0 rosa=100000.0 — m6: cand=50000.0 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Commissioni Portali — NEXI PAYMENTS S.p.A.: tot cand=5.49 rosa=2034.94 — m5: cand=5.49 rosa=2029.45, m6: cand=0.0 rosa=5.49
+- [DIVERSO_DA_CHIARIRE] Consulenze — Consulenza del lavoro: tot cand=10200.0 rosa=9822.9 — m5: cand=3900.0 rosa=3522.9
+- [DIVERSO_DA_CHIARIRE] Consulenze — Consulenza legale: tot cand=30000.0 rosa=33522.9 — m6: cand=0.0 rosa=3522.9
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — Adra srl: tot cand=374.22 rosa=160.38 — m5: cand=0.0 rosa=160.38, m6: cand=160.38 rosa=0.0, m8: cand=213.84 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — Amato Prisco pane: tot cand=708.24 rosa=367.38 — m6: cand=340.86 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — Bellagaia: tot cand=5160.25 rosa=3537.31 — m7: cand=1622.94 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — Di Sarno Coffee: tot cand=12678.6 rosa=9134.22 — m6: cand=1951.96 rosa=0.0, m7: cand=3437.06 rosa=1844.64
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — Fabbrocino Michele: tot cand=7287.06 rosa=1830.37 — m7: cand=3338.16 rosa=0.0, m8: cand=3405.5 rosa=1286.97
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — Feio Srl: tot cand=1764.85 rosa=969.9 — m6: cand=541.68 rosa=0.0, m7: cand=253.27 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — I.C.P srl: tot cand=3985.15 rosa=457.04 — m6: cand=1957.9 rosa=0.0, m7: cand=1570.21 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — Ingrosso frutta di Michele e Vincenzo: tot cand=1246.53 rosa=1144.74 — m5: cand=66.27 rosa=1144.74, m6: cand=1180.26 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — Le Croissant srl: tot cand=25979.78 rosa=14277.13 — m6: cand=5340.46 rosa=0.0, m7: cand=4669.79 rosa=0.0, m8: cand=1692.4 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — Pregis: tot cand=6316.88 rosa=408.89 — m6: cand=5907.99 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — AMAZON EU S.A R.L.: tot cand=620.27 rosa=0.0 — m5: cand=591.42 rosa=0.0, m6: cand=28.85 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — AP COMMERCIALE S.R.L.: tot cand=300.03 rosa=0.0 — m5: cand=149.28 rosa=0.0, m6: cand=150.75 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — Dr. Vranjes Firenze S.p.A.: tot cand=46.0 rosa=0.0 — m5: cand=46.0 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — EXORH DI CHIESA PAOLA: tot cand=148.0 rosa=0.0 — m5: cand=148.0 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — Gest. D.M.F. Srl: tot cand=3483.19 rosa=0.0 — m6: cand=3483.19 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — HAPPY CASA STORE S.R.L.: tot cand=60.06 rosa=0.0 — m5: cand=60.06 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — IDRO-TOP S.R.L.: tot cand=71.64 rosa=0.0 — m5: cand=71.64 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — KING CATERING S.R.L.: tot cand=165.5 rosa=0.0 — m5: cand=165.5 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — MIELE GIUSEPPE E FIGLI SPA: tot cand=15951.62 rosa=1913.03 — m5: cand=15951.62 rosa=1913.03
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — PEPPINO RISTORAZIONE S.R.L.: tot cand=72.0 rosa=0.0 — m5: cand=72.0 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — RISALITI SRL: tot cand=23.09 rosa=0.0 — m5: cand=23.09 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Materie Prime e Consumo — MARR SPA: tot cand=2948.93 rosa=2684.45 — m7: cand=720.16 rosa=455.68
+- [DIVERSO_DA_CHIARIRE] Salari e Stipendi — F24 : tot cand=287297.67 rosa=345998.0 — m5: cand=27000.0 rosa=33249.26, m6: cand=35000.0 rosa=44748.74, m7: cand=38000.0 rosa=50000.0, m8: cand=47500.0 rosa=60000.0, m9: cand=35000.0 rosa=50000.0, m10: cand=31797.67 rosa=35000.0
+- [DIVERSO_DA_CHIARIRE] Canoni e servizi — Proxima Service: tot cand=6679.5 rosa=6723.42 — m5: cand=6679.5 rosa=0.0, m6: cand=0.0 rosa=6723.42
+- [DIVERSO_DA_CHIARIRE] Canoni e servizi — Hoxell: tot cand=2145.0 rosa=2750.4 — m5: cand=0.0 rosa=605.4
+- [DIVERSO_DA_CHIARIRE] Canoni e servizi — Sistemi (E_solver): tot cand=1332.68 rosa=3832.68 — m6: cand=0.0 rosa=1332.68, m7: cand=1332.68 rosa=0.0, m9: cand=0.0 rosa=1250.0, m12: cand=0.0 rosa=1250.0
+- [DIVERSO_DA_CHIARIRE] Canoni e servizi — Noleggio Tesla: tot cand=1030.64 rosa=8245.12 — m5: cand=0.0 rosa=1030.64, m7: cand=0.0 rosa=1030.64, m8: cand=0.0 rosa=1030.64, m9: cand=0.0 rosa=1030.64, m10: cand=0.0 rosa=1030.64, m11: cand=0.0 rosa=1030.64, m12: cand=0.0 rosa=1030.64
+- [DIVERSO_DA_CHIARIRE] Canoni e servizi — Primavera Servizi Srl: tot cand=420.05 rosa=0.0 — m5: cand=420.05 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Tasse e Imposte — IMU: tot cand=5109.0 rosa=5325.0 — m6: cand=0.0 rosa=5325.0, m8: cand=5109.0 rosa=0.0
+- [DIVERSO_DA_CHIARIRE] Tasse e Imposte — IMPOSTA DI SOGGIORNO HP: tot cand=92020.0 rosa=103200.0 — m5: cand=2820.0 rosa=14000.0
+- [DIVERSO_DA_CHIARIRE] Tasse e Imposte — IMPOSTA DI SOGGIORNO AR: tot cand=13220.0 rosa=14540.0 — m5: cand=600.0 rosa=1920.0
+- [DIVERSO_DA_CHIARIRE] Tasse e Imposte — IMPOSTA DI SOGGIORNO CVM: tot cand=7270.0 rosa=7954.0 — m5: cand=450.0 rosa=1134.0
+- [DIVERSO_DA_CHIARIRE] Tasse e Imposte — IRES/IRAP: tot cand=345000.0 rosa=121000.0 — m6: cand=345000.0 rosa=121000.0
+- [DIVERSO_DA_CHIARIRE] Utenze — Energia elettrica: tot cand=141000.0 rosa=146620.09 — m5: cand=5500.0 rosa=6554.07, m6: cand=10500.0 rosa=15066.02
+- [DIVERSO_DA_CHIARIRE] Utenze — Acqua - Ausino: tot cand=10858.99 rosa=35801.12 — m5: cand=10858.99 rosa=8143.5, m6: cand=0.0 rosa=10407.62, m7: cand=0.0 rosa=4250.0, m8: cand=0.0 rosa=4500.0, m10: cand=0.0 rosa=4500.0, m12: cand=0.0 rosa=4000.0
+- [DIVERSO_DA_CHIARIRE] Varie ed Eventuali — CENTRO MODA S.R.L.: tot cand=1997.01 rosa=4615.02 — m5: cand=1997.01 rosa=2618.01, m6: cand=0.0 rosa=1997.01
+- [DIVERSO_DA_CHIARIRE] Varie ed Eventuali — MAGALDI LIFE SRL SOC. UNIP.: tot cand=120.17 rosa=118.22 — m6: cand=61.06 rosa=59.11
+
+### Quadrature
+- Maggio: candidato=326,306.24 Rosa=387,477.32 Δ=-61,171.08
+- Giugno: candidato=1,245,832.18 Rosa=826,212.68 Δ=419,619.50
+- Luglio: candidato=382,984.66 Rosa=405,621.35 Δ=-22,636.69
+- Agosto: candidato=250,094.37 Rosa=258,991.24 Δ=-8,896.87
+- Settembre: candidato=119,078.91 Rosa=136,359.55 Δ=-17,280.64
+- Ottobre: candidato=97,486.42 Rosa=106,219.39 Δ=-8,732.97
+- Novembre: candidato=206,704.93 Rosa=207,735.57 Δ=-1,030.64
+- Dicembre: candidato=229,583.31 Rosa=235,863.95 Δ=-6,280.64
