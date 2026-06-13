@@ -7,11 +7,16 @@
 
 ## Problema
 
-Il source `ESOLVER_PF_ORTI_SNAPSHOT` (e l'equivalente INTUR) scrive `f_piano_finanziario_input`
-in modalità SNAPSHOT con natural key `(societa_id, voce_id, anno, mese, fonte)`: ogni file
-post-rotate ingerito **cancella** i valori della generazione precedente (DELETE-INSERT,
-`core/bq/write.py`). La curva forward storica ("cosa diceva il file di aprile su luglio")
-sopravvive solo come xlsx immutabile su GCS — non queryabile.
+Il registry dichiara `ESOLVER_PF_ORTI_SNAPSHOT` ma il comportamento reale è un terzo
+(verificato 2026-06-12 in `load_to_bq`, `ingest_piano_finanziario_xlsx.py:407`): il parser
+scrive WRITE_APPEND con dedup hash contro BQ, e poiché `hash_riga` non include la
+generazione (`societa|voce|anno|mese|fonte`), le righe di un nuovo file post-rotate
+risultano "già presenti" e vengono **silenziosamente scartate**. La tabella fossilizza la
+prima generazione ingerita: né memoria né presente aggiornato. La curva forward storica
+("cosa diceva il file di aprile su luglio") sopravvive solo come xlsx immutabile su GCS —
+non queryabile. (Il lifecycle SNAPSHOT del registry è metadata non applicata per questo
+parser: la DELETE-INSERT di `core/bq/write.py` vale per i parser che usano
+`bq_write_validated`, non qui.)
 
 `f_chiusura_mensile` non copre il gap: salva previsione-vs-consuntivo del solo mese chiuso
 al momento di `hotelops chiudi`, non la curva forward per generazione.
