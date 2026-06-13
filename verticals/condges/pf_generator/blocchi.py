@@ -83,10 +83,12 @@ def rettifica_doppio_conteggio(
     senza toccare le celle previsione originali (spec, nota di design).
     """
     a_per_codice: dict[int, dict[int, float]] = {}
-    a_per_nome: dict[str, dict[int, float]] = {}
+    nome_hits: dict[str, list[dict[int, float]]] = {}
     for r in blocco_a:
         a_per_codice[r["codice"]] = r["mesi"]
-        a_per_nome[_chiave_norm(r["nome"])] = r["mesi"]
+        nome_hits.setdefault(_chiave_norm(r["nome"]), []).append(r["mesi"])
+    # nomi ambigui (>1 fornitore stesso nome normalizzato) NON sono matchabili
+    a_per_nome = {k: v[0] for k, v in nome_hits.items() if len(v) == 1}
 
     rett: dict[int, float] = {}
     for r in blocco_b:

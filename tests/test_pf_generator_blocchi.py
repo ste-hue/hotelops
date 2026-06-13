@@ -133,3 +133,19 @@ class TestRettifica:
         blocco_a = [{"codice": 1, "nome": "X", "mesi": {6: 100.0}}]
         blocco_b = [{"codice": 2, "nome": "Y", "mesi": {6: 300.0}}]
         assert rettifica_doppio_conteggio(blocco_a, blocco_b) == {}
+
+    def test_nome_ambiguo_non_matcha(self):
+        # due fornitori blocco_a con stesso nome normalizzato; una previsione
+        # senza codice NON deve matchare nessuno dei due (ambiguo = no-op)
+        blocco_a = [
+            {"codice": 10, "nome": "Rossi", "mesi": {6: 100.0}},
+            {"codice": 20, "nome": "ROSSI", "mesi": {6: 200.0}},
+        ]
+        blocco_b = [{"codice": None, "nome": "rossi", "mesi": {6: 500.0}}]
+        assert rettifica_doppio_conteggio(blocco_a, blocco_b) == {}
+
+    def test_prev_minore_delle_partite(self):
+        blocco_a = [{"codice": 1, "nome": "X", "mesi": {6: 200.0}}]
+        blocco_b = [{"codice": 1, "nome": "X", "mesi": {6: 50.0}}]
+        # taglio = min(50, 200) = 50
+        assert rettifica_doppio_conteggio(blocco_a, blocco_b) == {6: -50.0}
