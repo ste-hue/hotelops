@@ -43,8 +43,12 @@ _CSS = f"""
   --pg-shadow-navy: 0 12px 32px rgba(0,55,100,.16);
 }}
 
-/* Body / widget → Jost geometrico */
-html, body, [class*="st-"], .stMarkdown, .stMetric {{
+/* Body / widget → Jost geometrico.
+   NB: scope su .stApp (eredita ai figli) — MAI [class*="st-"]: blanketava ogni
+   emotion-class `st-emotion-cache-*` e bleedava in dataframe overlay, expander e
+   controlli sidebar → testo mush/sovrapposto + freccia "espandi" invisibile
+   (currentColor forzato a slate). Bug viewer 2026-06-14. */
+html, body, .stApp, .stMarkdown, .stMetric {{
   font-family: var(--pg-font-sans);
   color: var(--pg-slate);
 }}
@@ -115,8 +119,36 @@ h1 {{ font-weight: 600; letter-spacing: 0.04em; }}
 /* Sidebar nav su sabbia calda */
 [data-testid="stSidebar"] {{ background: var(--pg-sand); }}
 
+/* Controllo "espandi sidebar" sempre visibile e navy: la freccia » usa
+   currentColor → spariva (col vecchio blanket). Difensivo per il viewer. */
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stSidebarCollapsedControl"] * {{
+  color: var(--pg-navy) !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}}
+
 /* Link / underline cyan */
 a {{ color: var(--pg-azure); text-decoration-color: var(--pg-sky); }}
+
+/* ── Mobile (<= 640px) ──────────────────────────────────────────────────
+   Streamlit non impila le colonne da solo: si schiacciano. Qui: meno padding,
+   colonne che vanno a capo (KPI card 2×2), wordmark/heading rimpiccioliti. */
+@media (max-width: 640px) {{
+  [data-testid="stMainBlockContainer"], .block-container {{
+    padding-left: 0.8rem !important; padding-right: 0.8rem !important;
+    padding-top: 2.5rem !important;
+  }}
+  [data-testid="stHorizontalBlock"] {{ flex-wrap: wrap !important; gap: 0.6rem !important; }}
+  [data-testid="stColumn"], [data-testid="column"] {{
+    min-width: 45% !important; flex: 1 1 45% !important;
+  }}
+  .pg-wordmark {{ font-size: 1.15rem; letter-spacing: 0.1em; }}
+  .pg-descriptor {{ font-size: 1.2rem; }}
+  h1 {{ font-size: 1.5rem; letter-spacing: 0.02em; }}
+  h2, h3 {{ font-size: 1.2rem; }}
+  [data-testid="stMetricValue"] {{ font-size: 1.4rem; }}
+}}
 </style>
 """
 
