@@ -148,6 +148,15 @@ a {{ color: var(--pg-azure); text-decoration-color: var(--pg-sky); }}
   h1 {{ font-size: 1.5rem; letter-spacing: 0.02em; }}
   h2, h3 {{ font-size: 1.2rem; }}
   [data-testid="stMetricValue"] {{ font-size: 1.4rem; }}
+  /* il controllo "apri sidebar" deve essere visibile e toccabile su mobile
+     (altrimenti la nav — che vive nella sidebar — è irraggiungibile) */
+  [data-testid="stSidebarCollapsedControl"] {{
+    visibility: visible !important; opacity: 1 !important; display: flex !important;
+    background: var(--pg-navy) !important; border-radius: 0 0 12px 0 !important;
+    padding: 0.25rem 0.4rem !important; z-index: 999 !important;
+  }}
+  [data-testid="stSidebarCollapsedControl"] svg,
+  [data-testid="stSidebarCollapsedControl"] span {{ color: #fff !important; }}
 }}
 </style>
 """

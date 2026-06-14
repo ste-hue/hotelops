@@ -22,7 +22,12 @@ from verticals.hub import home  # noqa: E402
 from verticals.hub.pages_ import fb, mutui, reviews  # noqa: E402
 from verticals.hub.theme import inject_brand  # noqa: E402
 
-st.set_page_config(page_title="Panorama · HotelOps", page_icon="🏨", layout="wide")
+st.set_page_config(
+    page_title="Panorama · HotelOps",
+    page_icon="🏨",
+    layout="wide",
+    initial_sidebar_state="expanded",  # mobile: la nav È la sidebar → parte aperta
+)
 inject_brand(hide_chrome=True)  # viewer: chrome Streamlit nascosta
 
 
