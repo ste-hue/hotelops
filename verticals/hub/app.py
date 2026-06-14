@@ -29,6 +29,7 @@ pg = st.navigation(
         st.Page(reviews.render, title="Reviews", icon="⭐", url_path="reviews"),
         st.Page(mutui.render, title="Mutui", icon="🏦", url_path="mutui"),
         st.Page(ingest.render, title="Ingest", icon="📥", url_path="ingest"),
-    ]
+    ],
+    position="top",  # nav in barra superiore (mobile-friendly)
 )
 pg.run()
