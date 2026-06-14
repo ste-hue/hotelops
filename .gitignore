@@ -37,3 +37,7 @@ verticals/hub/publish/site/data/*.json
 /docs/superpowers/plans/2026-04-07-app-cdg.md
 /docs/superpowers/specs/2026-04-11-tripcom-integration-design.md
 .superpowers/
+
+# Stray raw exports dropped in ingest/ (belong in GCS via intake, not the repo)
+ingest/*.xlsx
+ingest/*.csv

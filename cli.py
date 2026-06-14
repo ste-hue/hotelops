@@ -914,43 +914,6 @@ def cmd_reconcile(args):
 # ── Main ────────────────────────────────────────────────────────────────────
 
 
-def cmd_ingest_stream(args):
-    """Continuously ingest data from configured sources into GCS.
-
-    Reads GCS configuration from environment variables:
-    GCS_PROJECT, GCS_BUCKET_DEST, and optionally GCS_SERVICE_ACCOUNT_JSON.
-    Registers a LocalFolderAdapter if --local-folder is provided.
-    """
-    import os
-    from core.ingest_manager import IngestManager
-    from core.sources.local_folder import LocalFolderAdapter
-
-    gcs_project = os.getenv("GCS_PROJECT")
-    dest_bucket = os.getenv("GCS_BUCKET_DEST")
-    service_account = os.getenv("GCS_SERVICE_ACCOUNT_JSON") or None
-    if not gcs_project or not dest_bucket:
-        raise RuntimeError(
-            "GCS_PROJECT and GCS_BUCKET_DEST must be set in the environment"
-        )
-
-    manager = IngestManager(
-        gcs_project=gcs_project,
-        dest_bucket=dest_bucket,
-        service_account_json=service_account,
-    )
-
-    # Register local folder source if provided
-    if args.local_folder:
-        if not os.path.isdir(args.local_folder):
-            raise RuntimeError(f"Local folder does not exist: {args.local_folder}")
-        manager.register(
-            "local_folder", LocalFolderAdapter("generic", args.local_folder)
-        )
-
-    # Future: register other adapters (e.g., GCS bucket, HTTP endpoint)
-    manager.run(poll_interval=args.poll_interval, dry_run=args.dry_run)
-
-
 def cmd_publish_export(args):
     import subprocess
     from datetime import datetime, timezone
@@ -1273,28 +1236,6 @@ def main():
         "--dry-run",
         action="store_true",
         help="Mostra plan senza scrivere (no intake, no promote)",
-    )
-
-    # ingest-stream (continuous ingestion)
-    p_stream = sub.add_parser(
-        "ingest-stream",
-        help="Continuously ingest from configured sources into GCS",
-    )
-    p_stream.add_argument(
-        "--poll-interval",
-        type=int,
-        default=60,
-        help="Seconds between polling cycles",
-    )
-    p_stream.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview actions without uploading",
-    )
-    p_stream.add_argument(
-        "--local-folder",
-        default=os.getenv("LOCAL_FOLDER_PATH", ""),
-        help="Path to a local folder to watch for Excel/CSV files",
     )
 
     p_lin = sub.add_parser(

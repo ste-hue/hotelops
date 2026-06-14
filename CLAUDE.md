@@ -103,9 +103,6 @@ cli.py      <- CLI entry point (hotelops command)
 - `core/bq/client.py` -- BigQuery client singleton (`get_client()`). 41 call sites consolidated 2026-04-19.
 - `core/parsers/accodamenti.py` -- Shared parser for HotelCube TXT accodamenti (H_/R_/C_ × Corr/Mov/Fatt). Extracted 2026-04-19 from ingest/banca/.
 - `core/pipeline_run.py` -- PipelineRun context manager for pipeline instrumentation (scrive `f_pipeline_runs`).
-- `core/ingest_manager.py` -- `IngestManager`: loop di ingestion incrementale source-adapter → GCS (`SourceAdapter` protocol, checkpoint via start_date). Usato da cli.py.
-- `core/start_date.py` -- Watermark per load incrementali: `START_DATE_MAP` (tabella BQ, colonna data, fallback) → `get_next_start_date()` / `update_last_processed()`.
-- `core/sources/local_folder.py` -- `LocalFolderAdapter`: watch di una cartella locale per nuovi Excel/CSV (adapter per IngestManager).
 - `core/ontology.yaml` -- ⚠️ **ORFANO**: nessun import nel repo (verificato 2026-06-12). Non cancellato — decidere se rimuovere o ricollegare.
 - `core/bq/views/` -- BigQuery view SQL definitions (source of truth). 26 SQL files.
 - `core/bq/dimensioni/` -- Dimension CSV sources (d_voci_piano_finanziario.csv, d_fornitori.csv, d_mapping_piano_finanziario.csv, d_saldi_banca_chiusura_mensile.csv).
@@ -169,7 +166,7 @@ Spec: `docs/superpowers/specs/2026-05-05-ingest-lineage-gcs-design.md`.
 - `verticals/reviews/PROPERTIES.md` -- Reference doc: actors, costs, property URLs, env vars.
 
 **Root**
-- `cli.py` -- CLI entry point (`hotelops` command). 28 subcommands (26 in cli.py + `pf-rotate`/`pf-normalize-intur` registrati da `verticals/condges/pf_rotate/cli_handler.py`). Large handlers in `verticals/condges/cli_commands.py` and `verticals/reviews/cli_commands.py`.
+- `cli.py` -- CLI entry point (`hotelops` command). 27 subcommands (25 in cli.py + `pf-rotate`/`pf-normalize-intur` registrati da `verticals/condges/pf_rotate/cli_handler.py`). Large handlers in `verticals/condges/cli_commands.py` and `verticals/reviews/cli_commands.py`.
 - `core/registry.yaml` -- Pipeline registry: file types, dest folders, BQ tables, signatures.
 
 ## GCP
