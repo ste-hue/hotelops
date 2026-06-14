@@ -99,15 +99,18 @@ h1 {{ font-weight: 600; letter-spacing: 0.04em; }}
   box-shadow: var(--pg-shadow-sm);
   padding: 1.1rem 1.2rem;
 }}
-[data-testid="stMetricValue"] {{
-  /* Jost compatto, non Cinzel largo: i valori-dato (date/numeri) devono STARE
-     nella card e andare a capo, non troncarsi a "2026...". */
-  font-family: var(--pg-font-sans);
+[data-testid="stMetricValue"], [data-testid="stMetricValue"] * {{
+  /* Colpisce ANCHE i figli: Streamlit mette nowrap+ellissi su un div interno,
+     non sul padre. + font più piccolo così "2026-05-08" sta nella card. */
+  font-family: var(--pg-font-sans) !important;
+  font-size: 1.3rem !important;
   font-weight: 600;
   color: var(--pg-navy);
   white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
   overflow-wrap: anywhere;
-  line-height: 1.15;
+  line-height: 1.2;
 }}
 [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * {{
   text-transform: uppercase; letter-spacing: 0.05em;
