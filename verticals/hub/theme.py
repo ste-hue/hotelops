@@ -100,12 +100,19 @@ h1 {{ font-weight: 600; letter-spacing: 0.04em; }}
   padding: 1.1rem 1.2rem;
 }}
 [data-testid="stMetricValue"] {{
-  font-family: var(--pg-font-display);
+  /* Jost compatto, non Cinzel largo: i valori-dato (date/numeri) devono STARE
+     nella card e andare a capo, non troncarsi a "2026...". */
+  font-family: var(--pg-font-sans);
+  font-weight: 600;
   color: var(--pg-navy);
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
 }}
-[data-testid="stMetricLabel"] {{
-  text-transform: uppercase; letter-spacing: 0.12em;
-  font-size: 0.7rem; color: var(--pg-slate);
+[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * {{
+  text-transform: uppercase; letter-spacing: 0.05em;
+  font-size: 0.68rem; color: var(--pg-slate);
+  white-space: normal !important;  /* label a capo, niente "COMANDE ..." tagliato */
 }}
 
 /* Bottoni: pill, azure, Jost tracciato */
