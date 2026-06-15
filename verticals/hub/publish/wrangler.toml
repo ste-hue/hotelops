@@ -1,5 +1,7 @@
-name = "hotelops-hub"
-compatibility_date = "2024-11-01"
+# Vetrina bespoke (launcher app-store). Worker assets-only.
+# Refresh dati: `hotelops publish-export --out <questo>/site && npx wrangler deploy`
+name = "hotelops-vetrina"
+compatibility_date = "2026-06-01"
 
 [assets]
 directory = "./site"
