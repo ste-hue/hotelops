@@ -3,82 +3,7 @@
 import json
 from pathlib import Path
 
-from verticals.hub.publish.export import shape_fb, shape_meta, shape_reviews
-
-
-def test_shape_fb_contract():
-    rows = [
-        {
-            "anno": 2026, "mese": 5, "periodo": "2026-05-01",
-            "ricavi_fb_totali": 100.0, "costo_fb_totale": 30.0,
-            "food_cost_pct_ristorante": 0.28, "food_cost_pct_bar": 0.22,
-            "euro_per_pasto": 4.5, "coperti_hotel": 600,
-        },
-    ]
-    out = shape_fb(rows)
-    assert out["schema"] == 1
-    assert out["serie"][0]["periodo"] == "2026-05-01"
-    assert out["serie"][0]["food_cost_pct_ristorante"] == 0.28
-    json.dumps(out)  # dev'essere JSON-serializzabile
-
-
-def test_shape_fb_tollera_campi_mancanti():
-    out = shape_fb([{"anno": 2025, "mese": 1}])
-    assert out["serie"][0]["food_cost_pct_bar"] is None
-    json.dumps(out)
-
-
-def test_shape_reviews_contract():
-    out = shape_reviews(
-        serie=[{"periodo": "2026-06-01", "n": 48, "media": 8.0}],
-        piattaforme=[{"piattaforma": "BOOKING", "n": 340, "media": 8.1}],
-        recenti=[{"data_review": "2026-06-12", "piattaforma": "BOOKING",
-                  "punteggio_norm": 6.0, "titolo": "X", "riassunto_nlp": "Y",
-                  "sentiment_nlp": "negativo"}],
-    )
-    assert out["schema"] == 1
-    assert out["serie"][0]["media"] == 8.0
-    assert out["piattaforme"][0]["piattaforma"] == "BOOKING"
-    assert out["recenti"][0]["punteggio_norm"] == 6.0
-    assert out["tutte"] == []  # no tutte passed → empty list
-    json.dumps(out)
-
-
-def test_shape_reviews_tutte():
-    tutte_input = [
-        {
-            "data_review": "2026-06-12", "piattaforma": "BOOKING",
-            "business_unit_id": "HOTEL", "punteggio_norm": 7.5,
-            "categoria_nlp": "pulizia", "sentiment_nlp": "positivo",
-            "riassunto_nlp": "Camera pulita", "titolo": "Ottimo",
-        },
-        {
-            "data_review": "2026-05-20", "piattaforma": "TRIPADVISOR",
-            "business_unit_id": "RESIDENCE", "punteggio_norm": 4.0,
-            "categoria_nlp": "servizio", "sentiment_nlp": "negativo",
-            "riassunto_nlp": "Personale scortese", "titolo": "Deludente",
-            "extra_field": "ignorato",  # extra fields should be excluded
-        },
-    ]
-    out = shape_reviews(
-        serie=[],
-        piattaforme=[],
-        recenti=[],
-        tutte=tutte_input,
-    )
-    assert out["schema"] == 1
-    assert len(out["tutte"]) == 2
-    r0 = out["tutte"][0]
-    assert r0["data_review"] == "2026-06-12"
-    assert r0["piattaforma"] == "BOOKING"
-    assert r0["business_unit_id"] == "HOTEL"
-    assert r0["punteggio_norm"] == 7.5
-    assert r0["categoria_nlp"] == "pulizia"
-    assert r0["sentiment_nlp"] == "positivo"
-    assert r0["riassunto_nlp"] == "Camera pulita"
-    assert r0["titolo"] == "Ottimo"
-    assert "extra_field" not in r0
-    json.dumps(out)
+from verticals.hub.publish.export import shape_meta
 
 
 def test_shape_meta_contract():
@@ -90,6 +15,22 @@ def test_shape_meta_contract():
     assert out["generated_at"] == "2026-06-13T03:00:00Z"
     assert out["surfaces"]["fb"]["semaforo"] in ("🟢", "🟡", "🔴")
     assert out["surfaces"]["reviews"]["media_mese"] == 8.0
+    assert "fb" in out["surfaces"]
+    assert "reviews" in out["surfaces"]
+
+
+def test_export_all_produces_only_meta(tmp_path):
+    """export_all (dry_run) returns only _meta — fb.json and reviews.json removed."""
+    from unittest.mock import patch
+
+    fake_fresh = {"fb": {"giorni": 12}, "reviews": {"giorni": 3, "media_mese": 8.5}}
+    with patch("verticals.hub.freshness.carica_freshness", return_value=fake_fresh):
+        from verticals.hub.publish.export import export_all
+        result = export_all(str(tmp_path), "2026-06-14T00:00:00Z", dry_run=True)
+
+    assert set(result.keys()) == {"_meta"}, f"export_all produced unexpected keys: {set(result.keys())}"
+    assert result["_meta"]["surfaces"]["fb"]["giorni"] == 12
+    assert result["_meta"]["surfaces"]["reviews"]["media_mese"] == 8.5
 
 
 _SITE = Path(__file__).resolve().parents[1] / "verticals/hub/publish/site"
@@ -110,7 +51,6 @@ def test_apps_manifest_valid():
 
 def test_internal_cards_reference_exported_surfaces():
     # ogni card internal.kpi_from deve essere una surface che _meta.json espone
-    from verticals.hub.publish.export import shape_meta
     fresh = {"fb": {"giorni": 10}, "reviews": {"giorni": 2, "media_mese": 8.1}}
     meta = shape_meta("2026-01-01T00:00:00Z", fresh)
     surfaces = set(meta["surfaces"].keys())

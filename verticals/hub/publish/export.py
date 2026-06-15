@@ -1,13 +1,12 @@
-"""Export read-only BQ → JSON per il viewer static-edge (slice 1).
+"""Export read-only BQ → JSON per il viewer static-edge.
 
-NON scrive in BQ, non tocca lineage: solo SELECT sulle viste canoniche. I JSON sono
-output di presentazione derivati (rigenerabili), non una fonte. Contratto versionato
+NON scrive in BQ, non tocca lineage: solo freshness da BQ. Il JSON è
+output di presentazione derivato (rigenerabile), non una fonte. Contratto versionato
 (`schema`) così il frontend non si rompe quando l'output evolve.
 """
 
 from __future__ import annotations
 
-import decimal
 import json
 from pathlib import Path
 
@@ -16,22 +15,6 @@ from verticals.hub.freshness import semaforo
 # Soglie freshness coerenti con la home Streamlit (grain mensile per F&B).
 _FB_ATT, _FB_ALL = 35, 70
 _REV_ATT, _REV_ALL = 7, 14
-
-_FB_FIELDS = (
-    "anno", "mese", "periodo",
-    "ricavi_breakfast", "ricavi_food", "ricavi_beverage", "ricavi_fb_totali",
-    "costo_breakfast", "costo_ristorante", "costo_bar", "costo_fb_totale",
-    "pax_breakfast", "pax_lunch", "pax_dinner", "coperti_hotel",
-    "food_cost_pct_breakfast", "food_cost_pct_ristorante", "food_cost_pct_bar",
-    "food_cost_pct", "euro_per_pasto",
-    "ricavi_fb_totali_ap", "costo_fb_totale_ap", "coperti_hotel_ap",
-)
-
-
-def shape_fb(rows: list[dict]) -> dict:
-    """Righe v_fb_kpi → contratto JSON F&B. Tollera campi mancanti (None)."""
-    serie = [{k: r.get(k) for k in _FB_FIELDS} for r in rows]
-    return {"schema": 1, "serie": serie}
 
 
 def shape_meta(generated_at: str, fresh: dict) -> dict:
@@ -52,83 +35,13 @@ def shape_meta(generated_at: str, fresh: dict) -> dict:
     }
 
 
-_REVIEW_FIELDS = (
-    "data_review", "piattaforma", "business_unit_id", "punteggio_norm",
-    "categoria_nlp", "sentiment_nlp", "riassunto_nlp", "titolo",
-)
-
-
-def shape_reviews(
-    serie: list[dict],
-    piattaforme: list[dict],
-    recenti: list[dict],
-    tutte: list[dict] | None = None,
-) -> dict:
-    """Aggregati reviews → contratto JSON: trend mensile + per piattaforma + recenti + tutte."""
-    return {
-        "schema": 1,
-        "serie": [{"periodo": r.get("periodo"), "n": r.get("n"), "media": r.get("media")}
-                  for r in serie],
-        "piattaforme": [{"piattaforma": r.get("piattaforma"), "n": r.get("n"),
-                         "media": r.get("media")} for r in piattaforme],
-        "recenti": [{k: r.get(k) for k in (
-            "data_review", "piattaforma", "punteggio_norm", "titolo",
-            "riassunto_nlp", "sentiment_nlp")} for r in recenti],
-        "tutte": [{k: r.get(k) for k in _REVIEW_FIELDS} for r in (tutte or [])],
-    }
-
-
-def _jsonable(v):
-    if isinstance(v, decimal.Decimal):
-        return float(v)
-    if hasattr(v, "isoformat"):  # date / datetime
-        return v.isoformat()
-    return v
-
-
-def _fb_rows_from_bq(client) -> list[dict]:
-    q = """
-    SELECT * FROM `hotelops-suite.hotelops.v_fb_kpi`
-    WHERE anno >= 2025 ORDER BY anno, mese
-    """
-    return [{k: _jsonable(v) for k, v in dict(r.items()).items()}
-            for r in client.query(q).result()]
-
-
-def _reviews_from_bq(client) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
-    P = "hotelops-suite.hotelops.f_reviews"
-    rows = lambda q: [{k: _jsonable(v) for k, v in dict(r.items()).items()}  # noqa: E731
-                      for r in client.query(q).result()]
-    serie = rows(f"""
-        SELECT FORMAT_DATE('%Y-%m-01', DATE_TRUNC(PARSE_DATE('%Y-%m-%d', data_review), MONTH)) AS periodo,
-               COUNT(*) AS n, ROUND(AVG(punteggio_norm), 1) AS media
-        FROM `{P}` WHERE data_review IS NOT NULL
-        GROUP BY 1 ORDER BY 1 DESC LIMIT 18""")
-    piattaforme = rows(f"""
-        SELECT piattaforma, COUNT(*) AS n, ROUND(AVG(punteggio_norm), 1) AS media
-        FROM `{P}` WHERE PARSE_DATE('%Y-%m-%d', data_review) >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH)
-        GROUP BY 1 ORDER BY n DESC""")
-    recenti = rows(f"""
-        SELECT data_review, piattaforma, punteggio_norm, titolo, riassunto_nlp, sentiment_nlp
-        FROM `{P}` WHERE data_review IS NOT NULL ORDER BY data_review DESC LIMIT 12""")
-    tutte = rows(f"""
-        SELECT data_review, piattaforma, business_unit_id, punteggio_norm,
-               categoria_nlp, sentiment_nlp, riassunto_nlp, titolo
-        FROM `{P}` WHERE data_review IS NOT NULL ORDER BY data_review DESC LIMIT 2000""")
-    return list(reversed(serie)), piattaforme, recenti, tutte
-
-
 def export_all(out_dir: str, generated_at: str, dry_run: bool = False) -> dict:
-    """Genera tutti i JSON. Ritorna {nome: dict} per ispezione/dry-run."""
-    from core.bq.client import get_client
+    """Genera _meta.json. Ritorna {nome: dict} per ispezione/dry-run."""
     from verticals.hub.freshness import carica_freshness
 
-    client = get_client()
-    fresh = carica_freshness()  # riusa le query provate; usiamo solo fb+reviews
+    fresh = carica_freshness()
     payloads = {
         "_meta": shape_meta(generated_at, fresh),
-        "fb": shape_fb(_fb_rows_from_bq(client)),
-        "reviews": shape_reviews(*_reviews_from_bq(client)),  # tuple unpacking: serie, piattaforme, recenti, tutte
     }
     if not dry_run:
         data_dir = Path(out_dir) / "data"
