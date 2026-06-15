@@ -18,25 +18,20 @@ if _ROOT not in sys.path:
 
 import streamlit as st  # noqa: E402
 
-from verticals.hub import home  # noqa: E402
-from verticals.hub.pages_ import fb, mutui, reviews  # noqa: E402
+from verticals.hub.pages_ import fb, reviews  # noqa: E402
 from verticals.hub.theme import inject_brand  # noqa: E402
 
 st.set_page_config(page_title="Panorama · HotelOps", page_icon="🏨", layout="wide")
 inject_brand(hide_chrome=True)  # viewer: chrome Streamlit nascosta
 
 
-def _home_viewer():
-    home.render(audience="viewer")
-
-
+# Solo i dashboard ricchi (F&B, Reviews). La home/launcher è la vetrina (Cloudflare Worker);
+# Mutui/Banche sono card esterne lì. Qui niente home né Mutui → zero doppione.
 pg = st.navigation(
     [
-        st.Page(_home_viewer, title="Home", icon="🏨", default=True, url_path="home"),
-        st.Page(fb.render, title="F&B", icon="🍽", url_path="fb"),
+        st.Page(fb.render, title="F&B", icon="🍽", default=True, url_path="fb"),
         st.Page(reviews.render, title="Reviews", icon="⭐", url_path="reviews"),
-        st.Page(mutui.render, title="Mutui", icon="🏦", url_path="mutui"),
     ],
-    position="top",  # nav in barra superiore: su mobile niente sidebar da riaprire
+    position="top",
 )
 pg.run()
