@@ -19,5 +19,5 @@ function cardMetric(app, surface) {
     if (app.kpi_from === 'reviews') return surface.media_mese != null ? `${surface.media_mese}/10` : '—';
     if (app.kpi_from === 'fb') return surface.giorni != null ? `${surface.giorni} gg fa` : '—';
   }
-  return app.kind === 'external' ? 'Apri' : '—';
+  return '';  // niente KPI → riga metrica vuota (la freccia "Apri ↗" basta)
 }
