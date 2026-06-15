@@ -40,6 +40,44 @@ def test_shape_reviews_contract():
     assert out["serie"][0]["media"] == 8.0
     assert out["piattaforme"][0]["piattaforma"] == "BOOKING"
     assert out["recenti"][0]["punteggio_norm"] == 6.0
+    assert out["tutte"] == []  # no tutte passed → empty list
+    json.dumps(out)
+
+
+def test_shape_reviews_tutte():
+    tutte_input = [
+        {
+            "data_review": "2026-06-12", "piattaforma": "BOOKING",
+            "business_unit_id": "HOTEL", "punteggio_norm": 7.5,
+            "categoria_nlp": "pulizia", "sentiment_nlp": "positivo",
+            "riassunto_nlp": "Camera pulita", "titolo": "Ottimo",
+        },
+        {
+            "data_review": "2026-05-20", "piattaforma": "TRIPADVISOR",
+            "business_unit_id": "RESIDENCE", "punteggio_norm": 4.0,
+            "categoria_nlp": "servizio", "sentiment_nlp": "negativo",
+            "riassunto_nlp": "Personale scortese", "titolo": "Deludente",
+            "extra_field": "ignorato",  # extra fields should be excluded
+        },
+    ]
+    out = shape_reviews(
+        serie=[],
+        piattaforme=[],
+        recenti=[],
+        tutte=tutte_input,
+    )
+    assert out["schema"] == 1
+    assert len(out["tutte"]) == 2
+    r0 = out["tutte"][0]
+    assert r0["data_review"] == "2026-06-12"
+    assert r0["piattaforma"] == "BOOKING"
+    assert r0["business_unit_id"] == "HOTEL"
+    assert r0["punteggio_norm"] == 7.5
+    assert r0["categoria_nlp"] == "pulizia"
+    assert r0["sentiment_nlp"] == "positivo"
+    assert r0["riassunto_nlp"] == "Camera pulita"
+    assert r0["titolo"] == "Ottimo"
+    assert "extra_field" not in r0
     json.dumps(out)
 
 

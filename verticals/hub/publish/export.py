@@ -52,8 +52,19 @@ def shape_meta(generated_at: str, fresh: dict) -> dict:
     }
 
 
-def shape_reviews(serie: list[dict], piattaforme: list[dict], recenti: list[dict]) -> dict:
-    """Aggregati reviews → contratto JSON: trend mensile + per piattaforma + recenti."""
+_REVIEW_FIELDS = (
+    "data_review", "piattaforma", "business_unit_id", "punteggio_norm",
+    "categoria_nlp", "sentiment_nlp", "riassunto_nlp", "titolo",
+)
+
+
+def shape_reviews(
+    serie: list[dict],
+    piattaforme: list[dict],
+    recenti: list[dict],
+    tutte: list[dict] | None = None,
+) -> dict:
+    """Aggregati reviews → contratto JSON: trend mensile + per piattaforma + recenti + tutte."""
     return {
         "schema": 1,
         "serie": [{"periodo": r.get("periodo"), "n": r.get("n"), "media": r.get("media")}
@@ -63,6 +74,7 @@ def shape_reviews(serie: list[dict], piattaforme: list[dict], recenti: list[dict
         "recenti": [{k: r.get(k) for k in (
             "data_review", "piattaforma", "punteggio_norm", "titolo",
             "riassunto_nlp", "sentiment_nlp")} for r in recenti],
+        "tutte": [{k: r.get(k) for k in _REVIEW_FIELDS} for r in (tutte or [])],
     }
 
 
@@ -83,7 +95,7 @@ def _fb_rows_from_bq(client) -> list[dict]:
             for r in client.query(q).result()]
 
 
-def _reviews_from_bq(client) -> tuple[list[dict], list[dict], list[dict]]:
+def _reviews_from_bq(client) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
     P = "hotelops-suite.hotelops.f_reviews"
     rows = lambda q: [{k: _jsonable(v) for k, v in dict(r.items()).items()}  # noqa: E731
                       for r in client.query(q).result()]
@@ -99,7 +111,11 @@ def _reviews_from_bq(client) -> tuple[list[dict], list[dict], list[dict]]:
     recenti = rows(f"""
         SELECT data_review, piattaforma, punteggio_norm, titolo, riassunto_nlp, sentiment_nlp
         FROM `{P}` WHERE data_review IS NOT NULL ORDER BY data_review DESC LIMIT 12""")
-    return list(reversed(serie)), piattaforme, recenti
+    tutte = rows(f"""
+        SELECT data_review, piattaforma, business_unit_id, punteggio_norm,
+               categoria_nlp, sentiment_nlp, riassunto_nlp, titolo
+        FROM `{P}` WHERE data_review IS NOT NULL ORDER BY data_review DESC LIMIT 2000""")
+    return list(reversed(serie)), piattaforme, recenti, tutte
 
 
 def export_all(out_dir: str, generated_at: str, dry_run: bool = False) -> dict:
@@ -112,7 +128,7 @@ def export_all(out_dir: str, generated_at: str, dry_run: bool = False) -> dict:
     payloads = {
         "_meta": shape_meta(generated_at, fresh),
         "fb": shape_fb(_fb_rows_from_bq(client)),
-        "reviews": shape_reviews(*_reviews_from_bq(client)),
+        "reviews": shape_reviews(*_reviews_from_bq(client)),  # tuple unpacking: serie, piattaforme, recenti, tutte
     }
     if not dry_run:
         data_dir = Path(out_dir) / "data"
