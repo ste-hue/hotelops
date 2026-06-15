@@ -19,6 +19,27 @@ export function renderCards(cards, onOpen){
   }
 }
 
+const _FB_LABELS = {
+  anno:'Anno', mese:'Mese', periodo:'Periodo',
+  ricavi_breakfast:'Ricavi Breakfast', ricavi_food:'Ricavi Food', ricavi_beverage:'Ricavi Beverage',
+  ricavi_fb_totali:'Ricavi F&B totali', costo_breakfast:'Costo Breakfast',
+  costo_ristorante:'Costo Ristorante', costo_bar:'Costo Bar', costo_fb_totale:'Costo F&B totale',
+  pax_breakfast:'Pax Breakfast', pax_lunch:'Pax Lunch', pax_dinner:'Pax Dinner',
+  coperti_hotel:'Coperti hotel',
+  food_cost_pct_breakfast:'Food cost % Breakfast', food_cost_pct_ristorante:'Food cost % Ristorante',
+  food_cost_pct_bar:'Food cost % Bar', food_cost_pct:'Food cost % totale',
+  euro_per_pasto:'€/pasto',
+  ricavi_fb_totali_ap:'Ricavi F&B (AP)', costo_fb_totale_ap:'Costo F&B (AP)',
+  coperti_hotel_ap:'Coperti hotel (AP)',
+};
+
+function renderFBDetail(row){
+  document.querySelector('#fb-tabella tbody').innerHTML =
+    Object.entries(row).map(([k,v]) =>
+      `<tr><th>${_FB_LABELS[k] || k}</th><td>${v ?? '—'}</td></tr>`
+    ).join('');
+}
+
 export function renderFB(fb){
   const serie = (fb && fb.serie) || [];
   const labels = serie.map(r => r.periodo);
@@ -31,11 +52,25 @@ export function renderFB(fb){
     {label:'Ricavi F&B', data:serie.map(r=>r.ricavi_fb_totali), backgroundColor:AZURE},
     {label:'Costo F&B', data:serie.map(r=>r.costo_fb_totale), backgroundColor:CORAL},
   ]}, options:{responsive:true, plugins:{legend:{position:'bottom'}}}});
-  const last = serie[serie.length-1] || {};
-  const rows = [['Periodo', last.periodo], ['Food cost %', last.food_cost_pct],
-    ['€/pasto', last.euro_per_pasto], ['Ricavi F&B', last.ricavi_fb_totali]];
-  document.querySelector('#fb-tabella tbody').innerHTML =
-    rows.map(([k,v]) => `<tr><th>${k}</th><td>${v ?? '—'}</td></tr>`).join('');
+
+  const sel = document.getElementById('fb-mese');
+  sel.innerHTML = serie.map((r,i) => `<option value="${i}">${r.periodo || i}</option>`).join('');
+  sel.value = String(serie.length - 1);
+  if(serie.length) renderFBDetail(serie[serie.length - 1]);
+  sel.onchange = () => renderFBDetail(serie[Number(sel.value)] || {});
+}
+
+function _opt(val){ return `<option value="${val}">${val}</option>`; }
+
+function _renderRevList(rows){
+  const tbody = document.querySelector('#rev-tabella tbody');
+  const count = document.getElementById('rev-count');
+  tbody.innerHTML = rows.map(r =>
+    `<tr><td>${(r.data_review||'').slice(0,10)}</td><td>${r.piattaforma||''}</td>
+     <td>${r.business_unit_id||''}</td><td>${r.punteggio_norm ?? ''}</td>
+     <td>${r.categoria_nlp||''}</td><td>${r.sentiment_nlp||''}</td>
+     <td>${r.riassunto_nlp || r.titolo || ''}</td></tr>`).join('');
+  if(count) count.textContent = `${rows.length} recensioni`;
 }
 
 export function renderReviews(rev){
@@ -49,8 +84,29 @@ export function renderReviews(rev){
   chart('chart-rev-plat', {type:'bar', data:{labels:plat.map(p=>p.piattaforma),
     datasets:[{label:'Media', data:plat.map(p=>p.media), backgroundColor:AZURE}]},
     options:{responsive:true, indexAxis:'y', plugins:{legend:{display:false}}, scales:{x:{min:0,max:10}}}});
-  const rec = (rev && rev.recenti) || [];
-  document.querySelector('#rev-tabella tbody').innerHTML = rec.map(r =>
-    `<tr><td>${(r.data_review||'').slice(0,10)}</td><td>${r.piattaforma||''}</td>
-     <td>${r.punteggio_norm ?? ''}</td><td>${r.riassunto_nlp || r.titolo || ''}</td></tr>`).join('');
+
+  // full list: prefer `tutte`, fall back to `recenti` for old snapshots
+  const all = (rev && rev.tutte && rev.tutte.length) ? rev.tutte : (rev && rev.recenti) || [];
+
+  // populate filter selects
+  const selPiatt = document.getElementById('rev-piatt');
+  const selSent = document.getElementById('rev-sent');
+  const search = document.getElementById('rev-search');
+  const piattaforme = [...new Set(all.map(r => r.piattaforma).filter(Boolean))].sort();
+  const sentimenti = [...new Set(all.map(r => r.sentiment_nlp).filter(Boolean))].sort();
+  selPiatt.innerHTML = '<option value="">Tutte le piattaforme</option>' + piattaforme.map(_opt).join('');
+  selSent.innerHTML = '<option value="">Tutti i sentiment</option>' + sentimenti.map(_opt).join('');
+
+  function applyFilters(){
+    const p = selPiatt.value, s = selSent.value, q = (search.value || '').toLowerCase();
+    _renderRevList(all.filter(r =>
+      (!p || r.piattaforma === p) &&
+      (!s || r.sentiment_nlp === s) &&
+      (!q || (r.riassunto_nlp||'').toLowerCase().includes(q) || (r.titolo||'').toLowerCase().includes(q))
+    ));
+  }
+  selPiatt.onchange = applyFilters;
+  selSent.onchange = applyFilters;
+  search.oninput = applyFilters;
+  applyFilters();
 }

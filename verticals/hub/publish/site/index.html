@@ -29,7 +29,13 @@
       <div class="err" id="fb-error"></div>
       <div class="chart-box"><h3>Food cost % per bucket</h3><canvas id="chart-foodcost" height="120"></canvas></div>
       <div class="chart-box"><h3>Ricavi vs costi F&amp;B</h3><canvas id="chart-ricavi" height="120"></canvas></div>
-      <div class="chart-box"><h3>Ultimo mese consuntivato</h3><div class="tablewrap"><table id="fb-tabella"><tbody></tbody></table></div></div>
+      <div class="chart-box">
+        <div class="filter-row">
+          <h3>Dettaglio mese</h3>
+          <select id="fb-mese" aria-label="Seleziona mese"></select>
+        </div>
+        <div class="tablewrap"><table id="fb-tabella"><tbody></tbody></table></div>
+      </div>
     </section>
 
     <!-- Reviews -->
@@ -39,8 +45,21 @@
       <div class="err" id="rev-error"></div>
       <div class="chart-box"><h3>Media e volume</h3><canvas id="chart-rev-trend" height="120"></canvas></div>
       <div class="chart-box"><h3>Per piattaforma (12 mesi)</h3><canvas id="chart-rev-plat" height="120"></canvas></div>
-      <div class="chart-box"><h3>Ultime recensioni</h3><div class="tablewrap"><table id="rev-tabella">
-        <thead><tr><th>Data</th><th>Piatt.</th><th>Voto</th><th>Riassunto</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="chart-box">
+        <div class="filter-row">
+          <h3>Tutte le recensioni</h3>
+          <span class="rev-count" id="rev-count"></span>
+        </div>
+        <div class="filter-controls">
+          <select id="rev-piatt" aria-label="Filtra per piattaforma"></select>
+          <select id="rev-sent" aria-label="Filtra per sentiment"></select>
+          <input id="rev-search" type="search" placeholder="cerca…" aria-label="Cerca nel testo">
+        </div>
+        <div class="tablewrap"><table id="rev-tabella">
+          <thead><tr><th>Data</th><th>Piatt.</th><th>BU</th><th>Voto</th><th>Categoria</th><th>Sentiment</th><th>Riassunto</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
     </section>
 
     <footer>Dati: BigQuery · snapshot <span id="gen-at">—</span>. Sola lettura.</footer>
