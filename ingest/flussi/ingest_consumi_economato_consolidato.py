@@ -188,10 +188,13 @@ BQ_SCHEMA = [
     bigquery.SchemaField("importo", "FLOAT64"),
     bigquery.SchemaField("file_sorgente", "STRING"),
     bigquery.SchemaField("data_caricamento", "TIMESTAMP"),
+    bigquery.SchemaField("raw_object_id", "STRING"),
 ]
 
 
-def parse_file(path: Path, logger: logging.Logger) -> list[dict]:
+def parse_file(
+    path: Path, logger: logging.Logger, raw_object_id: str | None = None
+) -> list[dict]:
     wb = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
     ws = wb.active
     rows_raw = list(ws.iter_rows(values_only=True))
@@ -346,6 +349,7 @@ def parse_file(path: Path, logger: logging.Logger) -> list[dict]:
                 "importo": round(importo, 4),
                 "file_sorgente": path.name,
                 "data_caricamento": now.isoformat(),
+                "raw_object_id": raw_object_id,
             }
         )
 
@@ -416,6 +420,14 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--file", required=True, help="Path al file xlsx consolidato")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--raw-object-id", dest="raw_object_id", default=None,
+        help="lineage FK — timbrato su ogni riga (passato da `hotelops promote`)",
+    )
+    parser.add_argument(
+        "--societa", default=None,
+        help="ignorato — societa derivata dal contenuto; accettato da `hotelops promote`",
+    )
     args = parser.parse_args()
 
     log = logging.getLogger("ingest_consumi_consolidato")
@@ -432,7 +444,7 @@ def main() -> None:
     log.info(f"File: {path.name}")
     log.info(f"Dry-run: {args.dry_run}")
 
-    records = parse_file(path, log)
+    records = parse_file(path, log, raw_object_id=args.raw_object_id)
     print_summary(records, log)
 
     if args.dry_run:
