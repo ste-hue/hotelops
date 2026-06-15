@@ -7,7 +7,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Cormorant+Garamond:ital,wght@1,400&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/panorama.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -17,50 +16,7 @@
       <div class="stato" id="stato-dati">Carico…</div>
     </header>
 
-    <!-- HOME: launcher -->
-    <section data-view="home" class="active">
-      <div class="cards" id="cards"></div>
-    </section>
-
-    <!-- F&B -->
-    <section data-view="fb">
-      <div class="viewhead"><span class="back" data-back>← Home</span><div class="eyebrow">Food &amp; Beverage</div></div>
-      <h2>Food cost &amp; ricavi</h2>
-      <div class="err" id="fb-error"></div>
-      <div class="chart-box"><h3>Food cost % per bucket</h3><canvas id="chart-foodcost" height="120"></canvas></div>
-      <div class="chart-box"><h3>Ricavi vs costi F&amp;B</h3><canvas id="chart-ricavi" height="120"></canvas></div>
-      <div class="chart-box">
-        <div class="filter-row">
-          <h3>Dettaglio mese</h3>
-          <select id="fb-mese" aria-label="Seleziona mese"></select>
-        </div>
-        <div class="tablewrap"><table id="fb-tabella"><tbody></tbody></table></div>
-      </div>
-    </section>
-
-    <!-- Reviews -->
-    <section data-view="reviews">
-      <div class="viewhead"><span class="back" data-back>← Home</span><div class="eyebrow">Reputation</div></div>
-      <h2>Recensioni ospiti</h2>
-      <div class="err" id="rev-error"></div>
-      <div class="chart-box"><h3>Media e volume</h3><canvas id="chart-rev-trend" height="120"></canvas></div>
-      <div class="chart-box"><h3>Per piattaforma (12 mesi)</h3><canvas id="chart-rev-plat" height="120"></canvas></div>
-      <div class="chart-box">
-        <div class="filter-row">
-          <h3>Tutte le recensioni</h3>
-          <span class="rev-count" id="rev-count"></span>
-        </div>
-        <div class="filter-controls">
-          <select id="rev-piatt" aria-label="Filtra per piattaforma"></select>
-          <select id="rev-sent" aria-label="Filtra per sentiment"></select>
-          <input id="rev-search" type="search" placeholder="cerca…" aria-label="Cerca nel testo">
-        </div>
-        <div class="tablewrap"><table id="rev-tabella">
-          <thead><tr><th>Data</th><th>Piatt.</th><th>BU</th><th>Voto</th><th>Categoria</th><th>Sentiment</th><th>Riassunto</th></tr></thead>
-          <tbody></tbody>
-        </table></div>
-      </div>
-    </section>
+    <div class="cards" id="cards"></div>
 
     <footer>Dati: BigQuery · snapshot <span id="gen-at">—</span>. Sola lettura.</footer>
   </div>
