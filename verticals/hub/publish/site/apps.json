@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "apps": [
+    {
+      "id": "fb",
+      "title": "Food & Beverage",
+      "icon": "🍽",
+      "kind": "internal",
+      "view": "fb",
+      "kpi_from": "fb",
+      "subtitle": "food cost & ricavi"
+    },
+    {
+      "id": "reviews",
+      "title": "Reputation",
+      "icon": "⭐",
+      "kind": "internal",
+      "view": "reviews",
+      "kpi_from": "reviews",
+      "subtitle": "recensioni ospiti"
+    },
+    {
+      "id": "mutui",
+      "title": "Mutui",
+      "icon": "🏦",
+      "kind": "external",
+      "url": "https://mutui-tracker.ste-dellapietra.workers.dev/",
+      "subtitle": "ammortamenti & simulatore"
+    },
+    {
+      "id": "backoffice",
+      "title": "Back-office",
+      "icon": "🛠",
+      "kind": "external",
+      "url": "https://hotelops-hub-lvk3phpq4q-ew.a.run.app/",
+      "subtitle": "strumenti interni (Streamlit)"
+    }
+  ]
+}
