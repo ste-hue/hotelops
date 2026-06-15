@@ -1,6 +1,7 @@
 """Exporter static-edge — contratti di shape (offline, righe sintetiche, no BQ)."""
 
 import json
+from pathlib import Path
 
 from verticals.hub.publish.export import shape_fb, shape_meta, shape_reviews
 
@@ -52,9 +53,6 @@ def test_shape_meta_contract():
     assert out["surfaces"]["fb"]["semaforo"] in ("🟢", "🟡", "🔴")
     assert out["surfaces"]["reviews"]["media_mese"] == 8.0
 
-
-import json
-from pathlib import Path
 
 _SITE = Path(__file__).resolve().parents[1] / "verticals/hub/publish/site"
 
