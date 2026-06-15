@@ -19,25 +19,47 @@ export function renderCards(cards, onOpen){
   }
 }
 
-const _FB_LABELS = {
-  anno:'Anno', mese:'Mese', periodo:'Periodo',
-  ricavi_breakfast:'Ricavi Breakfast', ricavi_food:'Ricavi Food', ricavi_beverage:'Ricavi Beverage',
-  ricavi_fb_totali:'Ricavi F&B totali', costo_breakfast:'Costo Breakfast',
-  costo_ristorante:'Costo Ristorante', costo_bar:'Costo Bar', costo_fb_totale:'Costo F&B totale',
-  pax_breakfast:'Pax Breakfast', pax_lunch:'Pax Lunch', pax_dinner:'Pax Dinner',
-  coperti_hotel:'Coperti hotel',
-  food_cost_pct_breakfast:'Food cost % Breakfast', food_cost_pct_ristorante:'Food cost % Ristorante',
-  food_cost_pct_bar:'Food cost % Bar', food_cost_pct:'Food cost % totale',
-  euro_per_pasto:'€/pasto',
-  ricavi_fb_totali_ap:'Ricavi F&B (AP)', costo_fb_totale_ap:'Costo F&B (AP)',
-  coperti_hotel_ap:'Coperti hotel (AP)',
-};
+// ── Formattatori per la visualizzazione (no float grezzi) ──────────────────
+const _bad = v => v == null || isNaN(v);
+const eur  = v => _bad(v) ? '—' : '€ ' + Math.round(v).toLocaleString('it-IT');
+const eur2 = v => _bad(v) ? '—' : '€ ' + Number(v).toFixed(2).replace('.', ',');
+const pct  = v => _bad(v) ? '—' : (v * 100).toFixed(1).replace('.', ',') + '%';
+const num  = v => _bad(v) ? '—' : Math.round(v).toLocaleString('it-IT');
 
-function renderFBDetail(row){
-  document.querySelector('#fb-tabella tbody').innerHTML =
-    Object.entries(row).map(([k,v]) =>
-      `<tr><th>${_FB_LABELS[k] || k}</th><td>${v ?? '—'}</td></tr>`
-    ).join('');
+function _yoy(cur, ap){
+  if(_bad(cur) || _bad(ap) || ap === 0) return '';
+  const d = (cur / ap - 1) * 100, col = d >= 0 ? '#2e9e4f' : '#dc2626';
+  return ` <span style="color:${col}">(${d >= 0 ? '+' : ''}${d.toFixed(0)}%)</span>`;
+}
+
+function renderFBDetail(r){
+  const rows = [
+    ['RICAVI', null],
+    ['Ricavi F&B totali', eur(r.ricavi_fb_totali), 1],
+    ['— Breakfast', eur(r.ricavi_breakfast)],
+    ['— Food', eur(r.ricavi_food)],
+    ['— Beverage', eur(r.ricavi_beverage)],
+    ['FOOD COST', null],
+    ['Costo F&B totale', eur(r.costo_fb_totale), 1],
+    ['Food cost % totale', pct(r.food_cost_pct), 1],
+    ['— Breakfast', pct(r.food_cost_pct_breakfast)],
+    ['— Ristorante', pct(r.food_cost_pct_ristorante)],
+    ['— Bar', pct(r.food_cost_pct_bar)],
+    ['OPERATIVO', null],
+    ['€ / pasto', eur2(r.euro_per_pasto), 1],
+    ['Coperti hotel', num(r.coperti_hotel)],
+    ['Pax Breakfast / Lunch / Dinner', `${num(r.pax_breakfast)} / ${num(r.pax_lunch)} / ${num(r.pax_dinner)}`],
+    ['vs ANNO PREC.', null],
+    ['Ricavi F&B', eur(r.ricavi_fb_totali_ap) + _yoy(r.ricavi_fb_totali, r.ricavi_fb_totali_ap)],
+    ['Costo F&B', eur(r.costo_fb_totale_ap)],
+    ['Coperti hotel', num(r.coperti_hotel_ap)],
+  ];
+  document.querySelector('#fb-tabella tbody').innerHTML = rows.map(([label, val, bold]) => {
+    if(val === null) return `<tr><th colspan="2" style="background:#f3eee6;text-transform:uppercase;`
+      + `letter-spacing:.08em;font-size:.66rem;color:#00a8e1">${label}</th></tr>`;
+    const w = bold ? 'font-weight:600' : '';
+    return `<tr><th style="${w}">${label}</th><td style="${w}">${val}</td></tr>`;
+  }).join('');
 }
 
 export function renderFB(fb){
