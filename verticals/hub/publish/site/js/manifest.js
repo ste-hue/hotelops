@@ -2,7 +2,9 @@
 const J = (p) => fetch(p, {cache: 'no-store'}).then(r => { if(!r.ok) throw new Error(p); return r.json(); });
 
 export async function loadManifest() {
-  const [manifest, meta] = await Promise.all([J('apps.json'), J('data/_meta.json')]);
+  const manifest = await J('apps.json');
+  let meta = null;
+  try { meta = await J('data/_meta.json'); } catch { /* snapshot non ancora generato → card senza KPI */ }
   const surfaces = (meta && meta.surfaces) || {};
   const cards = manifest.apps.map(a => {
     const s = a.kpi_from ? surfaces[a.kpi_from] : null;
