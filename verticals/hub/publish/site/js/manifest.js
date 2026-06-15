@@ -14,9 +14,10 @@ export async function loadManifest() {
 }
 
 function cardMetric(app, surface) {
-  if (app.kind === 'external') return app.icon ? 'Apri' : 'Apri';
-  if (!surface) return '—';
-  if (app.kpi_from === 'reviews') return surface.media_mese != null ? `${surface.media_mese}/10` : '—';
-  if (app.kpi_from === 'fb') return surface.giorni != null ? `${surface.giorni} gg fa` : '—';
-  return '—';
+  // mostra il KPI dallo snapshot anche se la card è un link esterno (es. → dashboard Streamlit)
+  if (app.kpi_from && surface) {
+    if (app.kpi_from === 'reviews') return surface.media_mese != null ? `${surface.media_mese}/10` : '—';
+    if (app.kpi_from === 'fb') return surface.giorni != null ? `${surface.giorni} gg fa` : '—';
+  }
+  return app.kind === 'external' ? 'Apri' : '—';
 }

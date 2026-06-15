@@ -5,19 +5,19 @@
       "id": "fb",
       "title": "Food & Beverage",
       "icon": "🍽",
-      "kind": "internal",
-      "view": "fb",
+      "kind": "external",
+      "url": "https://hotelops-hub-lvk3phpq4q-ew.a.run.app/fb",
       "kpi_from": "fb",
-      "subtitle": "food cost & ricavi"
+      "subtitle": "dashboard completo (Streamlit)"
     },
     {
       "id": "reviews",
       "title": "Reputation",
       "icon": "⭐",
-      "kind": "internal",
-      "view": "reviews",
+      "kind": "external",
+      "url": "https://hotelops-hub-lvk3phpq4q-ew.a.run.app/reviews",
       "kpi_from": "reviews",
-      "subtitle": "recensioni ospiti"
+      "subtitle": "dashboard completo (Streamlit)"
     },
     {
       "id": "mutui",
