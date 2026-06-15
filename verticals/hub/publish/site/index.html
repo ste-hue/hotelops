@@ -2,92 +2,49 @@
 <html lang="it">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Panorama · HotelOps — Direzione</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Panorama · HotelOps</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Cormorant+Garamond:ital@1&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/panorama.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div class="wrap">
     <header class="pg-header">
-      <span class="pg-wordmark">PANORAMA</span><span class="pg-descriptor">Direzione</span>
-      <div class="eyebrow" style="margin-top:.5rem">Amalfi Coast · Maiori</div>
+      <span class="pg-wordmark">PANORAMA</span><span class="pg-descriptor">HotelOps</span>
+      <div class="eyebrow" style="margin-top:.4rem">Amalfi Coast · Maiori</div>
       <div class="stato" id="stato-dati">Carico…</div>
     </header>
 
-    <!-- Card store: una per superficie, nella forma in cui esiste -->
-    <div class="cards">
-      <a class="card" href="#fb">
-        <h3>🍽 F&amp;B</h3>
-        <div class="metric" id="card-fb-metric">—</div>
-        <div class="sub" id="card-fb-sub">food cost ristorante (ultimo mese)</div>
-        <div class="arrow">Vedi sotto ↓</div>
-      </a>
-      <a class="card" href="#reviews">
-        <h3>⭐ Reputation</h3>
-        <div class="metric" id="card-rev-metric">—</div>
-        <div class="sub">media recensioni (mese)</div>
-        <div class="arrow">Vedi sotto ↓</div>
-      </a>
-      <a class="card" id="card-banche" href="#" target="_blank" rel="noopener">
-        <h3>🏛 Banche</h3>
-        <div class="metric">Looker</div>
-        <div class="sub">cashflow &amp; movimenti — live</div>
-        <div class="arrow">Apri report ↗</div>
-      </a>
-      <a class="card" href="https://mutui-tracker.ste-dellapietra.workers.dev/" target="_blank" rel="noopener">
-        <h3>🏦 Mutui</h3>
-        <div class="metric">Piani</div>
-        <div class="sub">ammortamenti &amp; simulatore</div>
-        <div class="arrow">Apri tracker ↗</div>
-      </a>
-    </div>
+    <!-- HOME: launcher -->
+    <section data-view="home" class="active">
+      <div class="cards" id="cards"></div>
+    </section>
 
-    <section id="fb">
-      <div class="eyebrow">Food &amp; Beverage</div>
+    <!-- F&B -->
+    <section data-view="fb">
+      <div class="viewhead"><span class="back" data-back>← Home</span><div class="eyebrow">Food &amp; Beverage</div></div>
       <h2>Food cost &amp; ricavi</h2>
-      <div id="fb-error"></div>
-      <div class="chart-box">
-        <h3>Food cost % per bucket — nel tempo</h3>
-        <canvas id="chart-foodcost" height="110"></canvas>
-      </div>
-      <div class="chart-box">
-        <h3>Ricavi vs costi F&amp;B — mensile</h3>
-        <canvas id="chart-ricavi" height="110"></canvas>
-      </div>
-      <div class="chart-box">
-        <h3>Ultimo mese consuntivato</h3>
-        <table id="fb-tabella"><tbody></tbody></table>
-      </div>
+      <div class="err" id="fb-error"></div>
+      <div class="chart-box"><h3>Food cost % per bucket</h3><canvas id="chart-foodcost" height="120"></canvas></div>
+      <div class="chart-box"><h3>Ricavi vs costi F&amp;B</h3><canvas id="chart-ricavi" height="120"></canvas></div>
+      <div class="chart-box"><h3>Ultimo mese consuntivato</h3><div class="tablewrap"><table id="fb-tabella"><tbody></tbody></table></div></div>
     </section>
 
-    <section id="reviews">
-      <div class="eyebrow">Reputation</div>
+    <!-- Reviews -->
+    <section data-view="reviews">
+      <div class="viewhead"><span class="back" data-back>← Home</span><div class="eyebrow">Reputation</div></div>
       <h2>Recensioni ospiti</h2>
-      <div id="rev-error"></div>
-      <div class="chart-box">
-        <h3>Media e volume — nel tempo</h3>
-        <canvas id="chart-rev-trend" height="110"></canvas>
-      </div>
-      <div class="chart-box">
-        <h3>Per piattaforma — ultimi 12 mesi</h3>
-        <canvas id="chart-rev-plat" height="110"></canvas>
-      </div>
-      <div class="chart-box">
-        <h3>Ultime recensioni</h3>
-        <table id="rev-tabella">
-          <thead><tr><th>Data</th><th>Piattaforma</th><th>Voto</th><th>Riassunto</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div class="err" id="rev-error"></div>
+      <div class="chart-box"><h3>Media e volume</h3><canvas id="chart-rev-trend" height="120"></canvas></div>
+      <div class="chart-box"><h3>Per piattaforma (12 mesi)</h3><canvas id="chart-rev-plat" height="120"></canvas></div>
+      <div class="chart-box"><h3>Ultime recensioni</h3><div class="tablewrap"><table id="rev-tabella">
+        <thead><tr><th>Data</th><th>Piatt.</th><th>Voto</th><th>Riassunto</th></tr></thead><tbody></tbody></table></div></div>
     </section>
 
-    <footer>
-      Dati: BigQuery · snapshot rigenerato dall'export <span id="gen-at">—</span>.
-      Vista di sola lettura.
-    </footer>
+    <footer>Dati: BigQuery · snapshot <span id="gen-at">—</span>. Sola lettura.</footer>
   </div>
-
-  <script src="js/app.js"></script>
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>
