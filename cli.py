@@ -655,6 +655,43 @@ def cmd_lineage_dispatch(args):
     cmd_lineage(args)
 
 
+# ── Sources (registry discoverability) ────────────────────────────────────
+
+
+def cmd_sources(args):
+    """Read-only: lista le source del registry lineage.
+
+    Risponde a "quale --source-name passo a intake?" leggendo solo il
+    registry (core/source_registry.yaml) — nessuna query BQ.
+    """
+    from core.lineage.source_resolver import load_registry
+
+    registry = load_registry()
+    rows = sorted(registry.sources.values(), key=lambda s: s.source_name)
+    if args.societa:
+        rows = [s for s in rows if s.societa == args.societa]
+    if args.system:
+        rows = [s for s in rows if s.system.upper() == args.system.upper()]
+
+    if not rows:
+        print("Nessuna source corrisponde ai filtri.")
+        return
+
+    flt = " ".join(x for x in (args.societa, args.system) if x)
+    print(f"{len(rows)} source" + (f" (filtro: {flt})" if flt else "") + "\n")
+    hdr = (
+        f"{'source_name':<40} {'soc':<6} {'lifecycle':<9} "
+        f"{'policy':<7} {'backend':<7} canonical_table"
+    )
+    print(hdr)
+    print("-" * len(hdr))
+    for s in rows:
+        print(
+            f"{s.source_name:<40} {s.societa:<6} {s.lifecycle:<9} "
+            f"{s.promotion_policy:<7} {s.raw_storage.backend:<7} {s.canonical_table}"
+        )
+
+
 # ── Capture (lineage-first single-file ingest) ────────────────────────────
 
 
@@ -1266,6 +1303,17 @@ def main():
         "--limit", type=int, default=20, help="Max righe in --list (default 20)"
     )
 
+    p_sources = sub.add_parser(
+        "sources",
+        help="Lineage: lista le source del registry (quale --source-name usare in intake)",
+    )
+    p_sources.add_argument(
+        "--societa", choices=["ORTI", "INTUR", "GROUP"], default=None
+    )
+    p_sources.add_argument(
+        "--system", default=None, help="Filtra per system (es. ESOLVER, MPS, POWERBI)"
+    )
+
     # ── Workspace (Gmail/Drive via DWD service account) ─────────────────────
     p_ws = sub.add_parser(
         "workspace",
@@ -1343,6 +1391,7 @@ def main():
         "promote": cmd_promote,
         "capture": cmd_capture,
         "lineage": cmd_lineage_dispatch,
+        "sources": cmd_sources,
         "workspace": cmd_workspace,
     }
 
