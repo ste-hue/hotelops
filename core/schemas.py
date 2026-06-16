@@ -579,6 +579,7 @@ class PmsStatisticheRow(BaseModel):
     fonte: str
     hash_riga: str
     data_caricamento: str
+    raw_object_id: Optional[str] = None
 
     @field_validator("occupazione_pct")
     @classmethod

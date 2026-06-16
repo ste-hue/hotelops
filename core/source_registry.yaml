@@ -481,6 +481,24 @@ sources:
       bucket: hotelops-raw
       path_template: "powerbi/produzione/ORTI"
 
+  POWERBI_OCCUPAZIONE_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: OCCUPAZIONE
+    dataset_label: "Produzione Consolidata Giornaliera — occupazione/presenze per struttura"
+    societa: ORTI
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_pms_statistiche
+    parser_module: ingest.flussi.ingest_occupazione_pms
+    natural_key: [business_unit_id, data]
+    loop_targets: [food_cost, monthly_close]
+    promotion_policy: AUTO
+    detector_category: occupazione_pms
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/occupazione/ORTI"
+
   # ── RistoCube Orders Report — APPEND ─────────────────────────────────────
   RISTOCUBE_ORDERS_ORTI_APPEND:
     system: RISTOCUBE
