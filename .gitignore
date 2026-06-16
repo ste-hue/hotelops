@@ -41,3 +41,6 @@ verticals/hub/publish/site/data/*.json
 # Stray raw exports dropped in ingest/ (belong in GCS via intake, not the repo)
 ingest/*.xlsx
 ingest/*.csv
+
+# Vendored reference examples (downloaded, hanno .git/.env propri — mai committare)
+integrations/examples/
