@@ -6,7 +6,7 @@
       "title": "Food & Beverage",
       "icon": "🍽",
       "kind": "external",
-      "url": "https://hotelops-hub-lvk3phpq4q-ew.a.run.app/fb",
+      "url": "https://hotelops-hub-lvk3phpq4q-ew.a.run.app/",
       "kpi_from": "fb",
       "subtitle": "dashboard completo (Streamlit)"
     },
