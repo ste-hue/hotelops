@@ -22,8 +22,22 @@ Minare le conversazioni reali per produrre **nuove righe `question ⟶ answer`**
 della knowledge base esistente) che colmano i **gap di knowledge**: domande che gli ospiti
 fanno davvero ma che la FAQ attuale non copre, o copre male.
 
-Il deliverable è un **CSV/TSV di candidati FAQ revisionabili a mano** — non un push automatico
-verso Keplero. Le risposte sono **bozze + evidenza**: mai inventare policy o prezzi.
+**Due deliverable** (entrambi proposti, gate umano, mai push automatico):
+1. **FAQ updated** (`keplero_faq_updated.tsv`) — la knowledge base, cosa il bot *sa*. Risposte
+   **bozza + evidenza**: mai inventare policy o prezzi.
+2. **System prompt v2** (`system_prompt_v2.md`) — come il bot *si comporta*. Redatto dopo aver
+   studiato i fallimenti reali, partendo dal system prompt v1 (Appendice A).
+
+### Tassonomia dei gap (cruciale per non confondere fallimenti con comportamento voluto)
+
+Il system prompt v1 (Appendice A) prevede al caso 5 il rimando allo staff "in tutti gli altri
+casi". Quindi molti rimandi a `info@panoramagroup.it` sono **by-design**, non gap. L'analisi
+classifica ogni deviazione/handoff in:
+- **deviazione_corretta** — il prompt vuole così (es. Ferragosto, disponibilità/conferma posti →
+  solo staff). Nessuna azione.
+- **gap_knowledge** — il bot ha deviato qualcosa che *dovrebbe* stare nella FAQ → candidato FAQ.
+- **gap_comportamentale** — il bot ha sbagliato handling (non ha usato il tool prenotazione,
+  validazione periodo errata, tono, loop) → raccomandazione per il **system prompt v2**.
 
 ## Dati
 
@@ -61,7 +75,7 @@ formato di output e (b) fare il gap-diff. **Va fornita dall'utente** prima della
 Nuovo vertical `verticals/keplero/`. Due fasi nette.
 
 ```
-DUMP (.tsv)  --intake-->  GCS raw  -->  f_raw_objects (RAW_ONLY, dedup conversation_id)
+DUMP (.tsv)  --intake-->  GCS raw  -->  f_raw_objects (AUTO, loop keplero_faq, dedup conversation_id)
                                               |
                                        parser TSV
                                               v
@@ -71,20 +85,39 @@ DUMP (.tsv)  --intake-->  GCS raw  -->  f_raw_objects (RAW_ONLY, dedup conversat
                                               |
                           read BQ + FAQ baseline (file)
                                               v
-                            classify per conversazione (Claude Sonnet)
+              [1] analisi NLP — classify per conversazione (Claude Sonnet)
                                               v
-                       conversazioni classificate (file JSONL artifact)               [FASE 2: mining]
+                       conversazioni_classificate.jsonl  (artefatto)
                                               v
-                       distillazione: cluster domande, dedup vs FAQ baseline
+              [2] considerazioni — sintesi ragionata Claude sull'aggregato       [FASE 2: mining]
                                               v
-        keplero_faq_candidates.tsv  +  gap_report.md   (artefatti file, revisione umana)
+                       considerazioni.md  (temi, gap prioritizzati, raccomandazioni)
+                                              v
+              [3] candidati — cluster domande-gap, dedup vs baseline, bozza+evidenza
+                                              v
+                       keplero_faq_candidates.tsv  (proposte concrete)
+                                              v
+              ─────────── GATE UMANO: revisione/edit dei candidati ───────────
+                                              v
+              [4] merge — baseline + candidati approvati
+                                              v
+                       keplero_faq_updated.tsv  (DELIVERABLE: da ricaricare in Keplero)
 ```
+
+**Il processo (cosa lo distingue da un dump→FAQ diretto):** lo stadio [2] *considerazioni* è il
+ragionamento esplicito che collega l'analisi NLP alle decisioni sulla knowledge base — non un
+report di conteggi, ma una sintesi che dice *dove* il bot fallisce, *quali* gap contano e *cosa*
+aggiungere/modificare. I candidati [3] sono proposte; il deliverable finale [4] è la **FAQ
+aggiornata**, prodotta solo **dopo** la revisione umana.
 
 ### Fase 1 — Landing (la fonte dati dedupata)
 
 1. **Source lineage** `KEPLERO_CONVERSATIONS_PANORAMA_DUMP` in `core/source_registry.yaml`:
-   - `promotion_policy: RAW_ONLY`, `loop_targets: []` (nessun loop di cassa — rispetta
-     l'invariante `loop_targets == [] ⇔ promotion_policy == RAW_ONLY`).
+   - `promotion_policy: AUTO`, `loop_targets: [keplero_faq]`. Correzione vs prima bozza
+     (`RAW_ONLY`): con `RAW_ONLY` il `policy_gate` blocca la promozione canonica e
+     `f_keplero_messaggi` non si popolerebbe via `promote`. `loop_targets` è lista libera
+     (non set chiuso); `keplero_faq` è il loop che questa fonte alimenta. L'invariante
+     `loop_targets == [] ⇔ RAW_ONLY` resta soddisfatta.
    - naming grammar 4 parti: `KEPLERO_CONVERSATIONS_PANORAMA_DUMP`
      (`<SYSTEM>_<DATASET>_<SOCIETA>_<LIFECYCLE>`).
 
@@ -130,26 +163,53 @@ DUMP (.tsv)  --intake-->  GCS raw  -->  f_raw_objects (RAW_ONLY, dedup conversat
    - `struttura` (HOTEL / RESIDENCE / CVM / LIDO / n.d.)
    - `domande_estratte[]` — le domande concrete poste dall'ospite, normalizzate
    - `esito` — `risolto_da_bot` / `handoff_umano` / `abbandonata`
-   - `flag_gap` — true se: ha chiesto qualcosa non coperto dalla FAQ baseline, oppure il bot ha
-     deviato su "contatta info@panoramagroup.it", oppure c'è stato takeover umano.
+   - `flag_gap` — true se il bot non ha soddisfatto la richiesta (ha deviato su
+     `info@panoramagroup.it` o c'è stato takeover umano)
+   - `tipo_gap` — quando `flag_gap=true`, uno tra: `deviazione_corretta` (il system prompt v1
+     vuole il rimando allo staff — vedi Appendice A), `gap_knowledge` (mancava nella FAQ →
+     candidato FAQ), `gap_comportamentale` (il bot ha gestito male → fix system prompt). La
+     classificazione riceve nel prompt un estratto delle regole del system prompt v1 per
+     distinguere i tre casi.
 
    Artefatto: `keplero_conversazioni_classificate.jsonl` (una riga per conversazione).
 
-6. **Distillazione** `verticals/keplero/distill_faq.py`:
-   - raccoglie tutte le `domande_estratte` con `flag_gap=true`
-   - clusterizza domande semanticamente equivalenti (Claude o embedding) → una domanda canonica
-     per cluster, con `support_count` (quante conversazioni) e `evidence_conversation_ids`
+6. **Considerazioni** `verticals/keplero/considerazioni.py` — **lo stadio ragionato** che
+   collega l'analisi NLP alle decisioni. Sintesi Claude sull'aggregato delle classificazioni
+   (+ statistiche calcolate: intent frequenti, % handoff, distribuzione `tipo_gap`). Artefatto
+   `considerazioni.md`: temi ricorrenti, *dove* e *perché* il bot fallisce, gap prioritizzati,
+   separati per knowledge vs comportamentale, con raccomandazioni concrete (aggiungi FAQ X /
+   modifica regola system prompt Y). Non è un report di conteggi: è il ragionamento che motiva
+   sia i candidati FAQ sia il system prompt v2.
+
+   Da questo stadio escono **due flussi**: i `gap_knowledge` → candidati FAQ (stadio 7); i
+   `gap_comportamentale` → raccomandazioni per il **system prompt v2** (stadio 7-bis).
+
+7-bis. **System prompt v2** `verticals/keplero/system_prompt.py`: dato il prompt v1 (Appendice A)
+   + le considerazioni sui `gap_comportamentale`, Claude redige una versione 2 proposta del
+   system prompt (`system_prompt_v2.md`) che corregge i comportamenti sbagliati osservati,
+   mantenendo intatte le regole corrette (Ferragosto, validazione periodi, rimando staff
+   legittimo). **Gate umano**: è una proposta, non si applica da sola.
+
+7. **Candidati FAQ** `verticals/keplero/distill_faq.py`:
+   - raccoglie le `domande_estratte` dalle conversazioni con `tipo_gap == gap_knowledge`
+   - clusterizza domande semanticamente equivalenti (Claude) → una domanda canonica per cluster,
+     con `support_count` (quante conversazioni) e `evidence_conversation_ids`
    - **dedup contro la FAQ baseline**: scarta cluster già coperti da una voce esistente
    - per ogni cluster nuovo, bozza una **risposta candidata** da: risposte dei takeover umani +
-     buone risposte bot del cluster + sintesi. **Mai inventare** policy/prezzi: se l'evidenza
-     non contiene la risposta fattuale, il campo answer resta `[DA COMPILARE]` con le evidenze
-     allegate.
+     buone risposte bot del cluster. **Mai inventare** policy/prezzi: se l'evidenza non contiene
+     la risposta fattuale, il campo answer resta `[DA COMPILARE]` con le evidenze allegate.
+   - Output `keplero_faq_candidates.tsv` — colonne: `question · answer · support_count ·
+     evidence_conversation_ids`.
 
-7. **Output** (artefatti file, revisione umana):
-   - `keplero_faq_candidates.tsv` — colonne: `question · answer · support_count ·
-     evidence_conversation_ids`
-   - `gap_report.md` — intent frequenti scoperti, cluster di fallimento, conteggio handoff umani,
-     top domande non coperte.
+   **── GATE UMANO ──**: Stefano/team revisiona ed edita i candidati (correggge risposte,
+   completa i `[DA COMPILARE]`, scarta i falsi gap). Produce un file di candidati **approvati**
+   (stesso formato, 2 colonne minime `question · answer`).
+
+8. **Merge → FAQ updated** `verticals/keplero/merge_faq.py`: unisce la FAQ baseline con i
+   candidati approvati (dedup finale per domanda canonica) → **`keplero_faq_updated.tsv`**
+   (2 colonne `question <TAB> answer`), il **deliverable** da ricaricare nella knowledge di
+   Keplero. È uno stadio separato, eseguito **dopo** il gate umano (non nello stesso run del
+   mining).
 
 ## Error handling
 
@@ -168,6 +228,8 @@ DUMP (.tsv)  --intake-->  GCS raw  -->  f_raw_objects (RAW_ONLY, dedup conversat
   come `test_reviews_classify.py`).
 - `test_keplero_distill.py` — dedup contro FAQ baseline (un cluster già coperto viene scartato),
   answer `[DA COMPILARE]` quando l'evidenza non contiene la risposta, `support_count` corretto.
+- `test_keplero_merge.py` — merge baseline + approvati: nessun duplicato per domanda canonica,
+  le voci baseline si conservano, le nuove si aggiungono.
 
 ## Open items (da risolvere nel piano o con l'utente)
 
