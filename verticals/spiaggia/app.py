@@ -52,6 +52,11 @@ def load_occupazione() -> pd.DataFrame:
     return _q(f"SELECT * FROM `{PROJECT}.{DATASET}.v_spiaggia_occupazione` ORDER BY giorno")
 
 
+@st.cache_data(ttl=300)
+def load_giornaliero() -> pd.DataFrame:
+    return _q(f"SELECT * FROM `{PROJECT}.{DATASET}.v_spiaggia_giornaliero` ORDER BY data")
+
+
 def render() -> None:
     """Render la pagina Panorama Beach. Montabile nell'hub (no set_page_config)."""
     st.markdown(_BRAND_CSS, unsafe_allow_html=True)
@@ -126,6 +131,23 @@ def render() -> None:
         per_metodo = cassa_y.groupby("method_label")["importo_netto"].sum()
         g2.subheader("Cassa per metodo")
         g2.bar_chart(per_metodo)
+
+    # --- Ricavo giornaliero ---
+    st.header("Ricavo giornaliero (corrispettivi + alloggiati)")
+    g = load_giornaliero()
+    if not g.empty:
+        if anno_sel is not None and "anno" in g:
+            g = g[g["anno"] == anno_sel]
+        st.dataframe(
+            g[[
+                "data", "spiaggia_intur", "spiaggia_orti", "bar_intur",
+                "bar_orti", "spiaggia_totale", "bar_totale", "stabilimento_totale",
+                "flag_manca_pms",
+            ]],
+            use_container_width=True,
+            height=400,
+        )
+        st.bar_chart(g.set_index("data")[["spiaggia_totale", "bar_totale"]])
 
 
 if __name__ == "__main__":
