@@ -99,9 +99,13 @@ def build_rows(
         vendibili = r["cam_vendibili"]
         occupate = r["cam_occupate"]
         importo = r["importo"]
-        occ_pct = min(100.0, 100.0 * occupate / vendibili) if vendibili else 0.0
+        # vendibili può essere ≤ 0 quando OOO include camere extra non nell'inventario
+        # base (HotelCube blocca > totali). In quel caso il denominatore onesto è
+        # camere_totali (occupazione = vendute/totali). Clamp 0-100 (validator schema).
+        den = vendibili if vendibili > 0 else r["cam_totali"]
+        occ_pct = max(0.0, min(100.0, 100.0 * occupate / den)) if den > 0 else 0.0
         adr = importo / occupate if occupate else 0.0
-        revpar = importo / vendibili if vendibili else 0.0
+        revpar = importo / den if den > 0 else 0.0
         d_iso = r["data"].isoformat()
         out.append(
             {
