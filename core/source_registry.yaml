@@ -577,3 +577,22 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "intur/corrispettivi_spiaggia/INTUR"
+
+  # ── Moolty F&B bar spiaggia — APPEND ──────────────────────────────────────
+  MOOLTY_FBSPIAGGIA_INTUR_APPEND:
+    system: MOOLTY
+    dataset: FBSPIAGGIA
+    dataset_label: "Prima nota F&B bar spiaggia (Moolty, per-scontrino)"
+    societa: INTUR
+    business_unit: LIDO
+    lifecycle: APPEND
+    canonical_table: f_spiaggia_fb_ordini
+    parser_module: ingest.flussi.ingest_spiaggia_fb
+    hash_basis: hash_riga
+    loop_targets: [cash_control]
+    promotion_policy: MANUAL
+    detector_category: moolty_fb
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "moolty/fbspiaggia/INTUR"
