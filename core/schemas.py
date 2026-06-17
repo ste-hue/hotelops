@@ -1068,6 +1068,32 @@ class SpiaggiaSpotRow(BaseModel):
     data_caricamento: datetime
 
 
+class SpiaggiaCorrispettivoRow(BaseModel):
+    """Schema per f_spiaggia_corrispettivi — corrispettivi RT giornalieri INTUR.
+
+    1 riga/giorno dal Registro Corrispettivi Spiaggia. Split per aliquota IVA:
+    22% = spiaggia, 10% = bar. Lifecycle SNAPSHOT full-replace per anno
+    (natural_key societa_id+anno). NON include gli alloggiati (= PMS, societa ORTI).
+    """
+
+    societa_id: SocietaId
+    business_unit_id: BusinessUnitId
+    location_id: Optional[str] = None
+    oggetto_id: Optional[str] = None
+    funzione_id: Optional[str] = None
+    data: _Date
+    anno: int
+    mese: int
+    corrispettivo_spiaggia: float
+    corrispettivo_bar: float
+    corrispettivo_totale: float
+    rt_matricola: Optional[str] = None
+    raw_object_id: Optional[str] = None
+    file_sorgente: str
+    hash_riga: str
+    data_caricamento: datetime
+
+
 # ── f_pipeline_runs ──────────────────────────────────────────────────────────
 
 

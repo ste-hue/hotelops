@@ -34,6 +34,7 @@ F_PROGETTO_EVENTI           = _t("f_progetto_eventi")
 F_SPIAGGIA_RESERVATIONS     = _t("f_spiaggia_reservations")
 F_SPIAGGIA_CASH_FLOWS       = _t("f_spiaggia_cash_flows")
 F_SPIAGGIA_SPOTS            = _t("f_spiaggia_spots")
+F_SPIAGGIA_CORRISPETTIVI    = _t("f_spiaggia_corrispettivi")
 
 # Dimension tables
 D_VOCI_PIANO_FINANZIARIO    = _t("d_voci_piano_finanziario")
