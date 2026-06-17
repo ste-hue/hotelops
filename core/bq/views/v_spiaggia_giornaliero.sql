@@ -9,6 +9,7 @@ WITH alloggiati AS (
     SUM(IF(classe = '10BEBAR', importo_imponibile, 0)) AS alloggiati_bar
   FROM `hotelops-suite.hotelops.f_produzione_pms`
   WHERE classe IN ('04BEALL', '10BEBAR')
+    AND societa_id = 'ORTI'
   GROUP BY data
 )
 SELECT
