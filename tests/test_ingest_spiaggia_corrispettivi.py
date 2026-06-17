@@ -5,6 +5,7 @@ from core.schemas import SpiaggiaCorrispettivoRow, make_hash
 import openpyxl
 from ingest.flussi.ingest_spiaggia_corrispettivi import (
     to_eur, parse_data, iter_day_rows, build_corrispettivo_rows, ingest_file,
+    _find_anno,
 )
 from datetime import date as _d, datetime as _dt, timezone as _tz
 
@@ -154,3 +155,37 @@ def test_stale_year_and_zero_day_exclusion(tmp_path):
     assert r.data.year == 2026
     assert r.corrispettivo_spiaggia == 561.0
     assert r.corrispettivo_bar == 517.5
+
+
+def _make_conflicting_header(tmp_path, header_anno: int, filename_year: int):
+    """Workbook whose ANNO: header says `header_anno`, but filename contains `filename_year`."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Settembre"
+    # Header with a DIFFERENT year than the filename
+    ws["I1"] = "ANNO:"; ws["J1"] = header_anno
+    ws["M1"] = "RT"; ws["N1"] = "RT2CFL018343"
+    # One data row
+    ws.cell(row=8, column=1, value="28-Sep")
+    ws.cell(row=8, column=2, value=1500.0)
+    ws.cell(row=8, column=3, value=900.0)
+    ws.cell(row=8, column=4, value=600.0)
+    p = tmp_path / f"registro_{filename_year}.xlsx"
+    wb.save(p)
+    return p
+
+
+def test_filename_wins_over_conflicting_header(tmp_path):
+    """Filename year takes priority over a conflicting ANNO: header in the sheet."""
+    # header says 2024, filename says 2025 — filename must win
+    p = _make_conflicting_header(tmp_path, header_anno=2024, filename_year=2025)
+    wb = openpyxl.load_workbook(p, data_only=True)
+    ws = wb.active
+    # Direct _find_anno check
+    assert _find_anno(ws, p.name) == 2025
+    # End-to-end: parsed rows carry anno=2025
+    rows = build_corrispettivo_rows(wb, p.name, "raw-conflict", _NOW)
+    assert len(rows) == 1
+    r = rows[0]
+    assert r.anno == 2025
+    assert r.data == _d(2025, 9, 28)

@@ -60,6 +60,8 @@ def main() -> None:
         description="Fetch a live Drive file, then run lineage intake + promote.",
     )
     p.add_argument("--source-name", required=True, help="Registry source name")
+    p.add_argument("--file-id", default=None,
+                   help="Override Drive file ID (bypasses registry drive_file_id)")
     p.add_argument("--no-promote", action="store_true", help="Skip promote after intake")
     p.add_argument("--key", default=DEFAULT_KEY, help="Path to SA key JSON")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -77,10 +79,10 @@ def main() -> None:
     if source_def is None:
         raise SystemExit(f"ERROR: source_name not in registry: {args.source_name!r}")
 
-    file_id = source_def.drive_file_id
+    file_id = args.file_id or source_def.drive_file_id
     if not file_id:
         raise SystemExit(
-            f"ERROR: source {args.source_name!r} has no drive_file_id in registry"
+            f"ERROR: source {args.source_name!r} has no drive_file_id in registry and --file-id not provided"
         )
 
     with tempfile.TemporaryDirectory() as tmp:

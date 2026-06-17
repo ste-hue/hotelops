@@ -72,7 +72,16 @@ def parse_data(cell: Any, anno: int) -> Optional[date]:
 
 
 def _find_anno(ws, file_name: str) -> int:
-    """Anno dall'header sheet (cella accanto a 'ANNO:'); fallback dal filename."""
+    """Anno dal filename (regex `(20\\d{2})`), poi dall'header sheet (cella accanto a 'ANNO:').
+
+    Risoluzione priorità:
+    1. filename regex — vince sempre (evita header stale nei template riutilizzati)
+    2. header ANNO: cell scan (prime 6 righe del foglio)
+    3. ValueError se nessuna fonte riesce
+    """
+    m = re.search(r"(20\d{2})", file_name)
+    if m:
+        return int(m.group(1))
     for row in ws.iter_rows(min_row=1, max_row=6, values_only=True):
         for i, c in enumerate(row):
             if isinstance(c, str) and c.strip().upper().startswith("ANNO"):
@@ -80,9 +89,6 @@ def _find_anno(ws, file_name: str) -> int:
                     n = to_eur(nxt)
                     if n and 2018 <= int(n) <= 2035:
                         return int(n)
-    m = re.search(r"(20\d{2})", file_name)
-    if m:
-        return int(m.group(1))
     raise ValueError(f"anno non determinabile per sheet {ws.title} / {file_name}")
 
 
