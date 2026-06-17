@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
 import pytest
-from core.schemas import SpiaggiaCorrispettivoRow
+from core.schemas import SpiaggiaCorrispettivoRow, make_hash
 
 import openpyxl
 from ingest.flussi.ingest_spiaggia_corrispettivi import (
@@ -100,9 +100,10 @@ def test_build_rows_and_quality_gate(tmp_path):
     assert r.corrispettivo_spiaggia == 561.0
     assert r.corrispettivo_bar == 517.5
     assert r.corrispettivo_totale == 1078.5
-    assert r.societa_id == "INTUR" and r.business_unit_id == "LIDO"
+    assert r.societa_id == "INTUR" and r.business_unit_id == "LIDO" and r.location_id == "LIDO"
     assert r.rt_matricola == "RT2CFL018343"
     assert r.raw_object_id == "raw-1"
+    assert r.hash_riga == make_hash("corrispettivi", "INTUR", _d(2026, 6, 16).isoformat())
 
 
 def test_ingest_file_dry_run(tmp_path):
