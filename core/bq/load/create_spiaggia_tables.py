@@ -18,6 +18,7 @@ import sys
 from core.bq.client import get_client
 from core.config import (
     F_SPIAGGIA_CASH_FLOWS,
+    F_SPIAGGIA_CORRISPETTIVI,
     F_SPIAGGIA_RESERVATIONS,
     F_SPIAGGIA_SPOTS,
 )
@@ -116,10 +117,34 @@ CREATE TABLE IF NOT EXISTS `{F_SPIAGGIA_SPOTS}` (
 )
 """
 
+DDL_CORRISPETTIVI = f"""
+CREATE TABLE IF NOT EXISTS `{F_SPIAGGIA_CORRISPETTIVI}` (
+    societa_id             STRING NOT NULL,
+    business_unit_id       STRING NOT NULL,
+    location_id            STRING,
+    oggetto_id             STRING,
+    funzione_id            STRING,
+    data                   DATE NOT NULL,
+    anno                   INT64 NOT NULL,
+    mese                   INT64 NOT NULL,
+    corrispettivo_spiaggia FLOAT64,
+    corrispettivo_bar      FLOAT64,
+    corrispettivo_totale   FLOAT64,
+    rt_matricola           STRING,
+    raw_object_id          STRING,
+    file_sorgente          STRING NOT NULL,
+    hash_riga              STRING NOT NULL,
+    data_caricamento       TIMESTAMP NOT NULL
+)
+PARTITION BY data
+CLUSTER BY societa_id
+"""
+
 ALL_DDL = {
     "f_spiaggia_reservations": DDL_RESERVATIONS,
     "f_spiaggia_cash_flows": DDL_CASH_FLOWS,
     "f_spiaggia_spots": DDL_SPOTS,
+    "f_spiaggia_corrispettivi": DDL_CORRISPETTIVI,
 }
 
 
