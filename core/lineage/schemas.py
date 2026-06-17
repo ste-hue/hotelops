@@ -131,6 +131,7 @@ class SourceDefinition(BaseModel):
     promotion_policy: PromotionPolicy
     detector_category: str
     raw_storage: RawStorage
+    drive_file_id: Optional[str] = None
     notes: Optional[str] = None
 
     @field_validator("source_name")
