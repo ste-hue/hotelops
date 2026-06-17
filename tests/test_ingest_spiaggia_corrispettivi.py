@@ -59,6 +59,10 @@ def test_parse_data():
     assert parse_data("1-Jul", 2026) == _d(2026, 7, 1)
     assert parse_data("Totale mese", 2026) is None
     assert parse_data(None, 2026) is None
+    # Bug 1: stale-year override — datetime/date cells from 2021 template must use header anno
+    from datetime import datetime as _dtmod
+    assert parse_data(_dtmod(2021, 6, 16), 2026) == _d(2026, 6, 16)
+    assert parse_data(_d(2021, 6, 5), 2026) == _d(2026, 6, 5)
 
 
 def _make_registro(tmp_path):
@@ -110,3 +114,43 @@ def test_ingest_file_dry_run(tmp_path):
     p = _make_registro(tmp_path)
     counts = ingest_file(p, raw_object_id=None, dry_run=True)
     assert counts["corrispettivi"] == 2
+
+
+def _make_registro_datetime(tmp_path):
+    """Fixture with stale-year datetime cells and a zero-value day row."""
+    from datetime import datetime as _dtmod
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Giugno"
+    # Header: ANNO: 2026 in row 2 cols D/E (col 4/5)
+    ws.cell(row=2, column=4, value="ANNO:")
+    ws.cell(row=2, column=5, value=2026)
+    # Day row with real values: datetime cell has stale year 2021
+    ws.cell(row=8, column=1, value=_dtmod(2021, 6, 16))   # stale year
+    ws.cell(row=8, column=2, value=1078.5)
+    ws.cell(row=8, column=3, value=561.0)
+    ws.cell(row=8, column=4, value=517.5)
+    # Zero-value day row (closed day): should be excluded
+    ws.cell(row=9, column=1, value=_dtmod(2021, 6, 17))   # stale year
+    ws.cell(row=9, column=2, value=0)
+    ws.cell(row=9, column=3, value=0)
+    ws.cell(row=9, column=4, value=0)
+    p = tmp_path / "registro_dt_2026.xlsx"
+    wb.save(p)
+    return p
+
+
+def test_stale_year_and_zero_day_exclusion(tmp_path):
+    """Bug 1 + Bug 2: stale datetime year uses header anno; zero-day rows are excluded."""
+    p = _make_registro_datetime(tmp_path)
+    wb = openpyxl.load_workbook(p, data_only=True)
+    rows = build_corrispettivo_rows(wb, "registro_dt_2026.xlsx", "raw-dt", _NOW)
+    # Only 1 row (the real-value row); zero row excluded
+    assert len(rows) == 1
+    r = rows[0]
+    # Year must come from header (2026), not stale datetime cell (2021)
+    assert r.data == _d(2026, 6, 16)
+    assert r.anno == 2026
+    assert r.data.year == 2026
+    assert r.corrispettivo_spiaggia == 561.0
+    assert r.corrispettivo_bar == 517.5

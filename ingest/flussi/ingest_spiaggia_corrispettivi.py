@@ -51,11 +51,11 @@ def to_eur(v: Any) -> Optional[float]:
 
 
 def parse_data(cell: Any, anno: int) -> Optional[date]:
-    """'16-Jun' + anno → date. Datetime cell → date. Altro → None."""
+    """'16-Jun' + anno → date. Datetime cell → date (year overridden by header anno). Altro → None."""
     if isinstance(cell, datetime):
-        return cell.date()
+        return date(anno, cell.month, cell.day)
     if isinstance(cell, date):
-        return cell
+        return date(anno, cell.month, cell.day)
     if cell is None:
         return None
     m = _DATE_RE.match(str(cell))
@@ -118,6 +118,8 @@ def iter_day_rows(ws, anno: int) -> list[tuple]:
         if len(nums) < 3:
             continue
         totale, spiaggia, bar = nums[0], nums[1], nums[2]
+        if not totale and not spiaggia and not bar:
+            continue
         out.append((d, totale, spiaggia, bar))
     return out
 
