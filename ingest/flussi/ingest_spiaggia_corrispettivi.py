@@ -4,7 +4,7 @@
 1 riga/giorno. Split aliquota: 22% = spiaggia, 10% = bar. Un file = un anno.
 Lifecycle SNAPSHOT full-replace per anno (natural_key societa_id+anno).
 
-Parser_module della source INTUR_CORRISPETTIVI_SPIAGGIA_INTUR_SNAPSHOT, invocato
+Parser_module della source RT_CORRISPETTIVISPIAGGIA_INTUR_SNAPSHOT, invocato
 da `hotelops promote`:
     python -m ingest.flussi.ingest_spiaggia_corrispettivi --file X.xlsx --raw-object-id Y
 """

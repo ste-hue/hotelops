@@ -559,9 +559,9 @@ sources:
       path_template: "spiaggeit/spiaggia/INTUR"
 
   # ── Registro Corrispettivi Spiaggia INTUR — SNAPSHOT ─────────────────────
-  INTUR_CORRISPETTIVOSPIAGGIA_INTUR_SNAPSHOT:
-    system: INTUR
-    dataset: CORRISPETTIVOSPIAGGIA
+  RT_CORRISPETTIVISPIAGGIA_INTUR_SNAPSHOT:
+    system: RT
+    dataset: CORRISPETTIVISPIAGGIA
     dataset_label: "Registro Corrispettivi RT Spiaggia (INTUR, giornaliero)"
     societa: INTUR
     business_unit: LIDO
