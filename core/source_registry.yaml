@@ -557,3 +557,22 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "spiaggeit/spiaggia/INTUR"
+
+  # ── Registro Corrispettivi Spiaggia INTUR — SNAPSHOT ─────────────────────
+  INTUR_CORRISPETTIVOSPIAGGIA_INTUR_SNAPSHOT:
+    system: INTUR
+    dataset: CORRISPETTIVOSPIAGGIA
+    dataset_label: "Registro Corrispettivi RT Spiaggia (INTUR, giornaliero)"
+    societa: INTUR
+    business_unit: LIDO
+    lifecycle: SNAPSHOT
+    canonical_table: f_spiaggia_corrispettivi
+    parser_module: ingest.flussi.ingest_spiaggia_corrispettivi
+    natural_key: [societa_id, anno]   # SNAPSHOT full-replace per anno
+    loop_targets: [cash_control]
+    promotion_policy: MANUAL
+    detector_category: corrispettivi_spiaggia
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "intur/corrispettivi_spiaggia/INTUR"
