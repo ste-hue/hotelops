@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, date as _d, datetime, datetime as _dt, timezone, timezone as _tz
 import pytest
 from core.schemas import SpiaggiaCorrispettivoRow, make_hash
 
@@ -7,7 +7,6 @@ from ingest.flussi.ingest_spiaggia_corrispettivi import (
     to_eur, parse_data, iter_day_rows, build_corrispettivo_rows, ingest_file,
     _find_anno,
 )
-from datetime import date as _d, datetime as _dt, timezone as _tz
 
 _NOW = _dt(2026, 6, 17, tzinfo=_tz.utc)
 

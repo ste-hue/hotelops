@@ -15,6 +15,7 @@ import argparse
 import io
 import logging
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -100,11 +101,14 @@ def main() -> None:
         if not args.no_promote:
             from ingest.promotion import promote_raw_object
 
-            if result.raw_object_id is None:
-                log.warning("intake returned no raw_object_id (gate=disabled?) — skipping promote")
-            else:
-                pr = promote_raw_object(result.raw_object_id, actor="drive_sync")
-                print(f"promote_status={pr.status} reason={pr.reason or '-'} noop={pr.noop}")
+            if not result.raw_object_id:
+                print(
+                    "ERROR: intake returned no raw_object_id (lineage gate disabled?) — promote skipped",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            pr = promote_raw_object(result.raw_object_id, actor="drive_sync")
+            print(f"promote_status={pr.status} reason={pr.reason or '-'} noop={pr.noop}")
 
 
 if __name__ == "__main__":
