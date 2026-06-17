@@ -1094,6 +1094,35 @@ class SpiaggiaCorrispettivoRow(BaseModel):
     data_caricamento: datetime
 
 
+class SpiaggiaFbOrdineRow(BaseModel):
+    """Schema per f_spiaggia_fb_ordini — prima nota F&B bar spiaggia (Moolty).
+
+    Per-scontrino: un ordine/pagamento per riga. Il bar spiaggia è INTUR.
+    Lifecycle APPEND (dedup file-level via content-hash in intake; hash_riga per traccia).
+    """
+
+    societa_id: SocietaId
+    business_unit_id: BusinessUnitId
+    location_id: Optional[str] = None
+    oggetto_id: Optional[str] = None
+    funzione_id: Optional[str] = None
+    data_ora: datetime
+    data: _Date
+    metodo: Optional[str] = None
+    entrata: Optional[float] = None
+    uscita: Optional[float] = None
+    pagato: bool = False
+    rata: Optional[str] = None
+    causale: Optional[str] = None
+    descrizione: Optional[str] = None
+    ordine_id: Optional[str] = None
+    mese_report: Optional[str] = None
+    raw_object_id: Optional[str] = None
+    file_sorgente: str
+    hash_riga: str
+    data_caricamento: datetime
+
+
 # ── f_pipeline_runs ──────────────────────────────────────────────────────────
 
 

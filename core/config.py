@@ -35,6 +35,7 @@ F_SPIAGGIA_RESERVATIONS     = _t("f_spiaggia_reservations")
 F_SPIAGGIA_CASH_FLOWS       = _t("f_spiaggia_cash_flows")
 F_SPIAGGIA_SPOTS            = _t("f_spiaggia_spots")
 F_SPIAGGIA_CORRISPETTIVI    = _t("f_spiaggia_corrispettivi")
+F_SPIAGGIA_FB_ORDINI        = _t("f_spiaggia_fb_ordini")
 
 # Dimension tables
 D_VOCI_PIANO_FINANZIARIO    = _t("d_voci_piano_finanziario")
