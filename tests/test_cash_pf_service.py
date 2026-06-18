@@ -1,3 +1,7 @@
+from unittest.mock import patch
+
+from core.schemas import BudgetMensileRow
+from verticals.condges.services import cash_pf_service
 from verticals.condges.services.intents import (
     BudgetRiga,
     SaveBudgetIntent,
@@ -27,3 +31,49 @@ def test_intents_construct():
 
     r = SaveResult(table="t", rows_written=2, natural_key=["a"])
     assert r.rows_written == 2
+
+
+def test_save_budget_calls_gate_snapshot():
+    intent = SaveBudgetIntent(
+        societa_id="ORTI",
+        anno=2026,
+        righe=[
+            BudgetRiga(
+                mese=4,
+                codice_conto="570913",
+                descrizione="Utenze",
+                tipo_costo="VARIABILE",
+                categoria_ce="COSTI",
+                business_unit_id="HOTEL",
+                importo=22000.0,
+            ),
+            BudgetRiga(mese=5, codice_conto="570913", importo=21000.0),
+        ],
+    )
+    with patch.object(cash_pf_service, "bq_write_validated") as gate:
+        result = cash_pf_service.save_budget(intent)
+
+    gate.assert_called_once()
+    args, kwargs = gate.call_args
+    table, rows = args[0], args[1]
+    assert table.endswith("f_budget_mensile")
+    assert kwargs["mode"] == "snapshot"
+    assert kwargs["natural_key"] == ["societa_id", "anno", "fonte"]
+    assert all(isinstance(r, BudgetMensileRow) for r in rows)
+    assert rows[0].fonte == "APP_BUDGET"
+    assert rows[0].data_caricamento  # required field popolato
+    assert result.rows_written == 2
+
+
+def test_save_budget_rejects_bad_row():
+    import pytest
+
+    bad = SaveBudgetIntent(
+        societa_id="ORTI",
+        anno=2026,
+        righe=[BudgetRiga(mese=13, codice_conto="570913", importo=1.0)],  # mese fuori range
+    )
+    with patch.object(cash_pf_service, "bq_write_validated") as gate:
+        with pytest.raises(Exception):
+            cash_pf_service.save_budget(bad)
+        gate.assert_not_called()  # fallisce alla validazione, prima del gate
