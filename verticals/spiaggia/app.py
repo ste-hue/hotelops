@@ -141,7 +141,7 @@ def render() -> None:
         st.dataframe(
             g[[
                 "data", "spiaggia_intur", "spiaggia_orti", "bar_intur",
-                "bar_moolty", "scost_bar",
+                "pos_moolty", "scost_cassa",
                 "spiaggia_totale", "bar_totale", "stabilimento_totale",
                 "flag_manca_pms",
             ]],

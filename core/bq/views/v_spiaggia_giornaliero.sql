@@ -1,9 +1,10 @@
 -- v_spiaggia_giornaliero
 -- Ricavo totale stabilimento per giorno: corrispettivi diretti INTUR (registro)
 -- + alloggiati ORTI (PMS 04BEALL, spiaggia only). Bar è INTUR-only (corrispettivi diretti).
--- Moolty (f_spiaggia_fb_ordini) aggiunto come layer di riconciliazione bar:
---   bar_moolty = totale POS Moolty del giorno (prima nota operativa)
---   scost_bar   = bar_intur - bar_moolty  (≠0 = scostamento; Moolty > corrispettivo → negativo)
+-- Moolty (f_spiaggia_fb_ordini) = dettaglio operativo del banco (ombrelloni + bar walk-in),
+--   riconciliazione vs corrispettivo totale INTUR (spiaggia_intur + bar_intur), NON addendo.
+--   pos_moolty  = totale POS Moolty del giorno (prima nota operativa del banco intero)
+--   scost_cassa = (spiaggia_intur + bar_intur) - pos_moolty  (≈0 se quadra; Moolty > totale → negativo)
 --   flag_manca_moolty = nessun record Moolty per quel giorno
 -- FULL OUTER JOIN: giorni con solo PMS (nessun corrispettivo INTUR) non vengono persi.
 CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_spiaggia_giornaliero` AS
@@ -58,9 +59,10 @@ SELECT
   u.stabilimento_totale,
   u.flag_manca_pms,
   u.flag_manca_corrispettivi,
-  -- riconciliazione Moolty
-  COALESCE(m.bar_moolty, 0)                              AS bar_moolty,
-  u.bar_intur - COALESCE(m.bar_moolty, 0)               AS scost_bar,
-  m.data IS NULL                                         AS flag_manca_moolty
+  -- riconciliazione Moolty (banco INTUR totale vs POS operativo)
+  COALESCE(m.bar_moolty, 0)                                              AS pos_moolty,
+  (COALESCE(u.spiaggia_intur, 0) + COALESCE(u.bar_intur, 0))
+    - COALESCE(m.bar_moolty, 0)                                          AS scost_cassa,
+  m.data IS NULL                                                         AS flag_manca_moolty
 FROM unified u
 LEFT JOIN moolty m ON u.data = m.data
