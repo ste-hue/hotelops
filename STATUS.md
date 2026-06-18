@@ -1,5 +1,13 @@
 # Status — 2026-06-13
 
+## Triage worktree/branch — 2026-06-18
+Consolidamento richiesto da Stefano ("torniamo su main, worktree-only d'ora in poi"). Verdetti:
+- 🟢 **`feat/vetrina`** (22↑, wt `.worktrees/vetrina`) — MERGE su main: è la front-door Cloudflare viva (`hotelops-vetrina`), unico vero lavoro non mergiato. Publish/site diverge da main (launcher vs vecchio statico) → merge con risoluzione a favore del launcher.
+- ⛔ **KILL eseguiti**: wt `.claude/worktrees/agent-aff27cae` (Moolty parser già in main, path legacy) + wt `.worktrees/fix-budget-lottery` (0↑, tutto in main) — potati 2026-06-18.
+- ⛔ **KILL proposti** (branch, attesa OK): `chore/gardener-20/21/22` (chore-bot stali), `feat/cashflow` (pf-rotate in main, 1 cleanup stale), `worktree-app-store` (25↑ ma superato da `feat/vetrina`), remote `origin/feat/fb-looker-close` (mergiato).
+- ⏸ **PARK**: `feat/cash-pf-engine` (2↑ spec+plan, bloccato da budget-lottery), `feat/hotelops-api` (1↑ spec data-API non implementata), `explore/ingest-accodamenti` (4↑ GAIA/accodamenti; risveglio = loop accodamenti). Docs/spec valgono — offrire land su main prima di potare i wt.
+- 🧊 **KEEP frozen**: `verticals-v2` (CLAUDE.md: NON toccare).
+
 ## In corso
 - ~~**Spiaggia hub mount**~~ **FATTO 2026-06-18**: vertical #3 montato nel hub (admin+viewer, PR #36) + card nella vetrina + Cloud Run ridepl `00009`. Fase 2 (corrispettivi/Moolty/alloggiati) completa — vedi Completato 06-18. Coda minore: legenda metodi pagamento Spiagge.it (1/14/2/3), receipts+res_service fase 3.
 - **PF generatore (`hotelops pf-genera`)** (2026-06-13): nuovo package `verticals/condges/pf_generator/` — genera il PF da zero invece di patchare (spec+piano `docs/superpowers/{specs,plans}/2026-06-12-pf-genera*`). Modello corretto da Stefano: **PF = pura proiezione forward-only**, niente consuntivi nel file, àncora = saldo banca certificato fine mese prec. (da BQ), deliverable = cascata saldo proiettato. 8 task subagent-driven (699 test verdi), CLI gira end-to-end: ORTI mag generato, àncora 30/04 = 332.611,44, quadratura al centesimo, 7 fornitori in DA MAPPARE. **Validazione semantica vs file Rosa FATTA** (`valida.py` + report `docs/superpowers/REPORT_VALIDAZIONE.md`): verdetto PEGGIORE per **6 item da adjudicare** — 3 FORNITORE_SBAGLIATO (cod 71/138/1306: shift codice↔nome NEL file di Rosa, il generatore ha il CSV canonico → probabile MIGLIORE) + 3 PARTITA_PERSA (cod 125/1222/1602 da verificare: 1602 è net-credit, alcuni forse in DA MAPPARE = falsi positivi del tool). 7 DOPPIO_CONTEGGIO confermano che il motore corregge i doppioni di Rosa. **Gate aperto: serve la chiamata di Stefano sui 6.** Layer 2 (cattura vintage previsioni in BQ) = spec a parte, non iniziata.
