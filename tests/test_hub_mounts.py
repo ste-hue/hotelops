@@ -61,6 +61,24 @@ def test_home_render_audience_param():
     assert "audience" in sig.parameters
 
 
+def test_spiaggia_page_importabile():
+    from verticals.hub.pages_ import spiaggia
+
+    assert callable(spiaggia.render)
+
+
+def test_spiaggia_render_non_chiama_set_page_config():
+    # set_page_config deve stare SOLO in __main__ (contratto hub-bind):
+    # render() montata dal hub non può richiamarlo (Streamlit lo vieta 2 volte).
+    # Usiamo "st.set_page_config" per evitare falsi positivi da docstring/commenti.
+    import inspect
+
+    from verticals.spiaggia import app
+
+    src = inspect.getsource(app.render)
+    assert "st.set_page_config" not in src
+
+
 def test_viewer_app_no_ingest_page():
     # l'app viewer non deve MONTARE la pagina Ingest (superficie di scrittura).
     # Controlla import effettivo + assenza di st.Page(ingest...), non la docstring.
