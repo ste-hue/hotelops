@@ -108,3 +108,12 @@ def test_app_cdg_has_no_direct_canonical_write():
     src = Path("verticals/condges/app_cdg.py").read_text()
     assert "load_table_from_json" not in src, "app_cdg deve delegare al service"
     assert not re.search(r"DELETE\s+FROM", src, re.IGNORECASE), "no DELETE diretto in surface"
+
+
+def test_update_previsione_hash_matches_service():
+    from verticals.condges import update_previsione as up
+    from verticals.condges.services.cash_pf_service import _previsione_hash
+
+    assert up._hash("ORTI", "USCITE_UTENZE", 2026, 4, "NANOCLAW") == _previsione_hash(
+        "ORTI", "USCITE_UTENZE", 2026, 4, "NANOCLAW"
+    )

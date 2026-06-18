@@ -22,7 +22,7 @@ Usage (NanoClaw — programmatic):
         anno=2026, mese_start=4, mese_end=12,
         importo_mensile=22000.0
     )
-    # result = {"status": "ok", "rows_deleted": 9, "rows_inserted": 9, "voce": "...", ...}
+    # result = {"status": "ok", "rows_written": 9, "voce": "...", ...}
 
 Voci valide: tutte quelle in d_voci_piano_finanziario.
 """
@@ -38,7 +38,6 @@ from datetime import datetime, timezone
 
 from core.bq.client import get_client
 from core.config import PROJECT
-from core.schemas import PianoFinanziarioInputRow, validate_batch
 
 BQ_TABLE = f"{PROJECT}.hotelops.f_piano_finanziario_input"
 BQ_VOCI_TABLE = f"{PROJECT}.hotelops.d_voci_piano_finanziario"
@@ -76,8 +75,6 @@ def update_previsione(
 
     Returns dict with status, rows affected, and summary.
     """
-    from google.cloud import bigquery
-
     bq_client = get_client()
 
     # Validate voce
@@ -142,49 +139,22 @@ def update_previsione(
             "fonte": fonte,
         }
 
-    # DELETE existing rows for this voce×mesi×fonte (parameterized)
-    delete_sql = f"""
-    DELETE FROM `{BQ_TABLE}`
-    WHERE societa_id = @societa_id
-      AND voce_id = @voce_id
-      AND anno = @anno
-      AND mese IN UNNEST(@mesi)
-      AND fonte = @fonte
-    """
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("societa_id", "STRING", societa_id),
-            bigquery.ScalarQueryParameter("voce_id", "STRING", voce_id),
-            bigquery.ScalarQueryParameter("anno", "INT64", anno),
-            bigquery.ArrayQueryParameter("mesi", "INT64", mesi),
-            bigquery.ScalarQueryParameter("fonte", "STRING", fonte),
-        ]
-    )
-    delete_result = bq_client.query(delete_sql, job_config=job_config).result()
-    rows_deleted = delete_result.num_dml_affected_rows or 0
+    # Write via service (gate I1) — un solo writer per Streamlit/CLI/NanoClaw
+    from verticals.condges.services import cash_pf_service
+    from verticals.condges.services.intents import SavePrevisioneIntent
 
-    # INSERT new rows
-    validate_batch(new_rows, PianoFinanziarioInputRow, "f_piano_finanziario_input")
-    job = bq_client.load_table_from_json(
-        new_rows,
-        BQ_TABLE,
-        job_config=bigquery.LoadJobConfig(
-            schema=[
-                bigquery.SchemaField("hash_riga", "STRING", mode="REQUIRED"),
-                bigquery.SchemaField("societa_id", "STRING", mode="REQUIRED"),
-                bigquery.SchemaField("voce_id", "STRING", mode="REQUIRED"),
-                bigquery.SchemaField("anno", "INTEGER", mode="REQUIRED"),
-                bigquery.SchemaField("mese", "INTEGER", mode="REQUIRED"),
-                bigquery.SchemaField("importo", "FLOAT64"),
-                bigquery.SchemaField("fonte", "STRING"),
-                bigquery.SchemaField("note", "STRING"),
-                bigquery.SchemaField("file_sorgente", "STRING"),
-                bigquery.SchemaField("data_caricamento", "TIMESTAMP"),
-            ],
-            write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        ),
+    result = cash_pf_service.save_previsione(
+        SavePrevisioneIntent(
+            societa_id=societa_id,
+            voce_id=voce_id,
+            mesi=mesi,
+            importo=importo_mensile,
+            anno=anno,
+            fonte=fonte,
+            note=note,
+        )
     )
-    job.result()
+    rows_written = result.rows_written
 
     return {
         "status": "ok",
@@ -195,8 +165,7 @@ def update_previsione(
         "mesi": f"{mese_start}-{mese_end}",
         "importo_mensile": importo_mensile,
         "totale_periodo": totale,
-        "rows_deleted": rows_deleted,
-        "rows_inserted": len(new_rows),
+        "rows_written": rows_written,
         "fonte": fonte,
     }
 
