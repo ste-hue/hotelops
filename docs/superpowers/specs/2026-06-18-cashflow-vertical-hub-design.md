@@ -120,19 +120,24 @@ CashProjectionRunRow:
 Abilita la **vista storica mese×mese** (previsione vs realtà) come incremento successivo
 (una `v_cash_projection_history` o pannello nell'app) senza statefulness.
 
-## 4. Controlli — fix del falso positivo (Fase 0)
+## 4. Controlli — mostrati as-is (NO fix in questa slice)
 
-`verticals/condges/pf_rotate/step5_controlli.py`: il check "Catena J4:R4 = mese precedente
-riga 37" deve **esentare la colonna-cutover** (che per design ORTI month-closed ospita il
-saldo iniziale **hardcoded**, non `=<col_prec>37`). Dopo il fix:
-- la colonna-cutover non genera ERR;
-- un ERR mostrato in UI = problema reale (non rumore).
+L'app **mostra i controlli così come li riporta `rotate()`** (`RotateResult.n_controlli_ok/
+err/indet`), con una nota che l'eventuale ERR su ORTI è **sotto investigazione separata**.
 
-**Non-goal in questa slice** (annotati come follow-up):
-- riconciliare il **conteggio** controlli CLI (`RotateResult` gen-time) vs i controlli live
-  in-foglio (oggi 13/0/7 vs 22/1/0);
-- chiarire le **label-mese stale** dell'header (template GEN..APR decorativo; il cutover
-  reale è in `J31`).
+**Correzione di rotta (2026-06-18):** la diagnosi Fase-0 ("il controllo non esenta la
+colonna-cutover") era **incompleta**. `_check_C3_cascade_chain` **già esclude** il cutover
+(`tail_cols = col_letters[cutover_idx+1:]`). Il vero problema è una **discrepanza**: il
+controllo rileva cutover = colonna I e verifica la catena J:R, ma il **saldo hardcoded
+(332.611) sta in J** = `tail_cols[0]`, una colonna *dopo* il cutover. O il saldo-writer
+scrive sulla colonna sbagliata (off-by-one), o writer e controllo non concordano sul cutover.
+Serve un mini-debug, non un fix a sentimento.
+
+**Fuori da questa slice** → task separato (`systematic-debugging`):
+- discrepanza colonna-saldo (J) vs cutover-detection (I) in `step5_controlli`/saldo-writer;
+- riconciliare il **conteggio** CLI (`RotateResult` gen-time) vs controlli live in-foglio
+  (13/0/7 vs 22/1/0);
+- label-mese **stale** dell'header (template GEN..APR; cutover reale in `J31`).
 
 ## 5. Deprecazioni
 
@@ -159,9 +164,6 @@ Razionale CLAUDE.md: dead code correlato si **segnala**, non si cancella nello s
 - **`tests/test_cash_pf_service.py`** (append): `log_cash_projection_run` chiama il gate con
   (a) `CashProjectionRunRow` validato, (b) `mode="snapshot"`,
   (c) `natural_key=["societa_id","anno","mese_chiuso"]`. Gate mockato, assert su args.
-- **`tests/test_pf_rotate_controlli.py`** (nuovo o append): fixture PF con `J4` hardcoded
-  (colonna-cutover) → `step5_controlli` **non** segnala ERR su quella colonna; un vero
-  break a valle (es. `K4` sbagliato) → ERR.
 - **Smoke headless**: `rotate()` su ORTI+INTUR aprile→maggio (file reali) → genera output,
   **0 ERR reali**, `log_cash_projection_run` chiamato (gate mockato).
 - `render()` non unit-testato (Streamlit) → smoke import/parse di `app_cashflow.py` +
@@ -173,7 +175,7 @@ Razionale CLAUDE.md: dead code correlato si **segnala**, non si cancella nello s
 - Genera il PF del mese successivo via `rotate()` canonico (upload PF+scadenziario, saldi
   pre-fill BQ editabili, scelta policy fornitori), con download.
 - Ogni run riuscito logga `f_cash_projection_runs` via gate I1 (snapshot idempotente).
-- `step5_controlli` non produce più il falso positivo sulla colonna-cutover.
+- L'app mostra i controlli come riportati da `rotate()` (no fix `step5` in questa slice).
 - `app_scadenzario`/`tesoreria` deprecati (banner), non cancellati.
 - `pytest -q` e `ruff check` verdi sui file della slice.
 
