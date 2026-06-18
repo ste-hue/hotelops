@@ -1,7 +1,20 @@
 # Cashflow Vertical (hub app) — design spec
 
 **Date:** 2026-06-18 · **Status:** design (awaiting review) · **Branch:** `feat/cash-pf-engine`
-**Slice:** unified Cashflow app surface su motore `pf-rotate` canonico + run-log BQ
+**Slice:** unified Cashflow app surface su motore `pf-rotate` canonico
+
+> **AMENDMENT 2026-06-18 — run-log RIMOSSO (governance proiezioni vs fatti).**
+> Il design originale loggava ogni run in una fact table `f_cash_projection_runs`. Stefano
+> ha chiarito il modello: il pool **`f_*` = solo numeri VERI** (actuals: Esolver, banche,
+> PMS). Il PF è **tutto PROIEZIONE** tranne i **saldi banca iniziali** (l'unico fatto, già
+> in `f_saldi_banca_chiusura_mensile`). Mettere proiezioni in `f_*` **inquina il pool dei
+> fatti** → il run-log e la tabella sono stati **rimossi** (tabella droppata, codice tolto
+> dalla slice). L'app legge i saldi VERI da BQ per seminare il PF, genera/scarica il foglio,
+> ma **non riscrive proiezioni in BQ**. La "memoria mese×mese" delle proiezioni vive nei
+> **file xlsx versionati** (sono già il loro store), non in una fact table. Una eventuale
+> persistenza futura andrà in una casa SEPARATA dal pool `f_` (dataset/prefisso dedicato o
+> archivio xlsx) — decisione aperta. Le sezioni §3 e i riferimenti a `log_cash_projection_run`/
+> `f_cash_projection_runs` qui sotto sono **storici** (superati da questo amendment).
 
 ## Scope
 
@@ -174,7 +187,7 @@ Razionale CLAUDE.md: dead code correlato si **segnala**, non si cancella nello s
 - App `Cashflow` montata nel hub (pagina + nav); gira `render()`. (Card vetrina fuori MVP.)
 - Genera il PF del mese successivo via `rotate()` canonico (upload PF+scadenziario, saldi
   pre-fill BQ editabili, scelta policy fornitori), con download.
-- Ogni run riuscito logga `f_cash_projection_runs` via gate I1 (snapshot idempotente).
+- ~~Ogni run riuscito logga `f_cash_projection_runs`~~ → **RIMOSSO** (amendment: no proiezioni in `f_*`). L'app non scrive proiezioni in BQ; legge solo i saldi veri.
 - L'app mostra i controlli come riportati da `rotate()` (no fix `step5` in questa slice).
 - `app_scadenzario`/`tesoreria` deprecati (banner), non cancellati.
 - `pytest -q` e `ruff check` verdi sui file della slice.

@@ -2,8 +2,9 @@
 """Cashflow vertical — guscio Streamlit sul motore canonico pf-rotate.
 
 Monta `render()` nel hub. Stateless: upload PF + scadenziario + saldi → genera il
-PF del mese successivo (rotation completa) + logga il run su BQ (memoria mese×mese).
-L'authority è BigQuery + l'engine pf_rotate; questa è solo la surface.
+PF del mese successivo (rotation completa) scaricabile. L'authority è l'engine
+pf_rotate + i saldi VERI letti da BQ (f_saldi_banca_chiusura_mensile); il PF è
+tutto PROIEZIONE (tranne i saldi iniziali) e NON viene riscritto nel pool fatti.
 """
 
 from __future__ import annotations
@@ -17,12 +18,10 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from verticals.condges.pf_rotate.rotate import RotateResult, rotate
+from verticals.condges.pf_rotate.rotate import rotate
 from verticals.condges.pf_rotate.step1_saldi import fetch_saldi_da_bq
 from verticals.condges.pf_rotate.step3_scadenzario import UnmappedPolicy
 from verticals.condges.scadenze_parse import parse_scadenze
-from verticals.condges.services import cash_pf_service
-from verticals.condges.services.intents import LogCashRunIntent
 
 FORNITORI_CSV = Path("core/bq/dimensioni/d_fornitori.csv")
 MESI = {
@@ -41,18 +40,13 @@ MESI = {
 }
 
 
-def build_cash_run_intent(
-    *,
-    societa_id: str,
-    anno: int,
-    mese_chiuso: int,
-    data_saldo: str,
-    saldi: dict[str, float],
-    scad_df: pd.DataFrame,
-    bucket_months: list[int],
-    result: RotateResult,
-) -> LogCashRunIntent:
-    """Estrae le cifre del run dal scad_df + saldi + RotateResult (funzione pura)."""
+def scad_summary(
+    scad_df: pd.DataFrame, bucket_months: list[int]
+) -> dict[str, object]:
+    """Cifre di display dallo scadenziario: scaduto (roll-forward) + buckets forward.
+
+    Funzione pura, solo per la UI. Niente persistenza (il PF è proiezione).
+    """
     scaduto = float(scad_df["scaduto"].sum()) if "scaduto" in scad_df.columns else 0.0
     totale = float(scad_df["totale"].sum()) if "totale" in scad_df.columns else 0.0
     buckets = {
@@ -60,19 +54,11 @@ def build_cash_run_intent(
         for m in bucket_months
         if f"mese_{m}" in scad_df.columns
     }
-    return LogCashRunIntent(
-        societa_id=societa_id,
-        anno=anno,
-        mese_chiuso=mese_chiuso,
-        data_saldo=data_saldo,
-        saldo_cutover=float(sum(saldi.values())) if saldi else 0.0,
-        scaduto_totale=scaduto,
-        totale_partite_aperte=totale,
-        forward_buckets=buckets,
-        n_controlli_ok=result.n_controlli_ok,
-        n_controlli_err=result.n_controlli_err,
-        n_controlli_indet=result.n_controlli_indet,
-    )
+    return {
+        "scaduto_totale": scaduto,
+        "totale_partite_aperte": totale,
+        "forward_buckets": buckets,
+    }
 
 
 def render() -> None:
@@ -191,29 +177,13 @@ def render() -> None:
             f"{result.n_controlli_indet} INDET"
         )
 
-    intent = build_cash_run_intent(
-        societa_id=societa,
-        anno=int(anno),
-        mese_chiuso=int(mese_chiuso),
-        data_saldo=data_saldo.isoformat(),
-        saldi=saldi,
-        scad_df=scad_df,
-        bucket_months=bucket_months,
-        result=result,
-    )
-    st.metric("Scaduto (roll-forward)", f"€ {intent.scaduto_totale:,.2f}")
-    st.metric("Totale partite aperte", f"€ {intent.totale_partite_aperte:,.2f}")
-    if intent.forward_buckets:
+    summ = scad_summary(scad_df, bucket_months)
+    st.metric("Scaduto (roll-forward)", f"€ {summ['scaduto_totale']:,.2f}")
+    st.metric("Totale partite aperte", f"€ {summ['totale_partite_aperte']:,.2f}")
+    forward = summ["forward_buckets"]
+    if forward:
         st.write("Progressivo forward:")
-        st.table(
-            {MESI[m]: f"€ {v:,.2f}" for m, v in sorted(intent.forward_buckets.items())}
-        )
-
-    try:
-        cash_pf_service.log_cash_projection_run(intent)
-        st.caption("Run loggato su BigQuery (f_cash_projection_runs).")
-    except Exception as e:  # noqa: BLE001 — log non deve bloccare il download
-        st.warning(f"Run-log BQ non riuscito ({e}); download comunque disponibile.")
+        st.table({MESI[m]: f"€ {v:,.2f}" for m, v in sorted(forward.items())})
 
     st.download_button(
         "⬇️ Scarica nuovo PF",

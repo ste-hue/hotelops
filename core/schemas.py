@@ -102,36 +102,6 @@ class PianoFinanziarioInputRow(BaseModel):
         return v.strip()
 
 
-# ── f_cash_projection_runs ───────────────────────────────────────────────────
-
-
-class CashProjectionRunRow(BaseModel):
-    """Schema for f_cash_projection_runs rows (run-log proiezione cassa)."""
-
-    societa_id: SocietaId
-    anno: int
-    mese_chiuso: int
-    data_saldo: str  # ISO date del cutover
-    saldo_cutover: float
-    scaduto_totale: float
-    totale_partite_aperte: float
-    forward_buckets_json: str  # JSON {mese: importo}
-    saldo_proiettato_finale: Optional[float] = None
-    n_controlli_ok: int
-    n_controlli_err: int
-    n_controlli_indet: int
-    fonte: str = "APP_CASHFLOW"
-    data_caricamento: str  # ISO timestamp
-    raw_object_id: Optional[str] = None
-
-    @field_validator("mese_chiuso")
-    @classmethod
-    def mese_range(cls, v: int) -> int:
-        if not 1 <= v <= 12:
-            raise ValueError(f"mese_chiuso fuori range: {v}")
-        return v
-
-
 # ── f_movimenti_contabili ────────────────────────────────────────────────────
 
 
