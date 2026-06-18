@@ -1,3 +1,5 @@
+import re
+from pathlib import Path
 from unittest.mock import patch
 
 from core.schemas import BudgetMensileRow, PianoFinanziarioInputRow
@@ -100,3 +102,9 @@ def test_save_previsione_calls_gate_snapshot():
     # hash deterministico e stabile per (societa, voce, anno, mese, fonte)
     assert rows[0].hash_riga and len(rows[0].hash_riga) == 32
     assert result.rows_written == 3
+
+
+def test_app_cdg_has_no_direct_canonical_write():
+    src = Path("verticals/condges/app_cdg.py").read_text()
+    assert "load_table_from_json" not in src, "app_cdg deve delegare al service"
+    assert not re.search(r"DELETE\s+FROM", src, re.IGNORECASE), "no DELETE diretto in surface"
