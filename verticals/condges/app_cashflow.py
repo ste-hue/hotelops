@@ -26,8 +26,18 @@ from verticals.condges.services.intents import LogCashRunIntent
 
 FORNITORI_CSV = Path("core/bq/dimensioni/d_fornitori.csv")
 MESI = {
-    1: "gennaio", 2: "febbraio", 3: "marzo", 4: "aprile", 5: "maggio", 6: "giugno",
-    7: "luglio", 8: "agosto", 9: "settembre", 10: "ottobre", 11: "novembre", 12: "dicembre",
+    1: "gennaio",
+    2: "febbraio",
+    3: "marzo",
+    4: "aprile",
+    5: "maggio",
+    6: "giugno",
+    7: "luglio",
+    8: "agosto",
+    9: "settembre",
+    10: "ottobre",
+    11: "novembre",
+    12: "dicembre",
 }
 
 
@@ -75,7 +85,9 @@ def render() -> None:
     societa = st.selectbox("Società", ["ORTI", "INTUR"])
     col1, col2 = st.columns(2)
     with col1:
-        up_pf = st.file_uploader("PF del mese da chiudere (.xlsx)", type=["xlsx"], key="pf")
+        up_pf = st.file_uploader(
+            "PF del mese da chiudere (.xlsx)", type=["xlsx"], key="pf"
+        )
     with col2:
         up_scad = st.file_uploader(
             "Scadenziario fornitori (.xlsx)", type=["xlsx"], key="scad"
@@ -87,7 +99,9 @@ def render() -> None:
             "Mese da chiudere", min_value=1, max_value=12, value=max(1, today.month - 1)
         )
     )
-    anno = int(st.number_input("Anno", min_value=2020, max_value=2100, value=today.year))
+    anno = int(
+        st.number_input("Anno", min_value=2020, max_value=2100, value=today.year)
+    )
 
     if not up_pf or not up_scad:
         st.info("Carica PF e scadenziario per continuare.")
@@ -113,7 +127,9 @@ def render() -> None:
         bq_saldi = {}
         st.warning(f"Saldi BQ non disponibili ({e}); inseriscili a mano.")
     st.subheader("Saldi banca al cutover")
-    st.caption(f"Cutover: {data_saldo.isoformat()} (pre-compilati da BQ se disponibili)")
+    st.caption(
+        f"Cutover: {data_saldo.isoformat()} (pre-compilati da BQ se disponibili)"
+    )
     default_banche = list(bq_saldi.keys()) or (
         ["MPS", "Intesa", "MPS_KROSS"]
         if societa == "ORTI"
@@ -134,7 +150,9 @@ def render() -> None:
     policy_label = st.radio(
         "Fornitori non mappati", ["skip (procedi con warning)", "fail (blocca)"]
     )
-    policy = UnmappedPolicy.SKIP if policy_label.startswith("skip") else UnmappedPolicy.FAIL
+    policy = (
+        UnmappedPolicy.SKIP if policy_label.startswith("skip") else UnmappedPolicy.FAIL
+    )
 
     if not st.button("Genera PF mese successivo", type="primary"):
         return

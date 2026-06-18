@@ -2,7 +2,11 @@ import re
 from pathlib import Path
 from unittest.mock import patch
 
-from core.schemas import BudgetMensileRow, CashProjectionRunRow, PianoFinanziarioInputRow
+from core.schemas import (
+    BudgetMensileRow,
+    CashProjectionRunRow,
+    PianoFinanziarioInputRow,
+)
 from verticals.condges.services import cash_pf_service
 from verticals.condges.services.intents import (
     BudgetRiga,
@@ -130,10 +134,17 @@ def test_update_previsione_hash_matches_service():
 
 def test_log_cash_projection_run_calls_gate_snapshot():
     intent = LogCashRunIntent(
-        societa_id="ORTI", anno=2026, mese_chiuso=4, data_saldo="2026-04-30",
-        saldo_cutover=332611.44, scaduto_totale=-180442.12,
-        totale_partite_aperte=-573556.67, forward_buckets={5: -23470.84, 6: -347596.64},
-        n_controlli_ok=22, n_controlli_err=1, n_controlli_indet=0,
+        societa_id="ORTI",
+        anno=2026,
+        mese_chiuso=4,
+        data_saldo="2026-04-30",
+        saldo_cutover=332611.44,
+        scaduto_totale=-180442.12,
+        totale_partite_aperte=-573556.67,
+        forward_buckets={5: -23470.84, 6: -347596.64},
+        n_controlli_ok=22,
+        n_controlli_err=1,
+        n_controlli_indet=0,
     )
     with patch.object(cash_pf_service, "bq_write_validated") as gate:
         result = cash_pf_service.log_cash_projection_run(intent)
@@ -150,16 +161,26 @@ def test_log_cash_projection_run_calls_gate_snapshot():
     assert row.data_caricamento
     # forward_buckets serializzato come JSON string {mese: importo}
     import json
+
     assert json.loads(row.forward_buckets_json) == {"5": -23470.84, "6": -347596.64}
     assert result.rows_written == 1
 
 
 def test_cash_projection_run_rejects_bad_mese():
     import pytest
+
     bad = LogCashRunIntent(
-        societa_id="ORTI", anno=2026, mese_chiuso=13, data_saldo="2026-04-30",
-        saldo_cutover=0.0, scaduto_totale=0.0, totale_partite_aperte=0.0,
-        forward_buckets={}, n_controlli_ok=0, n_controlli_err=0, n_controlli_indet=0,
+        societa_id="ORTI",
+        anno=2026,
+        mese_chiuso=13,
+        data_saldo="2026-04-30",
+        saldo_cutover=0.0,
+        scaduto_totale=0.0,
+        totale_partite_aperte=0.0,
+        forward_buckets={},
+        n_controlli_ok=0,
+        n_controlli_err=0,
+        n_controlli_indet=0,
     )
     with patch.object(cash_pf_service, "bq_write_validated") as gate:
         with pytest.raises(Exception):

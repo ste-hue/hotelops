@@ -21,9 +21,14 @@ def test_build_cash_run_intent_computes_figures():
         }
     )
     intent = build_cash_run_intent(
-        societa_id="ORTI", anno=2026, mese_chiuso=4, data_saldo="2026-04-30",
-        saldi={"MPS": 245171.52, "INTESA": 87439.92}, scad_df=df,
-        bucket_months=[5, 6], result=_FakeResult(),
+        societa_id="ORTI",
+        anno=2026,
+        mese_chiuso=4,
+        data_saldo="2026-04-30",
+        saldi={"MPS": 245171.52, "INTESA": 87439.92},
+        scad_df=df,
+        bucket_months=[5, 6],
+        result=_FakeResult(),
     )
     assert intent.societa_id == "ORTI"
     assert intent.mese_chiuso == 4

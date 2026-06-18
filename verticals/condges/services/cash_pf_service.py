@@ -7,8 +7,16 @@ import json
 from datetime import datetime, timezone
 
 from core.bq.write import bq_write_validated
-from core.config import F_BUDGET_MENSILE, F_CASH_PROJECTION_RUNS, F_PIANO_FINANZIARIO_INPUT
-from core.schemas import BudgetMensileRow, CashProjectionRunRow, PianoFinanziarioInputRow
+from core.config import (
+    F_BUDGET_MENSILE,
+    F_CASH_PROJECTION_RUNS,
+    F_PIANO_FINANZIARIO_INPUT,
+)
+from core.schemas import (
+    BudgetMensileRow,
+    CashProjectionRunRow,
+    PianoFinanziarioInputRow,
+)
 from verticals.condges.services.intents import (
     LogCashRunIntent,
     SaveBudgetIntent,
@@ -108,7 +116,9 @@ def log_cash_projection_run(intent: LogCashRunIntent) -> SaveResult:
         data_caricamento=datetime.now(timezone.utc).isoformat(),
     )
     bq_write_validated(
-        str(F_CASH_PROJECTION_RUNS), [row], mode="snapshot",
+        str(F_CASH_PROJECTION_RUNS),
+        [row],
+        mode="snapshot",
         natural_key=_CASH_RUN_NATURAL_KEY,
     )
     return SaveResult(str(F_CASH_PROJECTION_RUNS), 1, _CASH_RUN_NATURAL_KEY)

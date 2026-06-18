@@ -8,6 +8,8 @@ def render():
         from verticals.condges.app_cashflow import render as _render
     except ImportError:
         st.title("💸 Cashflow")
-        st.info("App Cashflow non disponibile: `verticals/condges/app_cashflow.py` mancante.")
+        st.info(
+            "App Cashflow non disponibile: `verticals/condges/app_cashflow.py` mancante."
+        )
         return
     _render()
