@@ -103,7 +103,7 @@ def render() -> None:
         "pos_moolty": "Moolty (cassa)",
         "scost_cassa": "scost. cassa",
     })
-    st.dataframe(show, use_container_width=True, height=460)
+    st.dataframe(show, use_container_width=True, height=460, hide_index=True)
     st.caption("scost. cassa = banco registro − Moolty (vicino a 0 = la cassa del banco quadra).")
 
 
