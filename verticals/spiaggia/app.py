@@ -1,8 +1,8 @@
 """Streamlit — vertical Spiaggia (Panorama Beach): soldi totali per giorno.
 
-Vista semplice, read-only, del RICAVO TOTALE dello stabilimento:
+Vista interattiva e read-only del RICAVO TOTALE dello stabilimento:
 `stabilimento_totale` = banco INTUR (corrispettivi) + alloggiati ORTI (PMS),
-con la quadratura cassa Moolty. Niente prenotazioni / occupazione.
+con la quadratura cassa Moolty. Filtri: anno, periodo, solo-giorni-col-registro.
 
 Standalone: `streamlit run verticals/spiaggia/app.py`
 Hub: `from verticals.spiaggia.app import render` → `st.Page(render, ...)`
@@ -16,7 +16,6 @@ import streamlit as st
 from core.bq.client import get_client
 from core.config import DATASET, PROJECT
 
-# Brand Panorama Beach (approssimazione CSS, non il Design System web).
 _BRAND_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500&display=swap');
@@ -38,7 +37,13 @@ def _q(sql: str) -> pd.DataFrame:
 
 @st.cache_data(ttl=300)
 def load_giornaliero() -> pd.DataFrame:
-    return _q(f"SELECT * FROM `{PROJECT}.{DATASET}.v_spiaggia_giornaliero` ORDER BY data")
+    g = _q(f"SELECT * FROM `{PROJECT}.{DATASET}.v_spiaggia_giornaliero` ORDER BY data")
+    for c in _NUM:
+        if c in g:
+            g[c] = pd.to_numeric(g[c], errors="coerce").fillna(0)
+    if "data" in g:
+        g["data"] = pd.to_datetime(g["data"]).dt.date
+    return g
 
 
 def _eur(v) -> str:
@@ -49,7 +54,7 @@ def _eur(v) -> str:
 
 
 def render() -> None:
-    """Panorama Beach — soldi totali per giorno. Montabile nell'hub."""
+    """Panorama Beach — soldi totali per giorno, interattiva. Montabile nell'hub."""
     st.markdown(_BRAND_CSS, unsafe_allow_html=True)
     st.title("Panorama Beach")
     st.markdown('<div class="pb-sub">Soldi totali spiaggia · per giorno</div>',
@@ -60,41 +65,46 @@ def render() -> None:
         st.info("Nessun dato disponibile.")
         return
 
-    for c in _NUM:
-        if c in g:
-            g[c] = pd.to_numeric(g[c], errors="coerce").fillna(0)
-
+    # ---------------- Filtri (sidebar) ----------------
+    st.sidebar.header("Filtri")
     anni = sorted(g["anno"].dropna().unique().tolist(), reverse=True)
-    # Default sull'ultimo anno con dati completi (Moolty presente), non sull'anno
-    # in corso semi-vuoto (es. 2026 senza export Moolty/PMS ancora caricati).
+    # Default sull'ultimo anno con Moolty (non sull'anno in corso semi-vuoto).
     anni_full = [a for a in anni if g.loc[g["anno"] == a, "pos_moolty"].sum() > 0]
     default_idx = anni.index(anni_full[0]) if anni_full else 0
     anno = st.sidebar.selectbox("Anno", anni, index=default_idx) if anni else None
+
     gy = g[g["anno"] == anno].copy() if anno is not None else g.copy()
+    if not gy.empty:
+        dmin, dmax = gy["data"].min(), gy["data"].max()
+        periodo = st.sidebar.date_input("Periodo", (dmin, dmax),
+                                        min_value=dmin, max_value=dmax)
+        if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
+            gy = gy[(gy["data"] >= periodo[0]) & (gy["data"] <= periodo[1])]
+
+    if st.sidebar.checkbox("Solo giorni col registro compilato", value=False):
+        gy = gy[~gy["flag_manca_corrispettivi"]]
+
+    if gy.empty:
+        st.warning("Nessun dato nel periodo/filtro selezionato.")
+        return
 
     gy["banco"] = gy["spiaggia_intur"] + gy["bar_intur"]
-    totale = gy["stabilimento_totale"].sum()
-    banco = gy["banco"].sum()
-    alloggiati = gy["spiaggia_orti"].sum()
 
-    # --- Headline: SOLDI TOTALI (INTUR banco + ORTI alloggiati) ---
-    st.metric("💰 Soldi totali spiaggia", _eur(totale))
-    c1, c2 = st.columns(2)
-    c1.metric("di cui banco diretto (INTUR)", _eur(banco))
-    c2.metric("di cui ospiti hotel (ORTI)", _eur(alloggiati))
-    if alloggiati == 0 and banco > 0:
-        st.caption("⚠️ Alloggiati ORTI a 0 per quest'anno: manca l'export PMS — il totale è ancora solo il banco.")
+    # ---------------- KPI (reattivi ai filtri) ----------------
+    st.metric("💰 Soldi totali spiaggia", _eur(gy["stabilimento_totale"].sum()))
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Banco diretto (INTUR)", _eur(gy["banco"].sum()))
+    c2.metric("Ospiti hotel (ORTI)", _eur(gy["spiaggia_orti"].sum()))
+    c3.metric("Moolty (cassa POS)", _eur(gy["pos_moolty"].sum()))
 
-    # --- Andamento mensile: totale (banco + alloggiati impilati) ---
-    st.subheader("Per mese")
-    monthly = (gy.groupby("mese")
-               .agg(Banco=("banco", "sum"), **{"Ospiti hotel": ("spiaggia_orti", "sum")}))
-    st.bar_chart(monthly)  # barre impilate → l'altezza è il totale spiaggia
-
-    # --- Dettaglio giornaliero ---
+    # ---------------- Grafico (totale = banco + ospiti impilati) ----------------
     st.subheader("Per giorno")
+    st.bar_chart(gy.set_index("data")[["banco", "spiaggia_orti"]])
+
+    # ---------------- Tabella interattiva (ordinabile) ----------------
     show = gy[["data", "stabilimento_totale", "spiaggia_intur", "bar_intur",
-               "spiaggia_orti", "pos_moolty", "scost_cassa"]].sort_values("data")
+               "spiaggia_orti", "pos_moolty", "scost_cassa",
+               "flag_manca_corrispettivi"]].sort_values("data")
     show = show.rename(columns={
         "stabilimento_totale": "TOTALE",
         "spiaggia_intur": "spiaggia (INTUR)",
@@ -102,9 +112,11 @@ def render() -> None:
         "spiaggia_orti": "ospiti hotel (ORTI)",
         "pos_moolty": "Moolty (cassa)",
         "scost_cassa": "scost. cassa",
+        "flag_manca_corrispettivi": "⚠ no registro",
     })
     st.dataframe(show, use_container_width=True, height=460, hide_index=True)
-    st.caption("scost. cassa = banco registro − Moolty (vicino a 0 = la cassa del banco quadra).")
+    st.caption("Colonne ordinabili (clic sull'intestazione). scost. cassa = banco − Moolty. "
+               "⚠ no registro = giorno con Moolty ma corrispettivo non ancora compilato.")
 
 
 if __name__ == "__main__":

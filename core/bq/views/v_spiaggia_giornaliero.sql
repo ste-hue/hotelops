@@ -47,22 +47,24 @@ unified AS (
   FROM `hotelops-suite.hotelops.f_spiaggia_corrispettivi` c
   FULL OUTER JOIN alloggiati a ON c.data = a.data
 )
+-- FULL OUTER anche su Moolty: i giorni con SOLO Moolty (registro non ancora
+-- compilato, es. giugno 17-30) non vengono persi — banco=0 + flag_manca_corrispettivi.
 SELECT
-  u.data,
-  u.anno,
-  u.mese,
-  u.spiaggia_intur,
-  u.bar_intur,
-  u.spiaggia_orti,
-  u.spiaggia_totale,
-  u.bar_totale,
-  u.stabilimento_totale,
-  u.flag_manca_pms,
-  u.flag_manca_corrispettivi,
+  COALESCE(u.data, m.data)                              AS data,
+  EXTRACT(YEAR  FROM COALESCE(u.data, m.data))          AS anno,
+  EXTRACT(MONTH FROM COALESCE(u.data, m.data))          AS mese,
+  COALESCE(u.spiaggia_intur, 0)                         AS spiaggia_intur,
+  COALESCE(u.bar_intur, 0)                              AS bar_intur,
+  COALESCE(u.spiaggia_orti, 0)                          AS spiaggia_orti,
+  COALESCE(u.spiaggia_totale, 0)                        AS spiaggia_totale,
+  COALESCE(u.bar_totale, 0)                             AS bar_totale,
+  COALESCE(u.stabilimento_totale, 0)                    AS stabilimento_totale,
+  COALESCE(u.flag_manca_pms, TRUE)                      AS flag_manca_pms,
+  COALESCE(u.flag_manca_corrispettivi, TRUE)            AS flag_manca_corrispettivi,
   -- riconciliazione Moolty (banco INTUR totale vs POS operativo)
-  COALESCE(m.bar_moolty, 0)                                              AS pos_moolty,
+  COALESCE(m.bar_moolty, 0)                             AS pos_moolty,
   (COALESCE(u.spiaggia_intur, 0) + COALESCE(u.bar_intur, 0))
-    - COALESCE(m.bar_moolty, 0)                                          AS scost_cassa,
-  m.data IS NULL                                                         AS flag_manca_moolty
+    - COALESCE(m.bar_moolty, 0)                         AS scost_cassa,
+  m.data IS NULL                                        AS flag_manca_moolty
 FROM unified u
-LEFT JOIN moolty m ON u.data = m.data
+FULL OUTER JOIN moolty m ON u.data = m.data
