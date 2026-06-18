@@ -65,7 +65,11 @@ def render() -> None:
             g[c] = pd.to_numeric(g[c], errors="coerce").fillna(0)
 
     anni = sorted(g["anno"].dropna().unique().tolist(), reverse=True)
-    anno = st.sidebar.selectbox("Anno", anni) if anni else None
+    # Default sull'ultimo anno con dati completi (Moolty presente), non sull'anno
+    # in corso semi-vuoto (es. 2026 senza export Moolty/PMS ancora caricati).
+    anni_full = [a for a in anni if g.loc[g["anno"] == a, "pos_moolty"].sum() > 0]
+    default_idx = anni.index(anni_full[0]) if anni_full else 0
+    anno = st.sidebar.selectbox("Anno", anni, index=default_idx) if anni else None
     gy = g[g["anno"] == anno].copy() if anno is not None else g.copy()
 
     gy["banco"] = gy["spiaggia_intur"] + gy["bar_intur"]
