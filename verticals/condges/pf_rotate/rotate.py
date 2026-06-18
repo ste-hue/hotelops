@@ -1,4 +1,13 @@
-"""Orchestratore della rotation. Tie step 1+2+3+5 + file naming."""
+"""PF rotation — RENDER/EXPORT ADAPTER.
+
+Non possiede stato: l'authority del cash/PF è BigQuery (vedi
+docs/superpowers/specs/2026-06-09-cash-pf-engine-consolidation-design.md).
+Questo modulo produce l'artefatto Excel post-rotate a partire dai dati BQ;
+non è la fonte di verità della proiezione. Le scritture canonical passano
+dal service (cash_pf_service → gate I1), mai da qui.
+
+Orchestratore della rotation. Tie step 1+2+3+5 + file naming.
+"""
 
 from __future__ import annotations
 
