@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Last checkpoint:** 2026-06-18 | **Version:** 0.8.0
 
-> **CLAUDE.md = concetti + puntatori, NON catalogo.** Qui stanno solo le cose che NON si rigenerano: architettura, invarianti, dominio (INTUR/ORTI), regole operative. Il **catalogo completo tabelle/viste/colonne** è rigenerabile e vive altrove: `hotelops manifest` → `manifest.yaml`, dettaglio per-tabella nello skill `hotelops-data-analyst` + `core/bq/SCHEMA_CONTEXT.md`. Il **diario operativo vivo** è `STATUS.md` (leggilo prima di pianificare).
+> **CLAUDE.md = concetti + puntatori, NON catalogo.** Qui stanno solo le cose che NON si rigenerano: architettura, invarianti, dominio (INTUR/ORTI), regole operative. Lo **schema completo** è BigQuery stesso (`bq show <table>` / `INFORMATION_SCHEMA` — la source of truth). Dettagli curati: skill `hotelops-data-analyst` + `core/bq/SCHEMA_CONTEXT.md`; `hotelops manifest` → `core/bq/manifest.yaml` (snapshot parziale, subset di tabelle). Il **diario operativo vivo** è `STATUS.md` (leggilo prima di pianificare).
 
 > **2026-06-18 checkpoint:** ultimo lavoro — **vertical #3 spiaggia** completo (banco INTUR/corrispettivi ↔ Moolty + alloggiati ORTI/PMS, vista `v_spiaggia_giornaliero`, Drive auto-sync via cron). Thread aperti: loop minimo `cash_control` end-to-end; review-findings spiaggia (#1 Moolty dedup write-time da fixare); `scost_cassa` Moolty↔registro (~2%, in attesa causa da amministrazione).
 
@@ -83,7 +83,7 @@ hotelops promote --raw-object-id Y          # Promuovi → canonical
 hotelops lineage Y                          # Ispeziona identità + eventi
 python -m ingest.drive_fetch --source-name X [--file-id ID]   # Pull da Drive vivo
 hotelops deploy-views [--dry-run]           # Deploy viste da core/bq/views/
-hotelops manifest [--table T]               # Genera catalogo BQ (manifest.yaml)
+hotelops manifest [--table T]               # Snapshot catalogo BQ → core/bq/manifest.yaml (subset)
 
 # reviews
 hotelops reviews [--scrape] [--stats] [--alert] [--report]
@@ -94,7 +94,7 @@ pytest ; ruff check . ; ruff format .
 
 ## BigQuery (concetti — catalogo completo nel manifest)
 
-> Catalogo tabelle/viste/colonne: `hotelops manifest` → `manifest.yaml` + skill `hotelops-data-analyst` + `core/bq/SCHEMA_CONTEXT.md`. Qui solo i concetti che non si rigenerano.
+> Schema completo: BigQuery stesso (`bq show <table>`). Dettagli curati: skill `hotelops-data-analyst` + `core/bq/SCHEMA_CONTEXT.md` + `core/bq/manifest.yaml` (snapshot parziale). Qui solo i concetti che non si rigenerano.
 
 **Lifecycle:** **APPEND** (ogni file aggiunge righe; dedup via `hash_riga`/`filter_new_rows_by_hash` o MD5 content-hash all'intake) vs **SNAPSHOT** (l'ultimo file rimpiazza via DELETE-INSERT scoped al `natural_key`).
 

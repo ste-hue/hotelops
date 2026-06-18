@@ -1,0 +1,2135 @@
+generated_at: '2026-06-18T15:00:49Z'
+project: hotelops-suite
+dataset: hotelops
+tables:
+  f_banche_movimenti:
+    rows: 7259
+    columns:
+      id_movimento:
+        type: STRING
+        distinct: 7259
+        sample:
+        - MOV_INTUR_SELLA_20260309_000032_20260420163218
+        - MOV_INTUR_SELLA_20260414_000010_20260420164018
+        - MOV_INTUR_SELLA_20260417_000004_20260420164018
+        - MOV_ORTI_MPS_20260417_000010_20260420164023
+        - MOV_INTUR_SELLA_20260415_000006_20260420164018
+      societa_id:
+        type: STRING
+        distinct: 2
+        values:
+        - INTUR
+        - ORTI
+      business_unit_id:
+        type: STRING
+        distinct: 1
+        values:
+        - HQ
+      funzione_id:
+        type: STRING
+        distinct: 1
+        values:
+        - FINANZA
+      location_id:
+        type: STRING
+        distinct: 1
+        values:
+        - N_A
+      oggetto_id:
+        type: STRING
+        distinct: 6
+        values:
+        - CONTO_INTUR_INTESA
+        - CONTO_INTUR_MPS
+        - CONTO_INTUR_SELLA
+        - CONTO_ORTI_INTESA
+        - CONTO_ORTI_MPS
+        - CONTO_ORTI_MPS_KROSS
+      banca_id:
+        type: STRING
+        distinct: 4
+        values:
+        - INTESA
+        - MPS
+        - MPS_KROSS
+        - SELLA
+      data_operazione:
+        type: DATE
+        min: '2025-01-01'
+        max: '2026-06-16'
+        distinct: 459
+      data_valuta:
+        type: DATE
+        min: '2024-12-31'
+        max: '2026-06-16'
+        distinct: 484
+      descrizione:
+        type: STRING
+        distinct: 5833
+        sample:
+        - Pagamento pagoPA effettuato con successo
+        - RAIAOIL SANT'EGIDIO DEL MONTE ALBINO
+        - AMZN Mktp IT 800-279-6620
+        - GIROCONTO A INTUR SRL
+        - GOOGLE*ADS7121385890 CC GOOGLE.COM
+      divisa:
+        type: STRING
+        distinct: 1
+        values:
+        - EUR
+      importo_debito:
+        type: FLOAT
+        min: -101321.88
+        max: 3000004.5
+        distinct: 1924
+      importo_credito:
+        type: FLOAT
+        min: 0.0
+        max: 3000000.0
+        distinct: 2157
+      importo_netto:
+        type: FLOAT
+        min: -3000004.5
+        max: 3000000.0
+        distinct: 3867
+      categoria_raw:
+        type: STRING
+        distinct: 74
+      sottocategoria_raw:
+        type: STRING
+        distinct: 32
+      categoria_normalizzata:
+        type: STRING
+        distinct: 6
+        values:
+        - AFFITTO
+        - COMMISSIONI_BANCARIE
+        - NON_CLASSIFICATO
+        - SPESE_OPERATIVE
+        - TRASFERIMENTI
+        - VIAGGI_TRASPORTI
+      sottocategoria_normalizzata:
+        type: STRING
+        distinct: 6
+        values:
+        - AFFITTO_IMMOBILI
+        - ALTRO
+        - COMMISSIONI
+        - NON_CLASSIFICATO
+        - PARCHEGGI_BIGLIETTI
+        - SERVIZI_PROFESSIONALI
+      tipo_movimento:
+        type: STRING
+        distinct: 76
+      codice_identificativo_banca:
+        type: STRING
+        distinct: 1179
+        sample:
+        - ''
+        - '2.5001E+13'
+        - '2.50009E+13'
+        - '2.50008E+13'
+        - '2.50011E+13'
+      etichette:
+        type: STRING
+        distinct: 76
+      note:
+        type: STRING
+        distinct: 1
+        values:
+        - ''
+      data_ingresso:
+        type: DATE
+        min: '2025-12-09'
+        max: '2026-06-16'
+        distinct: 16
+      file_sorgente:
+        type: STRING
+        distinct: 51
+      riga_sorgente:
+        type: INTEGER
+        min: 2
+        max: 2185
+        distinct: 2183
+      hash_riga:
+        type: STRING
+      raw_object_id:
+        type: STRING
+        distinct: 12
+        values:
+        - 1f22b48f-751a-42e7-8099-8841d3221246
+        - 227a0c16-6284-47ac-bb07-85d172e0ab7f
+        - 34befd5b-dd3a-4626-bd23-5ae26c5ad8d2
+        - 3a2c9b53-a701-4791-bdda-97c0115824cd
+        - 3c90b7d0-7040-4bcb-b858-a005a49878df
+        - 4d5e1e55-3dbd-4644-b760-4995604fbc2f
+        - 5fcbe02b-5fe5-475d-9b96-5f0d88017142
+        - 7db0626e-dcd1-4ae0-a621-c99cc0ead5b5
+        - 82c9affe-62c6-40a5-8b7e-a7b483b34c50
+        - 973d9b49-085e-41b2-b47b-c962364cbf23
+        - 9a21d49a-4dd5-437d-ba91-61c3d0a69140
+        - e3ffa5da-9488-4afa-9e22-144515f9ce51
+    freshness:
+      date_column: data_operazione
+      min: '2025-01-01'
+      max: '2026-06-16'
+    sources:
+      file_sorgente:
+      - 2025-12-09__FINANZA__INTUR_SELLA__LISTA_MOVIMENTI_010125_091225.csv
+      - 2025-12-09__FINANZA__MPS__MOVIMENTI_CC_ORTI.xls
+      - 2026-03-09__FINANZA__INTUR_INTESA__movimenti.xlsx
+      - 2026-03-10__FINANZA__INTUR_MPS__Intur_ListaMovMPS_01012026_09032026.xlsx
+      - 2026-03-10__FINANZA__INTUR_SELLA__Intur_ListaMovimentiConto_Sella_010126_09032026.xls
+      - 2026-03-10__FINANZA__ORTI_MPS_KROSS__ORTI_LISTA_MOV_KROSS09032026.xlsx
+      - 2026-03-10__FINANZA__ORTI_MPS__ORTI_LISTA_MOVIMENTI_MPS09032026.xlsx
+      - Banca MPS Movements List.xlsx
+      - INTESA_ORTI_movimenti.xlsx
+      - INTUR SRL  lista movimenti intesa 050326_300326.xlsx
+      - INTURSELLA.xls
+      - INTUR_INTESA_20260504.xlsx
+      - INTUR_MPS_20260504.xls
+      - INTUR_MPS_portale_20251201_20260401.xls
+      - INTUR_SELLA_20260330.csv
+      - INTUR_SELLA_20260420.xls
+      - INTUR_SELLA_20260501.csv
+      - INTUR_SELLA_ListaMovimentiConto.csv
+      - INTUR_SELLA_ListaMovimentiConto.xls
+      - INTUR_SELLA_recente.csv
+      - Intur Elenco_movimenti_MPS.xls
+      - Intur MPS_Elenco_movimenti_050326 300326.xls
+      - KROSS_filenameExcel.xlsx
+      - ORTI LISTA MOV KROSS09032026.XLS
+      - ORTIMPS.XLS
+      - ORTIMPSKROSS.XLS
+      - ORTI_INTESA_2026-04-30.xlsx
+      - ORTI_KROSS_Banca MPS Movements List.xlsx
+      - ORTI_MPS_2026-04-30.xls
+      - ORTI_MPS_20260323.xls
+      - ORTI_MPS_20260330.xls
+      - ORTI_MPS_20260420.xls
+      - ORTI_MPS_Elenco_movimenti_12042026105437.xls
+      - ORTI_MPS_KROSS_2026-04-30.xls
+      - ORTI_MPS_KROSS_20260323.xls
+      - ORTI_MPS_KROSS_20260330.xlsx
+      - ORTI_MPS_KROSS_20260420.xls
+      - ORTI_MPS_filenameExcel.xlsx
+      - SELLA_COPERTURAINTURListaMovimentiConto (3).xls
+      - hotelops_raw_58_irp_8_filenameExcel.xlsx
+      - hotelops_raw_5f4zysse_movimenti (2).xlsx
+      - hotelops_raw_6q973o5k_ortikrossfilenameExcel.xlsx
+      - hotelops_raw_74z_0rmw_movimenti.xlsx
+      - hotelops_raw_96243y2w_ListaMovimenti_ORTI_01052026_31052026.xlsx
+      - hotelops_raw_gj032b_j_MPS_KROSS_ORTI.xlsx
+      - hotelops_raw_k_piyfnk_ORTI_MPS_movimenti_totali.xlsx
+      - hotelops_raw_nug3bo3q_ListaMovimentiConto (12).xls
+      - hotelops_raw_qnnk0ore_INTURMPS_filenameExcel.xlsx
+      - hotelops_raw_razo57m9_ORTI_conto_ultimi12mesi_11maggio.xlsx
+      - hotelops_raw_t65ovgw__SELLA_INTUR.xls
+      - hotelops_raw_ybthj6pi_INTUR_INTESA_MAGGIO_2026.xlsx
+  f_movimenti_contabili:
+    rows: 65824
+    columns:
+      hash_riga:
+        type: STRING
+      societa_id:
+        type: STRING
+        distinct: 2
+        values:
+        - INTUR
+        - ORTI
+      id_documento:
+        type: INTEGER
+        min: 1
+        max: 24543
+        distinct: 4187
+      num_progr_riga:
+        type: INTEGER
+        min: 0
+        max: 150
+        distinct: 151
+      gruppo_doc:
+        type: STRING
+        distinct: 53
+      anno:
+        type: INTEGER
+        min: 2024
+        max: 2026
+        distinct: 3
+      mese:
+        type: INTEGER
+        min: 1
+        max: 12
+        distinct: 12
+      data_registrazione:
+        type: DATE
+        min: '2024-01-01'
+        max: '2026-06-08'
+        distinct: 832
+      sigla_doc:
+        type: STRING
+        distinct: 8
+        values:
+        - AFT
+        - AFT-UE
+        - COR
+        - FT
+        - FT-RC
+        - FT-UE
+        - NC
+        - PNC
+      rif_registrazione:
+        type: STRING
+        distinct: 1794
+        sample:
+        - PNC 2
+        - PNC 1
+        - PNC 3
+        - PNC 4
+        - PNC 5
+      num_doc_originale:
+        type: STRING
+        distinct: 1934
+        sample:
+        - '1'
+        - '2'
+        - '3'
+        - '7'
+        - '105'
+      data_originale:
+        type: DATE
+        min: '2024-03-11'
+        max: '2026-06-07'
+        distinct: 735
+      tipo_documento:
+        type: STRING
+        distinct: 30
+        values:
+        - 701 - DARE/AVERE
+        - 702 - Corrispettivi Hotel
+        - 702 - Pagamenti fornitori
+        - 703 - Corrispettivi Residence
+        - 703 - Incassi da clienti
+        - 704 - Corrispettivi Casa Vacanze Maiori
+        - 704 - Giroconto Pos/Banca
+        - 710 - Fattura da fornitore (differita)
+        - 710 - Pagamento immediato su documento
+        - 715 - Contabilizzazione da ICB
+        - 716 - Fattura da fornitore (conto prop.)
+        - 720 - Fattura cliente (conto) (immediata)
+        - 721 - Fattura cliente imputaz. contabile
+        - 721 - Nota credito (imp. conto)
+        - 723 - Fattura cliente Hotel
+        - 724 - Fattura cliente Residence
+        - 725 - Fattura cliente Casa Vacanze Maiori
+        - 726 - Fattura cliente cross booking
+        - 760 - Retribuzioni
+        - 762 - Nota credito Hotel
+        - 763 - Nota credito Residence
+        - 764 - Nota credito Casa Vacanze Maiori
+        - 765 - Contabilizzazione Modello F24
+        - 766 - Nota credito kross booking
+        - 770 - Distinte di incasso e pagamento
+        - 902 - Ripresa saldi
+        - 995 - Chiusura Conti Economici
+        - 996 - Rilevazione risultato di esercizio
+        - 997 - Chiusura Conti Patrimoniali
+        - 998 - Riapertura Conti Patrimoniali
+      cod_conto:
+        type: STRING
+        distinct: 279
+        sample:
+        - '390521'
+        - '199001'
+        - '190101'
+        - '330301'
+        - '199007'
+      cod_partitario:
+        type: STRING
+        distinct: 1824
+        sample:
+        - '1'
+        - '2'
+        - '1115'
+        - '1131.0'
+        - '19'
+      rag_sociale:
+        type: STRING
+        distinct: 1742
+        sample:
+        - Debiti per caparre confirmatorie
+        - POS RECEPTION_T
+        - Banca c/c - BANCA SELLA
+        - BONIFICO
+        - Costo per bonifici verso altre banche
+      causale_contabile:
+        type: STRING
+        distinct: 22727
+        sample:
+        - FATTURA
+        - CORR_HOTEL
+        - CAPARRA_HOTEL
+        - CORR_RES
+        - RICAVI HOTEL
+      imp_dare:
+        type: FLOAT
+        min: -14531.0
+        max: 4933685.43
+        distinct: 14239
+      imp_avere:
+        type: FLOAT
+        min: -14531.0
+        max: 4933685.43
+        distinct: 14166
+      cod_divisione:
+        type: STRING
+        distinct: 0
+      file_sorgente:
+        type: STRING
+        distinct: 7
+        values:
+        - 2024_Intur_Esolver.xlsx
+        - INTUR_LISTAMOVCONT.XLS
+        - ORTI_LISTAMOVCONT.XLS
+        - hotelops_raw_5g6uo_f7_esolver_lista-movimenti_INTUR_2026-01-01_2026-06-10.xlsx
+        - hotelops_raw_dxcfc7zu_esolver_lista-movimenti_ORTI_2026-01-01_2026-06-10.xlsx
+        - hotelops_raw_rvzu9qjd_movimentiORTI.xlsx
+        - movimentiINTUR.xlsx
+      data_ingresso:
+        type: DATE
+        min: '2026-03-13'
+        max: '2026-06-11'
+        distinct: 5
+      raw_object_id:
+        type: STRING
+        distinct: 2
+        values:
+        - 436eb605-b2cd-4614-9fa0-eea01f333a41
+        - 8a81f356-475c-4e66-9bca-2e8277056675
+    freshness:
+      date_column: data_registrazione
+      min: '2024-01-01'
+      max: '2026-06-08'
+    sources:
+      file_sorgente:
+      - 2024_Intur_Esolver.xlsx
+      - INTUR_LISTAMOVCONT.XLS
+      - ORTI_LISTAMOVCONT.XLS
+      - hotelops_raw_5g6uo_f7_esolver_lista-movimenti_INTUR_2026-01-01_2026-06-10.xlsx
+      - hotelops_raw_dxcfc7zu_esolver_lista-movimenti_ORTI_2026-01-01_2026-06-10.xlsx
+      - hotelops_raw_rvzu9qjd_movimentiORTI.xlsx
+      - movimentiINTUR.xlsx
+  f_budget_mensile:
+    rows: 2733
+    columns:
+      societa_id:
+        type: STRING
+        distinct: 2
+        values:
+        - INTUR
+        - ORTI
+      anno:
+        type: INTEGER
+        min: 2026
+        max: 2026
+        distinct: 1
+      mese:
+        type: INTEGER
+        min: 1
+        max: 12
+        distinct: 12
+      codice_conto:
+        type: STRING
+        distinct: 123
+        sample:
+        - 67.01.01
+        - 63.05.19
+        - 57.09.17
+        - 65.90.08
+        - 65.90.01
+      descrizione:
+        type: STRING
+        distinct: 140
+        sample:
+        - Ricavi per alloggi
+        - Ricavi parcheggi
+        - Ricavi F&B
+        - Altre spese manutenzione beni propri
+        - Ricavi diversi
+      tipo_costo:
+        type: STRING
+        distinct: 5
+        values:
+        - F
+        - IP
+        - P
+        - V
+        - X
+      categoria_ce:
+        type: STRING
+        distinct: 8
+        values:
+        - Acquisti
+        - Costi Amministrativi
+        - Costi Commerciali
+        - Costi Produttivi
+        - Costo del Personale
+        - Oneri Finanziari
+        - Oneri Tributari
+        - Ricavi
+      business_unit_id:
+        type: STRING
+        distinct: 5
+        values:
+        - CVM
+        - HOTEL
+        - HQ
+        - LIDO
+        - RESIDENCE
+      importo:
+        type: FLOAT
+        min: -129081.9
+        max: 567542.22
+        distinct: 1761
+      fonte:
+        type: STRING
+        distinct: 9
+        values:
+        - CONS2025_F
+        - CONS2025_IP
+        - CONS2025_V
+        - CONS2025_X
+        - GASPAROTTO
+        - INCIDENZA
+        - MAPPATURA
+        - PERSONALE
+        - STRUTTURALI
+      data_caricamento:
+        type: TIMESTAMP
+        min: '2026-03-24'
+        max: '2026-03-24'
+        distinct: 3
+      raw_object_id:
+        type: STRING
+        distinct: 0
+    freshness:
+      date_column: data_caricamento
+      min: '2026-03-24'
+      max: '2026-03-24'
+    sources:
+      fonte:
+      - CONS2025_F
+      - CONS2025_IP
+      - CONS2025_V
+      - CONS2025_X
+      - GASPAROTTO
+      - INCIDENZA
+      - MAPPATURA
+      - PERSONALE
+      - STRUTTURALI
+  f_piano_finanziario_input:
+    rows: 348
+    columns:
+      hash_riga:
+        type: STRING
+      societa_id:
+        type: STRING
+        distinct: 2
+        values:
+        - INTUR
+        - ORTI
+      voce_id:
+        type: STRING
+        distinct: 19
+        values:
+        - ENTRATE_AFFITTI_INTUR
+        - ENTRATE_AFFITTI_MINORI
+        - ENTRATE_CVM
+        - ENTRATE_HOTEL
+        - ENTRATE_RESIDENCE
+        - ENTRATE_SPIAGGIA
+        - ENTRATE_SPIAGGIA_ORTI
+        - ENTRATE_SUPERMERCATO
+        - USCITE_CANONI
+        - USCITE_COMMISSIONI
+        - USCITE_CONSULENZE
+        - USCITE_GODIMENTO_BENI
+        - USCITE_MATERIE_PRIME
+        - USCITE_MUTUI
+        - USCITE_MUTUI_SEMESTRALE
+        - USCITE_SALARI
+        - USCITE_TASSE
+        - USCITE_UTENZE
+        - USCITE_VARIE
+      anno:
+        type: INTEGER
+        min: 2026
+        max: 2027
+        distinct: 2
+      mese:
+        type: INTEGER
+        min: 1
+        max: 12
+        distinct: 12
+      importo:
+        type: FLOAT
+        min: -6011.56
+        max: 782267.49
+        distinct: 163
+      fonte:
+        type: STRING
+        distinct: 3
+        values:
+        - BVA_2026
+        - PIANO_FINANZIARIO
+        - SCADENZIARIO
+      note:
+        type: STRING
+        distinct: 9
+        values:
+        - 'BvA_2026:   Ricavi Affitti'
+        - 'BvA_2026:   Ricavi CVM'
+        - 'BvA_2026:   Ricavi Hotel'
+        - 'BvA_2026:   Ricavi Spiaggia'
+        - Finanziamento MPS 1.2M (interessi) (MPS)
+        - Finanziamento MPS 3.5M (MPS)
+        - Finanziamento MPS 75k (MPS)
+        - Mutuo Intesa ex-BPER (Intesa)
+        - Mutuo ipotecario Intesa (Intesa)
+      file_sorgente:
+        type: STRING
+        distinct: 4
+        values:
+        - BvA_2026
+        - Intur - Piano Finanziario - 1_Gen.2026.xlsx
+        - ORTI - Piano Finanziario - 03_mar2026.xlsx
+        - scadenziario_mutui.csv
+      data_caricamento:
+        type: TIMESTAMP
+        min: '2026-03-18'
+        max: '2026-03-20'
+        distinct: 4
+      raw_object_id:
+        type: STRING
+        distinct: 0
+    freshness:
+      date_column: data_caricamento
+      min: '2026-03-18'
+      max: '2026-03-20'
+    sources:
+      file_sorgente:
+      - BvA_2026
+      - Intur - Piano Finanziario - 1_Gen.2026.xlsx
+      - ORTI - Piano Finanziario - 03_mar2026.xlsx
+      - scadenziario_mutui.csv
+  f_consumi_economato:
+    rows: 24467
+    columns:
+      hash_riga:
+        type: STRING
+      societa_id:
+        type: STRING
+        distinct: 1
+        values:
+        - ORTI
+      anno:
+        type: INTEGER
+        min: 2024
+        max: 2026
+        distinct: 3
+      mese:
+        type: INTEGER
+        min: 1
+        max: 12
+        distinct: 12
+      business_unit_id:
+        type: STRING
+        distinct: 5
+        values:
+        - CVM
+        - HOTEL
+        - HQ
+        - LIDO
+        - RESIDENCE
+      funzione_id:
+        type: STRING
+        distinct: 8
+        values:
+        - AMM
+        - EVENTO
+        - F&B
+        - LIDO
+        - LOGISTICA
+        - MAN
+        - ROOMS
+        - UNKNOWN
+      reparto_id:
+        type: STRING
+        distinct: 39
+      reparto_raw:
+        type: STRING
+        distinct: 35
+      is_evento:
+        type: BOOLEAN
+      evento_nome:
+        type: STRING
+        distinct: 8
+        values:
+        - ''
+        - BANCHETTI
+        - Brunello Cucinelli
+        - EVENTI
+        - EVENTO
+        - EVENTO_LUNCH
+        - EVENTO_RISTO
+        - MEETING
+      codice_prodotto:
+        type: STRING
+        distinct: 1615
+        sample:
+        - VAR.CAR.00015
+        - BEV.ACQ.00005
+        - PUL.DET.00009
+        - FOO.MON.00008
+        - PUL.STR.00013
+      descrizione:
+        type: STRING
+        distinct: 1602
+        sample:
+        - BOBINA CARTA STRONG 800 STRAPPIX10
+        - ACQUA NATURALE 50CL X 24
+        - SGRASSATORE CHANTECLAIR 600MLX12PZ
+        - ZUCCHERO BUSTINE ERIDIANA 10KG
+        - SPUGNE SCOTCH-BRITE 3PZ X 40 CF
+      classe:
+        type: STRING
+        distinct: 7
+        values:
+        - ATTREZZATURE
+        - BEVERAGE
+        - FOOD
+        - MANUTENZIONE
+        - PRODOTTI PER PULIZIA
+        - PRORPIETA' DIREZIONE
+        - VARIE
+      categoria_prodotto:
+        type: STRING
+        distinct: 78
+      sottocategoria:
+        type: STRING
+        distinct: 1
+        values:
+        - ''
+      quantita:
+        type: FLOAT
+        min: -5956.0
+        max: 6601.0
+        distinct: 1447
+      importo:
+        type: FLOAT
+        min: -98658.4549
+        max: 31855.047
+        distinct: 8017
+      file_sorgente:
+        type: STRING
+        distinct: 2
+        values:
+        - Consumptions F&B Data (1).xlsx
+        - Consumptions F&B Data.xlsx
+      data_caricamento:
+        type: TIMESTAMP
+        min: '2026-05-21'
+        max: '2026-06-09'
+        distinct: 2
+      raw_object_id:
+        type: STRING
+        distinct: 0
+    freshness:
+      date_column: data_caricamento
+      min: '2026-05-21'
+      max: '2026-06-09'
+    sources:
+      file_sorgente:
+      - Consumptions F&B Data (1).xlsx
+      - Consumptions F&B Data.xlsx
+  f_coperti_giornalieri:
+    rows: 1847
+    columns:
+      societa_id:
+        type: STRING
+        distinct: 1
+        values:
+        - ORTI
+      anno:
+        type: INTEGER
+        min: 2025
+        max: 2026
+        distinct: 2
+      mese:
+        type: INTEGER
+        min: 4
+        max: 10
+        distinct: 7
+      data_servizio:
+        type: DATE
+        min: '2025-04-16'
+        max: '2026-06-18'
+        distinct: 274
+      tipo_pasto:
+        type: STRING
+        distinct: 3
+        values:
+        - BRK
+        - DINNER
+        - LUNCH
+      tipo_ospite:
+        type: STRING
+        distinct: 7
+        values:
+        - COURTESY
+        - CVM
+        - DIPENDENTI
+        - ESTERNI
+        - HOTEL
+        - PM
+        - RESIDENCE
+      business_unit_id:
+        type: STRING
+        distinct: 4
+        values:
+        - CVM
+        - HOTEL
+        - HQ
+        - RESIDENCE
+      n_coperti:
+        type: INTEGER
+        min: 1
+        max: 188
+        distinct: 147
+      fonte:
+        type: STRING
+        distinct: 4
+        values:
+        - coperti_gsheet.xlsx::Breakfast
+        - coperti_gsheet.xlsx::Dinner
+        - coperti_gsheet.xlsx::Lunch
+        - coperti_gsheet.xlsx::Mensa Dipendenti
+      hash_riga:
+        type: STRING
+      data_caricamento:
+        type: TIMESTAMP
+        min: '2026-06-18'
+        max: '2026-06-18'
+        distinct: 1
+      raw_object_id:
+        type: STRING
+        distinct: 0
+    freshness:
+      date_column: data_caricamento
+      min: '2026-06-18'
+      max: '2026-06-18'
+    sources:
+      fonte:
+      - coperti_gsheet.xlsx::Breakfast
+      - coperti_gsheet.xlsx::Dinner
+      - coperti_gsheet.xlsx::Lunch
+      - coperti_gsheet.xlsx::Mensa Dipendenti
+  f_bilancino:
+    rows: 1006
+    columns:
+      hash_riga:
+        type: STRING
+      societa_id:
+        type: STRING
+        distinct: 2
+        values:
+        - INTUR
+        - ORTI
+      mese:
+        type: STRING
+        distinct: 7
+        values:
+        - 2025-04
+        - 2025-05
+        - 2026-01
+        - 2026-02
+        - 2026-03
+        - 2026-04
+        - 2026-05
+      codice_conto:
+        type: STRING
+        distinct: 208
+        sample:
+        - 19.01.01
+        - 11.03.01
+        - 15.05.03
+        - 19.03.03
+        - 15.01.07
+      descrizione:
+        type: STRING
+        distinct: 199
+        sample:
+        - Banca c/c
+        - Clienti terzi Italia
+        - Depositi cauzionali vari
+        - Cassa contanti
+        - Anticipi a fornitori terzi
+      tipo_conto:
+        type: STRING
+        distinct: 2
+        values:
+        - CE
+        - SP
+      sezione:
+        type: STRING
+        distinct: 5
+        values:
+        - Attività
+        - Costi
+        - Da definire
+        - Passività
+        - Ricavi
+      dare:
+        type: FLOAT
+        min: -3500000.0
+        max: 3000000.0
+        distinct: 270
+      avere:
+        type: FLOAT
+        min: -286296.52
+        max: 251331.26
+        distinct: 321
+      saldo:
+        type: FLOAT
+        min: -3500000.0
+        max: 3000000.0
+        distinct: 678
+      business_unit_id:
+        type: STRING
+        distinct: 5
+        values:
+        - CVM
+        - HOTEL
+        - HQ
+        - LIDO
+        - RESIDENCE
+      categoria:
+        type: STRING
+        distinct: 5
+        values:
+        - ATTIVO
+        - COSTI
+        - PASSIVO
+        - PATRIMONIALE
+        - RICAVI
+      file_sorgente:
+        type: STRING
+        distinct: 12
+        values:
+        - 01_gennaio_orti_.xlsx
+        - 02_Febbraio_orti.xlsx
+        - 03_marzo_orti.XLSX
+        - GENNAIO2026ESOLVER.xls
+        - esolver_bilancino_INTUR_2026-04.xlsx
+        - esolver_bilancino_INTUR_2026-05.xlsx
+        - esolver_bilancino_ORTI_2026-05.xlsx
+        - hotelops_raw_c0wj0fpw_esolver_bilancino_ORTI_2026-04.xls
+        - hotelops_raw_jvy7_96l_esolver_bilancino_ORTI_2025-04.xlsx
+        - hotelops_raw_ncaw2_2a_esolver_bilancino_INTUR_2025-05.xlsx
+        - hotelops_raw_vl_vo6ld_esolver_bilancino_INTUR_2025-04.xlsx
+        - hotelops_raw_zdzgijnq_esolver_bilancino_ORTI_2025-05.xlsx
+      data_ingresso:
+        type: STRING
+        distinct: 3
+        values:
+        - '2026-03-13'
+        - '2026-04-02'
+        - '2026-06-11'
+      raw_object_id:
+        type: STRING
+        distinct: 8
+        values:
+        - 0b8d70b7-f32f-42a6-91b0-f553e351758b
+        - 0f33ecf1-1e26-4673-b3b0-eb410d9dfc21
+        - 3e8e1649-600f-463d-87f1-422d2ea2c31f
+        - 47f94128-aa2a-4349-b387-300e447ffc4b
+        - 697a80ec-1420-4ac5-9c41-0874b0d3213d
+        - bc2febad-789b-431f-979c-9824e8a91d6b
+        - c076d231-e176-4ed9-913c-fc5ed0071147
+        - e72438ee-a1c9-48e9-9f9e-247181582846
+    freshness:
+      date_column: data_ingresso
+      min: '2026-03-13'
+      max: '2026-06-11'
+    sources:
+      file_sorgente:
+      - 01_gennaio_orti_.xlsx
+      - 02_Febbraio_orti.xlsx
+      - 03_marzo_orti.XLSX
+      - GENNAIO2026ESOLVER.xls
+      - esolver_bilancino_INTUR_2026-04.xlsx
+      - esolver_bilancino_INTUR_2026-05.xlsx
+      - esolver_bilancino_ORTI_2026-05.xlsx
+      - hotelops_raw_c0wj0fpw_esolver_bilancino_ORTI_2026-04.xls
+      - hotelops_raw_jvy7_96l_esolver_bilancino_ORTI_2025-04.xlsx
+      - hotelops_raw_ncaw2_2a_esolver_bilancino_INTUR_2025-05.xlsx
+      - hotelops_raw_vl_vo6ld_esolver_bilancino_INTUR_2025-04.xlsx
+      - hotelops_raw_zdzgijnq_esolver_bilancino_ORTI_2025-05.xlsx
+  f_partite_aperte_fornitori:
+    rows: 698
+    columns:
+      societa_id:
+        type: STRING
+        distinct: 2
+        values:
+        - INTUR
+        - ORTI
+      data_snapshot:
+        type: DATE
+        min: '2026-03-20'
+        max: '2026-05-13'
+        distinct: 3
+      codice_fornitore:
+        type: INTEGER
+        min: 1
+        max: 1701
+        distinct: 158
+      nome_fornitore:
+        type: STRING
+        distinct: 158
+        sample:
+        - FORNITORE ANTE 2024
+        - LE CROISSANT SRL
+        - ATTIANESE ALFONSO S.A.S. DI ATTIANESE ALFONSO E C.
+        - AUSINO - S.P.A. SERVIZI IDRICI INTEGRATI
+        - 4G ENERGIA SRL
+      tipo_documento:
+        type: STRING
+        distinct: 4
+        values:
+        - AFT
+        - FT
+        - NC
+        - PNC
+      numero_documento:
+        type: STRING
+        distinct: 416
+        sample:
+        - '5'
+        - '1'
+        - S/887
+        - '2'
+        - '3'
+      data_documento:
+        type: DATE
+        min: '2023-01-01'
+        max: '2026-05-12'
+        distinct: 168
+      data_scadenza:
+        type: DATE
+        min: '2023-01-01'
+        max: '2026-08-31'
+        distinct: 125
+      importo_residuo:
+        type: FLOAT
+        min: -299427.16
+        max: 22647.95
+        distinct: 438
+      importo_abs:
+        type: FLOAT
+        min: 0.01
+        max: 299427.16
+        distinct: 435
+      codice_pagamento:
+        type: STRING
+        distinct: 8
+        values:
+        - '01'
+        - '02'
+        - '03'
+        - '04'
+        - '05'
+        - 08
+        - 09
+        - '10'
+      metodo_pagamento:
+        type: STRING
+        distinct: 8
+        values:
+        - Bonifico Estero
+        - Bonifico SEPA
+        - Carta di credit
+        - Contanti
+        - PagoPA
+        - RI.BA.
+        - Rimessa diretta
+        - SDD
+      is_intercompany:
+        type: BOOLEAN
+      file_sorgente:
+        type: STRING
+        distinct: 4
+        values:
+        - INTUR_PARTITE_FORNITORI_20260428.xlsx
+        - hotelops_raw_p572rkoz_situazionepartitesintetica.xlsx
+        - hotelops_raw_z_3kbyln_situazionepartiteperfornitoriINTUR.xlsx
+        - situazionepartitafornitorial20marzo2026.xlsx
+      raw_object_id:
+        type: STRING
+        distinct: 2
+        values:
+        - 82729755-0f75-4f7a-b462-8110dd49e8ab
+        - f4f79023-ff02-45d1-a7c4-2f668532913e
+    freshness:
+      date_column: data_snapshot
+      min: '2026-03-20'
+      max: '2026-05-13'
+    sources:
+      file_sorgente:
+      - INTUR_PARTITE_FORNITORI_20260428.xlsx
+      - hotelops_raw_p572rkoz_situazionepartitesintetica.xlsx
+      - hotelops_raw_z_3kbyln_situazionepartiteperfornitoriINTUR.xlsx
+      - situazionepartitafornitorial20marzo2026.xlsx
+  f_saldi_banca_snapshot:
+    rows: 964
+    columns:
+      societa_id:
+        type: STRING
+        distinct: 2
+        values:
+        - INTUR
+        - ORTI
+      banca_id:
+        type: STRING
+        distinct: 4
+        values:
+        - INTESA
+        - MPS
+        - MPS_KROSS
+        - SELLA
+      data_snapshot:
+        type: DATE
+        min: '2025-01-01'
+        max: '2026-06-16'
+        distinct: 427
+      saldo_finale:
+        type: NUMERIC
+        min: !!python/object/apply:decimal.Decimal
+        - '-300263.81'
+        max: !!python/object/apply:decimal.Decimal
+        - '3456231.68'
+        distinct: 958
+      raw_object_id:
+        type: STRING
+        distinct: 0
+    freshness:
+      date_column: data_snapshot
+      min: '2025-01-01'
+      max: '2026-06-16'
+  f_saldi_banca_chiusura_mensile:
+    rows: 15
+    columns:
+      societa_id:
+        type: STRING
+        distinct: 2
+        values:
+        - INTUR
+        - ORTI
+      data_riferimento:
+        type: DATE
+        min: '2026-03-31'
+        max: '2026-05-31'
+        distinct: 3
+      banca_id:
+        type: STRING
+        distinct: 3
+        values:
+        - INTESA
+        - MPS
+        - SELLA
+      saldo_eur:
+        type: FLOAT
+        min: 1457.78
+        max: 682801.07
+        distinct: 15
+      note:
+        type: STRING
+        distinct: 7
+        values:
+        - Rosa 30/04/2026 Intesa ORTI
+        - Rosa 31/05/2026 — Saldi Banca Fine Mese
+        - certificato Stefano 2026-06-12 (corregge Rosa 251897.54)
+        - da estratto Intesa Sanpaolo
+        - da estratto SaldoAData (saldo a data)
+        - da estratto mensile MPS
+        - manuale verificato fine mese
+  f_accodamenti:
+    rows: 0
+    columns:
+      id_registrazione:
+        type: STRING
+      societa_id:
+        type: STRING
+      business_unit_id:
+        type: STRING
+      funzione_id:
+        type: STRING
+      location_id:
+        type: STRING
+      oggetto_id:
+        type: STRING
+      banca_id:
+        type: STRING
+      data_registrazione:
+        type: DATE
+      descrizione:
+        type: STRING
+      importo:
+        type: FLOAT
+      importo_dare:
+        type: FLOAT
+      importo_avere:
+        type: FLOAT
+      divisa:
+        type: STRING
+      riferimento_registrazione:
+        type: STRING
+      documento:
+        type: STRING
+      riferimenti_iva:
+        type: STRING
+      centro_imputazione:
+        type: STRING
+      data_ingresso:
+        type: DATE
+      file_sorgente:
+        type: STRING
+      riga_sorgente:
+        type: INTEGER
+      hash_riga:
+        type: STRING
+      raw_object_id:
+        type: STRING
+      categoria_cassa:
+        type: STRING
+  f_ricavi_storici:
+    rows: 108
+    columns:
+      societa_id:
+        type: STRING
+        distinct: 1
+        values:
+        - ORTI
+      business_unit_id:
+        type: STRING
+        distinct: 3
+        values:
+        - CVM
+        - HOTEL
+        - RESIDENCE
+      anno:
+        type: INTEGER
+        min: 2023
+        max: 2025
+        distinct: 3
+      mese:
+        type: INTEGER
+        min: 1
+        max: 12
+        distinct: 12
+      importo_entrate:
+        type: FLOAT
+        min: 0.0
+        max: 664539.64
+        distinct: 94
+      fonte:
+        type: STRING
+        distinct: 1
+        values:
+        - Riepilogo_Entrate_2023_2024_2025.xlsx
+      hash_riga:
+        type: STRING
+      data_caricamento:
+        type: TIMESTAMP
+        min: '2026-03-23'
+        max: '2026-03-23'
+        distinct: 1
+    freshness:
+      date_column: data_caricamento
+      min: '2026-03-23'
+      max: '2026-03-23'
+    sources:
+      fonte:
+      - Riepilogo_Entrate_2023_2024_2025.xlsx
+  f_chiusura_mensile:
+    rows: 21
+    columns:
+      societa_id:
+        type: STRING
+        distinct: 1
+        values:
+        - ORTI
+      anno:
+        type: INTEGER
+        min: 2026
+        max: 2026
+        distinct: 1
+      mese:
+        type: INTEGER
+        min: 4
+        max: 4
+        distinct: 1
+      voce_id:
+        type: STRING
+        distinct: 21
+        values:
+        - ENTRATE_CAPARRE
+        - ENTRATE_CVM
+        - ENTRATE_HOTEL
+        - ENTRATE_RESIDENCE
+        - ENTRATE_SPIAGGIA_ORTI
+        - ENTRATE_SUPERMERCATO
+        - USCITE_CANONE_PASSIVO
+        - USCITE_CANONI
+        - USCITE_COMMISSIONI
+        - USCITE_CONSULENZE
+        - USCITE_GODIMENTO_BENI
+        - USCITE_MATERIE_PRIME
+        - USCITE_MUTUI
+        - USCITE_MUTUI_SEMESTRALE
+        - USCITE_SALARI
+        - USCITE_SERVIZI_PRODUZIONE
+        - USCITE_SPESE_BANCARIE
+        - USCITE_TASSE
+        - USCITE_UTENZE
+        - USCITE_VARIE
+        - USCITE_VARIE_EXT
+      voce_label:
+        type: STRING
+        distinct: 20
+        values:
+        - Canone Affitto Ramo Azienda (INTUR→ORTI)
+        - Canoni e Servizi
+        - Caparre da Intur
+        - Commissioni OTA e Portali
+        - Commissioni e Spese Bancarie
+        - Consulenze e Marketing
+        - Entrate CVM
+        - Entrate Hotel
+        - Entrate Residence
+        - Entrate Supermercato
+        - Godimento Beni di Terzi (Fitti Passivi)
+        - Materie Prime / Consumo
+        - Mutui e Finanziamenti (rate mensili)
+        - Rimborso Finanziamenti (semestrale)
+        - Salari e Stipendi
+        - Servizi per la Produzione
+        - Spiaggia Alloggiati (Hotel+Res+CVM)
+        - Tasse e Imposte
+        - Utenze (Energia+Acqua+Gas+Tel+Internet)
+        - Varie ed Eventuali
+      sezione:
+        type: STRING
+        distinct: 2
+        values:
+        - ENTRATE
+        - USCITE
+      importo_consuntivo:
+        type: FLOAT
+        min: 0.0
+        max: 107650.0
+        distinct: 4
+      importo_previsione:
+        type: FLOAT
+        min: 0.0
+        max: 123835.0
+        distinct: 20
+      delta:
+        type: FLOAT
+        min: -123835.0
+        max: 107650.0
+        distinct: 21
+      delta_pct:
+        type: FLOAT
+        min: -100.0
+        max: -65.4
+        distinct: 2
+      saldo_banca_fine_mese:
+        type: FLOAT
+        min: 373253.0
+        max: 373253.0
+        distinct: 1
+      data_chiusura:
+        type: DATE
+        min: '2026-05-04'
+        max: '2026-05-04'
+        distinct: 1
+  f_mastrino_consolidato:
+    rows: 901
+    columns:
+      societa_id:
+        type: STRING
+        distinct: 2
+        values:
+        - INTUR
+        - ORTI
+      anno:
+        type: INTEGER
+        min: 2025
+        max: 2025
+        distinct: 1
+      mese:
+        type: INTEGER
+        min: 1
+        max: 12
+        distinct: 12
+      codice_conto:
+        type: STRING
+        distinct: 132
+        sample:
+        - 57.01.51
+        - 75.01.91
+        - 75.01.92
+        - 67.01.01
+        - 75.01.07
+      descrizione:
+        type: STRING
+        distinct: 124
+        sample:
+        - Ricavi per alloggi
+        - Ricavi parcheggi
+        - Altri servizi per la produzione
+        - Costo per bonifici verso altre banche
+        - Ricavi F&B
+      importo:
+        type: FLOAT
+        min: -120000.0
+        max: 671070.01
+        distinct: 770
+      tipo_costo:
+        type: STRING
+        distinct: 5
+        values:
+        - F
+        - IP
+        - P
+        - V
+        - X
+      business_unit_id:
+        type: STRING
+        distinct: 5
+        values:
+        - CVM
+        - HOTEL
+        - HQ
+        - LIDO
+        - RESIDENCE
+      categoria:
+        type: STRING
+        distinct: 5
+        values:
+        - COSTO_FISSO
+        - COSTO_VAR
+        - EXTRA_EBITDA
+        - PERSONALE
+        - RICAVO
+      categoria_ce:
+        type: STRING
+        distinct: 7
+        values:
+        - Acquisti
+        - Costi Amministrativi
+        - Costi Commerciali
+        - Costi Produttivi
+        - Costo del Personale
+        - Oneri Finanziari
+        - Ricavi
+  d_voci_piano_finanziario:
+    rows: 28
+    columns:
+      voce_id:
+        type: STRING
+        distinct: 28
+        values:
+        - ENTRATE_AFFITTI_INTUR
+        - ENTRATE_AFFITTI_MINORI
+        - ENTRATE_CAPARRE
+        - ENTRATE_CAPARRE_INTUR
+        - ENTRATE_CVM
+        - ENTRATE_HOTEL
+        - ENTRATE_RESIDENCE
+        - ENTRATE_RIENTRO_SOSPESI
+        - ENTRATE_SPIAGGIA
+        - ENTRATE_SPIAGGIA_ORTI
+        - ENTRATE_SUPERMERCATO
+        - USCITE_CANONE_PASSIVO
+        - USCITE_CANONI
+        - USCITE_COMMISSIONI
+        - USCITE_CONSULENZE
+        - USCITE_DEPOSITO_FITTO
+        - USCITE_GODIMENTO_BENI
+        - USCITE_MARKETING
+        - USCITE_MATERIE_PRIME
+        - USCITE_MUTUI
+        - USCITE_MUTUI_SEMESTRALE
+        - USCITE_SALARI
+        - USCITE_SERVIZI_PRODUZIONE
+        - USCITE_SPESE_BANCARIE
+        - USCITE_TASSE
+        - USCITE_UTENZE
+        - USCITE_VARIE
+        - USCITE_VARIE_EXT
+      voce_label:
+        type: STRING
+        distinct: 27
+        values:
+        - Affitti Minori (Farmacia e altri)
+        - Canone Affitto Ramo Azienda (INTUR→ORTI)
+        - Canone Affitto Ramo Azienda (ORTI→INTUR)
+        - Canoni e Servizi
+        - Caparre (da girare)
+        - Caparre da Intur
+        - Commissioni OTA e Portali
+        - Commissioni e Spese Bancarie
+        - Consulenze e Marketing
+        - Deposito Fitto (una tantum)
+        - Entrate CVM
+        - Entrate Hotel
+        - Entrate Residence
+        - Entrate Spiaggia (clienti esterni)
+        - Entrate Supermercato
+        - Godimento Beni di Terzi (Fitti Passivi)
+        - Marketing e Pubblicità
+        - Materie Prime / Consumo
+        - Mutui e Finanziamenti (rate mensili)
+        - Rientro Sospesi
+        - Rimborso Finanziamenti (semestrale)
+        - Salari e Stipendi
+        - Servizi per la Produzione
+        - Spiaggia Alloggiati (Hotel+Res+CVM)
+        - Tasse e Imposte
+        - Utenze (Energia+Acqua+Gas+Tel+Internet)
+        - Varie ed Eventuali
+      sezione:
+        type: STRING
+        distinct: 2
+        values:
+        - ENTRATE
+        - USCITE
+      categoria:
+        type: STRING
+        distinct: 16
+        values:
+        - Acquisti
+        - Affitti
+        - Banca
+        - Canoni
+        - Caparre
+        - Commissioni
+        - Consulenze
+        - Finanziario
+        - Fiscale
+        - Godimento Beni
+        - Marketing
+        - Personale
+        - Ricavi
+        - Servizi
+        - Utenze
+        - Varie
+      societa_id:
+        type: STRING
+        distinct: 2
+        values:
+        - INTUR
+        - ORTI
+      fonte:
+        type: STRING
+        distinct: 3
+        values:
+        - BANCHE
+        - ESOLVER
+        - MANUALE
+      cod_conto_pattern:
+        type: STRING
+        distinct: 23
+        values:
+        - '390521'
+        - '4791'
+        - '4792'
+        - '4793'
+        - '4794'
+        - '479401'
+        - '479501'
+        - '479502'
+        - '53'
+        - '55'
+        - '570101'
+        - '570151'
+        - '5709'
+        - '5711'
+        - '6101'
+        - '6301'
+        - '6304'
+        - '63051'
+        - '650105'
+        - '6503'
+        - '6511'
+        - '67'
+        - '7501'
+      cod_conto_pat2:
+        type: STRING
+        distinct: 8
+        values:
+        - '479402'
+        - '479503'
+        - '570150'
+        - '5903'
+        - '63059'
+        - '6505'
+        - '650604'
+        - '710104'
+      cod_conto_pat3:
+        type: STRING
+        distinct: 7
+        values:
+        - '479403'
+        - '570190'
+        - '6302'
+        - '640503'
+        - '6590'
+        - '710107'
+        - '71019'
+      banca_tipo_pat:
+        type: STRING
+        distinct: 3
+        values:
+        - PAGAMENTO RATA
+        - RIMBORSO FINANZIAMENTI
+        - SOSPESI
+      ord:
+        type: INTEGER
+        min: 10
+        max: 325
+        distinct: 28
+      bu_filter:
+        type: STRING
+        distinct: 4
+        values:
+        - CVM
+        - HOTEL
+        - LIDO
+        - RESIDENCE
+      categoria_ce:
+        type: STRING
+        distinct: 7
+        values:
+        - Costi Amministrativi
+        - Costi Commerciali
+        - Costi Produttivi
+        - Costi del Personale
+        - Oneri Finanziari
+        - Oneri Tributari
+        - Ricavi
+      tipo_costo:
+        type: STRING
+        distinct: 5
+        values:
+        - F
+        - IP
+        - P
+        - V
+        - X
+    sources:
+      fonte:
+      - BANCHE
+      - ESOLVER
+      - MANUALE
+  d_piano_conti:
+    rows: 160
+    columns:
+      codice_conto:
+        type: STRING
+        distinct: 160
+        sample:
+        - 55.01.05
+        - 55.01.90
+        - 55.01.19
+        - 55.01.91
+        - 55.01.17
+      descrizione:
+        type: STRING
+        distinct: 142
+        sample:
+        - Ricavi per alloggi
+        - Ricavi F&B
+        - Ricavi parcheggi
+        - Energia elettrica
+        - Trasporti su acquisti
+      tipo_conto:
+        type: STRING
+        distinct: 1
+        values:
+        - CE
+      sezione:
+        type: STRING
+        distinct: 2
+        values:
+        - COSTI
+        - RICAVI
+      partitario:
+        type: STRING
+        distinct: 1
+        values:
+        - ''
+      business_unit_id:
+        type: STRING
+        distinct: 5
+        values:
+        - CVM
+        - HOTEL
+        - HQ
+        - LIDO
+        - RESIDENCE
+  d_categorie_conti:
+    rows: 188
+    columns:
+      codice_conto:
+        type: STRING
+        distinct: 188
+        sample:
+        - 47.13.05
+        - 47.91.04
+        - 47.91.03
+        - 47.91.05
+        - 47.91.01
+      descrizione:
+        type: STRING
+        distinct: 153
+        sample:
+        - Ricavi per alloggi
+        - Ricavi parcheggi
+        - Commissioni Spiagge/Stripe
+        - Ricavi F&B
+        - Altri ricavi e proventi
+      tipo_costo:
+        type: STRING
+        distinct: 5
+        values:
+        - F
+        - IP
+        - P
+        - V
+        - X
+      categoria_ce:
+        type: STRING
+        distinct: 7
+        values:
+        - Acquisti
+        - Costi Amministrativi
+        - Costi Commerciali
+        - Costi Produttivi
+        - Costo del Personale
+        - Oneri Finanziari
+        - Ricavi
+      anno_inizio:
+        type: INTEGER
+        min: 2025
+        max: 2026
+        distinct: 2
+      anno_fine:
+        type: INTEGER
+        min: 2025
+        max: 2025
+        distinct: 1
+  d_fornitori:
+    rows: 236
+    columns:
+      codice_fornitore:
+        type: INTEGER
+        min: 1
+        max: 1734
+        distinct: 180
+      nome_esolver:
+        type: STRING
+        distinct: 188
+        sample:
+        - Giordano Associati S.r.l Socio Unico
+        - DELLA PIETRA ANNAMARIA
+        - DELLA PIERTA PAOLA
+        - Geologo Antonio Apicella
+        - DELLA PIETRA STEFANO
+      nome_pf:
+        type: STRING
+        distinct: 167
+        sample:
+        - Vulaj (Ceramica)
+        - Geologo Antonio Apicella
+        - Casa Vinicola Sammarco
+        - Foraggio Srl
+        - B&G Di Palo
+      voce_id:
+        type: STRING
+        distinct: 9
+        values:
+        - USCITE_CANONE_PASSIVO
+        - USCITE_COMMISSIONI
+        - USCITE_CONSULENZE
+        - USCITE_MATERIE_PRIME
+        - USCITE_SALARI
+        - USCITE_SERVIZI_PRODUZIONE
+        - USCITE_TASSE
+        - USCITE_UTENZE
+        - USCITE_VARIE_EXT
+      is_intercompany:
+        type: BOOLEAN
+      is_excluded:
+        type: BOOLEAN
+      exclude_reason:
+        type: STRING
+        distinct: 4
+        values:
+        - HPAN25PIANO1
+        - intercompany
+        - intercompany gruppo - fitto ramo azienda - no pressione cassa
+        - una_tantum
+      societa_id:
+        type: STRING
+        distinct: 2
+        values:
+        - INTUR
+        - ORTI
+  d_anagrafica_fornitori:
+    rows: 358
+    columns:
+      codice_fornitore:
+        type: INTEGER
+        min: 1
+        max: 1625
+        distinct: 358
+      ragione_sociale:
+        type: STRING
+        distinct: 358
+        sample:
+        - DIGITAL CINEMA CREW S.R.L.
+        - LA NUOVA AUTOCARROZZERIA LA MODERNISSIMA DI VASATURO GENNA
+        - MACROGAMES ITALIA SRL
+        - PISACANE RAFFAELE
+        - A. MIGLIORE S.R.L.
+      partita_iva:
+        type: STRING
+        distinct: 338
+        sample:
+        - '9719591217'
+        - '8793301212'
+        - '10413691212'
+        - '6621061214'
+        - '1306701218'
+      codice_fiscale:
+        type: STRING
+        distinct: 318
+        sample:
+        - '9719591217'
+        - VSTGNR76B07B990B
+        - '10413691212'
+        - PSCRFL64A30A068N
+        - '3843770631'
+      comune:
+        type: STRING
+        distinct: 153
+        sample:
+        - MAIORI
+        - NAPOLI
+        - SALERNO
+        - MILANO
+        - ROMA
+      provincia:
+        type: STRING
+        distinct: 40
+      tipo_soggetto:
+        type: STRING
+        distinct: 4
+        values:
+        - Altro
+        - Persona fisica
+        - Società di capitale
+        - Società di persone
+      stato_anagrafica:
+        type: STRING
+        distinct: 1
+        values:
+        - Attivo
+      data_caricamento:
+        type: STRING
+        distinct: 1
+        values:
+        - '2026-03-27T11:33:40.050011+00:00'
+    freshness:
+      date_column: data_caricamento
+      min: '2026-03-27T11:33:40.050011+00:00'
+      max: '2026-03-27T11:33:40.050011+00:00'
+  d_mapping_piano_finanziario:
+    rows: 220
+    columns:
+      societa_id:
+        type: STRING
+        distinct: 2
+        values:
+        - INTUR
+        - ORTI
+      voce_id:
+        type: STRING
+        distinct: 15
+        values:
+        - USCITE_CANONE_PASSIVO
+        - USCITE_CANONI
+        - USCITE_COMMISSIONI
+        - USCITE_CONSULENZE
+        - USCITE_GODIMENTO_BENI
+        - USCITE_MARKETING
+        - USCITE_MATERIE_PRIME
+        - USCITE_MUTUI
+        - USCITE_SALARI
+        - USCITE_SERVIZI_PRODUZIONE
+        - USCITE_SPESE_BANCARIE
+        - USCITE_TASSE
+        - USCITE_UTENZE
+        - USCITE_VARIE
+        - USCITE_VARIE_EXT
+      sotto_voce:
+        type: STRING
+        distinct: 203
+        sample:
+        - Energia elettrica
+        - Gas
+        - Amalfi sei esse
+        - Consulenza legale
+        - Ninni
+      tipo:
+        type: STRING
+        distinct: 2
+        values:
+        - CATEGORIA
+        - FORNITORE
+      codice_fornitore:
+        type: INTEGER
+        min: 1
+        max: 1605
+        distinct: 91
+      cod_conto_pattern:
+        type: STRING
+        distinct: 91
+      nome_esolver:
+        type: STRING
+        distinct: 85
+  d_coefficienti_stagionalita:
+    rows: 48
+    columns:
+      societa_id:
+        type: STRING
+        distinct: 1
+        values:
+        - ORTI
+      business_unit_id:
+        type: STRING
+        distinct: 4
+        values:
+        - CVM
+        - HOTEL
+        - HQ
+        - RESIDENCE
+      mese:
+        type: INTEGER
+        min: 1
+        max: 12
+        distinct: 12
+      coefficiente:
+        type: FLOAT
+        min: 0.0
+        max: 3.206914
+        distinct: 46
+      fonte:
+        type: STRING
+        distinct: 1
+        values:
+        - RICAVI_STORICI
+      hash_riga:
+        type: STRING
+      data_caricamento:
+        type: TIMESTAMP
+        min: '2026-03-24'
+        max: '2026-03-24'
+        distinct: 1
+    freshness:
+      date_column: data_caricamento
+      min: '2026-03-24'
+      max: '2026-03-24'
+    sources:
+      fonte:
+      - RICAVI_STORICI
+  d_budget_costi_fissi:
+    rows: 43
+    columns:
+      societa_id:
+        type: STRING
+        distinct: 2
+        values:
+        - INTUR
+        - ORTI
+      codice_conto:
+        type: STRING
+        distinct: 29
+        values:
+        - 55.07.03
+        - 55.07.90.02
+        - 57.09.01.01
+        - 57.09.09.01
+        - 57.09.13.01
+        - 57.09.17
+        - 57.09.19
+        - 57.09.90
+        - 57.11.07.01
+        - 61.01.01.03
+        - 61.01.01.91
+        - 61.01.03
+        - 63.04.01
+        - 63.05.15
+        - 63.05.19
+        - 63.05.90
+        - 65.01.05.90
+        - 65.03.05.99
+        - 65.05.05
+        - 65.06.04
+        - 65.90.01
+        - 65.90.02
+        - 65.90.08
+        - 65.90.09
+        - 71.01.04
+        - 71.01.07
+        - 71.01.90
+        - 71.03.11
+        - 75.01.07
+      descrizione:
+        type: STRING
+        distinct: 42
+      tipo:
+        type: STRING
+        distinct: 1
+        values:
+        - F
+      actuals_2025:
+        type: FLOAT
+        min: 0.0
+        max: 136700.0
+        distinct: 41
+      budget_2026:
+        type: FLOAT
+        min: 0.0
+        max: 0.0
+        distinct: 1
+      hotel:
+        type: FLOAT
+        min: 0.0
+        max: 90000.0
+        distinct: 13
+      residence:
+        type: FLOAT
+        min: 0.0
+        max: 35000.0
+        distinct: 8
+      cvm:
+        type: FLOAT
+        min: 0.0
+        max: 11700.0
+        distinct: 10
+      spiaggia:
+        type: FLOAT
+        min: 0.0
+        max: 4000.0
+        distinct: 6
+      hq:
+        type: FLOAT
+        min: 0.0
+        max: 39500.0
+        distinct: 31
+  d_personale_mensile:
+    rows: 78
+    columns:
+      divisione:
+        type: STRING
+        distinct: 7
+        values:
+        - AMM/ECO
+        - F&B
+        - MANAGEMENT
+        - MANUTENZIONE
+        - PROPRIETA'
+        - ROOM DIVISION
+        - SPIAGGIA
+      anno:
+        type: INTEGER
+        min: 2026
+        max: 2026
+        distinct: 1
+      mese:
+        type: STRING
+        distinct: 12
+        values:
+        - 2026-01
+        - 2026-02
+        - 2026-03
+        - 2026-04
+        - 2026-05
+        - 2026-06
+        - 2026-07
+        - 2026-08
+        - 2026-09
+        - 2026-10
+        - 2026-11
+        - 2026-12
+      mese_num:
+        type: INTEGER
+        min: 1
+        max: 12
+        distinct: 12
+      importo:
+        type: FLOAT
+        min: 695.0
+        max: 71046.0
+        distinct: 21
+  d_periodi_apertura:
+    rows: 3
+    columns:
+      societa_id:
+        type: STRING
+        distinct: 1
+        values:
+        - ORTI
+      business_unit_id:
+        type: STRING
+        distinct: 1
+        values:
+        - HOTEL
+      anno:
+        type: INTEGER
+        min: 2024
+        max: 2026
+        distinct: 3
+      data_apertura:
+        type: DATE
+        min: '2024-03-27'
+        max: '2026-04-03'
+        distinct: 3
+      data_chiusura:
+        type: DATE
+        min: '2024-10-30'
+        max: '2025-10-30'
+        distinct: 2
+      note:
+        type: STRING
+        distinct: 1
+        values:
+        - ongoing
+      notti_apertura:
+        type: INTEGER
+        min: 216
+        max: 217
+        distinct: 2
