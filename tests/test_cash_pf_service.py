@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from core.schemas import BudgetMensileRow
+from core.schemas import BudgetMensileRow, PianoFinanziarioInputRow
 from verticals.condges.services import cash_pf_service
 from verticals.condges.services.intents import (
     BudgetRiga,
@@ -77,3 +77,26 @@ def test_save_budget_rejects_bad_row():
         with pytest.raises(Exception):
             cash_pf_service.save_budget(bad)
         gate.assert_not_called()  # fallisce alla validazione, prima del gate
+
+
+def test_save_previsione_calls_gate_snapshot():
+    intent = SavePrevisioneIntent(
+        societa_id="ORTI",
+        voce_id="USCITE_UTENZE",
+        mesi=[4, 5, 6],
+        importo=22000.0,
+        anno=2026,
+    )
+    with patch.object(cash_pf_service, "bq_write_validated") as gate:
+        result = cash_pf_service.save_previsione(intent)
+
+    args, kwargs = gate.call_args
+    table, rows = args[0], args[1]
+    assert table.endswith("f_piano_finanziario_input")
+    assert kwargs["mode"] == "snapshot"
+    assert kwargs["natural_key"] == ["societa_id", "voce_id", "anno", "mese", "fonte"]
+    assert all(isinstance(r, PianoFinanziarioInputRow) for r in rows)
+    assert {r.mese for r in rows} == {4, 5, 6}
+    # hash deterministico e stabile per (societa, voce, anno, mese, fonte)
+    assert rows[0].hash_riga and len(rows[0].hash_riga) == 32
+    assert result.rows_written == 3
