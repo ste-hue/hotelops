@@ -18,7 +18,11 @@ WITH alloggiati AS (
 ),
 moolty AS (
   SELECT data, SUM(entrata) AS bar_moolty
-  FROM `hotelops-suite.hotelops.f_spiaggia_fb_ordini`
+  FROM (
+    SELECT hash_riga, ANY_VALUE(data) AS data, ANY_VALUE(entrata) AS entrata
+    FROM `hotelops-suite.hotelops.f_spiaggia_fb_ordini`
+    GROUP BY hash_riga
+  )
   GROUP BY data
 ),
 unified AS (
