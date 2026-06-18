@@ -31,6 +31,7 @@ Verifica read-only su file reali aprile→maggio: il motore **funziona, i numeri
 - **Statefulness / auto-load** dell'ultimo PF dalla memoria (Fase 3 piena). Solo run-log.
 - **Editing in-UI del CSV fornitori** per i non mappati (Fase 4). Si surfacano e basta.
 - **Storage GCS** dell'xlsx generato (solo download nell'MVP).
+- **Card vetrina** (Cloudflare `publish/`) che linka la pagina hub → giro successivo.
 - **BQ authority** della proiezione / xlsx puro render (Metà B completa).
 - Fix del **doppio conteggio** controlli (CLI gen-time vs formule in-foglio) e delle
   **label-mese stale** dell'header → follow-up annotati, non bloccanti.
@@ -58,7 +59,7 @@ HUB MOUNT
   verticals/hub/pages_/cashflow.py  (NEW) — render() → app_cashflow.render()
   verticals/hub/app.py              — st.Page(cashflow.render, title="Cashflow",
                                       icon="💸", url_path="cashflow")
-  vetrina (publish/) — card "Cashflow" che linka la pagina hub (gated IAP)
+  (card vetrina → giro successivo, fuori MVP)
 ```
 
 **Regole del confine:**
@@ -77,8 +78,8 @@ HUB MOUNT
 4. **Mese-chiuso** (default dedotto da PF/data; override manuale).
 5. **Saldi banca**: pre-compilati da `fetch_saldi_da_bq(societa, data_saldo)` al cutover,
    **editabili** (override manuale per banca).
-6. **Fornitori non mappati**: lista esplicita + scelta policy `skip` (warning) / `fail`
-   (blocca). *(In-UI CSV editing → Fase 4.)*
+6. **Fornitori non mappati**: lista esplicita + scelta policy — **default `skip`** (procede
+   con warning, non blocca l'amministrazione) / `fail` (blocca). *(In-UI CSV editing → Fase 4.)*
 7. **Genera** → `rotate(...)`. Mostra:
    - esito **controlli** (OK/ERR/INDET) — con dettaglio degli ERR (post-fix §4);
    - **scaduto** roll-forward (totale in primo mese aperto);
@@ -168,7 +169,7 @@ Razionale CLAUDE.md: dead code correlato si **segnala**, non si cancella nello s
 - `pf_rotate` esistenti invariati.
 
 **Definition of done della slice:**
-- App `Cashflow` montata nel hub (pagina + nav) e linkata dalla vetrina; gira `render()`.
+- App `Cashflow` montata nel hub (pagina + nav); gira `render()`. (Card vetrina fuori MVP.)
 - Genera il PF del mese successivo via `rotate()` canonico (upload PF+scadenziario, saldi
   pre-fill BQ editabili, scelta policy fornitori), con download.
 - Ogni run riuscito logga `f_cash_projection_runs` via gate I1 (snapshot idempotente).
