@@ -65,23 +65,22 @@ def render() -> None:
         st.info("Nessun dato disponibile.")
         return
 
-    # ---------------- Filtri (sidebar) ----------------
-    st.sidebar.header("Filtri")
+    # ---------------- Filtri (in alto, sempre visibili — niente sidebar) ----------------
     anni = sorted(g["anno"].dropna().unique().tolist(), reverse=True)
     # Default sull'ultimo anno con Moolty (non sull'anno in corso semi-vuoto).
     anni_full = [a for a in anni if g.loc[g["anno"] == a, "pos_moolty"].sum() > 0]
     default_idx = anni.index(anni_full[0]) if anni_full else 0
-    anno = st.sidebar.selectbox("Anno", anni, index=default_idx) if anni else None
 
+    fc1, fc2, fc3 = st.columns([1, 2, 1.4])
+    anno = fc1.selectbox("Anno", anni, index=default_idx) if anni else None
     gy = g[g["anno"] == anno].copy() if anno is not None else g.copy()
     if not gy.empty:
         dmin, dmax = gy["data"].min(), gy["data"].max()
-        periodo = st.sidebar.date_input("Periodo", (dmin, dmax),
-                                        min_value=dmin, max_value=dmax)
+        periodo = fc2.date_input("Periodo", (dmin, dmax),
+                                 min_value=dmin, max_value=dmax)
         if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
             gy = gy[(gy["data"] >= periodo[0]) & (gy["data"] <= periodo[1])]
-
-    if st.sidebar.checkbox("Solo giorni col registro compilato", value=False):
+    if fc3.checkbox("Solo giorni col registro", value=False):
         gy = gy[~gy["flag_manca_corrispettivi"]]
 
     if gy.empty:
