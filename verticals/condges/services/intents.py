@@ -36,6 +36,23 @@ class SavePrevisioneIntent:
 
 
 @dataclass(frozen=True)
+class LogCashRunIntent:
+    societa_id: str
+    anno: int
+    mese_chiuso: int
+    data_saldo: str  # ISO date
+    saldo_cutover: float
+    scaduto_totale: float
+    totale_partite_aperte: float
+    forward_buckets: dict[int, float]
+    n_controlli_ok: int
+    n_controlli_err: int
+    n_controlli_indet: int
+    saldo_proiettato_finale: float | None = None
+    fonte: str = "APP_CASHFLOW"
+
+
+@dataclass(frozen=True)
 class SaveResult:
     table: str
     rows_written: int
