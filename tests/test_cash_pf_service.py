@@ -27,7 +27,11 @@ def test_intents_construct():
     assert b.righe[0].mese == 4
 
     p = SavePrevisioneIntent(
-        societa_id="ORTI", voce_id="USCITE_UTENZE", mesi=[4, 5], importo=22000.0, anno=2026,
+        societa_id="ORTI",
+        voce_id="USCITE_UTENZE",
+        mesi=[4, 5],
+        importo=22000.0,
+        anno=2026,
     )
     assert p.fonte == "NANOCLAW"
 
@@ -73,7 +77,9 @@ def test_save_budget_rejects_bad_row():
     bad = SaveBudgetIntent(
         societa_id="ORTI",
         anno=2026,
-        righe=[BudgetRiga(mese=13, codice_conto="570913", importo=1.0)],  # mese fuori range
+        righe=[
+            BudgetRiga(mese=13, codice_conto="570913", importo=1.0)
+        ],  # mese fuori range
     )
     with patch.object(cash_pf_service, "bq_write_validated") as gate:
         with pytest.raises(Exception):
@@ -107,7 +113,9 @@ def test_save_previsione_calls_gate_snapshot():
 def test_app_cdg_has_no_direct_canonical_write():
     src = Path("verticals/condges/app_cdg.py").read_text()
     assert "load_table_from_json" not in src, "app_cdg deve delegare al service"
-    assert not re.search(r"DELETE\s+FROM", src, re.IGNORECASE), "no DELETE diretto in surface"
+    assert not re.search(r"DELETE\s+FROM", src, re.IGNORECASE), (
+        "no DELETE diretto in surface"
+    )
 
 
 def test_update_previsione_hash_matches_service():

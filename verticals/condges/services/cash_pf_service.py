@@ -76,4 +76,6 @@ def save_previsione(intent: SavePrevisioneIntent) -> SaveResult:
         mode="snapshot",
         natural_key=_PREVISIONE_NATURAL_KEY,
     )
-    return SaveResult(str(F_PIANO_FINANZIARIO_INPUT), len(rows), _PREVISIONE_NATURAL_KEY)
+    return SaveResult(
+        str(F_PIANO_FINANZIARIO_INPUT), len(rows), _PREVISIONE_NATURAL_KEY
+    )
