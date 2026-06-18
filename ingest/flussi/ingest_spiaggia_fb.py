@@ -190,10 +190,18 @@ def ingest_file(
         log.info("[DRY-RUN] fb_ordini → %s : %d righe", F_SPIAGGIA_FB_ORDINI, len(rows))
         return {"fb_ordini": len(rows)}
 
+    from core.bq.dedup import filter_new_rows_by_hash
     from core.bq.write import bq_write_validated
-    bq_write_validated(F_SPIAGGIA_FB_ORDINI, rows, mode="append")
-    log.info("OK fb_ordini → %s : %d righe (append)", F_SPIAGGIA_FB_ORDINI, len(rows))
-    return {"fb_ordini": len(rows)}
+
+    new_rows = filter_new_rows_by_hash(F_SPIAGGIA_FB_ORDINI, rows, "hash_riga")
+    if not new_rows:
+        log.info("Tutte le righe già presenti — niente da scrivere (%s)", path.name)
+        return {"fb_ordini": 0}
+
+    bq_write_validated(F_SPIAGGIA_FB_ORDINI, new_rows, mode="append")
+    log.info("OK fb_ordini → %s : %d righe nuove (su %d totali)",
+             F_SPIAGGIA_FB_ORDINI, len(new_rows), len(rows))
+    return {"fb_ordini": len(new_rows)}
 
 
 def main() -> None:
