@@ -20,6 +20,14 @@
       "subtitle": "dashboard completo (Streamlit)"
     },
     {
+      "id": "spiaggia",
+      "title": "Spiaggia",
+      "icon": "🏖",
+      "kind": "external",
+      "url": "https://hotelops-hub-lvk3phpq4q-ew.a.run.app/spiaggia",
+      "subtitle": "ricavo stabilimento & quadratura (Streamlit)"
+    },
+    {
       "id": "mutui",
       "title": "Mutui",
       "icon": "🏦",
