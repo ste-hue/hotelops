@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "apps": [
+    {
+      "id": "fb",
+      "title": "Food & Beverage",
+      "icon": "🍽",
+      "kind": "external",
+      "url": "https://hotelops-hub-lvk3phpq4q-ew.a.run.app/",
+      "kpi_from": "fb",
+      "subtitle": "dashboard completo (Streamlit)"
+    },
+    {
+      "id": "reviews",
+      "title": "Reputation",
+      "icon": "⭐",
+      "kind": "external",
+      "url": "https://hotelops-hub-lvk3phpq4q-ew.a.run.app/reviews",
+      "kpi_from": "reviews",
+      "subtitle": "dashboard completo (Streamlit)"
+    },
+    {
+      "id": "spiaggia",
+      "title": "Spiaggia",
+      "icon": "🏖",
+      "kind": "external",
+      "url": "https://hotelops-hub-lvk3phpq4q-ew.a.run.app/spiaggia",
+      "subtitle": "ricavo stabilimento & quadratura (Streamlit)"
+    },
+    {
+      "id": "mutui",
+      "title": "Mutui",
+      "icon": "🏦",
+      "kind": "external",
+      "url": "https://mutui-tracker.ste-dellapietra.workers.dev/",
+      "subtitle": "ammortamenti & simulatore"
+    },
+    {
+      "id": "banche",
+      "title": "Banche",
+      "icon": "🏛",
+      "kind": "external",
+      "url": "https://datastudio.google.com/u/0/reporting/2a7a4c25-56f2-44d4-986f-9a9cc27a03cd/page/TlJ0C",
+      "subtitle": "cashflow & movimenti (Looker)"
+    }
+  ]
+}
