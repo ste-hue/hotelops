@@ -93,6 +93,11 @@ def main():
         help=f"Path al CSV (default: {DEFAULT_SOURCE})",
     )
     parser.add_argument("--dry-run", action="store_true", help="Parse only, no write")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Conferma il TRUNCATE distruttivo (vedi warning). Richiesto per scrivere.",
+    )
     args = parser.parse_args()
 
     logger = setup_logger()
@@ -119,6 +124,19 @@ def main():
     if not HAS_BQ:
         logger.error("google-cloud-bigquery non installato")
         sys.exit(1)
+
+    # GUARD: questo loader fa WRITE_TRUNCATE (sovrascrive l'intera d_fornitori).
+    # L'app Cashflow ora scrive le mappature DIRETTAMENTE su BQ (upsert MERGE) →
+    # BQ è la fonte di scrittura. Rilanciare il loader dal CSV (potenzialmente stale)
+    # CANCELLEREBBE quelle mappature. Usalo solo come SEED iniziale, con --force.
+    if not args.force:
+        logger.error(
+            "RIFIUTO: load TRUNCATE non confermato. Questo sovrascriverebbe d_fornitori "
+            "in BQ con il CSV — incluse le mappature scritte dall'app (upsert). "
+            "Usa --dry-run per ispezionare, o --force SOLO per un seed iniziale "
+            "(prima esporta lo stato BQ con fornitori_map.export_fornitori_to_csv)."
+        )
+        sys.exit(2)
 
     bq_client = get_client()
 
