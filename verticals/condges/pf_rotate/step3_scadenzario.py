@@ -14,7 +14,7 @@ from pathlib import Path
 import openpyxl
 import pandas as pd
 
-from verticals.condges.app_scadenzario import write_pf
+from verticals.condges.pf_rotate.pf_writer import write_pf
 from verticals.condges.pf_generator.blocchi import blocco_a_per_voce
 from verticals.condges.pf_generator.template import scrivi_da_mappare, scrivi_esclusi
 from verticals.condges.pf_rotate.fornitori_map import load_fornitori
