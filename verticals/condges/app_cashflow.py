@@ -296,9 +296,12 @@ def render() -> None:
         st.write("Progressivo forward:")
         st.table({MESI[m]: f"€ {v:,.2f}" for m, v in sorted(forward.items())})
 
+    # Nome download pulito e inequivocabile: società + PF + primo mese proiettato
+    # (YYYY-MM). Niente timestamp/doppia-data che confonde.
+    nome_download = f"{societa}_PF_{primo_aperto[0]}-{primo_aperto[1]:02d}.xlsx"
     st.download_button(
-        "⬇️ Scarica nuovo PF",
+        f"⬇️ Scarica {nome_download}",
         data=out_bytes,
-        file_name=result.out_path.name,
+        file_name=nome_download,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
