@@ -296,9 +296,9 @@ def render() -> None:
         st.write("Progressivo forward:")
         st.table({MESI[m]: f"€ {v:,.2f}" for m, v in sorted(forward.items())})
 
-    # Nome download pulito e inequivocabile: società + PF + primo mese proiettato
-    # (YYYY-MM). Niente timestamp/doppia-data che confonde.
-    nome_download = f"{societa}_PF_{primo_aperto[0]}-{primo_aperto[1]:02d}.xlsx"
+    # Nome canonico dell'engine: <societa>_PF_<YYYY-MM>_post-rotate_<timestamp>.xlsx
+    # — ha il mese (primo proiettato) + il timestamp. Mostrato nel bottone per verifica.
+    nome_download = result.out_path.name
     st.download_button(
         f"⬇️ Scarica {nome_download}",
         data=out_bytes,
