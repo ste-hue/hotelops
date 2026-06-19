@@ -720,7 +720,7 @@ def cmd_scadenzario(args):
     """Scadenzario fornitori → aggiorna PF Excel."""
     from datetime import date
     from io import BytesIO
-    from verticals.condges.app_scadenzario import (
+    from verticals.condges.pf_rotate.pf_writer import (
         load_fornitori_map,
         write_pf,
         MESI_NOMI,
