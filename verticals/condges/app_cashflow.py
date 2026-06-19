@@ -18,12 +18,17 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from verticals.condges.pf_rotate.fornitori_map import (
+    VOCE_LABELS,
+    export_fornitori_to_csv,
+    load_fornitori_bq,
+    upsert_fornitore_bq,
+)
 from verticals.condges.pf_rotate.rotate import rotate
 from verticals.condges.pf_rotate.step1_saldi import fetch_saldi_da_bq
 from verticals.condges.pf_rotate.step3_scadenzario import UnmappedPolicy
 from verticals.condges.scadenze_parse import parse_scadenze
 
-FORNITORI_CSV = Path("core/bq/dimensioni/d_fornitori.csv")
 MESI = {
     1: "gennaio",
     2: "febbraio",
@@ -135,14 +140,8 @@ def render() -> None:
         f"{', '.join(MESI[m] for m in bucket_months)}"
     )
 
-    # Fornitori non mappati → mappali qui (si salva in d_fornitori.csv: ricordato i mesi dopo)
-    from verticals.condges.pf_rotate.fornitori_map import (
-        VOCE_LABELS,
-        append_fornitore,
-        load_fornitori,
-    )
-
-    known = set(load_fornitori(FORNITORI_CSV, societa=societa).keys())
+    # Fornitori non mappati → mappali qui (persiste su BQ d_fornitori: ricordato i mesi dopo)
+    known = set(load_fornitori_bq(societa).keys())
     nuovi = unmapped_suppliers(scad_df, known)
     if nuovi:
         st.subheader(f"⚠️ {len(nuovi)} fornitori da mappare")
@@ -190,8 +189,7 @@ def render() -> None:
             if st.form_submit_button("💾 Salva mapping"):
                 for cod, (voce, nome, inter) in scelte.items():
                     if voce == ESCLUDI:
-                        append_fornitore(
-                            FORNITORI_CSV,
+                        upsert_fornitore_bq(
                             codice_fornitore=cod,
                             nome_esolver=nome,
                             nome_pf=nome,
@@ -201,8 +199,7 @@ def render() -> None:
                             exclude_reason="escluso da app cashflow",
                         )
                     else:
-                        append_fornitore(
-                            FORNITORI_CSV,
+                        upsert_fornitore_bq(
                             codice_fornitore=cod,
                             nome_esolver=nome,
                             nome_pf=nome.title() if nome.isupper() else nome,
@@ -257,6 +254,10 @@ def render() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         pf_path = Path(tmp) / up_pf.name
         pf_path.write_bytes(up_pf.getvalue())
+        # dump d_fornitori da BQ → CSV temp: l'engine resta CSV-based ma legge la
+        # mappatura PERSISTENTE (BQ), incluse le mappe appena salvate sopra.
+        forn_csv = Path(tmp) / "d_fornitori.csv"
+        export_fornitori_to_csv(forn_csv)
         try:
             result = rotate(
                 pf_path=pf_path,
@@ -266,7 +267,7 @@ def render() -> None:
                 mese_chiuso=mese_chiuso,
                 data_saldo=data_saldo,
                 saldi={k: v for k, v in saldi.items() if v != 0} or None,
-                fornitori_csv=FORNITORI_CSV,
+                fornitori_csv=forn_csv,
                 out_dir=Path(tmp),
                 unmapped_policy=policy,
             )
