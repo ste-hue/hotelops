@@ -1,4 +1,11 @@
-# Status — 2026-06-13
+# Status — 2026-06-19
+
+## Sessione 2026-06-18/19 — Cashflow vertical (cash/PF)
+- ✅ **PR #37 MERGED** su main: **cash/PF engine Metà A** (write-path budget/previsione dietro `cash_pf_service`+gate I1; `app_cdg`/`update_previsione` gusci sottili; `pf_rotate` etichettato render adapter) + **Cashflow vertical** (`app_cashflow.py` montata nel hub, guscio su `rotate()` canonico) + **fix saldi B/C** (blocco manuale ORTI avanzava al cutover) + **mappatura fornitori in-UI** + intercompany tracciato (fitto cod 264 ri-mappato Godimento Beni di Terzi).
+- ✅ **Run-log RIMOSSO** (`f_cash_projection_runs` creata e droppata): **governance — proiezioni NON nel pool `f_*`** (= solo fatti); memoria proiezioni = xlsx versionati. Decision: `vault/decisions/2026-06-19_Modello_Proiezione_Cassa`.
+- ✅ **4 PF prodotti** (mag/giu ORTI+INTUR), nome canonico `SOC_PF_2026-0M_post-rotate_<ts>.xlsx`, 0 ERR, saldi verificati. In `Desktop/WORK/condges/pianfin/PF/`.
+- 🟡 **PR #38 aperto**: **mappatura fornitori BQ-backed** (`load_fornitori_bq`/`upsert_fornitore_bq` MERGE → persistente, niente CSV effimero su Cloud Run, niente doppioni) + **esclusione per-rotation** (`extra_excluded`, transiente) vs permanente (`is_excluded`). Da review/merge.
+- 🟡 **Open**: refactor unificazione (estrarre motore `write_pf` da `app_scadenzario` deprecato-ma-load-bearing → cancellare gusci `app_scadenzario`/`tesoreria`); deploy Cloud Run hub (cashflow live, gated; ora mapping persiste); control-discrepancy (conteggio CLI 13/0/7 vs in-foglio 22/1/0 + label-mese header stale); footgun `load_fornitori.py` (CSV→BQ TRUNCATE sovrascrive upsert → guard).
 
 ## Triage worktree/branch — 2026-06-18 ✅ ESEGUITO
 Consolidamento ("torniamo su main, worktree-only d'ora in poi"). Esito:
