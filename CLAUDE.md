@@ -2,11 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last checkpoint:** 2026-06-18 | **Version:** 0.8.0
+**Last checkpoint:** 2026-06-19 | **Version:** 0.8.0
 
 > **CLAUDE.md = concetti + puntatori, NON catalogo.** Qui stanno solo le cose che NON si rigenerano: architettura, invarianti, dominio (INTUR/ORTI), regole operative. Lo **schema completo** è BigQuery stesso (`bq show <table>` / `INFORMATION_SCHEMA` — la source of truth). Dettagli curati: skill `hotelops-data-analyst` + `core/bq/SCHEMA_CONTEXT.md`; `hotelops manifest` → `core/bq/manifest.yaml` (snapshot parziale, subset di tabelle). Il **diario operativo vivo** è `STATUS.md` (leggilo prima di pianificare).
 
-> **2026-06-18 checkpoint:** ultimo lavoro — **vertical #3 spiaggia** completo (banco INTUR/corrispettivi ↔ Moolty + alloggiati ORTI/PMS, vista `v_spiaggia_giornaliero`, Drive auto-sync via cron). Thread aperti: loop minimo `cash_control` end-to-end; review-findings spiaggia (#1 Moolty dedup write-time da fixare); `scost_cassa` Moolty↔registro (~2%, in attesa causa da amministrazione).
+> **2026-06-19 checkpoint:** **Cashflow vertical** nel hub (`verticals/condges/app_cashflow.py`, guscio su `pf-rotate` canonico: upload PF+scadenziario, saldi pre-fill da BQ, **mappatura fornitori in-UI persistente su BQ `d_fornitori`** via `load_fornitori_bq`/`upsert_fornitore_bq`, **esclusione per-rotation** (`extra_excluded`) vs permanente (`is_excluded`), **intercompany tracciato** non escluso). Write-path cash/PF budget/previsione dietro `cash_pf_service`+gate I1 (Metà A, PR #37 merged). **Governance (decision `vault/decisions/2026-06-19_Modello_Proiezione_Cassa`):** le proiezioni NON vanno nel pool `f_*` (= solo fatti/actuals); la memoria mese×mese delle proiezioni = i **file xlsx versionati**, non una fact table. Thread aperti: **refactor unificazione** (estrarre il motore `write_pf` da `app_scadenzario` — deprecato ma load-bearing — e cancellare i gusci UI doppi); deploy Cloud Run hub; control-discrepancy (conteggio CLI vs in-foglio + label-mese header stale). PR #38 (mapping BQ-backed) aperto.
+>
+> **2026-06-18 checkpoint:** **vertical #3 spiaggia** completo (banco INTUR/corrispettivi ↔ Moolty + alloggiati ORTI/PMS, vista `v_spiaggia_giornaliero`, Drive auto-sync via cron).
 
 > **For AI agents**: ground truth = repo + BigQuery schema. Read in this order before non-trivial work:
 > 1. `docs/architecture/INVARIANTS.md` — la costituzione (I1–I8, canonical per concept).
@@ -54,7 +56,7 @@ cli.py      <- `hotelops` CLI
 - `ingest/drive_fetch.py` — pull da **Drive vivo** via service account (`drive-audit@`). **Drive è tornato come fonte VIVA** (via lineage, non rclone) per il registro corrispettivi spiaggia; cron `scripts/spiaggia-corrispettivi-daily.sh`. La vecchia nota "Drive non più popolato" vale solo per il path **legacy rclone** (`core/datahub_sync.py`, `ingest/classify.py`/`orchestrate.py` — Phase-5 cutover pendente).
 
 **verticals/** (concetti):
-- **#1 condges** — Controllo di Gestione: CE riclassificato, Budget vs Consuntivo, Tesoreria, indicatori, `hotelops pf-rotate` (rotation mensile Piano Finanziario, vedi §Financial Data). Streamlit `app_cdg.py`.
+- **#1 condges** — Controllo di Gestione: CE riclassificato, Budget vs Consuntivo, Tesoreria, indicatori, `hotelops pf-rotate` (rotation mensile Piano Finanziario, vedi §Financial Data). Streamlit `app_cdg.py`. **App Cashflow** (`app_cashflow.py`, montata nel hub) = guscio sul motore canonico `pf-rotate` per produrre il PF del mese successivo (mappatura fornitori→voce persistente su BQ). Write-path budget/previsione dietro `services/cash_pf_service.py` + gate I1. ⚠️ `app_scadenzario.py` (deprecato) ospita ancora il motore `write_pf` usato da `rotate()` — load-bearing, refactor di estrazione pendente.
 - **#2 reviews** — Guest reviews: Apify scrape → Claude NLP (Haiku) → `f_reviews` → alert email + dashboard.
 - **#3 spiaggia** — stabilimento balneare (vedi §Vertical Spiaggia).
 - **hub** (`verticals/hub/`) — app-store: app Streamlit viewer su Cloud Run (`hotelops-hub`) + vetrina statica Cloudflare (`publish/`, deploy da branch `feat/vetrina` → `hotelops-vetrina`). I vertical si montano via `render()` (skill `hub-bind`).
