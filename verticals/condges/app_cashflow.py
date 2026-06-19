@@ -146,8 +146,9 @@ def render() -> None:
     if nuovi:
         st.subheader(f"⚠️ {len(nuovi)} fornitori da mappare")
         st.caption(
-            "Assegna ognuno alla sua voce: si salva in d_fornitori.csv e i prossimi "
-            "mesi finisce da solo al posto giusto (invece che 'da mappare')."
+            "Assegna ognuno alla sua voce: si salva su BQ (d_fornitori) e i prossimi "
+            "mesi finisce da solo al posto giusto. 'Escludi sempre' = permanente "
+            "(strutturale, raro); per saltarlo solo questo mese usa la sezione esclusioni."
         )
         try:
             from verticals.condges.pf_rotate.interactive_map import (
@@ -172,7 +173,7 @@ def render() -> None:
                         f"{cod} · {str(n['nome'])[:40]} (€ {n['totale']:,.2f})",
                         options=opzioni,
                         index=opzioni.index(default),
-                        format_func=lambda v: "— escludi dal PF —"
+                        format_func=lambda v: "— escludi SEMPRE (permanente) —"
                         if v == ESCLUDI
                         else VOCE_LABELS[v],
                         key=f"map_{cod}",
@@ -241,6 +242,24 @@ def render() -> None:
             )
         )
 
+    # Esclusioni SOLO per questa rotation (transienti, NON salvate): il mese dopo il
+    # fornitore torna incluso. Per escludere sempre → "escludi sempre" in mappatura.
+    st.subheader("Escludi da questa rotation (solo questo mese)")
+    st.caption(
+        "Esclusione temporanea, NON salvata: il prossimo mese tornano inclusi. "
+        "Per un'esclusione permanente usa 'escludi sempre' nella mappatura sopra."
+    )
+    nome_by_cod = {
+        int(r["codice_fornitore"]): str(r.get("nome", "")) for _, r in scad_df.iterrows()
+    }
+    extra_excluded = set(
+        st.multiselect(
+            "Fornitori da escludere questo mese",
+            options=sorted(nome_by_cod),
+            format_func=lambda c: f"{c} · {nome_by_cod[c][:40]}",
+        )
+    )
+
     policy_label = st.radio(
         "Fornitori non mappati", ["skip (procedi con warning)", "fail (blocca)"]
     )
@@ -270,6 +289,7 @@ def render() -> None:
                 fornitori_csv=forn_csv,
                 out_dir=Path(tmp),
                 unmapped_policy=policy,
+                extra_excluded=extra_excluded or None,
             )
         except Exception as e:  # noqa: BLE001 — surfacing engine error to UI
             st.error(f"Rotation fallita: {e}")
