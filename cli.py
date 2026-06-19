@@ -196,10 +196,9 @@ def cmd_previsione(args):
     )
 
     if not args.dry_run:
-        deleted = result.get("rows_deleted", 0)
-        inserted = result.get("rows_inserted", 0)
+        written = result.get("rows_written", 0)
         print(
-            f"  BQ: {deleted} righe sostituite, {inserted} inserite (fonte={result.get('fonte')})"
+            f"  BQ: {written} righe scritte (snapshot, fonte={result.get('fonte')})"
         )
 
 

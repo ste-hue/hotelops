@@ -7,6 +7,21 @@ from pathlib import Path
 
 from core.schemas import FornitoreMapRow
 
+# voce_id PF → label foglio dettaglio. Home canonica (era in app_scadenzario,
+# deprecato): mapping fornitore→voce vive qui col loader/persister.
+VOCE_LABELS = {
+    "USCITE_MATERIE_PRIME": "Materie Prime",
+    "USCITE_UTENZE": "Utenze",
+    "USCITE_SALARI": "Salari e Stipendi",
+    "USCITE_TASSE": "Tasse e Imposte",
+    "USCITE_COMMISSIONI": "Commissioni",
+    "USCITE_MUTUI": "Mutui e Finanziamenti",
+    "USCITE_CONSULENZE": "Consulenze",
+    "USCITE_CANONE_PASSIVO": "Godimento Beni di Terzi",
+    "USCITE_VARIE_EXT": "Varie ed Eventuali",
+    "USCITE_SERVIZI_PRODUZIONE": "Canoni e servizi",
+}
+
 
 def _to_bool(s) -> bool:
     return str(s).strip().lower() in ("true", "1", "yes")

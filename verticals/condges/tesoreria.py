@@ -1,4 +1,6 @@
-"""Tesoreria Streamlit app — wires together parse_pf, bq_data, cashflow, export_excel.
+"""DEPRECATO — usare il vertical Cashflow (verticals/condges/app_cashflow.py, hub).
+
+Tesoreria Streamlit app — wires together parse_pf, bq_data, cashflow, export_excel.
 
 Run:
     streamlit run condges/tesoreria.py
@@ -746,6 +748,8 @@ def main() -> None:
     anno, pf_data, societa, data_saldo, saldi_banca, scad_data = render_sidebar()
 
     st.title(f"Tesoreria {societa} — {anno}")
+
+    st.warning("⚠️ App DEPRECATA — usa il vertical **Cashflow** nel hub.")
 
     tab_cassa, tab_bva = st.tabs(["💰 Cassa (Rosa)", "📊 Budget vs Consuntivo"])
 

@@ -456,52 +456,25 @@ def genera_excel(
 
 
 def save_to_bq(df: pd.DataFrame):
-    """DELETE-INSERT budget with fonte=APP_BUDGET."""
-    from google.cloud import bigquery
+    """DELETE-INSERT budget fonte=APP_BUDGET — delega al service (gate I1)."""
+    from verticals.condges.services import cash_pf_service
+    from verticals.condges.services.intents import BudgetRiga, SaveBudgetIntent
 
-    bq = get_bq()
-
-    bq.query(f"""
-        DELETE FROM `{cfg.F_BUDGET_MENSILE}`
-        WHERE societa_id = '{SOCIETA}' AND anno = {ANNO} AND fonte = 'APP_BUDGET'
-    """).result()
-
-    rows = []
-    for _, r in df.iterrows():
-        rows.append(
-            {
-                "societa_id": SOCIETA,
-                "anno": ANNO,
-                "mese": int(r["mese"]),
-                "codice_conto": r["codice_conto"],
-                "descrizione": r["descrizione"],
-                "tipo_costo": r["tipo_costo"],
-                "categoria_ce": r["categoria_ce"],
-                "business_unit_id": r.get("business_unit_id"),
-                "importo": round(float(r["importo"]), 2),
-                "fonte": "APP_BUDGET",
-            }
+    righe = [
+        BudgetRiga(
+            mese=int(r["mese"]),
+            codice_conto=r["codice_conto"],
+            descrizione=r["descrizione"],
+            tipo_costo=r["tipo_costo"],
+            categoria_ce=r["categoria_ce"],
+            business_unit_id=r.get("business_unit_id"),
+            importo=round(float(r["importo"]), 2),
         )
-
-    job_config = bigquery.LoadJobConfig(
-        schema=[
-            bigquery.SchemaField("societa_id", "STRING"),
-            bigquery.SchemaField("anno", "INTEGER"),
-            bigquery.SchemaField("mese", "INTEGER"),
-            bigquery.SchemaField("codice_conto", "STRING"),
-            bigquery.SchemaField("descrizione", "STRING"),
-            bigquery.SchemaField("tipo_costo", "STRING"),
-            bigquery.SchemaField("categoria_ce", "STRING"),
-            bigquery.SchemaField("business_unit_id", "STRING"),
-            bigquery.SchemaField("importo", "FLOAT64"),
-            bigquery.SchemaField("fonte", "STRING"),
-        ],
-        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+        for _, r in df.iterrows()
+    ]
+    return cash_pf_service.save_budget(
+        SaveBudgetIntent(societa_id=SOCIETA, anno=ANNO, righe=righe)
     )
-    job = bq.load_table_from_json(
-        rows, str(cfg.F_BUDGET_MENSILE), job_config=job_config
-    )
-    job.result()
 
 
 # ══════════════════════════════════════════════════════════════════════════════

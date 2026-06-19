@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Scadenzario -> PF Updater (Streamlit).
+"""DEPRECATO — usare il vertical Cashflow (verticals/condges/app_cashflow.py, hub).
+
+Questo path scrive le scadenze nel PF senza la rotation completa (no azzeramento
+mese chiuso, no controlli). Sostituito da app_cashflow che wrappa pf_rotate.rotate().
+
+Scadenzario -> PF Updater (Streamlit).
 
 Drop the Esolver 'Situazione sintetica scadenze' Excel,
 preview the match vs Piano Finanziario, and write amounts
@@ -469,6 +474,11 @@ def write_pf(
 def main():
     st.set_page_config(page_title="Scadenzario -> PF", page_icon="", layout="wide")
     st.title("Scadenzario -> Piano Finanziario")
+
+    st.warning(
+        "⚠️ App DEPRECATA — usa il vertical **Cashflow** nel hub "
+        "(`app_cashflow`, rotation completa con controlli)."
+    )
 
     col_up1, col_up2 = st.columns(2)
 

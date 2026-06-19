@@ -27,7 +27,7 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 158,GALLO GIOVANNI & C. SNC,Gallo Giovanni,USCITE_MATERIE_PRIME,False,False,,ORTI
 161,DI SARNO COFFEE SERVICE DI TERMINIELLO ROSA,Di Sarno Coffee,USCITE_MATERIE_PRIME,False,False,,ORTI
 186,L'EUROPEA - ORGANIZZAZIONE NAZIONALE SRL,L'Europea,USCITE_MATERIE_PRIME,False,False,,ORTI
-264,PANORAMA COMPANY S.R.L.,Fitto Ramo d' Azienda,,True,True,intercompany gruppo - fitto ramo azienda - no pressione cassa,ORTI
+264,PANORAMA COMPANY S.R.L.,Fitto Ramo d' Azienda,USCITE_CANONE_PASSIVO,True,False,tracciato: cash reale ORTI->INTUR (netta solo nel consolidato),ORTI
 315,CENTRO SERVICE SNC DI VOCCIA MASSIMO & ANTONIO,Centro service Snc,USCITE_MATERIE_PRIME,False,False,,ORTI
 412,Alberto D Urso S.a.s. di Tecla Apicella,Alberto D'Urso,USCITE_MATERIE_PRIME,False,False,,ORTI
 414,NEXI PAYMENTS S.p.A.,,USCITE_COMMISSIONI,False,False,,ORTI
@@ -235,3 +235,20 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 615,J.F. AMONN SRL,J.F. Amonn,USCITE_MATERIE_PRIME,False,False,,INTUR
 1734,CE.DI.S. S.R.L.,Ce.Di.S. srl,USCITE_VARIE_EXT,False,False,,INTUR
 1589,ALNUMAR DI GAROFALO MASSIMILIANO,Alnumar di Garofalo Massimiliano,USCITE_MATERIE_PRIME,False,False,,ORTI
+27,AL MORO DI ROMAGNOLI ANDREA SAS,AL MORO DI ROMAGNOLI ANDREA SAS,,False,True,escluso da app cashflow,ORTI
+1298,APICELLA LORENZO,Apicella Lorenzo,USCITE_VARIE_EXT,False,False,,ORTI
+1735,BARIN S.A.S. DI BARIN BENVENUTO & C.,BARIN S.A.S. DI BARIN BENVENUTO & C.,,False,True,escluso da app cashflow,ORTI
+1007,BIOLUMA S.R.L.S.,BIOLUMA S.R.L.S.,,False,True,escluso da app cashflow,ORTI
+1729,C.L.C. SOCIETA' A RESPONSABILITA' LIMITATA,C.L.C. Societa' A Responsabilita' Limitata,USCITE_VARIE_EXT,False,False,,ORTI
+125,CENTRO DISTRIBUZIONI MAGLIO DI MAGLIO COSIMO,Centro Distribuzioni Maglio Di Maglio Cosimo,USCITE_MATERIE_PRIME,False,False,,ORTI
+78,Clima Service srls,Clima Service srls,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
+1746,de filippis alfredo srl,de filippis alfredo srl,,False,True,escluso da app cashflow,ORTI
+7,DG NET WORK - S.R.L.,Dg Net Work - S.R.L.,USCITE_CONSULENZE,False,False,,ORTI
+1748,DOCTOR SPY SOCIETA' A RESPONSABILITA' LIMITATA,Doctor Spy Societa' A Responsabilita' Limitata,USCITE_VARIE_EXT,False,False,,ORTI
+385,FRANCESCA FUSCO,Francesca Fusco,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
+1633,GASFRIGO S.R.L.,Gasfrigo S.R.L.,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
+1222,PIETRA DI LUNA HOTEL - S.R.L.,Pietra Di Luna Hotel - S.R.L.,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
+1745,POPPITI ALDO,POPPITI ALDO,,False,True,escluso da app cashflow,ORTI
+119,SOCIETA ITALIANA DEGLI AUTORI ED EDITORI,Societa Italiana Degli Autori Ed Editori,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
+126,TUR.COM. S.R.L.,Tur.Com. S.R.L.,USCITE_MATERIE_PRIME,False,False,,ORTI
+49,ZUCCHETTI HOSPITALITY SRL A SOCIO UNICO,Zucchetti Hospitality Srl A Socio Unico,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI

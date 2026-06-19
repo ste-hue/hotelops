@@ -127,9 +127,34 @@ def write_saldi_banca(
         if isinstance(v, (int, float)):
             total += float(v)
 
+    manual_block_rows: list[int] = []
     if layout.snapshot_kind == "month-closed":
         # Scrivi totale come saldo iniziale — hardcoded (Controllo #1 esige non-formula)
         pf.cell(layout.saldo_iniziale_row, target_col, total)
+
+        # Avanza il blocco saldi MANUALE (col B = data, col C = valori testo) al cutover.
+        # È un blocco di display umano separato dalla colonna del mese: se non aggiornato
+        # resta al mese precedente (B32=31/03 in un foglio di maggio). Saltato quando C è
+        # la colonna cutover (layout dove i mesi partono da C). I valori sono TESTO così
+        # non entrano nelle somme (TOTALE BANCHE / T-totali); le celle-formula non si
+        # toccano (invariante mai-azzerare-formule).
+        MANUAL_DATE_COL, MANUAL_VAL_COL = 2, 3  # B, C
+        if target_col != MANUAL_VAL_COL and layout.saldi_banca_rows:
+            date_cell = pf.cell(min(layout.saldi_banca_rows), MANUAL_DATE_COL)
+            if not (isinstance(date_cell.value, str) and date_cell.value.startswith("=")):
+                date_cell.value = data_saldo.strftime("%d/%m/%Y")
+            for r in layout.saldi_banca_rows:
+                label = pf.cell(r, 1).value
+                if not label:
+                    continue
+                match = _match_bank(str(label), saldi)
+                if match is None:
+                    continue
+                val_cell = pf.cell(r, MANUAL_VAL_COL)
+                if isinstance(val_cell.value, str) and val_cell.value.startswith("="):
+                    continue  # mai sovrascrivere una formula
+                val_cell.value = f"{float(match):,.2f} €"
+                manual_block_rows.append(r)
 
     return {
         "col": target_col_letter,
@@ -138,6 +163,7 @@ def write_saldi_banca(
         "saldo_iniziale_row": layout.saldo_iniziale_row,
         "totale_banche": total,
         "snapshot_kind": layout.snapshot_kind,
+        "manual_block_rows": manual_block_rows,
     }
 
 
