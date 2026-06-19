@@ -18,12 +18,17 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from verticals.condges.pf_rotate.fornitori_map import (
+    VOCE_LABELS,
+    export_fornitori_to_csv,
+    load_fornitori_bq,
+    upsert_fornitore_bq,
+)
 from verticals.condges.pf_rotate.rotate import rotate
 from verticals.condges.pf_rotate.step1_saldi import fetch_saldi_da_bq
 from verticals.condges.pf_rotate.step3_scadenzario import UnmappedPolicy
 from verticals.condges.scadenze_parse import parse_scadenze
 
-FORNITORI_CSV = Path("core/bq/dimensioni/d_fornitori.csv")
 MESI = {
     1: "gennaio",
     2: "febbraio",
@@ -135,20 +140,15 @@ def render() -> None:
         f"{', '.join(MESI[m] for m in bucket_months)}"
     )
 
-    # Fornitori non mappati → mappali qui (si salva in d_fornitori.csv: ricordato i mesi dopo)
-    from verticals.condges.pf_rotate.fornitori_map import (
-        VOCE_LABELS,
-        append_fornitore,
-        load_fornitori,
-    )
-
-    known = set(load_fornitori(FORNITORI_CSV, societa=societa).keys())
+    # Fornitori non mappati → mappali qui (persiste su BQ d_fornitori: ricordato i mesi dopo)
+    known = set(load_fornitori_bq(societa).keys())
     nuovi = unmapped_suppliers(scad_df, known)
     if nuovi:
         st.subheader(f"⚠️ {len(nuovi)} fornitori da mappare")
         st.caption(
-            "Assegna ognuno alla sua voce: si salva in d_fornitori.csv e i prossimi "
-            "mesi finisce da solo al posto giusto (invece che 'da mappare')."
+            "Assegna ognuno alla sua voce: si salva su BQ (d_fornitori) e i prossimi "
+            "mesi finisce da solo al posto giusto. 'Escludi sempre' = permanente "
+            "(strutturale, raro); per saltarlo solo questo mese usa la sezione esclusioni."
         )
         try:
             from verticals.condges.pf_rotate.interactive_map import (
@@ -173,7 +173,7 @@ def render() -> None:
                         f"{cod} · {str(n['nome'])[:40]} (€ {n['totale']:,.2f})",
                         options=opzioni,
                         index=opzioni.index(default),
-                        format_func=lambda v: "— escludi dal PF —"
+                        format_func=lambda v: "— escludi SEMPRE (permanente) —"
                         if v == ESCLUDI
                         else VOCE_LABELS[v],
                         key=f"map_{cod}",
@@ -190,8 +190,7 @@ def render() -> None:
             if st.form_submit_button("💾 Salva mapping"):
                 for cod, (voce, nome, inter) in scelte.items():
                     if voce == ESCLUDI:
-                        append_fornitore(
-                            FORNITORI_CSV,
+                        upsert_fornitore_bq(
                             codice_fornitore=cod,
                             nome_esolver=nome,
                             nome_pf=nome,
@@ -201,8 +200,7 @@ def render() -> None:
                             exclude_reason="escluso da app cashflow",
                         )
                     else:
-                        append_fornitore(
-                            FORNITORI_CSV,
+                        upsert_fornitore_bq(
                             codice_fornitore=cod,
                             nome_esolver=nome,
                             nome_pf=nome.title() if nome.isupper() else nome,
@@ -244,6 +242,24 @@ def render() -> None:
             )
         )
 
+    # Esclusioni SOLO per questa rotation (transienti, NON salvate): il mese dopo il
+    # fornitore torna incluso. Per escludere sempre → "escludi sempre" in mappatura.
+    st.subheader("Escludi da questa rotation (solo questo mese)")
+    st.caption(
+        "Esclusione temporanea, NON salvata: il prossimo mese tornano inclusi. "
+        "Per un'esclusione permanente usa 'escludi sempre' nella mappatura sopra."
+    )
+    nome_by_cod = {
+        int(r["codice_fornitore"]): str(r.get("nome", "")) for _, r in scad_df.iterrows()
+    }
+    extra_excluded = set(
+        st.multiselect(
+            "Fornitori da escludere questo mese",
+            options=sorted(nome_by_cod),
+            format_func=lambda c: f"{c} · {nome_by_cod[c][:40]}",
+        )
+    )
+
     policy_label = st.radio(
         "Fornitori non mappati", ["skip (procedi con warning)", "fail (blocca)"]
     )
@@ -257,6 +273,10 @@ def render() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         pf_path = Path(tmp) / up_pf.name
         pf_path.write_bytes(up_pf.getvalue())
+        # dump d_fornitori da BQ → CSV temp: l'engine resta CSV-based ma legge la
+        # mappatura PERSISTENTE (BQ), incluse le mappe appena salvate sopra.
+        forn_csv = Path(tmp) / "d_fornitori.csv"
+        export_fornitori_to_csv(forn_csv)
         try:
             result = rotate(
                 pf_path=pf_path,
@@ -266,9 +286,10 @@ def render() -> None:
                 mese_chiuso=mese_chiuso,
                 data_saldo=data_saldo,
                 saldi={k: v for k, v in saldi.items() if v != 0} or None,
-                fornitori_csv=FORNITORI_CSV,
+                fornitori_csv=forn_csv,
                 out_dir=Path(tmp),
                 unmapped_policy=policy,
+                extra_excluded=extra_excluded or None,
             )
         except Exception as e:  # noqa: BLE001 — surfacing engine error to UI
             st.error(f"Rotation fallita: {e}")
