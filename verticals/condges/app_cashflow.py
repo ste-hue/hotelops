@@ -61,6 +61,30 @@ def scad_summary(
     }
 
 
+def unmapped_suppliers(
+    scad_df: pd.DataFrame, known_codici: set[int]
+) -> list[dict[str, object]]:
+    """Fornitori dello scadenziario assenti dalla mappa d_fornitori (funzione pura).
+
+    Ritorna [{codice, nome, totale}] deduplicato, per codici non in known_codici.
+    """
+    out: list[dict[str, object]] = []
+    seen: set[int] = set()
+    for _, r in scad_df.iterrows():
+        cod = int(r["codice_fornitore"])
+        if cod in known_codici or cod in seen:
+            continue
+        seen.add(cod)
+        out.append(
+            {
+                "codice": cod,
+                "nome": str(r.get("nome", "")),
+                "totale": float(r.get("totale", 0) or 0),
+            }
+        )
+    return out
+
+
 def render() -> None:
     st.title("💸 Cashflow — Piano Finanziario")
     st.caption(
@@ -82,7 +106,12 @@ def render() -> None:
     today = date.today()
     mese_chiuso = int(
         st.number_input(
-            "Mese da chiudere", min_value=1, max_value=12, value=max(1, today.month - 1)
+            "Ultimo mese con saldi banca certificati",
+            min_value=1,
+            max_value=12,
+            value=max(1, today.month - 1),
+            help="Il mese di cui hai i saldi banca reali (cutover). Il PF proietta dal "
+            "mese SUCCESSIVO in avanti. Es: saldi al 30/04 → metti 4 → PF di maggio.",
         )
     )
     anno = int(
@@ -105,6 +134,88 @@ def render() -> None:
         f"{len(scad_df)} fornitori · mesi forward: "
         f"{', '.join(MESI[m] for m in bucket_months)}"
     )
+
+    # Fornitori non mappati → mappali qui (si salva in d_fornitori.csv: ricordato i mesi dopo)
+    from verticals.condges.pf_rotate.fornitori_map import (
+        VOCE_LABELS,
+        append_fornitore,
+        load_fornitori,
+    )
+
+    known = set(load_fornitori(FORNITORI_CSV, societa=societa).keys())
+    nuovi = unmapped_suppliers(scad_df, known)
+    if nuovi:
+        st.subheader(f"⚠️ {len(nuovi)} fornitori da mappare")
+        st.caption(
+            "Assegna ognuno alla sua voce: si salva in d_fornitori.csv e i prossimi "
+            "mesi finisce da solo al posto giusto (invece che 'da mappare')."
+        )
+        try:
+            from verticals.condges.pf_rotate.interactive_map import (
+                suggest_voci_from_fatture,
+            )
+
+            sugg = suggest_voci_from_fatture([n["codice"] for n in nuovi], societa)
+        except Exception:  # noqa: BLE001 — suggerimenti BQ best-effort
+            sugg = {}
+        voci_ids = list(VOCE_LABELS.keys())
+        ESCLUDI = "__escludi__"
+        opzioni = voci_ids + [ESCLUDI]
+        with st.form("map_fornitori"):
+            scelte: dict[int, tuple[str, str, bool]] = {}
+            for n in nuovi:
+                cod = int(n["codice"])
+                suggested = sugg.get(cod, (None,))[0]
+                default = suggested if suggested in voci_ids else "USCITE_VARIE_EXT"
+                c_voce, c_ic = st.columns([4, 1])
+                with c_voce:
+                    sel = st.selectbox(
+                        f"{cod} · {str(n['nome'])[:40]} (€ {n['totale']:,.2f})",
+                        options=opzioni,
+                        index=opzioni.index(default),
+                        format_func=lambda v: "— escludi dal PF —"
+                        if v == ESCLUDI
+                        else VOCE_LABELS[v],
+                        key=f"map_{cod}",
+                    )
+                with c_ic:
+                    inter = st.checkbox(
+                        "intercompany",
+                        key=f"ic_{cod}",
+                        help="Movimento di cassa REALE tra società del gruppo (es. fitto "
+                        "ORTI→INTUR): tracciato nella cassa del singolo, netta solo nel "
+                        "consolidato. Diverso da 'escludi'.",
+                    )
+                scelte[cod] = (sel, str(n["nome"]), inter)
+            if st.form_submit_button("💾 Salva mapping"):
+                for cod, (voce, nome, inter) in scelte.items():
+                    if voce == ESCLUDI:
+                        append_fornitore(
+                            FORNITORI_CSV,
+                            codice_fornitore=cod,
+                            nome_esolver=nome,
+                            nome_pf=nome,
+                            voce_id="",
+                            societa_id=societa,
+                            is_excluded=True,
+                            exclude_reason="escluso da app cashflow",
+                        )
+                    else:
+                        append_fornitore(
+                            FORNITORI_CSV,
+                            codice_fornitore=cod,
+                            nome_esolver=nome,
+                            nome_pf=nome.title() if nome.isupper() else nome,
+                            voce_id=voce,
+                            societa_id=societa,
+                            is_intercompany=inter,
+                        )
+                st.success(f"{len(scelte)} fornitori salvati.")
+                st.rerun()
+        st.caption(
+            "Puoi anche procedere senza mappare: i non mappati restano 'da mappare' "
+            "(policy skip) e non entrano nelle voci."
+        )
 
     # Saldi: pre-fill da BQ, editabili
     try:

@@ -13,8 +13,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from verticals.condges.app_scadenzario import VOCE_LABELS
-from verticals.condges.pf_rotate.fornitori_map import append_fornitore, load_fornitori
+from verticals.condges.pf_rotate.fornitori_map import (
+    VOCE_LABELS,
+    append_fornitore,
+    load_fornitori,
+)
 
 log = logging.getLogger(__name__)
 
