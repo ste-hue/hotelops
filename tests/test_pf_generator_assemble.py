@@ -6,7 +6,7 @@ import openpyxl
 from io import BytesIO
 from openpyxl.utils import get_column_letter
 
-from verticals.condges.app_scadenzario import _build_month_col_map
+from verticals.condges.pf_rotate.pf_writer import _build_month_col_map
 from verticals.condges.pf_generator.costanti import (
     LABEL_RETTIFICA,
     PRIMA_RIGA_BLOCCO_A,

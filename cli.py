@@ -886,8 +886,7 @@ def cmd_app(args):
 
     apps = {
         "pf": "verticals/condges/app_cdg.py",
-        "scadenzario": "verticals/condges/app_scadenzario.py",
-        "accodamenti": "verticals/condges/app_accodamenti.py",
+"accodamenti": "verticals/condges/app_accodamenti.py",
         "reviews": "verticals/reviews/app.py",
     }
     app_key = args.app_name or "pf"

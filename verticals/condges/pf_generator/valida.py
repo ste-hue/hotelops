@@ -23,7 +23,7 @@ from io import BytesIO
 
 import openpyxl
 
-from verticals.condges.app_scadenzario import _build_month_col_map
+from verticals.condges.pf_rotate.pf_writer import _build_month_col_map
 from verticals.condges.pf_generator.costanti import MESI, VOCE_SHEET_NAME
 
 # --- soglie ---

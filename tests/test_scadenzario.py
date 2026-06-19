@@ -493,7 +493,7 @@ class TestWritePfRotation:
         return pd.DataFrame(base)
 
     def test_scaduto_va_nel_mese_indicato_non_oggi(self, tmp_path):
-        from verticals.condges.app_scadenzario import write_pf
+        from verticals.condges.pf_rotate.pf_writer import write_pf
 
         pf_path = _make_pf_fixture_con_codici(tmp_path)
         scad_df = self._scad_df(mese_6=[-1122.76])
@@ -510,7 +510,7 @@ class TestWritePfRotation:
         assert ws.cell(row=5, column=13).value == 1122.76
 
     def test_pulizia_scritture_stantie_nei_mesi_aperti(self, tmp_path):
-        from verticals.condges.app_scadenzario import write_pf
+        from verticals.condges.pf_rotate.pf_writer import write_pf
 
         pf_path = _make_pf_fixture_con_codici(tmp_path)
         # niente scaduto, solo giugno: la cella stantia di maggio deve sparire
@@ -533,7 +533,7 @@ class TestWritePfRotation:
     def test_pulizia_anche_su_fogli_senza_scritture(self, tmp_path):
         """Fornitore rimappato a un'altra voce: la riga nel vecchio foglio
         va pulita anche se quel foglio non riceve scritture in questo run."""
-        from verticals.condges.app_scadenzario import write_pf
+        from verticals.condges.pf_rotate.pf_writer import write_pf
 
         wb = openpyxl.Workbook()
         wb.active.title = "Piano Finanziario"
@@ -579,7 +579,7 @@ class TestWritePfRotation:
         """NC (importo positivo) si compensa sul primo mese con fatture in
         avanti: il mese azzerato non viene scritto, il residuo scala sul
         successivo. Il totale resta esatto (= saldo aperto reale)."""
-        from verticals.condges.app_scadenzario import write_pf
+        from verticals.condges.pf_rotate.pf_writer import write_pf
 
         pf_path = _make_pf_fixture_con_codici(tmp_path)
         import pandas as pd

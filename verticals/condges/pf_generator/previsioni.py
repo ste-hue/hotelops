@@ -10,7 +10,7 @@ from io import BytesIO
 
 import openpyxl
 
-from verticals.condges.app_scadenzario import (
+from verticals.condges.pf_rotate.pf_writer import (
     VOCE_TO_SHEET_CANDIDATES,
     _build_month_col_map,
 )
