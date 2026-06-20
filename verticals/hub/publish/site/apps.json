@@ -28,6 +28,14 @@
       "subtitle": "ricavo stabilimento & quadratura (Streamlit)"
     },
     {
+      "id": "cashflow",
+      "title": "Cashflow",
+      "icon": "💸",
+      "kind": "external",
+      "url": "https://hotelops-hub-lvk3phpq4q-ew.a.run.app/cashflow",
+      "subtitle": "PF & proiezione cassa (Streamlit · IAP)"
+    },
+    {
       "id": "mutui",
       "title": "Mutui",
       "icon": "🏦",
