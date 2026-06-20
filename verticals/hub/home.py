@@ -1,51 +1,49 @@
-"""Home-store: card per app con semaforo freshness (layout A, 2026-06-12)."""
+"""Home gateway: unico punto d'ingresso per tutto il frontend HotelOps.
+
+Si costruisce dal registry (``APPS``), raggruppata per dominio. Ogni tile mostra un
+KPI vivo da BQ (via ``card_fn``) e linka dentro la pagina (``page``), all'URL esterno
+(``bind``) o segna "coming soon" (``soon``). Nessuna card cablata a mano.
+"""
 
 import streamlit as st
 
-from verticals.hub.freshness import carica_freshness, semaforo
+from verticals.hub.registry import HubApp, by_group
 from verticals.hub.theme import brand_header
 
 
-@st.cache_data(ttl=300, show_spinner="Carico freshness…")
-def _freshness():
-    return carica_freshness()
-
-
-def render(audience: str = "admin"):
-    """audience='admin' (tu, tutte le card) | 'viewer' (direttore, no superfici interne)."""
+def render(page_objs: dict | None = None) -> None:
+    """page_objs = {app_id: st.Page} delle pagine montate, per i link in-app."""
+    page_objs = page_objs or {}
     brand_header("HotelOps", "Amalfi Coast · Maiori")
-    try:
-        fresh = _freshness()
-    except Exception as e:  # BQ giù: dichiarare, mai cache silente
-        st.error(f"Dati non disponibili (BigQuery): {e}")
-        return
+    st.caption("Punto d'ingresso · KPI live da BigQuery (aggiornati ogni 5 min)")
 
-    g_fb = fresh["fb"]["giorni"]
-    g_rev = fresh["reviews"]["giorni"]
-    s_fb = semaforo(g_fb, soglia_attenzione=35, soglia_allarme=70)
-    s_rev = semaforo(g_rev, 7, 14)
-    is_admin = audience == "admin"
+    for group, apps in by_group().items():
+        if not apps:
+            continue
+        st.subheader(group)
+        cols = st.columns(3)
+        for i, app in enumerate(apps):
+            with cols[i % 3]:
+                _tile(app, page_objs.get(app.id))
 
-    # semaforo di testata = peggiore dei semafori per-card (scale diverse per fonte)
-    semafori = [s_fb, s_rev]
-    if is_admin:
-        n_coda = fresh["ingest"]["in_coda"]
-        semafori.append("🟢" if n_coda == 0 else "🟡")
-    peggiore = "🔴" if "🔴" in semafori else ("🟡" if "🟡" in semafori else "🟢")
-    st.caption(f"Stato dati: {peggiore} · aggiornato ogni 5 min")
 
-    cols = st.columns(3 if is_admin else 2)
-    with cols[0]:
-        st.subheader(f"🍽 F&B {s_fb}")
-        st.metric("Ultimo mese coperto", f"{g_fb} gg fa" if g_fb is not None else "n/d")
-    with cols[1]:
-        st.subheader(f"⭐ Reviews {s_rev}")
-        st.metric("Media mese", fresh["reviews"]["media_mese"] or "n/d")
-    if is_admin:
-        with cols[2]:
-            st.subheader(f"📥 Ingest {'🟢' if n_coda == 0 else '🟡'}")
-            st.metric("Raw objects in coda", n_coda)
-        st.caption(
-            "💶 Cassa/PF arriva con la migrazione PF generazionale "
-            "(in pausa: P1 lotteria budget, vedi STATUS.md)."
-        )
+def _tile(app: HubApp, page_obj) -> None:
+    with st.container(border=True):
+        semaforo, label, value = "", None, None
+        if app.card_fn is not None:
+            try:
+                cd = app.card_fn()
+                semaforo, label, value = cd["semaforo"], cd["kpi_label"], cd["kpi_value"]
+            except Exception:  # BQ giù / vista mancante: tile "n/d", griglia intatta
+                semaforo, label, value = "🔴", "dati", "n/d"
+
+        st.markdown(f"### {app.icon} {app.title} {semaforo}")
+        if value is not None:
+            st.metric(label, value)
+
+        if app.kind == "page" and page_obj is not None:
+            st.page_link(page_obj, label="Apri →")
+        elif app.kind == "bind" and isinstance(app.target, str):
+            st.link_button("Apri ↗", app.target)
+        elif app.kind == "soon":
+            st.caption("🔜 coming soon")

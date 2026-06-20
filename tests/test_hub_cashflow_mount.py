@@ -9,9 +9,13 @@ def test_cashflow_page_exists_and_callable():
 
 
 def test_hub_app_registers_cashflow():
-    src = Path("verticals/hub/app.py").read_text()
-    assert "cashflow" in src, (
-        "hub/app.py deve importare e registrare la pagina cashflow"
+    # La registrazione vive nel registry (app.py costruisce la nav da lì).
+    from verticals.hub.registry import pages
+
+    assert "cashflow" in {a.id for a in pages()}, (
+        "il registry deve montare la pagina cashflow come kind=page"
     )
-    # parse-only sanity
+    # app.py resta parsabile e costruisce la nav dal registry.
+    src = Path("verticals/hub/app.py").read_text()
     ast.parse(src)
+    assert "registry" in src

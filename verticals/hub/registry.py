@@ -1,0 +1,89 @@
+"""Registry app-store del hub: una sola fonte di verità per ogni superficie.
+
+La Home (gateway) e la nav si costruiscono da ``APPS``. Aggiungere un'app = appendere
+una riga qui. I **ruoli/multi-audience sono rimandati** (YAGNI): quando serviranno, si
+aggiunge un campo ``roles`` + ``roles.py`` (spec 2026-06-14-hub-app-store-infrastructure).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+
+from verticals.hub import cards
+from verticals.hub.pages_ import cashflow, fb, ingest, mutui, reviews, spiaggia
+
+# Ordine dei gruppi nella Home gateway.
+GROUPS = ["Finanza", "Operations", "Sistema"]
+
+# URL esterni (bind).
+_BANCHE_LOOKER = (
+    "https://datastudio.google.com/u/0/reporting/"
+    "2a7a4c25-56f2-44d4-986f-9a9cc27a03cd/page/TlJ0C"
+)
+
+
+@dataclass(frozen=True)
+class HubApp:
+    """Una superficie montata nel hub.
+
+    kind:
+      - "page"  → ``target`` è una ``render()`` Streamlit (montata in nav + tile)
+      - "bind"  → ``target`` è un URL esterno (solo tile, link in nuova scheda)
+      - "soon"  → placeholder "coming soon" (né nav né link)
+    """
+
+    id: str
+    title: str
+    icon: str
+    group: str
+    kind: str
+    target: Callable | str | None = None
+    card_fn: Callable[[], dict] | None = None
+
+
+APPS: list[HubApp] = [
+    # ── Finanza ──────────────────────────────────────────────────────────────
+    HubApp("cashflow", "Cashflow", "💸", "Finanza", "page", cashflow.render, cards.card_cashflow),
+    HubApp("banche", "Banche", "🏛", "Finanza", "bind", _BANCHE_LOOKER, cards.card_banche),
+    HubApp("mutui", "Mutui", "🏦", "Finanza", "page", mutui.render, None),
+    HubApp("cdg", "CdG", "📊", "Finanza", "soon", None, None),
+    # ── Operations ───────────────────────────────────────────────────────────
+    HubApp("fb", "Food & Beverage", "🍽", "Operations", "page", fb.render, cards.card_fb),
+    HubApp("spiaggia", "Spiaggia", "🏖️", "Operations", "page", spiaggia.render, cards.card_spiaggia),
+    HubApp("reviews", "Reviews", "⭐", "Operations", "page", reviews.render, cards.card_reviews),
+    # ── Sistema ──────────────────────────────────────────────────────────────
+    HubApp("ingest", "Ingest", "📥", "Sistema", "page", ingest.render, cards.card_ingest),
+]
+
+
+def validate(apps: list[HubApp] = APPS) -> None:
+    """Check a import-time: id unici, group noto, target coerente col kind."""
+    seen = set()
+    for a in apps:
+        if a.id in seen:
+            raise ValueError(f"registry: id duplicato {a.id!r}")
+        seen.add(a.id)
+        if a.group not in GROUPS:
+            raise ValueError(f"registry: group sconosciuto {a.group!r} per {a.id!r}")
+        if a.kind == "page" and not callable(a.target):
+            raise ValueError(f"registry: {a.id!r} kind=page richiede target callable")
+        if a.kind == "bind" and not isinstance(a.target, str):
+            raise ValueError(f"registry: {a.id!r} kind=bind richiede URL str")
+        if a.kind == "soon" and a.target is not None:
+            raise ValueError(f"registry: {a.id!r} kind=soon non ha target")
+        if a.kind not in ("page", "bind", "soon"):
+            raise ValueError(f"registry: {a.id!r} kind sconosciuto {a.kind!r}")
+
+
+def pages() -> list[HubApp]:
+    """Le app montabili come pagina Streamlit (per la nav)."""
+    return [a for a in APPS if a.kind == "page"]
+
+
+def by_group() -> dict[str, list[HubApp]]:
+    """Le app raggruppate per dominio, nell'ordine di ``GROUPS``."""
+    return {g: [a for a in APPS if a.group == g] for g in GROUPS}
+
+
+validate()

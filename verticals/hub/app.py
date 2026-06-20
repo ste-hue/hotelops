@@ -1,7 +1,10 @@
 """HotelOps Hub — layer di presentazione sopra i vertical (NON un vertical).
 
+Home gateway + nav si costruiscono dal registry (`verticals/hub/registry.py`):
+aggiungere un'app = una riga lì, non una modifica qui.
+
 Lancio: streamlit run verticals/hub/app.py
-Spec: docs/superpowers/specs/2026-06-12-hub-app-store-design.md
+Spec: docs/superpowers/specs/2026-06-20-hub-gateway-presentation-design.md
 """
 
 import sys
@@ -16,22 +19,25 @@ if _ROOT not in sys.path:
 import streamlit as st  # noqa: E402
 
 from verticals.hub import home  # noqa: E402
-from verticals.hub.pages_ import cashflow, fb, ingest, mutui, reviews, spiaggia  # noqa: E402
+from verticals.hub.registry import pages as registry_pages  # noqa: E402
 from verticals.hub.theme import inject_brand  # noqa: E402
 
 st.set_page_config(page_title="HotelOps Hub", page_icon="🏨", layout="wide")
 inject_brand()  # admin: chrome Streamlit visibile
 
-pg = st.navigation(
-    [
-        st.Page(home.render, title="Home", icon="🏨", default=True, url_path="home"),
-        st.Page(fb.render, title="F&B", icon="🍽", url_path="fb"),
-        st.Page(reviews.render, title="Reviews", icon="⭐", url_path="reviews"),
-        st.Page(spiaggia.render, title="Spiaggia", icon="🏖️", url_path="spiaggia"),
-        st.Page(mutui.render, title="Mutui", icon="🏦", url_path="mutui"),
-        st.Page(cashflow.render, title="Cashflow", icon="💸", url_path="cashflow"),
-        st.Page(ingest.render, title="Ingest", icon="📥", url_path="ingest"),
-    ],
-    position="top",  # nav in barra superiore (mobile-friendly)
+# Una st.Page per ogni app kind="page"; mappa id→Page per i link dalla Home.
+_page_objs = {
+    a.id: st.Page(a.target, title=a.title, icon=a.icon, url_path=a.id)
+    for a in registry_pages()
+}
+
+home_page = st.Page(
+    lambda: home.render(_page_objs),
+    title="Home",
+    icon="🏨",
+    default=True,
+    url_path="home",
 )
+
+pg = st.navigation([home_page, *_page_objs.values()], position="top")
 pg.run()

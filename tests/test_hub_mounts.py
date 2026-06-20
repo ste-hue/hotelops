@@ -52,13 +52,14 @@ def test_mutui_page_importabile():
     assert mutui.MUTUI_URL.startswith("https://")
 
 
-def test_home_render_audience_param():
+def test_home_render_riceve_page_objs():
     from verticals.hub import home
 
     import inspect
 
+    # La Home gateway riceve la mappa id→st.Page per i link in-app (registry-driven).
     sig = inspect.signature(home.render)
-    assert "audience" in sig.parameters
+    assert "page_objs" in sig.parameters
 
 
 def test_spiaggia_page_importabile():
