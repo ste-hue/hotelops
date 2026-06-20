@@ -10,7 +10,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from verticals.hub import cards
 from verticals.hub.pages_ import cashflow, fb, ingest, mutui, reviews, spiaggia
 
 # Ordine dei gruppi nella Home gateway.
@@ -39,21 +38,21 @@ class HubApp:
     group: str
     kind: str
     target: Callable | str | None = None
-    card_fn: Callable[[], dict] | None = None
+    subtitle: str = ""
 
 
 APPS: list[HubApp] = [
     # ── Finanza ──────────────────────────────────────────────────────────────
-    HubApp("cashflow", "Cashflow", "💸", "Finanza", "page", cashflow.render, cards.card_cashflow),
-    HubApp("banche", "Banche", "🏛", "Finanza", "bind", _BANCHE_LOOKER, cards.card_banche),
-    HubApp("mutui", "Mutui", "🏦", "Finanza", "page", mutui.render, None),
-    HubApp("cdg", "CdG", "📊", "Finanza", "soon", None, None),
+    HubApp("cashflow", "Cashflow", "💸", "Finanza", "page", cashflow.render, "PF & proiezione cassa"),
+    HubApp("banche", "Banche", "🏛", "Finanza", "bind", _BANCHE_LOOKER, "movimenti & saldi (Looker)"),
+    HubApp("mutui", "Mutui", "🏦", "Finanza", "page", mutui.render, "ammortamenti & simulatore"),
+    HubApp("cdg", "CdG", "📊", "Finanza", "soon", None, "controllo di gestione"),
     # ── Operations ───────────────────────────────────────────────────────────
-    HubApp("fb", "Food & Beverage", "🍽", "Operations", "page", fb.render, cards.card_fb),
-    HubApp("spiaggia", "Spiaggia", "🏖️", "Operations", "page", spiaggia.render, cards.card_spiaggia),
-    HubApp("reviews", "Reviews", "⭐", "Operations", "page", reviews.render, cards.card_reviews),
+    HubApp("fb", "Food & Beverage", "🍽", "Operations", "page", fb.render, "food cost & coperti"),
+    HubApp("spiaggia", "Spiaggia", "🏖️", "Operations", "page", spiaggia.render, "ricavo stabilimento & quadratura"),
+    HubApp("reviews", "Reviews", "⭐", "Operations", "page", reviews.render, "reputation & sentiment"),
     # ── Sistema ──────────────────────────────────────────────────────────────
-    HubApp("ingest", "Ingest", "📥", "Sistema", "page", ingest.render, cards.card_ingest),
+    HubApp("ingest", "Ingest", "📥", "Sistema", "page", ingest.render, "lineage: intake → promote"),
 ]
 
 
