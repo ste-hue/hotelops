@@ -29,6 +29,14 @@ def _q(sql: str) -> pd.DataFrame:
     return get_client().query(sql).to_dataframe()
 
 
+def _mensa_predicate(includi_mensa: bool) -> str:
+    """Predicato SQL per i coperti: di default esclude la **mensa dipendenti**
+    (``business_unit_id = 'HQ'``) — è un costo senza ricavo e gonfia i coperti.
+    ``includi_mensa=True`` → stringa vuota (nessun filtro).
+    """
+    return "" if includi_mensa else "COALESCE(business_unit_id, '') != 'HQ'"
+
+
 def align_yoy_daily(df: pd.DataFrame, date_col: str = "data") -> pd.DataFrame:
     """Aggiunge colonne ``<col>_ap`` allineate allo stesso giorno-calendario
     dell'anno precedente. Il 29/02 non ha corrispondente nell'anno non
@@ -110,10 +118,16 @@ def pasti(anno: int) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def stagione_giornaliera(anno: int) -> pd.DataFrame:
+def stagione_giornaliera(anno: int, includi_mensa: bool = False) -> pd.DataFrame:
     """Una riga per giorno dell'anno: ricavi F&B PMS (classe 02FB), vendite
     POS, coperti. Colonne ``*_ap`` = stesso giorno-calendario anno precedente
-    (allineamento in pandas via align_yoy_daily)."""
+    (allineamento in pandas via align_yoy_daily).
+
+    ``includi_mensa=False`` (default): i coperti **escludono la mensa dipendenti**
+    (BU 'HQ'). ``True`` la include.
+    """
+    pred = _mensa_predicate(includi_mensa)
+    cop_where = f"WHERE {pred}" if pred else ""
     sql = f"""
     WITH prod AS (
       SELECT data, SUM(importo_imponibile) AS ricavi_fb_pms
@@ -127,6 +141,7 @@ def stagione_giornaliera(anno: int) -> pd.DataFrame:
     ), cop AS (
       SELECT data_servizio AS data, SUM(n_coperti) AS coperti
       FROM `{F_COPERTI_GIORNALIERI}`
+      {cop_where}
       GROUP BY 1
     ), giorni AS (
       SELECT data FROM prod
@@ -150,12 +165,17 @@ def stagione_giornaliera(anno: int) -> pd.DataFrame:
     return aligned[correnti].reset_index(drop=True)
 
 
-def coperti_giornalieri(anno: int) -> pd.DataFrame:
-    """Coperti per giorno × tipo_pasto (anno corrente)."""
+def coperti_giornalieri(anno: int, includi_mensa: bool = False) -> pd.DataFrame:
+    """Coperti per giorno × tipo_pasto (anno corrente).
+
+    ``includi_mensa=False`` (default) esclude la mensa dipendenti (BU 'HQ').
+    """
+    pred = _mensa_predicate(includi_mensa)
+    where = f"anno = {int(anno)}" + (f" AND {pred}" if pred else "")
     return _q(f"""
     SELECT data_servizio AS data, tipo_pasto, SUM(n_coperti) AS coperti
     FROM `{F_COPERTI_GIORNALIERI}`
-    WHERE anno = {int(anno)}
+    WHERE {where}
     GROUP BY 1, 2
     ORDER BY 1, 2
     """)

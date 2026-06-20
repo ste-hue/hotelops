@@ -82,6 +82,24 @@ class TestFreshnessBadge:
         assert fb_data.freshness_badge("mensile", "2026-06", self.OGGI) == "✅"
 
 
+class TestMensaPredicate:
+    def test_default_esclude_mensa(self):
+        # default: i coperti escludono la mensa dipendenti (BU 'HQ')
+        pred = fb_data._mensa_predicate(False)
+        assert pred == "COALESCE(business_unit_id, '') != 'HQ'"
+
+    def test_includi_mensa_nessun_filtro(self):
+        assert fb_data._mensa_predicate(True) == ""
+
+    def test_funzioni_coperti_hanno_flag(self):
+        import inspect
+
+        for fn in (fb_data.stagione_giornaliera, fb_data.coperti_giornalieri):
+            params = inspect.signature(fn).parameters
+            assert "includi_mensa" in params
+            assert params["includi_mensa"].default is False  # esclusa di default
+
+
 class TestKpiOrNd:
     def test_normale(self):
         assert fb_data.kpi_or_nd(0.261, 24572.9, 4377) == "26.1%"

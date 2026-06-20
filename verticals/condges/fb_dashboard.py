@@ -21,13 +21,13 @@ from verticals.condges import fb_data
 
 
 @st.cache_data(ttl=300)
-def _stagione(anno: int) -> pd.DataFrame:
-    return fb_data.stagione_giornaliera(anno)
+def _stagione(anno: int, includi_mensa: bool = False) -> pd.DataFrame:
+    return fb_data.stagione_giornaliera(anno, includi_mensa)
 
 
 @st.cache_data(ttl=300)
-def _coperti_giorno(anno: int) -> pd.DataFrame:
-    return fb_data.coperti_giornalieri(anno)
+def _coperti_giorno(anno: int, includi_mensa: bool = False) -> pd.DataFrame:
+    return fb_data.coperti_giornalieri(anno, includi_mensa)
 
 
 @st.cache_data(ttl=300)
@@ -227,7 +227,7 @@ def delta_euro_pasto(r: pd.Series) -> str | None:
 # --- sezioni ---------------------------------------------------------------
 
 
-def render_stagione(anno: int, oggi: date) -> None:
+def render_stagione(anno: int, oggi: date, includi_mensa: bool = False) -> None:
     fresh = _freshness()
     cols = st.columns(len(fresh))
     for col, row in zip(cols, fresh.itertuples(index=False)):
@@ -238,7 +238,7 @@ def render_stagione(anno: int, oggi: date) -> None:
         "mensile = manca l'ultimo mese chiuso."
     )
 
-    df = _stagione(anno)
+    df = _stagione(anno, includi_mensa)
     if df.empty:
         st.info(f"Nessun dato giornaliero per il {anno}.")
         return
@@ -246,7 +246,8 @@ def render_stagione(anno: int, oggi: date) -> None:
     st.plotly_chart(fig_cumulato(df), use_container_width=True)
     c1, c2 = st.columns(2)
     c1.plotly_chart(
-        fig_coperti_tipo_pasto(_coperti_giorno(anno)), use_container_width=True
+        fig_coperti_tipo_pasto(_coperti_giorno(anno, includi_mensa)),
+        use_container_width=True,
     )
     c2.plotly_chart(fig_vendite_sala(_vendite_sala(anno)), use_container_width=True)
 
@@ -377,14 +378,23 @@ def render() -> None:
     """Entry importabile dal hub. Nessun set_page_config qui."""
     st.title("🍽️ F&B — monitoraggio operativo")
     oggi = date.today()
+    c_anno, c_mensa = st.columns([1, 2])
     anno = int(
-        st.selectbox("Anno", list(range(oggi.year, 2024, -1)), index=0, key="fb_anno")
+        c_anno.selectbox(
+            "Anno", list(range(oggi.year, 2024, -1)), index=0, key="fb_anno"
+        )
+    )
+    includi_mensa = c_mensa.checkbox(
+        "Includi mensa dipendenti (HQ) nei coperti",
+        value=False,
+        key="fb_includi_mensa",
+        help="Default esclusa: è un costo senza ricavo, gonfia i coperti giornalieri.",
     )
     tab_stagione, tab_kpi, tab_dettaglio = st.tabs(
         ["🌊 Stagione in corso", "📊 KPI mensili", "🔍 Dettaglio mensile"]
     )
     with tab_stagione:
-        render_stagione(anno, oggi)
+        render_stagione(anno, oggi, includi_mensa)
     with tab_kpi:
         render_kpi(anno)
     with tab_dettaglio:
