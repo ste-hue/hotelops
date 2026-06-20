@@ -36,6 +36,7 @@ Consolidamento ("torniamo su main, worktree-only d'ora in poi"). Esito:
 - **Doc Refresh Sprint**: Step 1+2+2.5 chiusi in working tree. Step 3 (README rewrite) in attesa OK. Step 4-9 in coda.
 
 ## Completato di recente
+- 2026-06-20: **Deploy refresh + chiarimento 3 superfici hub.** (1) **Vetrina Cloudflare** ri-deployata (`hotelops publish-export` → `wrangler deploy`, Version `1eb69fc6`): dati `_meta.json` freschi 20/06 (erano 18/06). Sito vive in `verticals/hub/publish/site/` (HTML/JS committato; solo `data/*.json` generato). NB: l'exporter ora genera **solo `_meta.json`** (`ac723bc`); `fb/reviews/spiaggia.json` in `site/data/` = residui morti non più fetchati. (2) **Cloud Run hub** ri-deployato (rev. `00012`→`00013-hfb`, era codice pre-cashflow del 18/06 13:58): ora online cashflow vertical + mapping BQ (#38) + D1 (#41). 302→IAP verificato. **Footgun evitato**: il deploy va lanciato dalla repo, non da `~` (`--source .` caricherebbe la home). **Insight durevole — 3 superfici, il cashflow è in UNA sola**: vetrina (launcher statico, niente cashflow, by design) · Cloud Run hub = `app_viewer.py` (**viewer read-only direttore, cashflow ESCLUSO** perché superficie di scrittura) · **hub admin `app.py` = unica con pagina 💸 Cashflow, gira SOLO in locale** (`streamlit run verticals/hub/app.py`, mai deployata). "Metterlo online dietro IAP" = decisione aperta (servire `app.py` invece di `app_viewer.py`), non urgente.
 - 2026-06-18: **Spiaggia fase 2 — ricavo giornaliero unificato + vetrina + routine.** Modello cross-società: **stabilimento/giorno = banco INTUR + alloggiati ORTI**. Banco = Registro Corrispettivi RT (spiaggia 22% + bar 10%), **Drive auto-sync via cron** (`scripts/spiaggia-corrispettivi-daily.sh`, 9/14/20) → `f_spiaggia_corrispettivi`. **Moolty** = cassa POS dell'intero banco walk-in → `f_spiaggia_fb_ordini`, dettaglio non addendo (`scost_cassa = registro−Moolty ~2%`). **Alloggiati ORTI** = ospiti hotel → PMS `04BEALL`; **Spiagge.it ⊆ alloggiati** (2025 100% hotel-linked, NON si somma). Nuovo: `ingest/drive_fetch.py` (SA `drive-audit@`, `drive_file_id` su SourceDefinition), source `RT_CORRISPETTIVISPIAGGIA`/`MOOLTY_FBSPIAGGIA`, vista `v_spiaggia_giornaliero`, skill `add-new-vertical`. Validato 2025 (stabilimento ≈330k vs 334k registro, <1%) + 2026 live. App spiaggia **semplificata a "soldi totali"**, montata nel hub (PR #36) + card vetrina + Cloud Run ridepl `00009`. 3 PR (#34/#35/#36) merged. **CLAUDE.md sbrinato 525→178 righe** (cataloghi → `hotelops manifest`/manifest.yaml). Aperti: review-findings (#1 Moolty dedup write-time da fixare), `scost_cassa` ~2% (causa da amministrazione), export PMS 2026 + Moolty mesi futuri.
 - 2026-06-16: **Vetrina hub LIVE + fix link F&B** — launcher Cloudflare Worker `hotelops-vetrina.ste-dellapietra.workers.dev` (4 card: F&B/Reputation/Mutui/Banche; dashboard ricche su Streamlit Cloud Run). Bug: la card F&B puntava a `/fb` ma quella è la default page Streamlit (vive solo su `/`, `url_path` ignorato con `default=True` — cfr. streamlit page.py:118) → "Page not found" → fallback alla main. Fix: card → root, deployato + committato su `feat/vetrina` (`4c1bbfd`, 21↑). Mergeable su main (solo static site + exporter). ⚠️ resta **gating** (vetrina pubblica con dati finanziari).
 - 2026-06-13: **Spiaggia = vertical #3 shipped (fase 1)** — dump JSON Spiagge.it via intake→promote → 3 tabelle canonical `f_spiaggia_*` (fan-out 1→3, full-replace via `natural_key=[societa_id]`, source `SPIAGGEIT_SPIAGGIA_INTUR_SNAPSHOT` MANUAL) + 4 viste `v_spiaggia_*` + app Streamlit `verticals/spiaggia/app.py` (`render()` hub-ready). Live su BQ: 33.805/12.979/187 righe, FK 100%, cassa 532.904 €. KPI su cassa (`gross_booking_value` inaffidabile). 16 commit su main+origin (`8ea7b3c`…`9f0127c`). Spec/plan `docs/superpowers/{specs,plans}/2026-06-13-spiaggia-vertical*`. Vault: decision + `verticals/SPIAGGIA.md` + `concepts/SPIAGGIA_DATA_SEMANTICS.md`.
@@ -100,6 +101,35 @@ Consolidamento ("torniamo su main, worktree-only d'ora in poi"). Esito:
 - Mislabel MPS <-> MPS_KROSS per ORTI in `extract_saldo_mps2026` -- difetto latente confermato, fix deferred (content-detection IBAN autoritativa sul filename).
 
 ## Prossimi passi
+
+> **Triage thread 2026-06-20** (hotelops-threads): "cose da fare / cose da dimenticare".
+> **Superficie fisica PULITA**: `git worktree list` = solo `main` + `.worktrees/gardener-22`. I 4 worktree del triage 06-16 (vetrina/hotelops-api/cash-pf-engine/fix-budget-lottery) sono **spariti (potati)**. `gh pr list --state open` = **vuoto**.
+> **Drift sanato (STATUS 06-19 stale → CHIUSI):**
+> - ⛔ ~~"PR #38 aperto" (mapping fornitori BQ-backed)~~ → **MERGED** (PR #38, 06-19).
+> - ⛔ ~~"refactor unificazione: estrarre write_pf, cancellare app_scadenzario"~~ → **FATTO** (PR #41 D1, 06-19; `app_scadenzario.py` cancellato, motore in `pf_rotate/pf_writer.py`).
+> - ⛔ ~~"footgun load_fornitori guard"~~ → **FATTO** (PR #39, 06-19).
+> - ⛔ vetrina → **MERGED su main** (06-18). HUB.md "app-store legacy da prunare" → già potato. FB.md "f_produzione_pms non creata" → **hub stale**, la tabella è live in BQ+main.
+> **CORREZIONE (rilettura sessioni 06-19): il cashflow/PF-rotate È SHIPPATO, non bloccato.** Due track PF distinti, non confonderli:
+> - **pf-rotate / cashflow vertical** = ✅ **SHIPPATO 06-19** (4 PF prodotti, engine unificato D1, mapping BQ, app nel hub). Gira senza dipendere dal budget-lottery.
+> - **PF generazionale** (`pf-genera`, genera da zero) = 🅿️ esperimento separato; È questo che il budget-lottery + i 6 item bloccano (smoke T4). NON load-bearing.
+> **Residui REALI cashflow (carry-over sessioni 06-19, non dal triage 06-16):**
+> - ~~**Deploy Cloud Run hub**~~ ✅ **FATTO 2026-06-20** (rev. `00013-hfb`). ⚠️ **scoperta**: serve `app_viewer.py` (read-only) → NON espone il cashflow; il cashflow gira solo nell'admin `app.py` in locale. "Cashflow online" = decisione separata (vedi Completato 06-20).
+> - **D2 — `tesoreria.py` standalone**: investigare se duplica il tab tesoreria di `app_cdg` (`page_tesoreria`) prima di cancellare. Layer dati (`bq_tesoreria_core`/`gen_tesoreria_xlsx`) NON ridondante. Scope da scrivere.
+> - **Control-discrepancy** (debug P2): conteggio CLI `RotateResult` 13/0/7 vs controlli in-foglio 22/1/0 + label-mese header riga 3 stale.
+> - Campo "Motivo" custom esclusi (deferred) · casa memoria-proiezioni se mai serve (dataset fuori dal pool `f_*`, non urgente).
+> **PURSUE (sceglie Stefano):**
+> - **Rotation maggio→giugno** — timing-due (oggi 06-20, "~fine giugno"). Pura esecuzione, zero design: input = post-rotate 06-19 in `pianfin/PF/`, saldi 31/05 nell'anchor. Quick win operativo.
+> - **Deploy Cloud Run hub** (sopra) — sblocca l'uso online del cashflow shippato.
+> **HANDOFF (manuali, niente worktree):**
+> - **PF generazionale — chiamata di Stefano sui 6 item** (cod 71/138/1306 FORNITORE_SBAGLIATO + 125/1222/1602 PARTITA_PERSA): gate decisionale del track *generazionale* (non urgente).
+> - email Lara (revman) · `createAuditForm()`+FORM_URL+share audit direttore · re-export bilancini 2025 con CE (BVA YoY) · Rosa stipendi maggio ORTI. **Ricorrono in OGNI triage da 06-12, mai eseguiti** → o si fanno o si KILL-ano.
+> **PARK (con condizione di risveglio):**
+> - **fix-budget-lottery + PF generazionale** — track sperimentale "genera da zero". Verificato 06-20: il fix NON è in main (`v_piano_finanziario_mensile.sql:86` legge ancora `f_budget_mensile` grezza + `ROW_NUMBER`, non `v_budget_canonical`). Sveglia: quando si decide di sostituire pf-rotate con la generazione. **Non blocca il cashflow operativo.**
+> - **hotelops-api** — spec in main, build non iniziato. Sveglia: quando si attacca CdG da telefono.
+> - **hub pagina Cassa** — specchio PF con memoria; gated dietro la maturità della spina, non urgente.
+> - **explore/ingest-accodamenti** (branch 808541a tenuto) — sveglia: primo loop che richiede accodamenti in BQ.
+> **PRUNE candidate:** `.worktrees/gardener-22` (clean, 1↑ = checkbox STATUS.md superato). Sicuro da rimuovere — `status --short` vuoto verificato.
+> **Conflict check:** nessun worktree attivo copre i fronti PURSUE → se Stefano sceglie, si apre worktree pulito. Nessuno STOP.
 
 > **Triage thread 2026-06-16** (hotelops-threads): inventario 3 fonti.
 > **Drift sanato vs 06-14**: worktree `app-store` (legacy `.claude/worktrees/`) + `spiaggia` = **PRUNATI** (erano prune-candidate, ora spariti da `git worktree list`). HUB.md/STATUS che li citavano come "da prunare" → fatto.
