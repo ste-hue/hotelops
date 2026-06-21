@@ -41,6 +41,11 @@ def _inbox_df():
 
 
 def render():
+    from verticals.hub.roles import current_apps
+
+    if "ingest" not in current_apps():
+        st.error("Non hai accesso a questa sezione.")
+        st.stop()
     st.title("📥 Ingest")
     st.caption(
         "File → classifica → intake (GCS + f_raw_objects) → promote. Lineage-first."

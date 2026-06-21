@@ -27,8 +27,8 @@ Prima di agganciare, rispondi a due domande — determinano tutto:
    - Regola: il valore del hub è il **dato vivo**. Streamlit ti dà dato→schermo gratis; un frontend bespoke ha bisogno di un layer API (BQ→endpoint→frontend) = lavoro vero. Scegli bespoke solo per superfici *brand/vetrina*, non per strumenti dati.
 
 2. **Chi la vede?** (audience)
-   - *Sola lettura, ok per la direzione* → registrala in **entrambe** `app.py` (admin) e `app_viewer.py` (viewer).
-   - *Scrittura o roba interna* (ingest, edit previsioni, note operative) → **solo `app.py`**. Le superfici di scrittura sono admin-only per costruzione (vedi pagina Ingest).
+   - *Sola lettura, ok per la direzione* → registrala in `app.py` (entrypoint unico) e concedi l'audience aggiungendo l'`id` al grant giusto in `verticals/hub/roles.py::_GRANTS`.
+   - *Scrittura o roba interna* (ingest, edit previsioni, note operative) → **solo `app.py`**, grant ristretto. Le superfici di scrittura sono admin-only per costruzione (vedi pagina Ingest).
 
 ## A — Vista Streamlit (il caso comune)
 
@@ -68,15 +68,14 @@ La pagina del hub resta **sottile**.
    `brand_header("Food & Beverage")`. Mai un `st.title` grezzo per superfici
    direttore-facing.
 
-3. **Registra** in `verticals/hub/app.py` e/o `app_viewer.py`:
+3. **Registra** in `verticals/hub/app.py`:
 
    ```python
    from verticals.hub.pages_ import <nome>            # in cima
    st.Page(<nome>.render, title="...", icon="...", url_path="<unico>")  # in st.navigation([...])
    ```
 
-   `url_path` **deve essere unico tra tutte le pagine** (vedi §Trappole). In `app_viewer.py`
-   monta solo se la superficie è ok per la direzione.
+   `url_path` **deve essere unico tra tutte le pagine** (vedi §Trappole). L'audience viene controllata a runtime via `roles.py::_GRANTS` — aggiungi l'`id` dell'app al grant corretto.
 
 4. **Card freshness** (se è una superficie top-level): estendi
    `verticals/hub/freshness.py::carica_freshness()` con la query che misura la freschezza
@@ -95,7 +94,7 @@ La pagina del hub resta **sottile**.
 
 ### Tema (Panorama Group Design System)
 
-`inject_brand()` è già chiamato globalmente in ogni `app.py`/`app_viewer.py`: il CSS e i font
+`inject_brand()` è già chiamato globalmente in `app.py`: il CSS e i font
 del brand valgono per tutte le pagine. Tu devi solo:
 - usare gli helper `brand_header()` / `eyebrow()` di `verticals/hub/theme.py`;
 - **mai hardcodare colori** — usa i token (`theme.NAVY`, `SKY`, `AZURE`, `GOLD`, `CORAL`,
@@ -104,6 +103,12 @@ del brand valgono per tutte le pagine. Tu devi solo:
 
 Palette e font sono nel brief del design system; i loghi (quando presenti) in
 `verticals/hub/assets/logos/` — usa il P-mark per spot compatti, il lockup altrove.
+
+### Superfici di scrittura o dati riservati
+
+Un'app che **scrive, muta stato, è irreversibile o espone dati riservati**:
+1. va marcata `sensitive=True` nella riga di `registry.py` → è **esclusa dalle costanti-gruppo** (Invariante S1): NON la si concede per ereditarietà di gruppo, solo nominandola esplicitamente in un grant di `roles.py::_GRANTS`;
+2. **ri-controlla `current_apps()`** in testa al suo `render()` e fa `st.stop()` se l'`id` non è concesso. "Card nascosta" ≠ "dato protetto".
 
 ### Test
 
@@ -146,18 +151,18 @@ Usa B2 solo per superfici brand/vetrina. Per uno strumento dati, §A vince sempr
 
 ## Pubblicazione
 
-- **Viste/app Streamlit** (admin e viewer) → **Cloud Run** dietro **Cloudflare Tunnel +
-  Access** (Access fa da auth: gating per email del direttore). Spec:
+- **Viste/app Streamlit** → **Cloud Run** dietro **Cloudflare Tunnel + Access** (Access fa da
+  auth: gating per email del direttore). Spec:
   `docs/superpowers/specs/2026-06-12-hub-app-store-design.md` (§Pubblicazione) quando esiste.
 - **Front-door B2** → Cloudflare Pages diretto.
-- L'app **viewer** è quella che si pubblica per il direttore; l'app **admin** resta locale
-  (contiene le superfici di scrittura).
+- L'audience (chi vede cosa) è gestita da `roles.py::_GRANTS`; le superfici di scrittura
+  (`sensitive=True`) sono concesse solo a grant nominali.
 
 ## Trappole (imparate sul campo 2026-06-12/13 — non ri-sbagliarle)
 
 - **`ModuleNotFoundError: verticals`**: `streamlit run` mette in `sys.path` la cartella dello
-  script, non la repo root. Ogni entrypoint (`app.py`, `app_viewer.py`) bootstrappa il path
-  in testa (`sys.path.insert(0, parents[2])`) prima degli import `verticals.*`. Le pagine in
+  script, non la repo root. L'entrypoint `app.py` bootstrappa il path in testa
+  (`sys.path.insert(0, parents[2])`) prima degli import `verticals.*`. Le pagine in
   `pages_/` non ne hanno bisogno (le importa l'entrypoint).
 - **"Multiple Pages... URL pathnames must be unique"**: `st.Page` inferisce l'URL dal nome
   della callable; quattro `render` omonime collidono. Passa sempre `url_path="…"` esplicito e
@@ -175,7 +180,7 @@ Usa B2 solo per superfici brand/vetrina. Per uno strumento dati, §A vince sempr
 
 - [ ] Tipo deciso (vista A / embed B1 / front-door B2) e audience decisa (admin / +viewer)
 - [ ] `render()` senza `set_page_config`; logica nel vertical, pagina sottile
-- [ ] `pages_/<nome>.py` con degrado; registrata con `url_path` unico in app giuste
+- [ ] `pages_/<nome>.py` con degrado; registrata con `url_path` unico in `app.py`; audience in `roles.py::_GRANTS`
 - [ ] `brand_header`/token Panorama, niente colori hardcoded
 - [ ] BQ-only, `@st.cache_data(ttl=300)`, errore esplicito se BQ giù
 - [ ] (se top-level) card freshness in `freshness.py` + `home.py`

@@ -52,14 +52,24 @@ def test_mutui_page_importabile():
     assert mutui.MUTUI_URL.startswith("https://")
 
 
-def test_home_render_riceve_page_objs():
-    from verticals.hub import home
-
+def test_home_render_riceve_page_objs_e_allowed():
     import inspect
 
-    # La Home gateway riceve la mappa id→st.Page per i link in-app (registry-driven).
+    from verticals.hub import home
+
     sig = inspect.signature(home.render)
     assert "page_objs" in sig.parameters
+    assert "allowed" in sig.parameters
+
+
+def test_home_usa_by_group_for_e_landing():
+    from pathlib import Path
+
+    src = Path("verticals/hub/home.py").read_text(encoding="utf-8")
+    code = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("#"))
+    assert "by_group_for" in code
+    # landing quando non c'è nessuna app concessa
+    assert "allowed" in code
 
 
 def test_spiaggia_page_importabile():
@@ -80,13 +90,9 @@ def test_spiaggia_render_non_chiama_set_page_config():
     assert "st.set_page_config" not in src
 
 
-def test_viewer_app_no_ingest_page():
-    # l'app viewer non deve MONTARE la pagina Ingest (superficie di scrittura).
-    # Controlla import effettivo + assenza di st.Page(ingest...), non la docstring.
-    from pathlib import Path
+def test_audience_non_admin_non_riceve_ingest():
+    # Il "viewer" non è più un file: è un grant. Chi non è admin non vede ingest.
+    from verticals.hub.roles import _resolve
 
-    src = Path("verticals/hub/app_viewer.py").read_text(encoding="utf-8")
-    code = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("#"))
-    assert "import fb" in code and "reviews" in code
-    assert "ingest.render" not in code
-    assert "import ingest" not in code and "pages_ import fb, ingest" not in code
+    for email in ("gm@panoramagroup.it", "fom@panoramagroup.it", "amministrazione@panoramagroup.it"):
+        assert "ingest" not in _resolve(email, allow_all=False)
