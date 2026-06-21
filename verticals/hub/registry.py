@@ -39,11 +39,12 @@ class HubApp:
     kind: str
     target: Callable | str | None = None
     subtitle: str = ""
+    sensitive: bool = False  # scrive/muta stato/azioni irreversibili/dati riservati (S1)
 
 
 APPS: list[HubApp] = [
     # ── Finanza ──────────────────────────────────────────────────────────────
-    HubApp("cashflow", "Cashflow", "💸", "Finanza", "page", cashflow.render, "PF & proiezione cassa"),
+    HubApp("cashflow", "Cashflow", "💸", "Finanza", "page", cashflow.render, "PF & proiezione cassa", sensitive=True),
     HubApp("banche", "Banche", "🏛", "Finanza", "bind", _BANCHE_LOOKER, "movimenti & saldi (Looker)"),
     HubApp("mutui", "Mutui", "🏦", "Finanza", "page", mutui.render, "ammortamenti & simulatore"),
     HubApp("cdg", "CdG", "📊", "Finanza", "soon", None, "controllo di gestione"),
@@ -52,7 +53,7 @@ APPS: list[HubApp] = [
     HubApp("spiaggia", "Spiaggia", "🏖️", "Operations", "page", spiaggia.render, "ricavo stabilimento & quadratura"),
     HubApp("reviews", "Reviews", "⭐", "Operations", "page", reviews.render, "reputation & sentiment"),
     # ── Sistema ──────────────────────────────────────────────────────────────
-    HubApp("ingest", "Ingest", "📥", "Sistema", "page", ingest.render, "lineage: intake → promote"),
+    HubApp("ingest", "Ingest", "📥", "Sistema", "page", ingest.render, "lineage: intake → promote", sensitive=True),
 ]
 
 
@@ -83,6 +84,16 @@ def pages() -> list[HubApp]:
 def by_group() -> dict[str, list[HubApp]]:
     """Le app raggruppate per dominio, nell'ordine di ``GROUPS``."""
     return {g: [a for a in APPS if a.group == g] for g in GROUPS}
+
+
+def pages_for(allowed: frozenset[str]) -> list[HubApp]:
+    """Le pagine montabili (kind=page) concesse a ``allowed``."""
+    return [a for a in pages() if a.id in allowed]
+
+
+def by_group_for(allowed: frozenset[str]) -> dict[str, list[HubApp]]:
+    """Le app per gruppo, filtrate su ``allowed`` (gruppi vuoti restano chiavi)."""
+    return {g: [a for a in apps if a.id in allowed] for g, apps in by_group().items()}
 
 
 validate()

@@ -55,3 +55,27 @@ def test_validate_rifiuta_id_duplicato():
     a = HubApp("dup", "A", "🅰", "Finanza", "soon", None, None)
     with pytest.raises(ValueError):
         validate([a, a])
+
+
+def test_cashflow_e_ingest_sono_sensibili():
+    from verticals.hub.registry import APPS
+
+    sens = {a.id for a in APPS if a.sensitive}
+    assert sens == {"cashflow", "ingest"}
+
+
+def test_pages_for_filtra_su_allowed():
+    from verticals.hub.registry import pages_for
+
+    got = {a.id for a in pages_for(frozenset({"reviews", "fb"}))}
+    assert got == {"reviews", "fb"}
+    assert {a.id for a in pages_for(frozenset())} == set()
+
+
+def test_by_group_for_filtra_e_mantiene_ordine():
+    from verticals.hub.registry import GROUPS, by_group_for
+
+    g = by_group_for(frozenset({"reviews"}))
+    assert list(g.keys()) == GROUPS  # tutti i gruppi presenti (anche vuoti)
+    assert {a.id for a in g["Operations"]} == {"reviews"}
+    assert g["Finanza"] == []
