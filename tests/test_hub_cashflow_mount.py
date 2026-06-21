@@ -30,3 +30,15 @@ def test_app_filtra_la_nav_su_current_apps():
     assert "pages_for" in code
     # la Home riceve anche le app concesse, non solo page_objs
     assert "home.render(_page_objs, allowed)" in code
+
+
+def test_superfici_scrittura_ricontrollano_il_grant():
+    import inspect
+
+    from verticals.hub.pages_ import cashflow, ingest
+
+    for mod, app_id in ((cashflow, "cashflow"), (ingest, "ingest")):
+        src = inspect.getsource(mod.render)
+        assert "current_apps()" in src, f"{app_id}: manca il re-check"
+        assert f'"{app_id}"' in src
+        assert "st.stop()" in src
