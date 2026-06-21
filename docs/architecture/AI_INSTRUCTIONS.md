@@ -2,7 +2,7 @@
 type: ai_instructions
 domain: HotelOps
 audience: AI agents (Claude Code, NanoClaw, Cron agents, future)
-last_updated: 2026-04-30
+last_updated: 2026-06-21
 canonical: repo (was vault HotelOps/AI_INSTRUCTIONS.md)
 ---
 
@@ -76,6 +76,8 @@ Mai calcolare saldo da movimenti contabili. Mai budget da view downstream divers
 - **I6 — Stagionalità è dominio**: forecast flat 1/12 è fuorviante. `d_coefficienti_stagionalita` obbligatorio in ogni scostamento.
 - **I7 — Ogni vertical ha un nome umano**: Rosa, Gasparotto, Antonio, Mario. Senza persona → non è vertical.
 - **I8 — Locality**: la row-selection (dedup, precedenza, risoluzione fonti) vive **nella canonical view**, non nel consumer (CLI, Streamlit, agente). Se un consumer filtra/deduplica, è un bug da rimandare upstream.
+- **I9 — Raw boundary**: nuovi write canonical passano dal Raw Object GCS tracciato quando la source è nel regime `raw_storage.backend: gcs`; no ingest diretto senza lineage per nuove sorgenti.
+- **I10 — Hub authz**: superfici operative sensibili nel hub richiedono registry, grant nominativo esplicito, re-check server-side e fail-closed. IAP autentica l'identità; non sostituisce i grant applicativi.
 
 ## Vocabolario canonico (use these names, nothing else)
 
@@ -134,6 +136,7 @@ Il sistema espone (non nasconde) allarmi su:
 - **Schema drift**: Pydantic contract fail = pipeline **stop**, non log-and-continue.
 - **Ontology drift**: valori in `D_*` non presenti nel vault `ontology/` → flag.
 - **Boundary drift**: row che supera Pydantic ma fallisce `json.dumps` → `SerializationBoundaryError` (vedi gate I1).
+- **Authz drift hub**: app sensibile senza `sensitive=True`, grant implicito tramite gruppo, pagina senza re-check `current_apps()` o fallback non fail-closed.
 
 ## Anti-goals (specifici HotelOps)
 
