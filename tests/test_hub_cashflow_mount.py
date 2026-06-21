@@ -19,3 +19,14 @@ def test_hub_app_registers_cashflow():
     src = Path("verticals/hub/app.py").read_text()
     ast.parse(src)
     assert "registry" in src
+
+
+def test_app_filtra_la_nav_su_current_apps():
+    from pathlib import Path
+
+    src = Path("verticals/hub/app.py").read_text(encoding="utf-8")
+    code = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("#"))
+    assert "current_apps" in code
+    assert "pages_for" in code
+    # la Home riceve anche le app concesse, non solo page_objs
+    assert "home.render(_page_objs, allowed)" in code

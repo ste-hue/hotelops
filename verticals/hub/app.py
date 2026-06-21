@@ -19,20 +19,23 @@ if _ROOT not in sys.path:
 import streamlit as st  # noqa: E402
 
 from verticals.hub import home  # noqa: E402
-from verticals.hub.registry import pages as registry_pages  # noqa: E402
+from verticals.hub.registry import pages_for  # noqa: E402
+from verticals.hub.roles import current_apps  # noqa: E402
 from verticals.hub.theme import inject_brand  # noqa: E402
 
 st.set_page_config(page_title="HotelOps Hub", page_icon="🏨", layout="wide")
 inject_brand()  # admin: chrome Streamlit visibile
 
-# Una st.Page per ogni app kind="page"; mappa id→Page per i link dalla Home.
+allowed = current_apps()
+
+# Una st.Page per ogni pagina CONCESSA; mappa id→Page per i link dalla Home.
 _page_objs = {
     a.id: st.Page(a.target, title=a.title, icon=a.icon, url_path=a.id)
-    for a in registry_pages()
+    for a in pages_for(allowed)
 }
 
 home_page = st.Page(
-    lambda: home.render(_page_objs),
+    lambda: home.render(_page_objs, allowed),
     title="Home",
     icon="🏨",
     default=True,
