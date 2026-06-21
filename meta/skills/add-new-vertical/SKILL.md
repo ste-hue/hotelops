@@ -48,7 +48,7 @@ Un vertical senza superficie raggiungibile è metà lavoro.
 | Pezzo | Dove | Note |
 |---|---|---|
 | App vertical | `verticals/<x>/app.py` | espone **`render()`** (NIENTE `set_page_config` dentro render — lo fa l'hub una volta sola); standalone `streamlit run …` per dev. |
-| Mount in vetrina | `verticals/hub/app.py` (+ `app_viewer.py` se pubblico) | `st.Page(<x>.render, title=…, icon=…, url_path="<x>")`; eventuale wrapper in `verticals/hub/pages_/`. |
+| Mount nel hub | `verticals/hub/registry.py` (appendi una `HubApp`) + audience in `verticals/hub/roles.py::_GRANTS` | `HubApp("<x>", "<Titolo>", "<icona>", "<gruppo>", "page", <x>.render, "<sottotitolo>")`; se scrive dati → `sensitive=True` + grant esplicito + re-check in `render()`. |
 | Tema | `verticals/hub/theme.py` | usa il brand Panorama, non hardcodare colori. |
 
 Agganciare alla vetrina è il dominio di **`hub-bind`**: invocala. *È il pezzo che si dimentica più spesso* (la spiaggia ha avuto `render()` pronto per giorni senza essere montata).
