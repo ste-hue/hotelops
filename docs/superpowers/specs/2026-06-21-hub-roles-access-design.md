@@ -73,8 +73,10 @@ _GRANTS: dict[str, frozenset[str]] = {
 Reso **meccanico**, non affidato alla memoria: `sensitive=True` esclude l'app dalle costanti-gruppo, quindi
 finché non la nomini esplicitamente in `_GRANTS` resta invisibile a tutti tranne l'admin (`ALL`). Aggiungere
 una nuova app **read** a Operations → 1 riga, eredita l'audience del gruppo. Aggiungere una nuova app
-**di scrittura** → la marchi `sensitive=True` e la concedi a mano: la frizione è voluta. `validate()` nel
-registry testa che nessun id sensibile compaia in una costante-gruppo.
+**di scrittura** → la marchi `sensitive=True` e la concedi a mano: la frizione è voluta. Il tripwire è un
+assert **a import-time in `roles.py`** (`_assert_s1`): se una costante-gruppo dovesse contenere un id
+sensibile — per hardcoding errato o per aver marcato un'app sensibile senza escluderla da `_group_safe` —
+il modulo esplode all'avvio, fail loudly.
 
 **Conseguenze volute del modello:**
 
@@ -206,8 +208,8 @@ nessuna UI di amministrazione utenti.
 
 ## Ordine di esecuzione
 
-0. `registry.py`: campo `sensitive: bool = False`; `cashflow`/`ingest` → `sensitive=True`; `validate()`
-   estesa (Invariante S1: nessun sensibile in costante-gruppo). Test registry.
+0. `registry.py`: campo `sensitive: bool = False`; `cashflow`/`ingest` → `sensitive=True`. Test registry.
+   (Invariante S1 verificata a import-time in `roles.py` via `_assert_s1`, non in `registry.validate()`.)
 1. `roles.py`: `current_apps()` + costanti-gruppo `_group_safe()` + `_GRANTS` + bypass `HUB_DEV_ALLOW_ALL`
    + parsing header. Test `test_hub_roles.py`.
 2. `app.py`: filtro `_page_objs` su `current_apps()`; passa `allowed` a `home.render`.

@@ -81,3 +81,19 @@ def test_no_header_bypass_solo_esplicito():
 def test_header_presente_vince_sul_bypass():
     apps = _resolve("fom@panoramagroup.it", allow_all=True)
     assert apps == frozenset({"fb", "spiaggia", "reviews"})
+
+
+def test_assert_s1_blocca_costante_con_app_sensibile():
+    import pytest
+
+    from verticals.hub.roles import _assert_s1
+
+    with pytest.raises(AssertionError, match="S1 violata"):
+        _assert_s1("FAKE", frozenset({"cashflow"}))  # cashflow è sensibile
+
+
+def test_assert_s1_passa_costante_pulita():
+    from verticals.hub.roles import _assert_s1
+
+    safe = frozenset({"fb", "spiaggia"})
+    assert _assert_s1("OK", safe) == safe

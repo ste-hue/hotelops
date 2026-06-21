@@ -28,9 +28,32 @@ def _group_safe(group: str) -> frozenset[str]:
     return frozenset(a.id for a in APPS if a.group == group and not a.sensitive)
 
 
-FINANZA = _group_safe("Finanza")  # {banche, mutui, cdg} — cashflow escluso (sensitive)
+# {banche, mutui, cdg} — cashflow escluso (sensitive). Nota: cdg è kind="soon" (tile placeholder,
+# nessuna pagina reale), quindi un grant su cdg è attualmente un no-op.
+FINANZA = _group_safe("Finanza")
 OPERATIONS = _group_safe("Operations")  # {fb, spiaggia, reviews}
 ALL = frozenset(a.id for a in APPS)  # admin: tutto, sensibili incluse
+
+# Tripwire S1: le costanti-gruppo non devono contenere app sensibili.
+# Eseguito a import-time: se qualcuno bypassa _group_safe o marca un'app
+# sensibile senza escluderla, il modulo esplode subito (fail loudly).
+_SENSITIVE_IDS = frozenset(a.id for a in APPS if a.sensitive)
+
+
+def _assert_s1(name: str, const: frozenset[str]) -> frozenset[str]:
+    """Tripwire S1: una costante-gruppo non può contenere app sensibili.
+
+    Difende dal caso in cui qualcuno hardcodi una costante bypassando
+    _group_safe, o marchi un'app sensibile senza escluderla dal gruppo.
+    """
+    leaked = const & _SENSITIVE_IDS
+    if leaked:
+        raise AssertionError(f"S1 violata: app sensibili in {name}: {sorted(leaked)}")
+    return const
+
+
+_assert_s1("FINANZA", FINANZA)
+_assert_s1("OPERATIONS", OPERATIONS)
 
 # Mappa email → app concesse. Versionata in git; sensibili nominate a mano (S1).
 _GRANTS: dict[str, frozenset[str]] = {
