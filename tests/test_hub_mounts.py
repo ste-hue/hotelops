@@ -52,14 +52,24 @@ def test_mutui_page_importabile():
     assert mutui.MUTUI_URL.startswith("https://")
 
 
-def test_home_render_riceve_page_objs():
-    from verticals.hub import home
-
+def test_home_render_riceve_page_objs_e_allowed():
     import inspect
 
-    # La Home gateway riceve la mappa id→st.Page per i link in-app (registry-driven).
+    from verticals.hub import home
+
     sig = inspect.signature(home.render)
     assert "page_objs" in sig.parameters
+    assert "allowed" in sig.parameters
+
+
+def test_home_usa_by_group_for_e_landing():
+    from pathlib import Path
+
+    src = Path("verticals/hub/home.py").read_text(encoding="utf-8")
+    code = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("#"))
+    assert "by_group_for" in code
+    # landing quando non c'è nessuna app concessa
+    assert "allowed" in code
 
 
 def test_spiaggia_page_importabile():
