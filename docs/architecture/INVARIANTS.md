@@ -1,7 +1,7 @@
 ---
 type: invariants
 domain: HotelOps
-last_updated: 2026-05-07
+last_updated: 2026-06-21
 canonical: repo (was vault HotelOps/INVARIANTS.md)
 ---
 
@@ -105,6 +105,26 @@ Corollario operativo:
 - nuove sorgenti discovery-first vanno in `RAW_ONLY` finché non esiste un target canonical esplicito.
 
 ADR: `docs/adr/0004-gcs-mandatory-ingestion-boundary.md`
+
+### I10. Superfici operative sensibili richiedono grant esplicito e authz server-side
+
+Il hub è una superficie operativa, non solo un menu. Ogni app montata vive nel
+registry del hub (`verticals/hub/registry.py`): aggiungere, rimuovere o
+riclassificare una superficie significa cambiare quella singola fonte, non
+spargere link o condizioni nei consumer.
+
+Le app sensibili (scrittura, mutazione di stato, azioni irreversibili, dati
+riservati) non ereditano accesso da gruppi generici. Devono avere:
+
+- flag esplicito nel registry;
+- grant nominativo esplicito nel layer ruoli;
+- re-check server-side all'ingresso della pagina;
+- comportamento fail-closed se l'identità non è nota;
+- bypass dev solo esplicito e locale.
+
+L'edge auth (IAP oggi, eventuale Cloudflare Access domani) risponde a "chi sei";
+non sostituisce l'autorizzazione applicativa "cosa puoi fare". Una pagina
+sensibile visibile solo per assenza di link non è protetta.
 
 ## Quando aggiornare questo file
 
