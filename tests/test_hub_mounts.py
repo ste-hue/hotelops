@@ -90,9 +90,10 @@ def test_spiaggia_render_non_chiama_set_page_config():
     assert "st.set_page_config" not in src
 
 
-def test_audience_non_admin_non_riceve_accodamenti():
-    # accodamenti è una superficie di scrittura (sensitive): solo l'admin la riceve.
+def test_audience_senza_grant_non_riceve_accodamenti():
+    # accodamenti (sensitive) è concesso a mano solo ad admin + Rosa (cassa/Gaia).
+    # Chi non ha il grant esplicito non lo riceve, anche se è in Finanza/Operations.
     from verticals.hub.roles import _resolve
 
-    for email in ("gm@panoramagroup.it", "fom@panoramagroup.it", "amministrazione@panoramagroup.it"):
+    for email in ("gm@panoramagroup.it", "fom@panoramagroup.it"):
         assert "accodamenti" not in _resolve(email, allow_all=False)
