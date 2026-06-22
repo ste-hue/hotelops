@@ -59,7 +59,7 @@ _assert_s1("OPERATIONS", OPERATIONS)
 _GRANTS: dict[str, frozenset[str]] = {
     "stefano@panoramagroup.it": ALL,  # Stefano (Workspace/IAP) — admin
     "ste.dellapietra@gmail.com": ALL,  # Stefano (gmail) — ridondanza
-    "amministrazione@panoramagroup.it": FINANZA | {"cashflow"},  # Rosa
+    "amministrazione@panoramagroup.it": FINANZA | {"cashflow", "accodamenti"},  # Rosa
     "fom@panoramagroup.it": OPERATIONS,  # Anna (room division)
     "fb@panoramagroup.it": OPERATIONS,  # Stefano Amato (F&B)
     "gm@panoramagroup.it": FINANZA

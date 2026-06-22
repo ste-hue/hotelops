@@ -41,11 +41,10 @@ def test_anna_solo_operations():
     assert "cashflow" not in apps and "accodamenti" not in apps
 
 
-def test_rosa_finanza_con_cashflow_senza_accodamenti():
+def test_rosa_finanza_con_cashflow_e_accodamenti():
     apps = _resolve("amministrazione@panoramagroup.it", allow_all=False)
-    assert {"cashflow", "mutui", "banche", "cdg"} <= apps
-    # accodamenti è sensitive: non si eredita da FINANZA, va concesso a mano (S1)
-    assert "accodamenti" not in apps
+    # accodamenti è sensitive: concesso a mano a Rosa (cassa/Gaia), non da FINANZA (S1)
+    assert {"cashflow", "mutui", "banche", "cdg", "accodamenti"} <= apps
     assert "fb" not in apps
 
 
