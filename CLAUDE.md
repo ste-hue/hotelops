@@ -59,7 +59,7 @@ cli.py      <- `hotelops` CLI
 - **#1 condges** — Controllo di Gestione: CE riclassificato, Budget vs Consuntivo, Tesoreria, indicatori, `hotelops pf-rotate` (rotation mensile Piano Finanziario, vedi §Financial Data). Streamlit `app_cdg.py`. **App Cashflow** (`app_cashflow.py`, montata nel hub) = guscio sul motore canonico `pf-rotate` per produrre il PF del mese successivo (mappatura fornitori→voce persistente su BQ). Write-path budget/previsione dietro `services/cash_pf_service.py` + gate I1. Motore `write_pf` in `pf_rotate/pf_writer.py` (D1 completato — `app_scadenzario.py` cancellato).
 - **#2 reviews** — Guest reviews: Apify scrape → Claude NLP (Haiku) → `f_reviews` → alert email + dashboard.
 - **#3 spiaggia** — stabilimento balneare (vedi §Vertical Spiaggia).
-- **hub** (`verticals/hub/`) — app-store: app Streamlit viewer su Cloud Run (`hotelops-hub`) + vetrina statica Cloudflare (`publish/`, deploy da branch `feat/vetrina` → `hotelops-vetrina`). I vertical si montano via `render()` (skill `hub-bind`).
+- **hub** (`verticals/hub/`) — app-store: front-door unico = `app.py` su Cloud Run (`hotelops-hub`), gated IAP. Registry-driven (1 riga = 1 app), accessi a 2 livelli (IAP edge + grant per-email in `roles.py`). I vertical si montano via `render()`. **Dettagli/deploy/accessi: `verticals/hub/README.md`.** (Vetrina Cloudflare ritirata 2026-06-20.)
 
 ## GCP
 - **Project:** `hotelops-suite` · **Dataset:** `hotelops` · **Auth:** `gcloud` come `stefano@panoramagroup.it`

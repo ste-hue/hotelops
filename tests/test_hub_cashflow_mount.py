@@ -35,9 +35,9 @@ def test_app_filtra_la_nav_su_current_apps():
 def test_superfici_scrittura_ricontrollano_il_grant():
     import inspect
 
-    from verticals.hub.pages_ import cashflow, ingest
+    from verticals.hub.pages_ import accodamenti, cashflow
 
-    for mod, app_id in ((cashflow, "cashflow"), (ingest, "ingest")):
+    for mod, app_id in ((cashflow, "cashflow"), (accodamenti, "accodamenti")):
         src = inspect.getsource(mod.render)
         assert "current_apps()" in src, f"{app_id}: manca il re-check"
         assert f'"{app_id}"' in src

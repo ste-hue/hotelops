@@ -29,7 +29,7 @@ def test_target_coerente_col_kind():
 def test_pages_solo_kind_page():
     assert all(a.kind == "page" for a in pages())
     assert {a.id for a in pages()} == {
-        "cashflow", "mutui", "fb", "spiaggia", "reviews", "ingest",
+        "cashflow", "accodamenti", "mutui", "fb", "spiaggia", "reviews",
     }
 
 
@@ -37,8 +37,9 @@ def test_by_group_ordine_e_contenuto():
     g = by_group()
     assert list(g.keys()) == GROUPS
     assert "cashflow" in {a.id for a in g["Finanza"]}
+    assert "accodamenti" in {a.id for a in g["Finanza"]}
     assert "fb" in {a.id for a in g["Operations"]}
-    assert "ingest" in {a.id for a in g["Sistema"]}
+    assert g["Sistema"] == []  # ingest non è una sezione: è funzione del vertical
 
 
 def test_validate_rifiuta_page_senza_callable():
@@ -57,11 +58,11 @@ def test_validate_rifiuta_id_duplicato():
         validate([a, a])
 
 
-def test_cashflow_e_ingest_sono_sensibili():
+def test_cashflow_e_accodamenti_sono_sensibili():
     from verticals.hub.registry import APPS
 
     sens = {a.id for a in APPS if a.sensitive}
-    assert sens == {"cashflow", "ingest"}
+    assert sens == {"cashflow", "accodamenti"}
 
 
 def test_pages_for_filtra_su_allowed():

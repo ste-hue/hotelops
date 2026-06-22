@@ -90,9 +90,9 @@ def test_spiaggia_render_non_chiama_set_page_config():
     assert "st.set_page_config" not in src
 
 
-def test_audience_non_admin_non_riceve_ingest():
-    # Il "viewer" non è più un file: è un grant. Chi non è admin non vede ingest.
+def test_audience_non_admin_non_riceve_accodamenti():
+    # accodamenti è una superficie di scrittura (sensitive): solo l'admin la riceve.
     from verticals.hub.roles import _resolve
 
     for email in ("gm@panoramagroup.it", "fom@panoramagroup.it", "amministrazione@panoramagroup.it"):
-        assert "ingest" not in _resolve(email, allow_all=False)
+        assert "accodamenti" not in _resolve(email, allow_all=False)

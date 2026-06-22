@@ -14,31 +14,21 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from verticals.condges.accodamenti_service import (
+from verticals.condges.accodamenti_service import (  # noqa: E402
     current_watermark,
     generate_cumulative_excel_from_bq,
     ingest_rows,
     preview_folder,
 )
 
-DEFAULT_OUTPUT = Path.home() / "Downloads" / "RACCOLTAACCODAMENTI.xlsx"
-
 
 def _init_state() -> None:
-    if "preview_new_rows" not in st.session_state:
-        st.session_state.preview_new_rows = None
-    if "preview_stats" not in st.session_state:
-        st.session_state.preview_stats = None
-    if "preview_input_dir" not in st.session_state:
-        st.session_state.preview_input_dir = None
-    if "uploaded_input_dir" not in st.session_state:
-        st.session_state.uploaded_input_dir = None
-    if "uploaded_count" not in st.session_state:
-        st.session_state.uploaded_count = 0
-    if "last_excel_bytes" not in st.session_state:
-        st.session_state.last_excel_bytes = None
-    if "last_excel_name" not in st.session_state:
-        st.session_state.last_excel_name = "RACCOLTAACCODAMENTI.xlsx"
+    st.session_state.setdefault("acc_preview_new_rows", None)
+    st.session_state.setdefault("acc_preview_stats", None)
+    st.session_state.setdefault("acc_uploaded_input_dir", None)
+    st.session_state.setdefault("acc_uploaded_count", 0)
+    st.session_state.setdefault("acc_excel_bytes", None)
+    st.session_state.setdefault("acc_excel_name", "RACCOLTAACCODAMENTI.xlsx")
 
 
 def _materialize_uploaded_files(uploaded_files: list) -> Path:
@@ -52,88 +42,89 @@ def _materialize_uploaded_files(uploaded_files: list) -> Path:
     return tmp_dir
 
 
-def main() -> None:
-    st.set_page_config(page_title="Raccolta Accodamenti", layout="wide")
+def _cumulative_excel_bytes(start_date: date) -> tuple[dict, bytes | None]:
+    """Genera l'Excel cumulativo Gaia su un tempfile e ne ritorna i bytes.
+
+    Cloud-Run-safe: nessun path utente, il download avviene dai bytes in memoria.
+    """
+    out = Path(tempfile.mkdtemp(prefix="accodamenti_xlsx_")) / "RACCOLTAACCODAMENTI.xlsx"
+    result = generate_cumulative_excel_from_bq(start_date, out)
+    data = out.read_bytes() if out.exists() else None
+    return result, data
+
+
+def render() -> None:
+    """Pagina montabile (hub): drop → dedup → aggiorna f_accodamenti → Excel Gaia.
+
+    Niente ``set_page_config`` qui: lo imposta il guscio (``main`` o l'hub).
+    """
     _init_state()
 
-    st.title("Raccolta Accodamenti")
-    st.caption("Workflow standard: drop -> anteprima -> ingest nuove righe -> Excel cumulativo da BQ")
+    st.title("📒 Raccolta Accodamenti")
+    st.caption(
+        "Workflow: drop TXT → anteprima/dedup → ingest nuove righe → Excel cumulativo da BQ"
+    )
 
     watermark = current_watermark()
     st.info(f"Watermark corrente f_accodamenti: `{watermark or 'N/A'}`")
 
-    input_dir_raw = st.text_input(
-        "Cartella accodamenti (.txt)",
-        value="/Users/stefanodellapietra/Downloads/RACCOLTAACCODAMENTI",
-    ).strip()
+    societa = "ORTI"
     dropped_files = st.file_uploader(
-        "Oppure droppa qui la cartella (seleziona tutti i .txt)",
+        "Trascina i file accodamenti (.txt)",
         accept_multiple_files=True,
         type=["txt"],
-        help="Puoi trascinare i file della cartella; useremo questi come input della sessione.",
+        help="Società fissa per accodamenti: ORTI.",
     )
-    societa = "ORTI"
-    st.caption("Societa fissa per accodamenti: `ORTI`")
-    output_path_raw = st.text_input(
-        "Output Excel",
-        value=str(DEFAULT_OUTPUT),
-    ).strip()
     start_date = st.date_input("Data inizio cumulativo (BQ)", value=date(2026, 4, 3))
+
+    with st.expander("Cartella locale (solo dev, ignorata su Cloud Run)", expanded=False):
+        local_dir = st.text_input("Path cartella .txt", value="").strip()
 
     if dropped_files:
         uploaded_dir = _materialize_uploaded_files(dropped_files)
-        st.session_state.uploaded_input_dir = str(uploaded_dir)
-        st.session_state.uploaded_count = len(dropped_files)
-        st.success(
-            f"Drop ricevuto: {len(dropped_files)} file in `{uploaded_dir}`"
-        )
+        st.session_state.acc_uploaded_input_dir = str(uploaded_dir)
+        st.session_state.acc_uploaded_count = len(dropped_files)
+        st.success(f"Drop ricevuto: {len(dropped_files)} file")
 
-    effective_input_dir = (
-        st.session_state.uploaded_input_dir
-        if st.session_state.uploaded_input_dir
-        else input_dir_raw
-    )
-    st.caption(f"Input effettivo: `{effective_input_dir}`")
+    effective_input_dir = st.session_state.acc_uploaded_input_dir or (local_dir or None)
+    if effective_input_dir:
+        st.caption(f"Input effettivo: `{effective_input_dir}`")
 
     action_col, reset_col = st.columns([4, 1])
     with action_col:
         run_all = st.button(
             "Esegui workflow cumulativo (standard)",
             type="primary",
-            help="Anteprima overlap, ingest solo nuove righe, rigenera Excel cumulativo",
+            disabled=effective_input_dir is None,
+            help="Anteprima overlap, ingest solo nuove righe, rigenera Excel cumulativo da BQ",
         )
     with reset_col:
         if st.button("Reset drop"):
-            st.session_state.uploaded_input_dir = None
-            st.session_state.uploaded_count = 0
-            st.session_state.preview_new_rows = None
-            st.session_state.preview_stats = None
-            st.session_state.preview_input_dir = None
+            st.session_state.acc_uploaded_input_dir = None
+            st.session_state.acc_uploaded_count = 0
+            st.session_state.acc_preview_new_rows = None
+            st.session_state.acc_preview_stats = None
             st.rerun()
 
-    if run_all:
+    if run_all and effective_input_dir:
         input_dir = Path(effective_input_dir).expanduser()
-        output_path = Path(output_path_raw).expanduser()
         if not input_dir.exists():
             st.error(f"Cartella non trovata: {input_dir}")
         else:
-            with st.spinner("Esecuzione workflow completo..."):
+            with st.spinner("Parsing → dedup → ingest → Excel..."):
                 stats, _rows, new_rows = preview_folder(input_dir, societa=societa)
                 written = ingest_rows(new_rows)
-                result = generate_cumulative_excel_from_bq(start_date, output_path)
-            st.session_state.preview_new_rows = new_rows
-            st.session_state.preview_stats = stats
-            st.session_state.preview_input_dir = str(input_dir)
+                result, data = _cumulative_excel_bytes(start_date)
+            st.session_state.acc_preview_new_rows = new_rows
+            st.session_state.acc_preview_stats = stats
+            st.session_state.acc_excel_bytes = data
             st.success(
-                f"Completato. Nuove righe ingestite: {written} | Excel: {result['output']}"
+                f"Completato. Nuove righe ingestite: {written} | "
+                f"Righe Excel cumulativo: {result['rows']}"
             )
-            generated_path = Path(result["output"])
-            if generated_path.exists():
-                st.session_state.last_excel_bytes = generated_path.read_bytes()
-                st.session_state.last_excel_name = generated_path.name
             st.info(f"Watermark aggiornato: `{current_watermark() or 'N/A'}`")
 
-    stats = st.session_state.preview_stats
+    stats = st.session_state.acc_preview_stats
     if stats:
         st.subheader("Preview batch")
         c1, c2, c3 = st.columns(3)
@@ -143,57 +134,57 @@ def main() -> None:
 
         c4, c5, c6 = st.columns(3)
         c4.metric("Hash candidati", stats.candidate_hashes)
-        c5.metric("Hash gia presenti", stats.existing_hashes)
-        c6.metric("Range date", f"{stats.min_date or '-'} -> {stats.max_date or '-'}")
+        c5.metric("Hash già presenti", stats.existing_hashes)
+        c6.metric("Range date", f"{stats.min_date or '-'} → {stats.max_date or '-'}")
 
     with st.expander("Azioni avanzate (opzionali)", expanded=False):
         a1, a2, a3 = st.columns(3)
         with a1:
-            if st.button("Solo anteprima overlap"):
+            if st.button("Solo anteprima overlap", disabled=effective_input_dir is None):
                 input_dir = Path(effective_input_dir).expanduser()
                 if not input_dir.exists():
                     st.error(f"Cartella non trovata: {input_dir}")
                 else:
                     with st.spinner("Parsing + dedup preview su BQ..."):
                         stats, _rows, new_rows = preview_folder(input_dir, societa=societa)
-                    st.session_state.preview_new_rows = new_rows
-                    st.session_state.preview_stats = stats
-                    st.session_state.preview_input_dir = str(input_dir)
+                    st.session_state.acc_preview_new_rows = new_rows
+                    st.session_state.acc_preview_stats = stats
         with a2:
             if st.button("Solo ingest nuove righe"):
-                if not st.session_state.preview_new_rows or not st.session_state.preview_stats:
+                if not st.session_state.acc_preview_new_rows or not st.session_state.acc_preview_stats:
                     st.warning("Esegui prima 'Solo anteprima overlap'.")
                 else:
                     with st.spinner("Scrittura su BigQuery in corso..."):
-                        written = ingest_rows(st.session_state.preview_new_rows)
+                        written = ingest_rows(st.session_state.acc_preview_new_rows)
                     st.success(f"Ingest completato: {written} nuove righe.")
                     st.info(f"Nuovo watermark: `{current_watermark() or 'N/A'}`")
         with a3:
             if st.button("Excel cumulativo da BQ"):
-                output_path = Path(output_path_raw).expanduser()
                 with st.spinner("Export cumulativo da BigQuery..."):
-                    result = generate_cumulative_excel_from_bq(start_date, output_path)
-                st.success(f"Excel cumulativo generato: {result['output']}")
-                st.write(
-                    f"Righe esportate: {result['rows']} | Data inizio: {result['start_date']}"
+                    result, data = _cumulative_excel_bytes(start_date)
+                st.session_state.acc_excel_bytes = data
+                st.success(
+                    f"Excel cumulativo generato: {result['rows']} righe "
+                    f"da {result['start_date']}"
                 )
-                generated_path = Path(result["output"])
-                if generated_path.exists():
-                    st.session_state.last_excel_bytes = generated_path.read_bytes()
-                    st.session_state.last_excel_name = generated_path.name
 
         st.caption(
             "Nota: il percorso standard produce sempre il cumulativo da BigQuery. "
             "Usa i pulsanti qui solo per debug o operazioni isolate."
         )
 
-    if st.session_state.last_excel_bytes:
+    if st.session_state.acc_excel_bytes:
         st.download_button(
-            "Scarica Excel cumulativo",
-            data=st.session_state.last_excel_bytes,
-            file_name=st.session_state.last_excel_name,
+            "⬇ Scarica Excel cumulativo (Gaia)",
+            data=st.session_state.acc_excel_bytes,
+            file_name=st.session_state.acc_excel_name,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+
+
+def main() -> None:
+    st.set_page_config(page_title="Raccolta Accodamenti", layout="wide")
+    render()
 
 
 if __name__ == "__main__":

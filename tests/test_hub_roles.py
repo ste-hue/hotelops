@@ -38,20 +38,22 @@ def test_costanti_gruppo_escludono_sensibili_S1():
 def test_anna_solo_operations():
     apps = _resolve("fom@panoramagroup.it", allow_all=False)
     assert apps == frozenset({"fb", "spiaggia", "reviews"})
-    assert "cashflow" not in apps and "ingest" not in apps
+    assert "cashflow" not in apps and "accodamenti" not in apps
 
 
-def test_rosa_finanza_con_cashflow_senza_ingest():
+def test_rosa_finanza_con_cashflow_senza_accodamenti():
     apps = _resolve("amministrazione@panoramagroup.it", allow_all=False)
     assert {"cashflow", "mutui", "banche", "cdg"} <= apps
-    assert "ingest" not in apps
+    # accodamenti è sensitive: non si eredita da FINANZA, va concesso a mano (S1)
+    assert "accodamenti" not in apps
     assert "fb" not in apps
 
 
-def test_antonio_e_padre_tutto_tranne_ingest():
+def test_antonio_e_padre_tutto_tranne_scrittura_a_mano():
     for email in ("gm@panoramagroup.it", "stedepi@gmail.com"):
         apps = _resolve(email, allow_all=False)
-        assert "ingest" not in apps
+        # accodamenti è sensitive → non ereditato, solo admin a mano
+        assert "accodamenti" not in apps
         assert {"cashflow", "reviews", "fb", "spiaggia", "mutui"} <= apps
 
 
@@ -63,7 +65,7 @@ def test_mario_solo_fb_e_spiaggia():
 def test_admin_vede_tutto():
     apps = _resolve("stefano@panoramagroup.it", allow_all=False)
     assert apps == ALL
-    assert "ingest" in apps and "cashflow" in apps
+    assert "accodamenti" in apps and "cashflow" in apps
 
 
 def test_email_ignota_deny():
