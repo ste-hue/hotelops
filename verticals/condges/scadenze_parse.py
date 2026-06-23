@@ -26,9 +26,13 @@ def parse_scadenze(
 ) -> tuple[pd.DataFrame, list[int]]:
     """Parse Esolver 'Situazione partite sintetica/dettagliata per fornitori'.
 
-    Layout sintetica (one row per invoice):
+    Layout sintetica (one row per scadenza):
       col 11: codice_fornitore, col 12+13: nome (Ragione sociale 1+2),
-      col 20: importo, col 23: data_scadenza.
+      col 26: importo = "Saldo scadenza in UDC" (residuo per-scadenza, signed:
+      debiti NEGATIVI / note credito POSITIVE — la convenzione che cascata_nc/
+      write_pf si aspettano), col 23: data_scadenza.
+      NB: NON col 20 ("Importo apertura in UdC"): è la fattura intera ripetuta su
+      ogni rata → sommata per mese dava importi sballati (issue #47).
     Layout dettagliata (one row per partita; codice/nome same columns):
       col 34: data_scadenza, col 37: saldo scadenza in UDC (residuo aperto).
 
@@ -53,7 +57,7 @@ def parse_scadenze(
         codice = None
         nome = ""
         scad = None
-        importo_col = 20
+        importo_col = 26  # "Saldo scadenza in UDC" (residuo per-scadenza, signed)
 
         c11 = ws.cell(row=row_idx, column=11).value
         if c11 and isinstance(c11, (int, float)):

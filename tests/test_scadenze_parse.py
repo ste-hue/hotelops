@@ -27,10 +27,11 @@ def _wb_bytes(rows: list[dict]) -> BytesIO:
 
 
 def test_sintetica_layout():
+    # importo = col 26 "Saldo scadenza in UDC" (residuo per-scadenza, signed)
     buf = _wb_bytes(
         [
-            {11: 42, 12: "FORNITORE SINT", 20: -100.0, 23: FUTURE},
-            {11: 42, 12: "FORNITORE SINT", 20: -50.0, 23: PAST},
+            {11: 42, 12: "FORNITORE SINT", 26: -100.0, 23: FUTURE},
+            {11: 42, 12: "FORNITORE SINT", 26: -50.0, 23: PAST},
         ]
     )
     df, buckets = parse_scadenze(buf)
@@ -40,6 +41,36 @@ def test_sintetica_layout():
     assert row["totale"] == -150.0
     assert row["scaduto"] == -50.0
     assert buckets == [FUTURE.month]
+
+
+def test_sintetica_usa_saldo_scadenza_non_apertura():
+    """issue #47: usa col 26 (saldo scadenza) NON col 20 (importo apertura).
+
+    col 20 = fattura intera ripetuta su ogni rata → da ignorare;
+    col 26 = residuo della singola scadenza → quello da bucketare.
+    """
+    buf = _wb_bytes(
+        [
+            {11: 99, 12: "MIELE", 20: -10857.37, 26: -3619.13, 23: FUTURE},
+        ]
+    )
+    df, _ = parse_scadenze(buf)
+    row = df.iloc[0]
+    assert row[f"mese_{FUTURE.month}"] == -3619.13  # col 26, non -10857.37
+    assert row["totale"] == -3619.13
+
+
+def test_due_rate_stesso_mese_sommate():
+    """Due scadenze della stessa voce nello stesso mese → sommate (caso Miele lug)."""
+    m = FUTURE.month
+    buf = _wb_bytes(
+        [
+            {11: 1008, 12: "MIELE", 26: -3619.12, 23: FUTURE},
+            {11: 1008, 12: "MIELE", 26: -439.74, 23: FUTURE},
+        ]
+    )
+    df, _ = parse_scadenze(buf)
+    assert round(df.iloc[0][f"mese_{m}"], 2) == -4058.86
 
 
 def test_dettagliata_layout():
@@ -77,9 +108,9 @@ def test_cutoff_esplicito_decide_scaduto():
     """
     buf = _wb_bytes(
         [
-            {11: 92, 12: "AMALFI SEI ESSE", 20: -100.0, 23: date(2026, 4, 30)},
-            {11: 92, 12: "AMALFI SEI ESSE", 20: -200.0, 23: date(2026, 5, 31)},
-            {11: 92, 12: "AMALFI SEI ESSE", 20: -300.0, 23: date(2026, 6, 30)},
+            {11: 92, 12: "AMALFI SEI ESSE", 26: -100.0, 23: date(2026, 4, 30)},
+            {11: 92, 12: "AMALFI SEI ESSE", 26: -200.0, 23: date(2026, 5, 31)},
+            {11: 92, 12: "AMALFI SEI ESSE", 26: -300.0, 23: date(2026, 6, 30)},
         ]
     )
     df, buckets = parse_scadenze(buf, primo_mese_aperto=(2026, 5))
@@ -94,7 +125,7 @@ def test_nome_completo_da_due_colonne():
     """Ragione sociale 1 (col 12) + Ragione sociale 2 (col 13) concatenate."""
     buf = _wb_bytes(
         [
-            {11: 417, 12: "CIMINI", 13: "FILOMENA", 20: -51.48, 23: FUTURE},
+            {11: 417, 12: "CIMINI", 13: "FILOMENA", 26: -51.48, 23: FUTURE},
         ]
     )
     df, _ = parse_scadenze(buf)

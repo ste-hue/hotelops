@@ -10,6 +10,22 @@ source: tribal knowledge (Rosa) → first written 2026-05-13
 
 # Procedura: Rollover Cashflow Mensile (Piano Finanziario Rosa)
 
+> **⚠️ AGGIORNAMENTO 2026-06-23 — flusso e persistenza cambiati.**
+> Lo step 2 NON usa più `streamlit run app_scadenzario.py` (file **cancellato**): si usa
+> l'**app Cashflow** montata nel hub (`verticals/condges/app_cashflow.py`), che gira il
+> motore canonico `pf_rotate.rotate()`. Conseguenze su questo doc:
+> - **Persistenza mappatura fornitori:** NON più `st.session_state` (la nota "si perde al
+>   refresh" più sotto è **superata**). "Salva mapping" fa `upsert_fornitore_bq` →
+>   **MERGE su BigQuery `d_fornitori`** (chiave `codice_fornitore+societa_id`), permanente.
+>   Il CSV `core/bq/dimensioni/d_fornitori.csv` è solo **seed/export**.
+>   - ⚠️ **Doppia-verità (open):** gli upsert in-app NON vengono riscritti nel CSV. Il loader
+>     `core/bq/load/load_fornitori.py` fa WRITE_TRUNCATE dal CSV (ora protetto da `--force`):
+>     un reseed dal CSV stale **cancellerebbe** le mappature fatte in-app. Prima di QUALSIASI
+>     reseed: `python -c "from verticals.condges.pf_rotate.fornitori_map import export_fornitori_to_csv, FORNITORI_CSV; export_fornitori_to_csv(FORNITORI_CSV)"` e committa il CSV.
+> - **Importo per scadenza (fix issue #47, 2026-06-23):** `parse_scadenze` ora legge la colonna
+>   **Z "Saldo scadenza in UDC"** (residuo per-scadenza, col 26), non più T "Importo apertura"
+>   (col 20 = fattura intera ripetuta su ogni rata → importi sballati).
+
 Ogni mese si genera un nuovo file Piano Finanziario (PF Rosa) a partire da quello del mese precedente. Il file mostra:
 
 - **Mese corrente** (colonna 3 dello sheet master "Piano Finanziario"): primo mese previsionale. La sua riga 4 `SALDO MESE PRECED` = somma saldi banca a fine mese precedente (consuntivo).
