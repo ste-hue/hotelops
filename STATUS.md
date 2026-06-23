@@ -173,7 +173,7 @@ Consolidamento ("torniamo su main, worktree-only d'ora in poi"). Esito:
 - **Debug `VALIDATE_FAIL` promote accodamenti** + roundtrip FK (tabella ORTI vuota, TXT in GCS).
 - **P2: cash_control memory tables** + moduli evaluation: BVA (COMPETENZA, GASPAROTTO) + `cash_backcheck` (CASSA, PF forecast vs Esolver, backwards check).
 - **Rotation maggio->giugno** ~fine giugno (timing paradigm) -- pura esecuzione: input = file post-rotate 2026-06-12 in `pianfin/PF/`, saldi 31/05 già nell'anchor.
-- **Aggiornare CLAUDE.md** con v_fb_kpi v3 (3 bucket onesti, colonne food/beverage), 33 reparti consumi, audit tool entries, sistema workstream vault.
+- ~~**Aggiornare CLAUDE.md** con v_fb_kpi v3 (3 bucket onesti, colonne food/beverage), 33 reparti consumi, audit tool entries, sistema workstream vault.~~ **FATTO 2026-06-12** (commit `81839bd`): doc refresh step 4 — views 16→26, f_consumi_economato 33 reparti, 14 moduli condges documentati, workstream vault.
 - **Viste F&B su f_ristocube_orders** (daily granularity) -- sblocca split Lunch/Dinner via orario/sala, scontrino medio per pasto, daily food cost.
 - **Fix mensa dipendenti F&B** (emerso 2026-06-20): i coperti/food-cost F&B includono la **mensa dipendenti di default** → gonfia i coperti e distorce food cost %. Deve essere **esclusa di default + checkbox per includerla** (è un costo reale ma senza ricavo). Tocca `v_fb_kpi`/`app_fb` (non il gateway). Sblocca il KPI "food cost %" sulla tile F&B della Home (ora su "ultimo mese N gg fa" come ripiego).
 - **Piano dei conti finale per ANG+CVM** in `pianodeicontilavoro.xlsx` (HP fatto 79/79, gli altri skeleton).
