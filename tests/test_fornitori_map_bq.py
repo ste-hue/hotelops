@@ -66,3 +66,42 @@ def test_load_fornitori_bq_parses_and_filters():
     assert out[1].exclude_reason == ""  # None → ""
     sql = fake.query.call_args[0][0]
     assert "d_fornitori" in sql and "WHERE societa_id" in sql
+
+
+def test_load_voci_pf_bq_returns_voce_dict():
+    """load_voci_pf_bq interroga d_voci_piano_finanziario filtrato USCITE+societa."""
+    fake = MagicMock()
+    rows = [
+        MagicMock(voce_id="USCITE_UTENZE", voce_label="Utenze"),
+        MagicMock(voce_id="USCITE_SALARI", voce_label="Salari e Stipendi"),
+        MagicMock(voce_id="USCITE_MARKETING", voce_label="Marketing e Pubblicità"),
+    ]
+    fake.query.return_value.result.return_value = rows
+    with patch.object(fornitori_map, "_bq", return_value=fake):
+        out = fornitori_map.load_voci_pf_bq("ORTI")
+    assert out == {
+        "USCITE_UTENZE": "Utenze",
+        "USCITE_SALARI": "Salari e Stipendi",
+        "USCITE_MARKETING": "Marketing e Pubblicità",
+    }
+    sql = fake.query.call_args[0][0]
+    assert "d_voci_piano_finanziario" in sql
+    assert "sezione" in sql and "USCITE" in sql
+    params = {
+        p.name: p.value
+        for p in fake.query.call_args[1]["job_config"].query_parameters
+    }
+    assert params["soc"] == "ORTI"
+
+
+def test_load_voci_pf_bq_includes_global_voci():
+    """Voci senza societa_id (globali) sono incluse nel filtro SQL."""
+    fake = MagicMock()
+    fake.query.return_value.result.return_value = []
+    with patch.object(fornitori_map, "_bq", return_value=fake):
+        fornitori_map.load_voci_pf_bq("INTUR")
+    sql = fake.query.call_args[0][0].lower()
+    # Devono esserci entrambi: filtro societa specifica + righe globali (IS NULL / = '')
+    assert "societa_id is null" in sql
+    assert "societa_id = @soc" in sql
+

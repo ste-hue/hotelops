@@ -22,6 +22,7 @@ from verticals.condges.pf_rotate.fornitori_map import (
     VOCE_LABELS,
     export_fornitori_to_csv,
     load_fornitori_bq,
+    load_voci_pf_bq,
     upsert_fornitore_bq,
 )
 from verticals.condges.pf_rotate.rotate import rotate
@@ -143,6 +144,13 @@ def render() -> None:
     # Fornitori non mappati → mappali qui (persiste su BQ d_fornitori: ricordato i mesi dopo)
     known = set(load_fornitori_bq(societa).keys())
     nuovi = unmapped_suppliers(scad_df, known)
+
+    # Voci PF selezionabili: dalla dimensione canonica BQ; fallback statico se offline.
+    try:
+        voci_labels = load_voci_pf_bq(societa)
+    except Exception:  # noqa: BLE001 — BQ assente in dev/offline è non-fatale
+        voci_labels = VOCE_LABELS
+
     if nuovi:
         st.subheader(f"⚠️ {len(nuovi)} fornitori da mappare")
         st.caption(
@@ -158,7 +166,7 @@ def render() -> None:
             sugg = suggest_voci_from_fatture([n["codice"] for n in nuovi], societa)
         except Exception:  # noqa: BLE001 — suggerimenti BQ best-effort
             sugg = {}
-        voci_ids = list(VOCE_LABELS.keys())
+        voci_ids = list(voci_labels.keys())
         ESCLUDI = "__escludi__"
         opzioni = voci_ids + [ESCLUDI]
         with st.form("map_fornitori"):
@@ -166,7 +174,9 @@ def render() -> None:
             for n in nuovi:
                 cod = int(n["codice"])
                 suggested = sugg.get(cod, (None,))[0]
-                default = suggested if suggested in voci_ids else "USCITE_VARIE_EXT"
+                default = suggested if suggested in voci_ids else (
+                    "USCITE_VARIE_EXT" if "USCITE_VARIE_EXT" in voci_ids else (voci_ids[0] if voci_ids else ESCLUDI)
+                )
                 c_voce, c_ic = st.columns([4, 1])
                 with c_voce:
                     sel = st.selectbox(
@@ -175,7 +185,7 @@ def render() -> None:
                         index=opzioni.index(default),
                         format_func=lambda v: "— escludi SEMPRE (permanente) —"
                         if v == ESCLUDI
-                        else VOCE_LABELS[v],
+                        else voci_labels[v],
                         key=f"map_{cod}",
                     )
                 with c_ic:
