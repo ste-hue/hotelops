@@ -228,7 +228,7 @@ def check_impegno_freshness() -> list[dict]:
     Returns:
         [{"societa_id": str, "ultimo_snapshot": str, "giorni": int,
           "n_partite": int, "totale_eur": float}]
-    Each row is absent if there are no snapshots for that societa.
+    A societa_id will not appear in the result list if it has no snapshot data.
     """
     from core.bq.client import get_client
     from core.config import F_PARTITE_APERTE_FORNITORI
