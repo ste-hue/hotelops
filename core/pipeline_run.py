@@ -210,3 +210,39 @@ def check_pipeline_staleness(
         ]
     )
     return [dict(r) for r in client.query(sql, job_config=job_config).result()]
+
+
+# Freshness threshold for IMPEGNO snapshots (partite aperte are manual exports —
+# monthly is normal, > 30 days is worth flagging).
+IMPEGNO_STALENESS_DAYS = 30
+
+
+def check_impegno_freshness() -> list[dict]:
+    """Return freshness info for f_partite_aperte_fornitori per societa_id.
+
+    These snapshots are the IMPEGNO dimension of v_previsione_cassa and
+    cash_control: they represent committed but unpaid invoices. Stale data
+    here means the scadenzario column in v_previsione_cassa reflects old
+    payment obligations.
+
+    Returns:
+        [{"societa_id": str, "ultimo_snapshot": str, "giorni": int,
+          "n_partite": int, "totale_eur": float}]
+    Each row is absent if there are no snapshots for that societa.
+    """
+    from core.bq.client import get_client
+    from core.config import F_PARTITE_APERTE_FORNITORI
+
+    client = get_client()
+    sql = f"""
+    SELECT
+        societa_id,
+        MAX(data_snapshot)                                           AS ultimo_snapshot,
+        DATE_DIFF(CURRENT_DATE('Europe/Rome'), MAX(data_snapshot), DAY) AS giorni,
+        COUNT(*)                                                     AS n_partite,
+        ROUND(SUM(importo_abs), 0)                                   AS totale_eur
+    FROM `{F_PARTITE_APERTE_FORNITORI}`
+    GROUP BY societa_id
+    ORDER BY societa_id
+    """
+    return [dict(r) for r in client.query(sql).result()]

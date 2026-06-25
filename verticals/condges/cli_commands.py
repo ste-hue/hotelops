@@ -142,6 +142,39 @@ def cmd_health(args):
             f"    {flag} {r['societa_id']}: ultima {r['ultima']} ({r['giorni']}gg fa)"
         )
 
+    # IMPEGNO: partite aperte freshness (dimension IMPEGNO per v_previsione_cassa)
+    try:
+        from core.pipeline_run import IMPEGNO_STALENESS_DAYS, check_impegno_freshness
+
+        impegno_rows = check_impegno_freshness()
+        print("\n  IMPEGNO (partite aperte fornitori):")
+        if not impegno_rows:
+            print("    ⚠ nessun dato in f_partite_aperte_fornitori")
+        for r in impegno_rows:
+            flag = "⚠" if r["giorni"] > IMPEGNO_STALENESS_DAYS else ("!" if r["giorni"] > 7 else "✓")
+            print(
+                f"    {flag} {r['societa_id']}: snapshot {r['ultimo_snapshot']} "
+                f"({r['giorni']}gg fa) — {r['n_partite']} partite, {fmt_eur(r['totale_eur'])}"
+            )
+    except Exception as e:
+        print(f"\n  IMPEGNO (partite aperte): errore — {e}")
+
+    # Scheda contabile freshness (f_saldi_banca_snapshot, âncora di v_previsione_cassa)
+    rows = query("""
+    SELECT societa_id, banca_id, MAX(data_snapshot) AS ultimo_snapshot,
+      DATE_DIFF(CURRENT_DATE('Europe/Rome'), MAX(data_snapshot), DAY) AS giorni
+    FROM hotelops.f_saldi_banca_snapshot
+    GROUP BY 1, 2 ORDER BY giorni DESC
+    """)
+    print("\n  SCHEDA CONTABILE (saldi banca snapshot):")
+    if not rows:
+        print("    ⚠ nessun dato in f_saldi_banca_snapshot")
+    for r in rows:
+        flag = "⚠" if r["giorni"] > 30 else ("!" if r["giorni"] > 7 else "✓")
+        print(
+            f"    {flag} {r['societa_id']}/{r['banca_id']}: snapshot {r['ultimo_snapshot']} ({r['giorni']}gg fa)"
+        )
+
     # Budget loaded
     rows = query("""
     SELECT fonte, COUNT(*) AS righe, COUNT(DISTINCT codice_conto) AS conti,
