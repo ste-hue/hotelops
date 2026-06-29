@@ -84,3 +84,53 @@ def test_check_pipeline_staleness_returns_stale_pipelines():
     assert len(result) == 1
     assert result[0]["pipeline_name"] == "reviews_scrape"
     assert result[0]["hours_since"] == 52
+
+
+def test_check_impegno_freshness_returns_per_societa():
+    """check_impegno_freshness returns one row per societa with snapshot info."""
+    from core.pipeline_run import check_impegno_freshness
+
+    fake_client = _fake_query_client(
+        [
+            {
+                "societa_id": "INTUR",
+                "ultimo_snapshot": "2026-04-30",
+                "giorni": 56,
+                "n_partite": 42,
+                "totale_eur": 250000.0,
+            },
+            {
+                "societa_id": "ORTI",
+                "ultimo_snapshot": "2026-04-30",
+                "giorni": 56,
+                "n_partite": 176,
+                "totale_eur": 573000.0,
+            },
+        ]
+    )
+    with patch("google.cloud.bigquery.Client", return_value=fake_client):
+        result = check_impegno_freshness()
+
+    assert len(result) == 2
+    assert result[0]["societa_id"] == "INTUR"
+    assert result[0]["giorni"] == 56
+    assert result[0]["n_partite"] == 42
+    assert result[1]["societa_id"] == "ORTI"
+    assert result[1]["totale_eur"] == 573000.0
+
+
+def test_check_impegno_freshness_empty_when_no_data():
+    """Empty table → empty result (not an error)."""
+    from core.pipeline_run import check_impegno_freshness
+
+    fake_client = _fake_query_client([])
+    with patch("google.cloud.bigquery.Client", return_value=fake_client):
+        result = check_impegno_freshness()
+    assert result == []
+
+
+def test_impegno_staleness_threshold_constant():
+    """IMPEGNO_STALENESS_DAYS is exported and set to 30 days."""
+    from core.pipeline_run import IMPEGNO_STALENESS_DAYS
+
+    assert IMPEGNO_STALENESS_DAYS == 30
