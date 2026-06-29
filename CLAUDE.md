@@ -49,7 +49,7 @@ cli.py      <- `hotelops` CLI
 
 **Layer chiave (concetti — il dettaglio file-per-file è nel codice):**
 - `core/schemas.py` — Pydantic + `validate_batch()`. `core/bq/write.py::bq_write_validated` è **l'unico writer** (append/snapshot). **Ogni write BQ passa da qui** (gate I1/I9).
-- `core/config.py` — table IDs (`F_*`/`D_*`/`V_*`), `PROJECT`/`DATASET`.
+- `core/config.py` — table IDs (`F_*`/`D_*`/`V_*`), `PROJECT`/`DATASET`. ⚠️ **`V_PROGETTO_VOCI_STATO` = costante orfana**: la vista non esiste in BQ né ha SQL nel repo (era Task 9 del piano *Projects event-sourced Step 1*, mai landato — vedi STATUS "Projects event-sourced Step 1", deferred). Non è una vista deployabile (`core/bq/views/` non la contiene).
 - `core/lineage/` — per-raw-object lineage: `SourceDefinition` (registry `core/source_registry.yaml`, **grammar 4-part** `<SYSTEM>_<DATASET>_<SOCIETA>_<LIFECYCLE>`), state machine (RAW_ONLY→…→PROMOTED), policy gate (invariante **`loop_targets==[] ⇔ RAW_ONLY`**). Tabelle `f_raw_objects`/`f_lineage_events`, bucket `gs://hotelops-raw` (Object Versioning).
 
 **ingest/** — target model: `hotelops intake` (→ `f_raw_objects` con URI gs://) + `hotelops promote` (→ canonical via gate). Parser in `ingest/flussi/`.
