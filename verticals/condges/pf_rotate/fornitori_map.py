@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from core.config import D_FORNITORI
+from core.config import D_FORNITORI, D_VOCI_PIANO_FINANZIARIO
 from core.schemas import FornitoreMapRow
 
 # voce_id PF → label foglio dettaglio. Home canonica (era in app_scadenzario,
@@ -187,6 +187,30 @@ def upsert_fornitore_bq(
     _bq().query(
         sql, job_config=bigquery.QueryJobConfig(query_parameters=params)
     ).result()
+
+
+def load_voci_pf_bq(societa: str) -> dict[str, str]:
+    """Carica le voci PF selezionabili da d_voci_piano_finanziario (BQ).
+
+    Filtra sezione='USCITE' + (societa_id uguale a @soc OPPURE globale).
+    Ritorna {voce_id: voce_label} ordinato per ord.
+    """
+    from google.cloud import bigquery
+
+    sql = f"""
+        SELECT voce_id, voce_label
+        FROM `{D_VOCI_PIANO_FINANZIARIO}`
+        WHERE sezione = 'USCITE'
+          AND (societa_id = @soc OR societa_id IS NULL OR societa_id = '')
+        ORDER BY ord
+    """
+    job = _bq().query(
+        sql,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ScalarQueryParameter("soc", "STRING", societa)]
+        ),
+    )
+    return {r.voce_id: r.voce_label for r in job.result()}
 
 
 def export_fornitori_to_csv(csv_path: Path, societa: str | None = None) -> int:

@@ -7,6 +7,7 @@ Spostate verbatim da verticals/condges/app_scadenzario.py (deprecato).
 from __future__ import annotations
 
 import csv
+import logging
 import re
 from datetime import date
 from io import BytesIO
@@ -17,6 +18,8 @@ import pandas as pd
 
 from verticals.condges.pf_generator.blocchi import cascata_nc
 from verticals.condges.pf_rotate.fornitori_map import VOCE_LABELS
+
+log = logging.getLogger(__name__)
 
 # -- Config --------------------------------------------------------------------
 
@@ -306,6 +309,12 @@ def write_pf(
     for voce_id, suppliers in scad_by_voce.items():
         sheet_name = resolve_sheet_name(voce_id, wb.sheetnames)
         if not sheet_name:
+            log.warning(
+                "voce_id '%s' non ha un foglio dettaglio nel PF (%d fornitori skippati). "
+                "Aggiungere il foglio per includere questi importi (punto B/#51).",
+                voce_id,
+                len(suppliers),
+            )
             continue
 
         ws = wb[sheet_name]

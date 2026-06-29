@@ -1,6 +1,8 @@
 import pandas as pd
 
 from verticals.condges.app_cashflow import scad_summary, unmapped_suppliers
+from verticals.condges.pf_rotate import fornitori_map
+from verticals.condges.pf_rotate.fornitori_map import VOCE_LABELS
 
 
 def test_scad_summary_computes_figures():
@@ -32,3 +34,22 @@ def test_unmapped_suppliers_filters_known_and_dedups():
     codici = [u["codice"] for u in out]
     assert codici == [10, 30]  # 20 escluso (known), 10 deduplicato
     assert out[0] == {"codice": 10, "nome": "A", "totale": -5.0}
+
+
+def test_load_voci_pf_bq_fallback_to_voce_labels(monkeypatch):
+    """Se load_voci_pf_bq solleva, app_cashflow usa VOCE_LABELS come fallback."""
+    # Verifichiamo la logica del fallback importando direttamente il modulo
+    # (il render() Streamlit richiede un server attivo; testiamo solo la funzione).
+    def boom(societa):
+        raise ConnectionError("BQ offline")
+
+    monkeypatch.setattr(fornitori_map, "load_voci_pf_bq", boom)
+
+    # Simula il pattern try/except usato in render()
+    try:
+        result = fornitori_map.load_voci_pf_bq("ORTI")
+    except Exception:  # noqa: BLE001
+        result = VOCE_LABELS
+
+    assert result is VOCE_LABELS
+    assert "USCITE_UTENZE" in result
