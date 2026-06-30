@@ -20,6 +20,8 @@ def _ensure_table(client: bigquery.Client) -> None:
         created_at TIMESTAMP NOT NULL,
         run_id STRING
     )
+    PARTITION BY DATE(created_at)
+    CLUSTER BY review_hash
     """
     client.query(sql).result()
 
@@ -53,8 +55,19 @@ def append_pending_flags(review_hashes: list[str], run_id: str | None = None) ->
         rows = [{"review_hash": h, "created_at": now, "run_id": run_id} for h in hashes]
         errors = client.insert_rows_json(F_PENDING_ALERT_FLAGS, rows)
         if errors:
-            log.warning("append_pending_flags INSERT errors: %s", errors)
-            return 0
+            failed_indexes = {
+                e.get("index")
+                for e in errors
+                if isinstance(e, dict) and isinstance(e.get("index"), int)
+            }
+            inserted = len(rows) - len(failed_indexes)
+            log.warning(
+                "append_pending_flags INSERT errors: %s (inserted=%d/%d)",
+                errors,
+                inserted,
+                len(rows),
+            )
+            return max(inserted, 0)
         return len(rows)
     except Exception:
         log.exception("append_pending_flags failed (non-fatal)")
@@ -78,8 +91,8 @@ def clear_pending_flags(review_hashes: list[str]) -> int:
                 bigquery.ArrayQueryParameter("hashes", "STRING", hashes),
             ]
         )
-        client.query(sql, job_config=job_config).result()
-        return len(hashes)
+        result = client.query(sql, job_config=job_config).result()
+        return int(result.num_dml_affected_rows or 0)
     except Exception:
         log.exception("clear_pending_flags failed (non-fatal)")
         return 0

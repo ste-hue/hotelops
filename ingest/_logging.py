@@ -17,6 +17,8 @@ def setup_logging(
         log_dir: Directory where log files are written (non-cloud only).
         verbose: If True, set DEBUG level; otherwise INFO.
     """
+    # K_SERVICE is set automatically by Cloud Run; HOTELOPS_ENV=cloud is a
+    # manual override for non-Cloud-Run cloud contexts/tests.
     is_cloud = os.getenv("HOTELOPS_ENV", "").lower() == "cloud" or bool(
         os.getenv("K_SERVICE")
     )

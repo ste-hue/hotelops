@@ -161,7 +161,7 @@ def _persist_pending(review_hashes: list[str]) -> None:
             run_id = current.run_id
     except Exception:
         # Best-effort metadata only.
-        run_id = None
+        pass
 
     inserted = append_pending_flags(review_hashes, run_id=run_id)
     pending = read_pending_flags()
@@ -248,7 +248,8 @@ def flush_pending_alert_flags() -> int:
     cleared = clear_pending_flags(hashes)
     if cleared != len(hashes):
         log.warning(
-            "flush_pending_alert_flags: flagged %d hashes but cleared %d pending rows",
+            "flush_pending_alert_flags: marked %d alerts as sent but only cleared %d "
+            "from pending state",
             len(hashes),
             cleared,
         )

@@ -50,8 +50,9 @@ HOTELOPS_ROOT = Path(__file__).resolve().parent.parent
 # Google Drive datahub (macOS default — override with --datahub)
 DEFAULT_DATAHUB = DATAHUB_ROOT
 
-# Local staging dirs (override via HOTELOPS_STAGING_DIR)
-# On Cloud Run this defaults to /tmp/hotelops (ephemeral by design).
+# Local staging dirs (override via HOTELOPS_STAGING_DIR).
+# Default is /tmp/hotelops for cloud/container portability; set
+# HOTELOPS_STAGING_DIR to a persistent local path if needed in dev.
 STAGING_BASE = Path(os.getenv("HOTELOPS_STAGING_DIR", "/tmp/hotelops"))
 STAGING = {
     "banche": STAGING_BASE / "banche_staging",
