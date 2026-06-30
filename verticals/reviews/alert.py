@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import time
-from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
+from datetime import date, timedelta
 
 from google.api_core.exceptions import BadRequest
 from google.cloud import bigquery
 
+from core.bq.pending_flags import (
+    append_pending_flags,
+    clear_pending_flags,
+    read_pending_flags,
+)
 from core.bq.client import get_client
 
 from verticals.reviews.config import ALERT_THRESHOLD, ALERT_RECIPIENTS
@@ -22,17 +25,8 @@ GRACE_WINDOW_DAYS = 7
 # Retry backoff for mark_alerts_sent when UPDATE hits the streaming buffer.
 # Tests monkeypatch this to [0, 0, 0] to skip sleeps.
 # Total wait ~3.5 min — catches fast buffer flushes + transient BQ flakiness.
-# Slow flushes (30-90 min) are handled by the pending state file instead.
+# Slow flushes (30-90 min) are handled by BigQuery-backed pending state.
 _MARK_ALERTS_RETRY_DELAYS = [30, 60, 120]
-
-# Durable state file for hashes whose UPDATE failed after all retries.
-# Reconciled at the start of the next scrape run, so emails sent but flag
-# not persisted don't trigger re-alerts (watermark would have moved past them).
-_PENDING_STATE_PATH = (
-    Path(__file__).resolve().parent.parent
-    / ".hotelops_state"
-    / "pending_alert_flags.json"
-)
 
 
 def should_alert(row: dict) -> bool:
@@ -157,33 +151,25 @@ def _run_update_flag(client: bigquery.Client, review_hashes: list[str]) -> None:
 
 
 def _persist_pending(review_hashes: list[str]) -> None:
-    """Append hashes to the durable pending-state file.
+    """Append hashes to durable BigQuery pending state."""
+    run_id = None
+    try:
+        from core.pipeline_run import PipelineRun
 
-    Merges with existing entries (union of hashes, never loses old ones).
-    Next scrape run calls flush_pending_alert_flags() to retry them.
-    """
-    _PENDING_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    existing: set[str] = set()
-    if _PENDING_STATE_PATH.exists():
-        try:
-            data = json.loads(_PENDING_STATE_PATH.read_text())
-            existing = set(data.get("hashes", []))
-        except Exception:
-            log.warning("Pending state file corrupt, overwriting")
-    merged = sorted(existing | set(review_hashes))
-    _PENDING_STATE_PATH.write_text(
-        json.dumps(
-            {
-                "hashes": merged,
-                "last_updated": datetime.now(timezone.utc).isoformat(),
-            },
-            indent=2,
-        )
-    )
+        current = PipelineRun.get_current()
+        if current:
+            run_id = current.run_id
+    except Exception:
+        # Best-effort metadata only.
+        run_id = None
+
+    inserted = append_pending_flags(review_hashes, run_id=run_id)
+    pending = read_pending_flags()
     log.error(
-        "PENDING ALERT FLAGS: persisted %d hashes to %s — will retry next run",
-        len(merged),
-        _PENDING_STATE_PATH,
+        "PENDING ALERT FLAGS: persisted %d hashes (%d currently pending in BQ) "
+        "— will retry next run",
+        inserted,
+        len(pending),
     )
 
 
@@ -236,22 +222,13 @@ def flush_pending_alert_flags() -> int:
     """Retry pending alert-flag UPDATEs from a previous run.
 
     Called at the start of a scrape run — by then the streaming buffer has
-    usually flushed. On success, removes the state file. On failure, leaves
-    it for the next run. Never raises: this is a best-effort reconciliation.
+    usually flushed. On success, clears pending rows in BQ. On failure, leaves
+    them for the next run. Never raises: this is a best-effort reconciliation.
 
     Returns: number of hashes successfully flagged (0 if no pending).
     """
-    if not _PENDING_STATE_PATH.exists():
-        return 0
-    try:
-        data = json.loads(_PENDING_STATE_PATH.read_text())
-        hashes = list(data.get("hashes", []))
-    except Exception:
-        log.warning("Pending state file unreadable, removing")
-        _PENDING_STATE_PATH.unlink(missing_ok=True)
-        return 0
+    hashes = read_pending_flags()
     if not hashes:
-        _PENDING_STATE_PATH.unlink(missing_ok=True)
         return 0
 
     log.info("flush_pending_alert_flags: retrying %d pending hashes", len(hashes))
@@ -262,14 +239,22 @@ def flush_pending_alert_flags() -> int:
         if _is_streaming_buffer_error(e):
             log.warning(
                 "flush_pending_alert_flags: still blocked by streaming buffer, "
-                "leaving state file for next run"
+                "leaving pending hashes in BQ for next run"
             )
         else:
             log.exception("flush_pending_alert_flags failed unexpectedly")
         return 0
 
-    _PENDING_STATE_PATH.unlink(missing_ok=True)
-    log.info("flush_pending_alert_flags: flagged %d hashes, cleared state", len(hashes))
+    cleared = clear_pending_flags(hashes)
+    if cleared != len(hashes):
+        log.warning(
+            "flush_pending_alert_flags: flagged %d hashes but cleared %d pending rows",
+            len(hashes),
+            cleared,
+        )
+    log.info(
+        "flush_pending_alert_flags: flagged %d hashes, cleared pending state", len(hashes)
+    )
     return len(hashes)
 
 

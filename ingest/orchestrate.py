@@ -50,8 +50,9 @@ HOTELOPS_ROOT = Path(__file__).resolve().parent.parent
 # Google Drive datahub (macOS default — override with --datahub)
 DEFAULT_DATAHUB = DATAHUB_ROOT
 
-# Local staging dirs
-STAGING_BASE = Path(os.path.expanduser("~/.cache/hotelops"))
+# Local staging dirs (override via HOTELOPS_STAGING_DIR)
+# On Cloud Run this defaults to /tmp/hotelops (ephemeral by design).
+STAGING_BASE = Path(os.getenv("HOTELOPS_STAGING_DIR", "/tmp/hotelops"))
 STAGING = {
     "banche": STAGING_BASE / "banche_staging",
     "accodamenti": STAGING_BASE / "accodamenti_staging",
@@ -460,7 +461,11 @@ def _file_hash(path: Path) -> str:
 
 
 class Manifest:
-    """Append-only log of pipeline runs."""
+    """Append-only local log of pipeline runs.
+
+    Note: this CSV is a local convenience artifact and may be ephemeral
+    in cloud containers. `f_pipeline_runs` in BigQuery is the durable audit trail.
+    """
 
     def __init__(self, base_dir: Path):
         self.base_dir = base_dir
