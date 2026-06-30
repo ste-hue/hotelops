@@ -28,12 +28,20 @@ _SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
 
 def _drive_service(key_path: str = DEFAULT_KEY):
-    from google.oauth2 import service_account
     from googleapiclient.discovery import build
 
-    creds = service_account.Credentials.from_service_account_file(
-        key_path, scopes=_SCOPES
-    )
+    if os.path.exists(key_path):
+        from google.oauth2 import service_account
+
+        creds = service_account.Credentials.from_service_account_file(
+            key_path, scopes=_SCOPES
+        )
+    else:
+        # Keyless: usa l'identità del runtime (es. Cloud Run Job che gira come
+        # drive-audit@). Nessun file-chiave necessario.
+        import google.auth
+
+        creds, _ = google.auth.default(scopes=_SCOPES)
     return build("drive", "v3", credentials=creds, cache_discovery=False)
 
 
