@@ -1,4 +1,18 @@
-# Status — 2026-06-19
+# Status — 2026-06-30
+
+## Sessione 2026-06-30 — Cutover cloud + chiusura giugno (ingest)
+- ✅ **CUTOVER CLOUD COMPLETO** (PR #63 + #61 mergiate su main): i 4 scheduled job spostati da cron/launchd del Mac a **Cloud Run Jobs + Cloud Scheduler**. reviews-scrape (07:00), reviews-report (lun 08:00), spiaggia-corrispettivi (09:00, keyless drive-audit@), coperti (12:00, keyless, **rclone→API Drive**). Secret in Secret Manager, **nessuna chiave nell'immagine**. Alert email su job falliti. Tutti verificati e2e. Script in `scripts/cloud/`. Immagine `jobs:v3` su Artifact Registry. Il Mac non è più production scheduler.
+- ✅ **Chiusura giugno — ingest fatti** (intake→promote→verify): **banche tutte al 30/06** (MPS ORTI/KROSS/INTUR, SELLA INTUR; INTESA INTUR dormiente 10/06, INTESA ORTI 05/06 — entrambi senza movimenti dopo, ok). **Partite aperte fornitori** 30/06 (ORTI 319 −673k, INTUR 91 −914k, FK 100% — IMPEGNO era fermo a 48g). **Moolty giugno** 2334 righe/26 giorni.
+- 🧠 **Insight**: i "2M su MPS maggio" = **partite di giro** (assegni circolari liquidazione zia, usciti+rientrati a pareggio; giroconto 900k) → netto −60k. Regola catturata in `vault/concepts/PARTITE_DI_GIRO.md`: i flussi LORDI di banca vanno nettati prima di CE/cassa.
+
+### ⏳ COSA MANCA (riprendere da qui)
+- [ ] **Esolver** — il blocco mancante della chiusura: **movimenti contabili** (ORTI+INTUR → `f_movimenti_contabili`), **fatture** acquisto/vendita (`f_fatture_righe`), **scheda contabile** (`f_saldi_banca_snapshot`, stale 23g), **bilancino** (`f_bilancino`). Servono gli export da Stefano. Source: `ESOLVER_MOVIMENTI_*`, `ESOLVER_FATTURE{ACQUISTO,VENDITA}_*`, `ESOLVER_SCHEDA_*`, `ESOLVER_BILANCINO_*`.
+- [ ] **Verificare liquidazione zia in Esolver maggio**: deve stare su conto patrimoniale (debiti vs soci), NON CE.
+- [ ] **Buco Moolty 19/06**: manca l'export giornaliero (o confermare zero vendite).
+- [ ] **Task 7 cutover** (~02/07, dopo 2g di scheduler verdi): spegnere cron/launchd locale + aggiornare CLAUDE.md; decidere gardener (dev box) e consumi (path legacy morto).
+- [ ] **Viste cashflow/tesoreria**: verificare che escludano le partite di giro (giroconti/assegni circolari) dal lordo entrate/uscite.
+
+> Dettaglio completo + protocollo di ripresa: `vault/.../sessions/2026-06-30_chiusura_giugno_ingest.md`.
 
 ## Sessione 2026-06-18/19 — Cashflow vertical (cash/PF)
 - ✅ **PR #37 MERGED** su main: **cash/PF engine Metà A** (write-path budget/previsione dietro `cash_pf_service`+gate I1; `app_cdg`/`update_previsione` gusci sottili; `pf_rotate` etichettato render adapter) + **Cashflow vertical** (`app_cashflow.py` montata nel hub, guscio su `rotate()` canonico) + **fix saldi B/C** (blocco manuale ORTI avanzava al cutover) + **mappatura fornitori in-UI** + intercompany tracciato (fitto cod 264 ri-mappato Godimento Beni di Terzi).
