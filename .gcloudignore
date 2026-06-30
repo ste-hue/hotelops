@@ -1,0 +1,15 @@
+# Upload context per `gcloud builds submit`. Tiene fuori venv/git/secret/dati pesanti.
+# Il contenuto dell'immagine è poi filtrato da .dockerignore.
+.git
+.github
+.venv
+node_modules
+**/__pycache__
+*.pyc
+.env
+.DS_Store
+.worktrees
+.wrangler
+**/.wrangler
+integrations
+verticals/hub/publish

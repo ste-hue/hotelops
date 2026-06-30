@@ -1,0 +1,15 @@
+# HotelOps Scheduled Jobs — immagine batch (no Streamlit). Eseguita da Cloud Run Jobs.
+# Auth GCP via ADC del runtime service account: NESSUNA chiave nell'immagine.
+# Secret (Anthropic/Apify/Gmail) iniettati come env a runtime da Secret Manager.
+FROM python:3.11-slim
+
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential && rm -rf /var/lib/apt/lists/*
+
+COPY . .
+RUN pip install --no-cache-dir ".[jobs,drive]"
+
+# Default innocuo: ogni Job sovrascrive command/args.
+ENTRYPOINT ["python"]
+CMD ["-c", "print('hotelops jobs image — specify a command')"]
