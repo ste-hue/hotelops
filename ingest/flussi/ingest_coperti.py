@@ -36,7 +36,6 @@ import argparse
 import csv
 import hashlib
 import logging
-import subprocess
 import sys
 import tempfile
 from datetime import date, datetime, timezone
@@ -59,7 +58,7 @@ except ImportError:
 
 from core.bq.client import get_client
 from core.config import PROJECT
-from core.datahub_sync import DATAHUB_ROOT as DATAHUB_DEFAULT, RCLONE_REMOTE
+from core.datahub_sync import DATAHUB_ROOT as DATAHUB_DEFAULT
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -178,30 +177,22 @@ def make_hash(
 # ── Google Sheet download ─────────────────────────────────────────────────────
 
 
-def fetch_gsheet(sheet_id: str, remote: str = RCLONE_REMOTE) -> Path:
-    """Download a Google Sheet as XLSX via rclone backend copyid."""
+def fetch_gsheet(sheet_id: str) -> Path:
+    """Esporta un Google Sheet come XLSX via API Drive (keyless / service account).
+
+    L'auth passa da drive_fetch._drive_service (file-chiave SA in locale, o ADC
+    del runtime in cloud: il job gira come drive-audit@). Sostituisce il vecchio
+    `rclone backend copyid`, che dipendeva dal binario+config sul Mac.
+    """
+    from ingest.drive_fetch import _drive_service
+
     tmp = Path(tempfile.mkdtemp(prefix="hotelops_coperti_")) / "coperti_gsheet.xlsx"
-    # not a datahub path — rclone drive.copyid exports a Sheet by fileId
-    cmd = ["rclone", "backend", "copyid", f"{remote}:", sheet_id, str(tmp)]
-    log.info("rclone: scarico Google Sheet %s …", sheet_id)
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"rclone download failed: {result.stderr.strip()}")
-    # rclone copyid drops the file without extension
-    actual = tmp if tmp.exists() else tmp.with_suffix("")
-    if not actual.exists():
-        # rclone may save without extension
-        candidates = list(tmp.parent.iterdir())
-        if candidates:
-            actual = candidates[0]
-        else:
-            raise RuntimeError("File non trovato dopo rclone download")
-    if actual.suffix != ".xlsx":
-        dest = actual.with_suffix(".xlsx")
-        actual.rename(dest)
-        actual = dest
-    log.info("Scaricato: %s (%d KB)", actual.name, actual.stat().st_size // 1024)
-    return actual
+    xlsx_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    log.info("Drive export: scarico Google Sheet %s …", sheet_id)
+    data = _drive_service().files().export(fileId=sheet_id, mimeType=xlsx_mime).execute()
+    tmp.write_bytes(data)
+    log.info("Scaricato: %s (%d KB)", tmp.name, tmp.stat().st_size // 1024)
+    return tmp
 
 
 # ── Parsing ────────────────────────────────────────────────────────────────────
@@ -646,7 +637,7 @@ def main():
         nargs="?",
         const=GSHEET_ID_DEFAULT,
         default=None,
-        help=f"Scarica da Google Sheet via rclone (default ID: {GSHEET_ID_DEFAULT})",
+        help=f"Scarica da Google Sheet via API Drive (default ID: {GSHEET_ID_DEFAULT})",
     )
     parser.add_argument(
         "--replace",
