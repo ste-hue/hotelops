@@ -12,7 +12,7 @@ JOBS_SA="hotelops-jobs@${PROJECT}.iam.gserviceaccount.com"
 gcloud run jobs create reviews-scrape --project="$PROJECT" --region="$REGION" \
   --image="$IMAGE" --service-account="$JOBS_SA" \
   --command=python --args=-m,cli,reviews,--scrape \
-  --set-secrets=ANTHROPIC_API_KEY=anthropic-api-key:latest,APIFY_API_TOKEN=apify-api-token:latest \
+  --set-secrets=ANTHROPIC_API_KEY=anthropic-api-key:latest,APIFY_API_TOKEN=apify-api-token:latest,GMAIL_USER=gmail-user:latest,GMAIL_APP_PASSWORD=gmail-app-password:latest \
   --max-retries=2 --task-timeout=900s
 
 gcloud run jobs add-iam-policy-binding reviews-scrape --project="$PROJECT" --region="$REGION" \
