@@ -92,28 +92,26 @@ def load_budget_base(societa: str = None, anno: int = None) -> pd.DataFrame:
 
 @st.cache_data(ttl=300, show_spinner="Caricamento consuntivo...")
 def load_consuntivo_ytd(societa: str = None, anno: int = None) -> pd.DataFrame:
-    """Consuntivo YTD da f_movimenti_contabili."""
+    """Consuntivo YTD dal bilancino (v_ce_mensile_bilancino = CE backbone).
+
+    La prima nota (f_movimenti_contabili) non contiene i ricavi (scope PNC,
+    decisione 2026-06-04) → il consuntivo CE viene dal bilancio mensile.
+    """
     societa = societa or SOCIETA
     anno = anno or ANNO
     bq = get_bq()
     sql = f"""
     SELECT
-      c.cod_conto,
-      cat.codice_conto,
-      cat.descrizione,
-      cat.tipo_costo,
-      cat.categoria_ce,
-      c.mese,
-      CASE
-        WHEN c.cod_conto LIKE '47%' OR c.cod_conto LIKE '48%' OR c.cod_conto LIKE '53%'
-        THEN SUM(imp_avere) - SUM(imp_dare)
-        ELSE SUM(imp_dare) - SUM(imp_avere)
-      END as importo
-    FROM `{cfg.F_MOVIMENTI_CONTABILI}` c
-    JOIN `{cfg.D_CATEGORIE_CONTI}` cat
-      ON REPLACE(cat.codice_conto, '.', '') = c.cod_conto
-    WHERE c.anno = {anno} AND c.societa_id = '{societa}'
-    GROUP BY c.cod_conto, cat.codice_conto, cat.descrizione, cat.tipo_costo, cat.categoria_ce, c.mese
+      REPLACE(codice_conto, '.', '') AS cod_conto,
+      codice_conto,
+      descrizione,
+      tipo_costo,
+      categoria_ce,
+      mese,
+      SUM(importo) AS importo
+    FROM `{cfg.V_CE_MENSILE_BILANCINO}`
+    WHERE anno = {anno} AND societa_id = '{societa}'
+    GROUP BY 1, 2, 3, 4, 5, 6
     """
     return bq.query(sql).to_dataframe()
 
@@ -141,25 +139,12 @@ def load_saldi_banca(societa: str = None) -> pd.DataFrame:
 
 @st.cache_data(ttl=300, show_spinner="Caricamento CE...")
 def load_consuntivo_ce(societa: str, anno: int) -> pd.DataFrame:
-    """Consuntivo aggregato per categoria_ce (for CE cascade)."""
+    """Consuntivo aggregato per categoria_ce dal bilancino (for CE cascade)."""
     bq = get_bq()
     sql = f"""
-    SELECT categoria_ce, SUM(importo) as importo
-    FROM (
-      SELECT
-        cat.categoria_ce,
-        c.cod_conto,
-        CASE
-          WHEN c.cod_conto LIKE '47%' OR c.cod_conto LIKE '48%' OR c.cod_conto LIKE '53%'
-          THEN SUM(imp_avere) - SUM(imp_dare)
-          ELSE SUM(imp_dare) - SUM(imp_avere)
-        END as importo
-      FROM `{cfg.F_MOVIMENTI_CONTABILI}` c
-      JOIN `{cfg.D_CATEGORIE_CONTI}` cat
-        ON REPLACE(cat.codice_conto, '.', '') = c.cod_conto
-      WHERE c.anno = {anno} AND c.societa_id = '{societa}'
-      GROUP BY cat.categoria_ce, c.cod_conto
-    )
+    SELECT categoria_ce, SUM(importo) AS importo
+    FROM `{cfg.V_CE_MENSILE_BILANCINO}`
+    WHERE anno = {anno} AND societa_id = '{societa}'
     GROUP BY categoria_ce
     """
     return bq.query(sql).to_dataframe()
@@ -179,25 +164,19 @@ def load_stagionalita() -> pd.DataFrame:
 
 @st.cache_data(ttl=300, show_spinner="Caricamento dettaglio CE...")
 def load_consuntivo_ce_detail(societa: str, anno: int) -> pd.DataFrame:
-    """Consuntivo per codice conto (for CE drill-down)."""
+    """Consuntivo per codice conto dal bilancino (for CE drill-down)."""
     bq = get_bq()
     sql = f"""
     SELECT
-      cat.codice_conto,
-      cat.descrizione,
-      cat.categoria_ce,
-      cat.tipo_costo,
-      CASE
-        WHEN c.cod_conto LIKE '47%' OR c.cod_conto LIKE '48%' OR c.cod_conto LIKE '53%'
-        THEN SUM(imp_avere) - SUM(imp_dare)
-        ELSE SUM(imp_dare) - SUM(imp_avere)
-      END as importo
-    FROM `{cfg.F_MOVIMENTI_CONTABILI}` c
-    JOIN `{cfg.D_CATEGORIE_CONTI}` cat
-      ON REPLACE(cat.codice_conto, '.', '') = c.cod_conto
-    WHERE c.anno = {anno} AND c.societa_id = '{societa}'
-    GROUP BY c.cod_conto, cat.codice_conto, cat.descrizione, cat.categoria_ce, cat.tipo_costo
-    ORDER BY cat.categoria_ce, cat.codice_conto
+      codice_conto,
+      descrizione,
+      categoria_ce,
+      tipo_costo,
+      SUM(importo) AS importo
+    FROM `{cfg.V_CE_MENSILE_BILANCINO}`
+    WHERE anno = {anno} AND societa_id = '{societa}'
+    GROUP BY codice_conto, descrizione, categoria_ce, tipo_costo
+    ORDER BY categoria_ce, codice_conto
     """
     return bq.query(sql).to_dataframe()
 
@@ -1063,6 +1042,7 @@ def page_ce(consuntivo: pd.DataFrame, last_actual_month: int):
         "Costi Commerciali",
         "Costi Amministrativi",
         "Oneri Finanziari",
+        "Da definire",
     ]:
         cat_df = ce_detail[ce_detail["categoria_ce"] == cat]
         if cat_df.empty:

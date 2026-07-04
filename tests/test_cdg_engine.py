@@ -64,6 +64,24 @@ class TestCECascade:
         vals = {r["label"]: r["importo"] for r in result}
         assert vals["Ricavi"] == 0
 
+    def test_da_definire_riga_esplicita_e_dentro_ebit(self):
+        # I conti non mappati (categoria 'Da definire', segno-bilancio: costo>0)
+        # NON spariscono: riga esplicita in cascata e inclusi nei costi operativi.
+        df = pd.concat([
+            _make_consuntivo(),
+            pd.DataFrame([{"categoria_ce": "Da definire", "importo": 40_000}]),
+        ], ignore_index=True)
+        result = compute_ce_cascade(df)
+        vals = {r["label"]: r["importo"] for r in result}
+        assert vals["Da definire (non mappati)"] == -40_000
+        assert vals["EBIT"] == 220_000 - 40_000
+
+    def test_senza_da_definire_riga_a_zero(self):
+        result = compute_ce_cascade(_make_consuntivo())
+        vals = {r["label"]: r["importo"] for r in result}
+        assert vals["Da definire (non mappati)"] == 0
+        assert vals["EBIT"] == 220_000  # invariato
+
 
 class TestIndicatori:
     def test_ebitda_pct(self):
