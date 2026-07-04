@@ -56,6 +56,9 @@ def test_antonio_e_padre_tutto_tranne_scrittura_a_mano():
         # accodamenti è sensitive → non ereditato, solo admin a mano
         assert "accodamenti" not in apps
         assert {"cashflow", "reviews", "fb", "spiaggia", "mutui"} <= apps
+    # cdg (sensitive): concesso a mano al direttore, non al padre
+    assert "cdg" in _resolve("gm@panoramagroup.it", allow_all=False)
+    assert "cdg" not in _resolve("stedepi@gmail.com", allow_all=False)
 
 
 def test_mario_solo_fb_e_spiaggia():
