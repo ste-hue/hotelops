@@ -28,8 +28,7 @@ def _group_safe(group: str) -> frozenset[str]:
     return frozenset(a.id for a in APPS if a.group == group and not a.sensitive)
 
 
-# {banche, mutui, cdg} — cashflow escluso (sensitive). Nota: cdg è kind="soon" (tile placeholder,
-# nessuna pagina reale), quindi un grant su cdg è attualmente un no-op.
+# {banche, mutui} — cashflow e cdg esclusi (sensitive: scrivono su BQ).
 FINANZA = _group_safe("Finanza")
 OPERATIONS = _group_safe("Operations")  # {fb, spiaggia, reviews}
 ALL = frozenset(a.id for a in APPS)  # admin: tutto, sensibili incluse

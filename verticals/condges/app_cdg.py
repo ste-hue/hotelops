@@ -1176,10 +1176,13 @@ def page_indicatori(
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def main():
+def render():
+    """Pagina montabile (hub): CdG a 4 tab.
+
+    Niente ``set_page_config`` qui: lo imposta il guscio (``main`` o l'hub).
+    """
     global SOCIETA, ANNO
 
-    st.set_page_config(page_title="Controllo di Gestione", layout="wide")
     st.title("Controllo di Gestione")
 
     # ── Sidebar (before data loading so selections drive queries) ───────────
@@ -1248,6 +1251,11 @@ def main():
 
     with tab_indicatori:
         page_indicatori(consuntivo, adjusted, last_actual_month)
+
+
+def main():
+    st.set_page_config(page_title="Controllo di Gestione", layout="wide")
+    render()
 
 
 if __name__ == "__main__":

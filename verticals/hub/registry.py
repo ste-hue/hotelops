@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from verticals.hub.pages_ import accodamenti, cashflow, fb, mutui, reviews, spiaggia
+from verticals.hub.pages_ import accodamenti, cashflow, cdg, fb, mutui, reviews, spiaggia
 
 # Ordine dei gruppi nella Home gateway.
 GROUPS = ["Finanza", "Operations", "Sistema"]
@@ -48,7 +48,7 @@ APPS: list[HubApp] = [
     HubApp("accodamenti", "Accodamenti", "📒", "Finanza", "page", accodamenti.render, "raccolta cassa → Gaia", sensitive=True),
     HubApp("banche", "Banche", "🏛", "Finanza", "bind", _BANCHE_LOOKER, "movimenti & saldi (Looker)"),
     HubApp("mutui", "Mutui", "🏦", "Finanza", "page", mutui.render, "ammortamenti & simulatore"),
-    HubApp("cdg", "CdG", "📊", "Finanza", "soon", None, "controllo di gestione"),
+    HubApp("cdg", "CdG", "📊", "Finanza", "page", cdg.render, "controllo di gestione", sensitive=True),
     # ── Operations ───────────────────────────────────────────────────────────
     HubApp("fb", "Food & Beverage", "🍽", "Operations", "page", fb.render, "food cost & coperti"),
     HubApp("spiaggia", "Spiaggia", "🏖️", "Operations", "page", spiaggia.render, "ricavo stabilimento & quadratura"),

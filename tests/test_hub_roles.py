@@ -44,7 +44,9 @@ def test_anna_solo_operations():
 def test_rosa_finanza_con_cashflow_accodamenti_spiaggia():
     apps = _resolve("amministrazione@panoramagroup.it", allow_all=False)
     # accodamenti (sensitive) + spiaggia concessi a mano a Rosa (cassa/Gaia), non da FINANZA (S1)
-    assert {"cashflow", "mutui", "banche", "cdg", "accodamenti", "spiaggia"} <= apps
+    assert {"cashflow", "mutui", "banche", "accodamenti", "spiaggia"} <= apps
+    # cdg ora è sensitive (scrive budget su BQ) → fuori da FINANZA; grant a mano da decidere
+    assert "cdg" not in apps
     assert "fb" not in apps
 
 
