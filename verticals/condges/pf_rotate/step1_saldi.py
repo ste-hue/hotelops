@@ -129,7 +129,10 @@ def write_saldi_banca(
 
     manual_block_rows: list[int] = []
     if layout.snapshot_kind == "month-closed":
-        # Scrivi totale come saldo iniziale — hardcoded (Controllo #1 esige non-formula)
+        # Scrivi totale come saldo iniziale — hardcoded (Controllo #1 esige non-formula).
+        # NB: il primo mese aperto resta '=<chiusa>37' BY CONTRACT (check C3 esige la
+        # catena a formula): l'apertura è corretta SOLO se step 2 azzera davvero tutta
+        # la colonna chiusa, dettagli riga-3 inclusi (leak 40k, 2026-07-04).
         pf.cell(layout.saldo_iniziale_row, target_col, total)
 
         # Avanza il blocco saldi MANUALE (col B = data, col C = valori testo) al cutover.

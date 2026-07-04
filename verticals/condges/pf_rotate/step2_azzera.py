@@ -31,8 +31,12 @@ DETAIL_SHEET_ALIASES = [
     "Canoni e servizi",
 ]
 
-# Detail: from r5 down to row before total (assumed r3) — i.e. r4..max
-DETAIL_VALUE_START_ROW = 4
+# Detail: dalla r3 in giù. Anatomia REALE dei fogli dettaglio: r3 = costante
+# manuale (previsione del mese, es. Materie Prime 40k), r4 = =SUM(r5:...),
+# r5+ = fornitori. La vecchia assunzione "r3 = riga totale" era invertita e
+# lasciava vive le previsioni manuali del mese chiuso (leak nella cascata via
+# formule master protette). is_value_cell salta comunque le formule.
+DETAIL_VALUE_START_ROW = 3
 
 
 @dataclass(frozen=True)

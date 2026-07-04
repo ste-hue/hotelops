@@ -54,3 +54,20 @@ def test_azzera_does_not_touch_other_months(minimal_pf_orti_bytes):
 
     assert ut["E4"].value == pre_e4
     assert ut["E5"].value == pre_e5
+
+
+def test_azzera_dettaglio_riga3_costante_manuale(minimal_pf_orti_bytes):
+    """Anatomia REALE dei fogli dettaglio: r3 = costante manuale (previsione mese),
+    r4 = =SUM(...). Il template vero tiene la previsione in r3 — era la riga
+    saltata da DETAIL_VALUE_START_ROW=4 (assunzione invertita: leak 40k maggio)."""
+    wb = openpyxl.load_workbook(BytesIO(minimal_pf_orti_bytes), data_only=False)
+    mp = wb["Materie Prime-Consumo "]
+    mp["D3"] = 40000.0  # costante manuale APRILE (mese che chiudiamo)
+    mp["E3"] = 95000.0  # costante manuale MAGGIO (mese aperto: NON toccare)
+
+    azzera_mese(wb, mese_chiuso=4)
+
+    assert mp["D3"].value is None  # costante del mese chiuso → azzerata
+    assert mp["E3"].value == 95000.0  # mese aperto intatto
+    # le formule =SUM restano intoccate ovunque (invariante mai-azzerare-formule)
+    assert str(mp["F3"].value).startswith("=SUM(")

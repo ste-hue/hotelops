@@ -257,3 +257,18 @@ def test_preflight_saldi_complete_ok():
         preflight_saldi("INTUR", {"MPS": 1, "INTESA": 2, "SELLA": 3}, date(2026, 5, 31))
         == []
     )
+
+
+def test_write_saldi_fixed_snapshot_non_tocca_r4_mesi(intur_pf_bytes):
+    """INTUR fixed-snapshot: saldi solo in colonna C, r4 dei mesi mai toccato."""
+    wb = openpyxl.load_workbook(BytesIO(intur_pf_bytes), data_only=False)
+    pf = wb["Piano Finanziario"]
+    before = [pf.cell(4, c).value for c in range(3, 12)]
+    write_saldi_banca(
+        wb,
+        mese_chiuso=4,
+        data_saldo=date(2026, 4, 30),
+        saldi={"Sella": 10000.0, "MPS": 20000.0, "Intesa": 3000.0},
+    )
+    after = [pf.cell(4, c).value for c in range(3, 12)]
+    assert before == after
