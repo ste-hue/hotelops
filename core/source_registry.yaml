@@ -596,3 +596,21 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "moolty/fbspiaggia/INTUR"
+
+ESOLVER_PARTITE_APERTE_ORTI_APPEND:
+  lifecycle: APPEND
+  description: "Esolver situazione fornitori ORTI (partite aperte)"
+  loop_targets: [supplier_obligations, cash_control]
+  files_glob: "*.xlsx"
+  system: ESOLVER
+  dataset: PARTITE_APERTE
+  societa: ORTI
+
+ESOLVER_PARTITE_APERTE_INTUR_APPEND:
+  lifecycle: APPEND
+  description: "Esolver situazione fornitori INTUR (partite aperte)"
+  loop_targets: [supplier_obligations, cash_control]
+  files_glob: "*.xlsx"
+  system: ESOLVER
+  dataset: PARTITE_APERTE
+  societa: INTUR
