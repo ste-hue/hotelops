@@ -1,6 +1,6 @@
 """Test del motore scan NLP reviews (build_scan) e del renderer HTML."""
 
-from verticals.reviews.scan import build_scan
+from verticals.reviews.scan import build_scan, render_scan_html
 
 
 def _booking_row(**kw):
@@ -123,3 +123,35 @@ def test_nan_and_timestamp_tolerated():
     scan = build_scan([row])
     assert scan["total"] == 1
     assert "2026-06" in scan["by_month"]
+
+
+def test_render_contains_sections():
+    scan = build_scan(ROWS)
+    out = render_scan_html(scan, 2026)
+    for expected in (
+        "La fotografia",
+        "Trend mensile",
+        "Le parole dei clienti",
+        "Temi: menzioni positive vs negative",
+        "Per struttura",
+        "Le negative, una per una",
+        "prefers-color-scheme",
+    ):
+        assert expected in out
+
+
+def test_render_escapes_user_text():
+    row = _google_row(
+        riassunto_nlp='<script>alert("x")</script> pessimo',
+        testo="<b>hack</b>",
+    )
+    out = render_scan_html(build_scan([row]), 2026)
+    assert "<script>" not in out
+    assert "&lt;script&gt;" in out
+
+
+def test_render_fotografia_is_data_driven():
+    out = render_scan_html(build_scan(ROWS), 2026)
+    # tema positivo top e tema negativo top compaiono nella sintesi
+    assert "Staff" in out
+    assert "Rumore" in out
