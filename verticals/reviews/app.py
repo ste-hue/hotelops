@@ -4,10 +4,11 @@ from __future__ import annotations
 
 
 import pandas as pd
-import plotly.express as px
 import streamlit as st
+import streamlit.components.v1 as components
 
 from core import config as cfg
+from verticals.reviews.scan import build_scan, render_scan_html
 
 PIATTAFORME = ["BOOKING", "TRIPADVISOR", "GOOGLE", "EXPEDIA", "TRIP"]
 
@@ -75,61 +76,19 @@ def render():
         st.warning("Nessuna review trovata con questi filtri.")
         return
 
+    # ── Quadro generale (scan NLP) ───────────────────────────────────────────
+    # Calcolato sulle righe filtrate anno/piattaforme/BU, PRIMA del filtro
+    # sentiment: il corpus pos/neg è già distinto dentro lo scan.
+    scan = build_scan(df.to_dict("records"))
+    components.html(render_scan_html(scan, anno), height=4300, scrolling=True)
+
+    st.divider()
+
     if sentiment_filter != "Tutti":
         df = df[df["sentiment_nlp"] == sentiment_filter]
-
-    # ── KPI Cards ────────────────────────────────────────────────────────────
-    avg_score = df["punteggio_norm"].mean()
-    n_total = len(df)
-    n_negative = (df["punteggio_norm"] <= 6.0).sum()
-    pct_neg = n_negative / n_total * 100 if n_total > 0 else 0
-
-    # Worst platform
-    by_plat = df.groupby("piattaforma")["punteggio_norm"].mean()
-    worst_plat = by_plat.idxmin() if not by_plat.empty else "—"
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Punteggio medio", f"{avg_score:.1f}/10")
-    col2.metric("Review totali", n_total)
-    col3.metric("% Negative", f"{pct_neg:.0f}%")
-    col4.metric("Piattaforma peggiore", worst_plat)
-
-    st.divider()
-
-    # ── Trend Chart ──────────────────────────────────────────────────────────
-    st.subheader("Trend punteggio medio mensile")
-    df["mese"] = df["data_review"].dt.to_period("M").astype(str)
-    monthly = df.groupby(["mese", "piattaforma"])["punteggio_norm"].mean().reset_index()
-    if not monthly.empty:
-        fig = px.line(
-            monthly,
-            x="mese",
-            y="punteggio_norm",
-            color="piattaforma",
-            markers=True,
-            labels={"punteggio_norm": "Media", "mese": "Mese"},
-        )
-        fig.update_layout(yaxis_range=[1, 10], height=350)
-        st.plotly_chart(fig, use_container_width=True)
-
-    st.divider()
-
-    # ── Category Breakdown ───────────────────────────────────────────────────
-    st.subheader("Categorie")
-    cat_counts = df["categoria_nlp"].value_counts().reset_index()
-    cat_counts.columns = ["Categoria", "Count"]
-    if not cat_counts.empty:
-        fig2 = px.bar(
-            cat_counts,
-            x="Count",
-            y="Categoria",
-            orientation="h",
-            color="Categoria",
-        )
-        fig2.update_layout(height=300, showlegend=False)
-        st.plotly_chart(fig2, use_container_width=True)
-
-    st.divider()
+        if df.empty:
+            st.info("Nessuna review con questo sentiment.")
+            return
 
     # ── Review Table ─────────────────────────────────────────────────────────
     st.subheader("Dettaglio review")
