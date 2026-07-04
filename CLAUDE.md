@@ -53,7 +53,7 @@ cli.py      <- `hotelops` CLI
 - `core/lineage/` — per-raw-object lineage: `SourceDefinition` (registry `core/source_registry.yaml`, **grammar 4-part** `<SYSTEM>_<DATASET>_<SOCIETA>_<LIFECYCLE>`), state machine (RAW_ONLY→…→PROMOTED), policy gate (invariante **`loop_targets==[] ⇔ RAW_ONLY`**). Tabelle `f_raw_objects`/`f_lineage_events`, bucket `gs://hotelops-raw` (Object Versioning).
 
 **ingest/** — target model: `hotelops intake` (→ `f_raw_objects` con URI gs://) + `hotelops promote` (→ canonical via gate). Parser in `ingest/flussi/`.
-- `ingest/drive_fetch.py` — pull da **Drive vivo** via service account (`drive-audit@`). **Drive è tornato come fonte VIVA** (via lineage, non rclone) per il registro corrispettivi spiaggia; cron `scripts/spiaggia-corrispettivi-daily.sh`. La vecchia nota "Drive non più popolato" vale solo per il path **legacy rclone** (`core/datahub_sync.py`, `ingest/classify.py`/`orchestrate.py` — Phase-5 cutover pendente).
+- `ingest/drive_fetch.py` — pull da **Drive vivo** via service account (`drive-audit@`). **Drive è tornato come fonte VIVA** (via lineage, non rclone) per il registro corrispettivi spiaggia; schedulato su **Cloud Run Job + Cloud Scheduler** (`spiaggia-corrispettivi-daily`, non più cron locale — cutover cloud 2026-06-30/07-01). La vecchia nota "Drive non più popolato" vale solo per il path **legacy rclone** (`core/datahub_sync.py`, `ingest/classify.py`/`orchestrate.py` — Phase-5 cutover pendente).
 
 **verticals/** (concetti):
 - **#1 condges** — Controllo di Gestione: CE riclassificato, Budget vs Consuntivo, Tesoreria, indicatori, `hotelops pf-rotate` (rotation mensile Piano Finanziario, vedi §Financial Data). Streamlit `app_cdg.py`. **App Cashflow** (`app_cashflow.py`, montata nel hub) = guscio sul motore canonico `pf-rotate` per produrre il PF del mese successivo (mappatura fornitori→voce persistente su BQ). Write-path budget/previsione dietro `services/cash_pf_service.py` + gate I1. Motore `write_pf` in `pf_rotate/pf_writer.py` (D1 completato — `app_scadenzario.py` cancellato).
@@ -115,7 +115,7 @@ pytest ; ruff check . ; ruff format .
 ## Vertical Spiaggia
 
 Stabilimento balneare (Lido, INTUR). **Ricavo TOTALE/giorno = banco INTUR + alloggiati ORTI** (additivo, no doppio conteggio):
-- **Banco INTUR** = Registro Corrispettivi RT (spiaggia 22% + bar 10%), pescato dal **Drive vivo** (cron giornaliero) → `f_spiaggia_corrispettivi` (source `RT_CORRISPETTIVISPIAGGIA_INTUR_SNAPSHOT`). Anno autorevole dal **filename** (l'header del template è stale).
+- **Banco INTUR** = Registro Corrispettivi RT (spiaggia 22% + bar 10%), pescato dal **Drive vivo** (Cloud Run Job giornaliero) → `f_spiaggia_corrispettivi` (source `RT_CORRISPETTIVISPIAGGIA_INTUR_SNAPSHOT`). Anno autorevole dal **filename** (l'header del template è stale).
 - **Moolty** = cassa POS dell'intero banco walk-in (ombrelloni + bar) → `f_spiaggia_fb_ordini` (source `MOOLTY_FBSPIAGGIA_INTUR_APPEND`). È il **dettaglio operativo** del banco, NON un addendo: `scost_cassa = corrispettivo_totale − Moolty` (~2%, quadratura POS↔fiscale).
 - **Alloggiati ORTI** = ospiti hotel che usano la spiaggia (conto camera, non al banco) → PMS `f_produzione_pms` classe `04BEALL`. **Spiagge.it** (`f_spiaggia_cash_flows`, prenotazioni online) è ⊆ alloggiati (2025 = 100% hotel-linked) → cross-check, NON si somma.
 - Vista unificata **`v_spiaggia_giornaliero`**; app `verticals/spiaggia/app.py` (montata nel hub). Spec/plan: `docs/superpowers/{specs,plans}/2026-06-17-spiaggia-*`.
