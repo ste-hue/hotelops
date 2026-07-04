@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Ingest HotelCube Power BI Daily Production Report (classe cut) → f_produzione_pms.
 
-One xlsx = one struttura × one anno. Period metadata (CodiceHotel, Anno,
+One xlsx = one struttura × one or more anni (il filtro Power BI può essere
+"Anno is 2026" o "Anno is 2026 or 2025"). Period metadata (CodiceHotel, Anno,
 Descrizione) lives in the file's last "Applied filters" cell. Data rows are daily;
-columns are revenue classes (01ROOM, 02FB, ...). Unpivot wide→long.
+columns are revenue classes (01ROOM, 02FB, ...). Unpivot wide→long. L'anno di
+ogni riga segue la SUA data — mai il filtro.
 
 Lifecycle: SNAPSHOT, natural_key (business_unit_id, anno). Re-loading a
-struttura×anno replaces those rows.
+struttura×anno replaces those rows; un file bi-anno rimpiazza entrambi gli
+scope (la DELETE del gate copre i combo distinti presenti nel batch).
 
 Parser_module della source POWERBI_PRODUZIONE_ORTI_SNAPSHOT, invocato da
 `hotelops promote` come: python -m ingest.flussi.ingest_produzione_pms --file X --raw-object-id Y
@@ -44,23 +47,25 @@ HOTEL_TO_BU = {
 CLASSE_RE = re.compile(r"^\d{2}[A-Z]+$")
 
 
-def parse_applied_filters(text: str) -> tuple[str, int]:
-    """Extract (business_unit_id, anno) from the 'Applied filters' cell.
+def parse_applied_filters(text: str) -> tuple[str, set[int]]:
+    """Extract (business_unit_id, anni) from the 'Applied filters' cell.
 
-    Requires Descrizione is Imponibile. Raises ValueError otherwise.
+    Il filtro Anno può essere singolo ("Anno is 2026") o multiplo
+    ("Anno is 2026 or 2025"). Requires Descrizione is Imponibile.
     """
     if not re.search(r"Descrizione is Imponibile", text):
         raise ValueError(
             f"file non Imponibile (atteso 'Descrizione is Imponibile'): {text[:120]!r}"
         )
     hotel_m = re.search(r"CodiceHotel is (\w+)", text)
-    anno_m = re.search(r"Anno is (\d+)", text)
+    anno_m = re.search(r"Anno is (\d{4}(?: or \d{4})*)", text)
     if not (hotel_m and anno_m):
         raise ValueError(f"Applied filters incompleti: {text[:120]!r}")
     codice = hotel_m.group(1)
     if codice not in HOTEL_TO_BU:
         raise ValueError(f"CodiceHotel sconosciuto: {codice}")
-    return HOTEL_TO_BU[codice], int(anno_m.group(1))
+    anni = {int(a) for a in re.findall(r"\d{4}", anno_m.group(1))}
+    return HOTEL_TO_BU[codice], anni
 
 
 def detect_classe_columns(header: tuple) -> dict[int, str]:
@@ -78,8 +83,8 @@ def detect_classe_columns(header: tuple) -> dict[int, str]:
     return out
 
 
-def parse_xlsx(path: Path) -> tuple[tuple[str, int], list[dict]]:
-    """Read a Daily Production Report (classe cut) → ((bu, anno), data_rows).
+def parse_xlsx(path: Path) -> tuple[tuple[str, set[int]], list[dict]]:
+    """Read a Daily Production Report (classe cut) → ((bu, anni), data_rows).
 
     data_rows = list of {data: date, classe: str, importo: Decimal}. The 'Total'
     row/column and empty cells are skipped; negatives are kept.
@@ -127,25 +132,35 @@ def parse_xlsx(path: Path) -> tuple[tuple[str, int], list[dict]]:
                 "classe": classe,
                 "importo": Decimal(str(val)),
             })
+
+    _, anni = period
+    fuori = {r["data"].year for r in data_rows} - anni
+    if fuori:
+        raise ValueError(
+            f"{path.name}: righe datate fuori dagli anni del filtro "
+            f"({sorted(fuori)} ∉ {sorted(anni)})"
+        )
     return period, data_rows
 
 
 def build_rows(
-    period: tuple[str, int],
+    period: tuple[str, set[int]],
     raw_rows: list[dict],
     file_name: str,
     raw_object_id: str | None = None,
 ) -> list[dict]:
     """Turn parsed raw rows into f_produzione_pms dict rows.
 
-    Derives societa_id from data via OPERATIONS_CUTOVER_DATE, mese from data,
+    Derives societa_id from data via OPERATIONS_CUTOVER_DATE, anno e mese from
+    data (per-riga — un file può coprire più anni),
     and hash_riga = md5(business_unit_id, anno, data, classe).
     """
-    bu, anno = period
+    bu, _anni = period
     now = datetime.now(timezone.utc)
     out: list[dict] = []
     for r in raw_rows:
         d = r["data"]
+        anno = d.year
         societa = "INTUR" if d < OPERATIONS_CUTOVER_DATE else "ORTI"
         out.append({
             "societa_id": societa,
@@ -156,7 +171,7 @@ def build_rows(
             "classe": r["classe"],
             "importo_imponibile": r["importo"],
             "file_sorgente": file_name,
-            "hash_riga": make_hash(bu, str(anno), d.isoformat(), r["classe"]),
+            "hash_riga": make_hash(bu, str(d.year), d.isoformat(), r["classe"]),
             "raw_object_id": raw_object_id,
             "data_caricamento": now,
         })
@@ -174,9 +189,10 @@ def ingest_file(
     period, raw = parse_xlsx(path)
     rows = build_rows(period, raw, path.name, raw_object_id)
     validate_batch(rows, ProduzioneRow, context=f"produzione_pms {path.name}")
-    bu, anno = period
+    bu, anni = period
+    anni_str = ",".join(str(a) for a in sorted(anni))
     if dry_run:
-        log.info("[DRY-RUN] %s → %s %d : %d righe", path.name, bu, anno, len(rows))
+        log.info("[DRY-RUN] %s → %s %s : %d righe", path.name, bu, anni_str, len(rows))
         return len(rows)
 
     from core.bq.write import bq_write_validated
@@ -188,7 +204,7 @@ def ingest_file(
         mode="snapshot",
         natural_key=["business_unit_id", "anno"],
     )
-    log.info("OK %s → %s %d : %d righe", path.name, bu, anno, len(rows))
+    log.info("OK %s → %s %s : %d righe", path.name, bu, anni_str, len(rows))
     return len(rows)
 
 

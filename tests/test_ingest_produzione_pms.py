@@ -85,9 +85,17 @@ FILTER_HOTEL = (
 
 
 def test_parse_applied_filters_hotel():
-    bu, anno = parse_applied_filters(FILTER_HOTEL)
+    bu, anni = parse_applied_filters(FILTER_HOTEL)
     assert bu == "HOTEL"
-    assert anno == 2026
+    assert anni == {2026}
+
+
+def test_parse_applied_filters_multi_anno():
+    # Export "ultimi 2 anni": il filtro Power BI è "Anno is 2026 or 2025"
+    txt = FILTER_HOTEL.replace("Anno is 2026", "Anno is 2026 or 2025")
+    bu, anni = parse_applied_filters(txt)
+    assert bu == "HOTEL"
+    assert anni == {2025, 2026}
 
 
 def test_parse_applied_filters_rejects_lordo():
@@ -139,9 +147,9 @@ def _make_class_xlsx(path, codice_hotel="PANORAMAHT", anno=2026):
 def test_parse_xlsx_unpivot(tmp_path):
     p = tmp_path / "HOTEL_prod.xlsx"
     _make_class_xlsx(p)
-    (bu, anno), rows = parse_xlsx(p)
+    (bu, anni), rows = parse_xlsx(p)
     assert bu == "HOTEL"
-    assert anno == 2026
+    assert anni == {2026}
     # 15: 2 classi, 16: 1 (02FB None skipped), 17: 2 → 5 righe; Total escluso
     assert len(rows) == 5
     keys = {(r["data"].isoformat(), r["classe"]) for r in rows}
@@ -178,6 +186,59 @@ def test_build_rows_pre_cutover_is_intur(tmp_path):
     period, raw = parse_xlsx(p)
     out = build_rows(period, raw, p.name)
     assert all(r["societa_id"] == "ORTI" for r in out)  # april 2025 > cutover
+
+
+def _make_two_year_xlsx(path, codice_hotel="PANORAMAHT"):
+    """File 'ultimi 2 anni': righe 2025 e 2026, filtro 'Anno is 2026 or 2025'."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Export"
+    ws.append(["Classe", None, "01ROOM", "02FB", "Total"])
+    ws.append(["Data", "Importo", "Importo", "Importo", "Importo"])
+    ws.append([datetime(2025, 5, 10), None, 7000.0, 400.0, 7400.0])
+    ws.append([datetime(2026, 4, 15), None, 8000.0, 500.0, 8500.0])
+    ws.append(["Total", None, 15000.0, 900.0, 15900.0])
+    ws.append([
+        f"Applied filters:\nCodiceHotel is {codice_hotel}\n"
+        "Anno is 2026 or 2025\nDescrizione is Imponibile", None, None, None, None,
+    ])
+    wb.save(path)
+
+
+def test_two_year_file_anno_per_riga(tmp_path):
+    # File bi-anno: anno deve seguire la data della riga, non il filtro.
+    p = tmp_path / "HOTEL_prod_2anni.xlsx"
+    _make_two_year_xlsx(p)
+    period, raw = parse_xlsx(p)
+    out = build_rows(period, raw, p.name, raw_object_id="ro-2")
+    by_year = {r["anno"] for r in out}
+    assert by_year == {2025, 2026}
+    for r in out:
+        assert r["anno"] == r["data"].year
+        assert r["hash_riga"] == make_hash(
+            "HOTEL", str(r["anno"]), r["data"].isoformat(), r["classe"]
+        )
+    # il batch valida contro lo schema (anno/mese coerenti con data)
+    from core.schemas import validate_batch
+    validate_batch(out, ProduzioneRow, context="test 2 anni")
+
+
+def test_two_year_file_rejects_data_fuori_filtro(tmp_path):
+    # Riga datata fuori dagli anni dichiarati nel filtro → errore loud.
+    p = tmp_path / "HOTEL_prod_mismatch.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Export"
+    ws.append(["Classe", None, "01ROOM", "Total"])
+    ws.append(["Data", "Importo", "Importo", "Importo"])
+    ws.append([datetime(2024, 7, 1), None, 100.0, 100.0])
+    ws.append([
+        "Applied filters:\nCodiceHotel is PANORAMAHT\n"
+        "Anno is 2026 or 2025\nDescrizione is Imponibile", None, None, None,
+    ])
+    wb.save(p)
+    with pytest.raises(ValueError, match="fuori dagli anni"):
+        parse_xlsx(p)
 
 
 def test_ingest_file_dry_run_no_write(tmp_path):
