@@ -569,6 +569,7 @@ def write_saldi_multibank_to_bq(
     saldi: dict[tuple[str, date], float],
     societa_id: str,
     dry_run: bool = False,
+    raw_object_id: str | None = None,
 ) -> int:
     """Write end-of-day saldi for multiple banks to f_saldi_banca_snapshot.
 
@@ -588,6 +589,7 @@ def write_saldi_multibank_to_bq(
             banca_id=b,
             data_snapshot=d,
             saldo_finale=saldo,
+            raw_object_id=raw_object_id,
         )
         for (b, d), saldo in sorted(saldi.items(), key=lambda kv: (kv[0][1], kv[0][0]))
     ]
@@ -635,10 +637,7 @@ def process_file(
     ):
         log.info(f"Processing: {filepath.name}")
         if raw_object_id:
-            log.info(
-                f"  lineage raw_object_id ricevuto: {raw_object_id} "
-                "(non ancora stampato sulle righe — f_saldi_banca_snapshot FK column TBD)"
-            )
+            log.info(f"  lineage raw_object_id: {raw_object_id}")
 
         if is_multibank(filepath):
             log.info("Detected multi-bank Esolver mastrino (Partitario populated)")
@@ -656,7 +655,9 @@ def process_file(
                 per_bank[b] = per_bank.get(b, 0) + 1
             for b, n in sorted(per_bank.items()):
                 log.info(f"  {b}: {n} end-of-day saldi")
-            return write_saldi_multibank_to_bq(daily_saldi, societa_id, dry_run)
+            return write_saldi_multibank_to_bq(
+                daily_saldi, societa_id, dry_run, raw_object_id=raw_object_id
+            )
 
         if not banca_id:
             banca_id = infer_banca_from_filename(filepath.name, societa_id)

@@ -74,3 +74,22 @@ def test_multibank_xlsx_running_balance_ignores_cumulative_saldo(tmp_path):
     assert saldi[("MPS_KROSS", date(2026, 1, 2))] == 50
     assert saldi[("MPS", date(2026, 1, 3))] == 70  # 100 - 30
     assert saldi[("MPS_KROSS", date(2026, 1, 3))] == 70  # 50 + 20
+
+
+def test_multibank_write_stampa_raw_object_id(tmp_path, monkeypatch):
+    # I9: il path multibank deve stampare la FK lineage su ogni riga
+    # (il writer mono la stampava già; il multibank la perdeva → FK-void).
+    from ingest.flussi import ingest_scheda_contabile as mod
+
+    captured = {}
+
+    def fake_write(table, rows, mode, natural_key):
+        captured["rows"] = rows
+
+    import core.bq.write as bqw
+
+    monkeypatch.setattr(bqw, "bq_write_validated", fake_write)
+    path = _make_scheda_xlsx(tmp_path, ORTI_MULTIBANK_ROWS)
+    n = mod.process_file(path, "ORTI", None, dry_run=False, raw_object_id="ro-lineage-1")
+    assert n > 0
+    assert all(r.raw_object_id == "ro-lineage-1" for r in captured["rows"])
