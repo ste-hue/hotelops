@@ -210,14 +210,11 @@ def _make_buffer_error():
     )
 
 
-def test_mark_alerts_sent_retries_on_streaming_buffer_then_succeeds(
-    tmp_path, monkeypatch
-):
-    """First 2 attempts hit streaming buffer, 3rd succeeds — no pending file."""
+def test_mark_alerts_sent_retries_on_streaming_buffer_then_succeeds(monkeypatch):
+    """First 2 attempts hit streaming buffer, 3rd succeeds — no pending write."""
     from verticals.reviews import alert as alert_mod
 
     monkeypatch.setattr(alert_mod, "_MARK_ALERTS_RETRY_DELAYS", [0, 0, 0])
-    monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", tmp_path / "pending.json")
 
     fake_client = MagicMock()
     fake_query = MagicMock()
@@ -233,102 +230,95 @@ def test_mark_alerts_sent_retries_on_streaming_buffer_then_succeeds(
 
     fake_client.query.side_effect = query_side_effect
 
-    with patch.object(alert_mod.bigquery, "Client", return_value=fake_client):
+    with (
+        patch.object(alert_mod.bigquery, "Client", return_value=fake_client),
+        patch.object(alert_mod, "append_pending_flags") as mock_append,
+    ):
         alert_mod.mark_alerts_sent(["h1", "h2"])
 
     assert call_count["n"] == 3
-    assert not (tmp_path / "pending.json").exists()
+    mock_append.assert_not_called()
 
 
-def test_mark_alerts_sent_persists_pending_after_all_retries_fail(
-    tmp_path, monkeypatch
-):
-    """All retries exhausted: hashes persisted to pending state file, no raise."""
-    import json as _json
+def test_mark_alerts_sent_persists_pending_after_all_retries_fail(monkeypatch):
+    """All retries exhausted: hashes persisted to pending state in BQ."""
     from verticals.reviews import alert as alert_mod
 
     monkeypatch.setattr(alert_mod, "_MARK_ALERTS_RETRY_DELAYS", [0, 0, 0])
-    state_path = tmp_path / "pending.json"
-    monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", state_path)
 
     fake_client = MagicMock()
     fake_client.query.side_effect = _make_buffer_error()
 
-    with patch.object(alert_mod.bigquery, "Client", return_value=fake_client):
-        # Must NOT raise — pending file is the graceful fallback
+    with (
+        patch.object(alert_mod.bigquery, "Client", return_value=fake_client),
+        patch.object(alert_mod, "append_pending_flags", return_value=2) as mock_append,
+        patch.object(alert_mod, "read_pending_flags", return_value=["h1", "h2"]),
+    ):
         alert_mod.mark_alerts_sent(["h1", "h2"])
 
-    assert state_path.exists()
-    data = _json.loads(state_path.read_text())
-    assert sorted(data["hashes"]) == ["h1", "h2"]
-    assert "last_updated" in data
+    mock_append.assert_called_once()
+    assert sorted(mock_append.call_args.args[0]) == ["h1", "h2"]
 
 
-def test_mark_alerts_sent_reraises_non_buffer_errors(tmp_path, monkeypatch):
-    """Non-streaming-buffer errors propagate immediately (no retry, no pending)."""
+def test_mark_alerts_sent_reraises_non_buffer_errors(monkeypatch):
+    """Non-streaming-buffer errors propagate immediately (no retry, no pending write)."""
     from verticals.reviews import alert as alert_mod
 
     monkeypatch.setattr(alert_mod, "_MARK_ALERTS_RETRY_DELAYS", [0, 0, 0])
-    monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", tmp_path / "pending.json")
 
     fake_client = MagicMock()
     fake_client.query.side_effect = RuntimeError("some other failure")
 
-    with patch.object(alert_mod.bigquery, "Client", return_value=fake_client):
-        try:
+    with (
+        patch.object(alert_mod.bigquery, "Client", return_value=fake_client),
+        patch.object(alert_mod, "append_pending_flags") as mock_append,
+    ):
+        with pytest.raises(RuntimeError):
             alert_mod.mark_alerts_sent(["h1"])
-            raised = False
-        except RuntimeError:
-            raised = True
 
-    assert raised is True
-    assert not (tmp_path / "pending.json").exists()
+    mock_append.assert_not_called()
 
 
-def test_flush_pending_alert_flags_success_clears_state(tmp_path, monkeypatch):
-    """On successful flush, state file is removed."""
-    import json as _json
+def test_flush_pending_alert_flags_success_clears_state(monkeypatch):
+    """On successful flush, pending hashes are cleared from BQ state."""
     from verticals.reviews import alert as alert_mod
 
-    state_path = tmp_path / "pending.json"
-    state_path.write_text(_json.dumps({"hashes": ["h1", "h2"], "last_updated": "x"}))
-    monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", state_path)
-
     fake_client = MagicMock()
-    with patch.object(alert_mod.bigquery, "Client", return_value=fake_client):
+    with (
+        patch.object(alert_mod.bigquery, "Client", return_value=fake_client),
+        patch.object(alert_mod, "read_pending_flags", return_value=["h1", "h2"]),
+        patch.object(alert_mod, "clear_pending_flags", return_value=2) as mock_clear,
+    ):
         flushed = alert_mod.flush_pending_alert_flags()
 
     assert flushed == 2
-    assert not state_path.exists()
+    mock_clear.assert_called_once_with(["h1", "h2"])
 
 
-def test_flush_pending_alert_flags_noop_when_no_state(tmp_path, monkeypatch):
+def test_flush_pending_alert_flags_noop_when_no_state(monkeypatch):
     from verticals.reviews import alert as alert_mod
 
-    monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", tmp_path / "nope.json")
-    flushed = alert_mod.flush_pending_alert_flags()
+    with patch.object(alert_mod, "read_pending_flags", return_value=[]):
+        flushed = alert_mod.flush_pending_alert_flags()
     assert flushed == 0
 
 
-def test_flush_pending_alert_flags_keeps_state_if_buffer_still_blocking(
-    tmp_path, monkeypatch
-):
-    """If the buffer is still blocking, state file stays intact for next run."""
-    import json as _json
+def test_flush_pending_alert_flags_keeps_state_if_buffer_still_blocking(monkeypatch):
+    """If the buffer is still blocking, pending hashes stay for next run."""
     from verticals.reviews import alert as alert_mod
-
-    state_path = tmp_path / "pending.json"
-    state_path.write_text(_json.dumps({"hashes": ["h1"], "last_updated": "x"}))
-    monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", state_path)
 
     fake_client = MagicMock()
     fake_client.query.side_effect = _make_buffer_error()
 
-    with patch.object(alert_mod.bigquery, "Client", return_value=fake_client):
+    with (
+        patch.object(alert_mod.bigquery, "Client", return_value=fake_client),
+        patch.object(alert_mod, "read_pending_flags", return_value=["h1"]),
+        patch.object(alert_mod, "clear_pending_flags") as mock_clear,
+    ):
         flushed = alert_mod.flush_pending_alert_flags()
 
     assert flushed == 0
-    assert state_path.exists()  # preserved for next attempt
+    mock_clear.assert_not_called()
 
 
 def test_weekly_report_renders_cost_section_when_data_present():
@@ -376,16 +366,18 @@ def test_weekly_report_omits_cost_section_when_no_data():
     assert "Costi Apify" not in html
 
 
-def test_persist_pending_merges_with_existing(tmp_path, monkeypatch):
-    """Repeated failures merge hashes, never lose old ones."""
-    import json as _json
+def test_persist_pending_stores_run_id_when_available():
+    """Pending persistence should include active run_id metadata when present."""
     from verticals.reviews import alert as alert_mod
 
-    state_path = tmp_path / "pending.json"
-    monkeypatch.setattr(alert_mod, "_PENDING_STATE_PATH", state_path)
+    run = MagicMock()
+    run.run_id = "run-123"
+    with (
+        patch.object(alert_mod, "append_pending_flags", return_value=2) as mock_append,
+        patch.object(alert_mod, "read_pending_flags", return_value=["h1", "h2"]),
+        patch("core.pipeline_run.PipelineRun.get_current", return_value=run),
+    ):
+        alert_mod._persist_pending(["h1", "h2"])
 
-    alert_mod._persist_pending(["h1", "h2"])
-    alert_mod._persist_pending(["h2", "h3"])
-
-    data = _json.loads(state_path.read_text())
-    assert sorted(data["hashes"]) == ["h1", "h2", "h3"]
+    assert mock_append.call_count == 1
+    assert mock_append.call_args.kwargs["run_id"] == "run-123"
