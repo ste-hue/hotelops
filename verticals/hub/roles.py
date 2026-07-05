@@ -24,8 +24,14 @@ _DEV_BYPASS_ENV = "HUB_DEV_ALLOW_ALL"
 
 
 def _group_safe(group: str) -> frozenset[str]:
-    """App del gruppo NON sensibili — le sensibili non si ereditano (S1)."""
-    return frozenset(a.id for a in APPS if a.group == group and not a.sensitive)
+    """App del gruppo NON sensibili — le sensibili non si ereditano (S1).
+
+    I placeholder ``soon`` sono esclusi: non sono superfici concedibili
+    (es. cdg spento 2026-07-05 non deve rientrare in FINANZA dal gruppo).
+    """
+    return frozenset(
+        a.id for a in APPS if a.group == group and not a.sensitive and a.kind != "soon"
+    )
 
 
 # {banche, mutui} — cashflow e cdg esclusi (sensitive: scrivono su BQ).

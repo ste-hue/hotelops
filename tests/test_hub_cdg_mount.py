@@ -24,10 +24,11 @@ def test_render_non_chiama_set_page_config():
     assert "st.set_page_config" not in src
 
 
-def test_registry_monta_cdg_in_finanza_sensibile():
+def test_registry_cdg_spento_come_soon():
+    # 2026-07-05: CdG smontato dalla nav ("troppi dati, semplifichiamo"),
+    # resta tile "coming soon" in Finanza finché non atterra il redesign.
     from verticals.hub.registry import APPS, by_group, pages
 
-    assert "cdg" in {a.id for a in pages()}
+    assert "cdg" not in {a.id for a in pages()}
     assert "cdg" in {a.id for a in by_group()["Finanza"]}
-    # scrive su BQ (Salva in BQ fonte=APP_BUDGET) → S1: non ereditabile dal gruppo
-    assert next(a for a in APPS if a.id == "cdg").sensitive
+    assert next(a for a in APPS if a.id == "cdg").kind == "soon"

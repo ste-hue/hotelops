@@ -29,7 +29,7 @@ def test_target_coerente_col_kind():
 def test_pages_solo_kind_page():
     assert all(a.kind == "page" for a in pages())
     assert {a.id for a in pages()} == {
-        "cashflow", "accodamenti", "cdg", "mutui", "fb", "spiaggia", "reviews",
+        "cashflow", "accodamenti", "mutui", "fb", "spiaggia", "reviews",
     }
 
 
@@ -58,11 +58,12 @@ def test_validate_rifiuta_id_duplicato():
         validate([a, a])
 
 
-def test_cashflow_accodamenti_cdg_sono_sensibili():
+def test_cashflow_accodamenti_sono_sensibili():
+    # cdg non è più qui: spento (kind=soon, 2026-07-05) → niente superficie di scrittura
     from verticals.hub.registry import APPS
 
     sens = {a.id for a in APPS if a.sensitive}
-    assert sens == {"cashflow", "accodamenti", "cdg"}
+    assert sens == {"cashflow", "accodamenti"}
 
 
 def test_pages_for_filtra_su_allowed():
