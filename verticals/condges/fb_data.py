@@ -89,6 +89,52 @@ def kpi_mensili(anno: int) -> pd.DataFrame:
     return _q(f"SELECT * FROM `{V_FB_KPI}` WHERE anno = {int(anno)} ORDER BY mese")
 
 
+_YOY_COLS = [
+    "coperti_hotel",
+    "ricavi_fb_totale",
+    "costo_fb_totale",
+    "euro_per_pasto",
+    "food_cost_pct_breakfast",
+    "food_cost_pct_ristorante",
+    "food_cost_pct_bar",
+]
+
+
+def join_yoy(cur: pd.DataFrame, prev: pd.DataFrame) -> pd.DataFrame:
+    """Affianca ai KPI mensili di ``cur`` quelli di ``prev`` (suffisso ``_prec``),
+    join su mese. Pura (niente BQ): testabile con fixture."""
+    out, p = cur.copy(), prev.copy()
+    for df in (out, p):
+        df["ricavi_fb_totale"] = (
+            df["ricavi_breakfast"] + df["ricavi_food"] + df["ricavi_beverage"]
+        )
+    p = p[["mese", *_YOY_COLS]].rename(columns={c: f"{c}_prec" for c in _YOY_COLS})
+    return out.merge(p, on="mese", how="left")
+
+
+def kpi_yoy(anno: int) -> pd.DataFrame:
+    """KPI mensili anno vs anno-1 (v_fb_kpi due volte, join su mese)."""
+    return join_yoy(kpi_mensili(anno), kpi_mensili(anno - 1))
+
+
+def ricavi_tipo_pasto_yoy(anno: int) -> pd.DataFrame:
+    """Ricavi F&B per tipo pasto, anno vs anno-1 a parità di periodo:
+    l'anno precedente è tagliato all'ultimo mese con ricavi dell'anno scelto
+    (altrimenti a stagione in corso si confronterebbe col 2025 intero)."""
+    a, p = int(anno), int(anno) - 1
+    return _q(f"""
+        WITH mese_max AS (
+          SELECT MAX(mese) AS m FROM `{V_FB_RICAVI}` WHERE anno = {a} AND netto > 0
+        )
+        SELECT tipo_pasto,
+          SUM(IF(anno = {a}, netto, 0)) AS ricavo,
+          SUM(IF(anno = {p}, netto, 0)) AS ricavo_prec
+        FROM `{V_FB_RICAVI}`, mese_max
+        WHERE anno IN ({a}, {p}) AND tipo_pasto IS NOT NULL AND mese <= mese_max.m
+        GROUP BY tipo_pasto ORDER BY ricavo DESC
+    """)
+
+
 def consumi(anno: int, solo_fb: bool = True) -> pd.DataFrame:
     """Costo merce per prodotto da v_fb_consumi.
 

@@ -60,6 +60,16 @@ def _pasti(anno: int) -> pd.DataFrame:
     return fb_data.pasti(anno)
 
 
+@st.cache_data(ttl=300)
+def _kpi_yoy(anno: int) -> pd.DataFrame:
+    return fb_data.kpi_yoy(anno)
+
+
+@st.cache_data(ttl=300)
+def _ricavi_tipo_pasto_yoy(anno: int) -> pd.DataFrame:
+    return fb_data.ricavi_tipo_pasto_yoy(anno)
+
+
 # --- figure pure (testabili senza Streamlit) -------------------------------
 
 
@@ -139,6 +149,14 @@ _BUCKETS_FC = {
 }
 
 
+def _tick_mensili(fig: go.Figure) -> go.Figure:
+    """periodo è una DATE: con pochi punti Plotly mette tick ogni ~28gg,
+    sfasati rispetto alle barre (apr/mag/giu letti come Mar 26/Apr 23/May 21).
+    Forza un tick per mese, allineato."""
+    fig.update_xaxes(dtick="M1", tickformat="%b %Y")
+    return fig
+
+
 def fig_food_cost_mensile(df: pd.DataFrame) -> go.Figure:
     """Food cost % per bucket. Mesi senza consumi caricati -> buco, mai 0%."""
     plot = df.copy()
@@ -151,7 +169,7 @@ def fig_food_cost_mensile(df: pd.DataFrame) -> go.Figure:
             go.Scatter(x=plot["periodo"], y=plot[col], name=label, mode="lines+markers")
         )
     fig.update_layout(title="Food & beverage cost % per bucket", yaxis_tickformat=".0%")
-    return fig
+    return _tick_mensili(fig)
 
 
 def fig_ricavi_split(df: pd.DataFrame) -> go.Figure:
@@ -165,7 +183,7 @@ def fig_ricavi_split(df: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         barmode="stack", title="Ricavi F&B per componente", yaxis_tickformat=",.0f"
     )
-    return fig
+    return _tick_mensili(fig)
 
 
 def fig_coperti_mensili(df: pd.DataFrame) -> go.Figure:
@@ -175,6 +193,45 @@ def fig_coperti_mensili(df: pd.DataFrame) -> go.Figure:
         go.Bar(x=df["periodo"], y=df["coperti_hotel_ap"], name="anno precedente")
     )
     fig.update_layout(barmode="group", title="Coperti hotel per mese")
+    return _tick_mensili(fig)
+
+
+def fig_food_cost_yoy(df: pd.DataFrame) -> go.Figure:
+    """Food cost % per bucket: linea piena = anno scelto, punteggiata = anno prec."""
+    fig = go.Figure()
+    for col, label in _BUCKETS_FC.items():
+        fig.add_trace(
+            go.Scatter(x=df["mese"], y=df[col], name=label, mode="lines+markers")
+        )
+    for col, label in _BUCKETS_FC.items():
+        fig.add_trace(
+            go.Scatter(
+                x=df["mese"],
+                y=df[f"{col}_prec"],
+                name=f"{label} (anno prec.)",
+                mode="lines",
+                line={"dash": "dot"},
+            )
+        )
+    fig.update_layout(
+        title="Food cost % per bucket vs anno precedente",
+        yaxis_tickformat=".0%",
+        xaxis={"dtick": 1, "title": "mese"},
+    )
+    return fig
+
+
+def fig_ricavi_tipo_pasto_yoy(df: pd.DataFrame) -> go.Figure:
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=df["tipo_pasto"], y=df["ricavo"], name="anno corrente"))
+    fig.add_trace(
+        go.Bar(x=df["tipo_pasto"], y=df["ricavo_prec"], name="anno precedente")
+    )
+    fig.update_layout(
+        barmode="group",
+        title="Ricavi per tipo pasto vs anno precedente (a parità di periodo)",
+        yaxis_tickformat=",.0f",
+    )
     return fig
 
 
@@ -200,13 +257,14 @@ def fig_ricavi_tipo_pasto(df: pd.DataFrame) -> go.Figure:
 
 def fig_pasti_mensili(df: pd.DataFrame) -> go.Figure:
     agg = df.groupby(["periodo", "tipo_pasto"], as_index=False)["n_coperti"].sum()
-    return px.bar(
+    fig = px.bar(
         agg,
         x="periodo",
         y="n_coperti",
         color="tipo_pasto",
         title="Coperti mensili per tipo pasto",
     )
+    return _tick_mensili(fig)
 
 
 # --- helpers puri ----------------------------------------------------------
@@ -294,6 +352,34 @@ def render_kpi(anno: int) -> None:
     col1, col2 = st.columns(2)
     col1.plotly_chart(fig_ricavi_split(df), use_container_width=True)
     col2.plotly_chart(fig_coperti_mensili(df), use_container_width=True)
+
+
+def render_yoy(anno: int) -> None:
+    """Stagione a confronto con l'anno precedente: tabella mensile + bucket + mix."""
+    df = _kpi_yoy(anno)
+    if df.empty:
+        st.info(f"Nessun KPI mensile per il {anno}.")
+        return
+    st.caption(f"Confronto {anno} vs {anno - 1}, stesso mese.")
+    confronto = pd.DataFrame(
+        {
+            "mese": df["mese"],
+            "coperti": df["coperti_hotel"],
+            f"coperti {anno - 1}": df["coperti_hotel_prec"],
+            "ricavi F&B €": df["ricavi_fb_totale"].round(0),
+            f"ricavi {anno - 1} €": df["ricavi_fb_totale_prec"].round(0),
+            "costo merce €": df["costo_fb_totale"].round(0),
+            f"costo {anno - 1} €": df["costo_fb_totale_prec"].round(0),
+            "€/pasto": df["euro_per_pasto"].round(2),
+            f"€/pasto {anno - 1}": df["euro_per_pasto_prec"].round(2),
+        }
+    )
+    st.dataframe(confronto, hide_index=True, use_container_width=True)
+    st.plotly_chart(fig_food_cost_yoy(df), use_container_width=True)
+    st.plotly_chart(
+        fig_ricavi_tipo_pasto_yoy(_ricavi_tipo_pasto_yoy(anno)),
+        use_container_width=True,
+    )
 
 
 def render_dettaglio(anno: int) -> None:
@@ -390,12 +476,19 @@ def render() -> None:
         key="fb_includi_mensa",
         help="Default esclusa: è un costo senza ricavo, gonfia i coperti giornalieri.",
     )
-    tab_stagione, tab_kpi, tab_dettaglio = st.tabs(
-        ["🌊 Stagione in corso", "📊 KPI mensili", "🔍 Dettaglio mensile"]
+    tab_stagione, tab_kpi, tab_yoy, tab_dettaglio = st.tabs(
+        [
+            "🌊 Stagione in corso",
+            "📊 KPI mensili",
+            "📈 vs anno scorso",
+            "🔍 Dettaglio mensile",
+        ]
     )
     with tab_stagione:
         render_stagione(anno, oggi, includi_mensa)
     with tab_kpi:
         render_kpi(anno)
+    with tab_yoy:
+        render_yoy(anno)
     with tab_dettaglio:
         render_dettaglio(anno)

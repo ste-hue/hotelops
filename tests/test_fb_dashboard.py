@@ -237,6 +237,62 @@ class TestFigKpi:
         assert isinstance(fig, go.Figure)
         assert len(fig.data) == 2  # anno corrente + precedente
 
+    def test_assi_x_un_tick_per_mese(self):
+        # periodo è una DATE: con pochi punti Plotly mette tick automatici
+        # ogni ~28gg (etichette sfasate: barre apr/mag/giu lette come
+        # "Mar 26 / Apr 23 / May 21") -> ogni fig mensile forza dtick M1
+        for fig in [
+            fb_dashboard.fig_food_cost_mensile(_df_kpi()),
+            fb_dashboard.fig_ricavi_split(_df_kpi()),
+            fb_dashboard.fig_coperti_mensili(_df_kpi()),
+        ]:
+            assert fig.layout.xaxis.dtick == "M1"
+
+
+@pytest.mark.skipif(_FB_DASHBOARD_MISSING, reason="fb_dashboard not yet created")
+class TestYoY:
+    def _cur_prev(self):
+        cur = _df_kpi()
+        prev = _df_kpi().copy()
+        prev["coperti_hotel"] = [3271, 4461]
+        return cur, prev
+
+    def test_join_yoy_affianca_colonne_prec(self):
+        from verticals.condges import fb_data
+
+        out = fb_data.join_yoy(*self._cur_prev())
+        assert "ricavi_fb_totale" in out.columns  # somma dei 3 componenti
+        assert "coperti_hotel_prec" in out.columns
+        r = out[out["mese"] == 5].iloc[0]
+        assert r["coperti_hotel"] == 4377 and r["coperti_hotel_prec"] == 3271
+
+    def test_join_yoy_mese_senza_anno_prec(self):
+        from verticals.condges import fb_data
+
+        cur, prev = self._cur_prev()
+        prev = prev[prev["mese"] != 6]  # giugno assente nell'anno prec
+        out = fb_data.join_yoy(cur, prev)
+        assert pd.isna(out[out["mese"] == 6].iloc[0]["coperti_hotel_prec"])
+
+    def test_fig_food_cost_yoy(self):
+        from verticals.condges import fb_data
+
+        fig = fb_dashboard.fig_food_cost_yoy(fb_data.join_yoy(*self._cur_prev()))
+        assert isinstance(fig, go.Figure)
+        assert len(fig.data) == 6  # 3 bucket × (anno, anno prec)
+
+    def test_fig_ricavi_tipo_pasto_yoy(self):
+        df = pd.DataFrame(
+            {
+                "tipo_pasto": ["COLAZIONE", "BAR"],
+                "ricavo": [46382.0, 22368.0],
+                "ricavo_prec": [41500.0, 15864.0],
+            }
+        )
+        fig = fb_dashboard.fig_ricavi_tipo_pasto_yoy(df)
+        assert isinstance(fig, go.Figure)
+        assert len(fig.data) == 2  # anno corrente + precedente
+
 
 @pytest.mark.skipif(_FB_DASHBOARD_MISSING, reason="fb_dashboard not yet created")
 class TestFigDettaglio:
@@ -271,3 +327,4 @@ class TestFigDettaglio:
         )
         fig = fb_dashboard.fig_pasti_mensili(df)
         assert isinstance(fig, go.Figure)
+        assert fig.layout.xaxis.dtick == "M1"  # tick allineati ai mesi
