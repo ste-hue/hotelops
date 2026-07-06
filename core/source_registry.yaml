@@ -499,6 +499,33 @@ sources:
       bucket: hotelops-raw
       path_template: "powerbi/occupazione/ORTI"
 
+  # ── Andamento Prenotazioni (on-the-books) — RAW_ONLY ─────────────────────
+  POWERBI_ANDAMENTOPRENOTAZIONI_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: ANDAMENTOPRENOTAZIONI
+    dataset_label: "Andamento Prenotazioni — portafoglio on-the-books per data soggiorno × tipologia (consumato + futuro)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_prenotazioni_otb
+    parser_module: ingest.flussi.ingest_andamento_prenotazioni
+    natural_key: [business_unit_id, data, tipologia]
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: andamento_prenotazioni
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/andamento_prenotazioni/ORTI"
+    notes: |
+      Fotografia del portafoglio prenotazioni (venduto + soggiorni futuri fino a
+      fine stagione) per data soggiorno × tipologia. Due varianti dello stesso
+      report: dimensione "Tipologia" (camera assegnata) o "Tipologia Venduta"
+      (camera pagata) — la variante è nel footer 'Applied filters' dentro il file.
+      ⚠️ La data dello snapshot NON è nel contenuto: fa fede la data di intake.
+      RAW_ONLY (hard gate): canonical_table/parser sono nomi TARGET futuri, non
+      esistono ancora. Flip a AUTO + parser quando si storicizza il booking pace.
+
   # ── RistoCube Orders Report — APPEND ─────────────────────────────────────
   RISTOCUBE_ORDERS_ORTI_APPEND:
     system: RISTOCUBE
