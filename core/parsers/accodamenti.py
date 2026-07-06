@@ -14,6 +14,7 @@ I file sono generati da HotelCube PMS e contengono record di tipo:
 from decimal import Decimal, InvalidOperation
 import logging
 import os
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -108,14 +109,22 @@ def _split_line(line: str) -> list[str]:
     return [f.strip() for f in line.split("|")]
 
 
+_STRUTTURA_RE = re.compile(
+    r"(?:^|_)([HRC])_(?:Movimenti|Corrispettivi|Fatture|Clienti)\.txt$",
+    re.IGNORECASE,
+)
+
+
 def _detect_struttura(filepath: str) -> str:
+    """Deduce la struttura dal filename (H_/R_/C_ + tipo record).
+
+    Il match è ancorato alla coda del nome così da riconoscere anche i file
+    temporanei della promotion (es. `hotelops_raw_xxxx_H_Movimenti.txt`).
+    """
     basename = os.path.basename(filepath)
-    if basename.startswith("H_"):
-        return "hotel"
-    elif basename.startswith("R_"):
-        return "residence"
-    elif basename.startswith("C_"):
-        return "cvm"
+    m = _STRUTTURA_RE.search(basename)
+    if m:
+        return {"H": "hotel", "R": "residence", "C": "cvm"}[m.group(1).upper()]
     logger.warning(
         "Prefisso filename sconosciuto (atteso H_/R_/C_): %s → struttura=unknown",
         basename,

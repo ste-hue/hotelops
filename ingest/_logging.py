@@ -12,18 +12,20 @@ def setup_logging(
 
     Args:
         logger_name: Name for the logger and log file prefix.
-        log_dir: Directory where log files are written.
+        log_dir: Directory where log files are written. If None (e.g.
+            promotion mode without --datahub), the file handler is skipped.
         verbose: If True, set DEBUG level; otherwise INFO.
     """
-    log_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
-    fh = logging.FileHandler(log_dir / f"{logger_name}_{ts}.log", encoding="utf-8")
-    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    if log_dir is not None:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        fh = logging.FileHandler(log_dir / f"{logger_name}_{ts}.log", encoding="utf-8")
+        fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        logger.addHandler(fh)
     ch = logging.StreamHandler()
     ch.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
     ch.setLevel(logging.DEBUG if verbose else logging.INFO)
-    logger.addHandler(fh)
     logger.addHandler(ch)
     return logger

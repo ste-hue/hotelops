@@ -170,3 +170,17 @@ def test_parse_movimenti_unknown_struttura_logs_warning(tmp_path, caplog):
     assert events[0]["struttura"] == "unknown"
     assert any("prefisso" in rec.message.lower() or "unknown" in rec.message.lower()
                for rec in caplog.records)
+
+
+def test_detect_struttura_promotion_tempfile_prefix(tmp_path):
+    """La promotion scarica il blob come `hotelops_raw_<rand>_H_Movimenti.txt`:
+    il prefisso BU non è più in testa al nome. La detection deve ancorarsi alla
+    coda del filename (regressione: righe finite tutte su HQ, 2026-07-06)."""
+    path = tmp_path / "hotelops_raw_v3_18897_H_Movimenti.txt"
+    path.write_text(
+        _gen_line(conto="199001", dare="100", progressivo=1) + "\n",
+        encoding="utf-8",
+    )
+    events = parse_movimenti(str(path))
+    assert len(events) == 1
+    assert events[0]["struttura"] == "hotel"
