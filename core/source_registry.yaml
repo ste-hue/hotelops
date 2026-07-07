@@ -526,6 +526,62 @@ sources:
       RAW_ONLY (hard gate): canonical_table/parser sono nomi TARGET futuri, non
       esistono ancora. Flip a AUTO + parser quando si storicizza il booking pace.
 
+  # ── Detailed Data Prenotations (on-the-books giornaliero) — RAW_ONLY ─────
+  POWERBI_DETTAGLIOPRENOTAZIONI_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: DETTAGLIOPRENOTAZIONI
+    dataset_label: "Detailed Data Prenotations — portafoglio on-the-books giornaliero per struttura (camere, pax, infant, ADR, ricavo camera/extra), multi-anno"
+    societa: ORTI
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_prenotazioni_dettaglio_otb
+    parser_module: ingest.flussi.ingest_dettaglio_prenotazioni
+    natural_key: [business_unit_id, data]
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: dettaglio_prenotazioni
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/dettaglio_prenotazioni/ORTI"
+    notes: |
+      Variante "dettaglio" dell'Andamento Prenotazioni: grana giorno per
+      struttura (senza tipologia), con pax/infant/ADR e ricavo spaccato
+      Appartamento vs Extra, Imponibile. Copre anche anni futuri (export
+      2026-07: prenotazioni fino a ottobre 2028). BU dal prefisso filename
+      (PANORAMA/ANGELINA/CVM; CodiceHotel CVM = HOMEHOLIDAY).
+      ⚠️ La data dello snapshot NON è nel contenuto: fa fede la data di intake.
+      RAW_ONLY (hard gate): canonical_table/parser sono nomi TARGET futuri.
+      Al flip, valutare snapshot_date nella natural key per il booking pace.
+
+  # ── Detailed Data for Bookings (giorno × tipologia venduta) — RAW_ONLY ───
+  POWERBI_BOOKINGSTIPOLOGIA_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: BOOKINGSTIPOLOGIA
+    dataset_label: "Detailed Data for Bookings — venduto giornaliero per tipologia venduta (camere, pax, infant, ADR, ricavo camera/extra)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_bookings_tipologia
+    parser_module: ingest.flussi.ingest_bookings_tipologia
+    natural_key: [business_unit_id, data, tipologia]
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: bookings_tipologia
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/bookings_tipologia/ORTI"
+    notes: |
+      Come DETTAGLIOPRENOTAZIONI ma con la dimensione "Tipologia Venduta"
+      (camera pagata): grana giorno × tipologia, pax/infant/ADR e ricavo
+      Appartamento vs Extra, Imponibile. Export 2026-07: consuntivo
+      maggio-giugno 2026. È la base delle "tariffe medie effettivamente
+      pagate per tipologia". Codici tipologia decodificati da d_pms_codici
+      (dominio ROOM_TYPE); BU dal prefisso filename.
+      ⚠️ La data dello snapshot NON è nel contenuto: fa fede la data di intake.
+      RAW_ONLY (hard gate): canonical_table/parser sono nomi TARGET futuri.
+
   # ── RistoCube Orders Report — APPEND ─────────────────────────────────────
   RISTOCUBE_ORDERS_ORTI_APPEND:
     system: RISTOCUBE
