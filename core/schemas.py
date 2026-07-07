@@ -548,6 +548,76 @@ class MappingPianoFinanziarioRow(BaseModel):
         return v
 
 
+# ── d_camere ─────────────────────────────────────────────────────────────────
+
+
+class CameraRow(BaseModel):
+    """Schema for d_camere — physical room inventory (Hotel Panorama).
+
+    Static hand-curated dimension (source: sheet "Distribuzione camere",
+    86 rooms). Denominator for occupancy/booking pace once f_prenotazioni_otb
+    lands. Pattern: WRITE_TRUNCATE (full reload from CSV).
+    """
+
+    room_id: str
+    piano: int
+    cod_camera: Optional[str] = None
+    tipologia: str
+    occupazione: Optional[str] = None
+    pax_max: Optional[int] = Field(default=None, ge=1, le=6)
+    vista: Optional[str] = None
+    esposizione: Optional[str] = None
+    affaccio: Optional[str] = None
+    doccia_vasca: Optional[str] = None
+    letto_principale: Optional[str] = None
+    letto_secondario: Optional[str] = None
+    bagno_fa: Optional[Literal["F", "A"]] = None
+    comunicante_con: Optional[str] = None
+    note: Optional[str] = None
+    business_unit_id: BusinessUnitId
+    societa_id: SocietaId
+
+    @field_validator("room_id", "tipologia")
+    @classmethod
+    def not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("campo vuoto")
+        return v
+
+
+# ── d_pms_codici ─────────────────────────────────────────────────────────────
+
+DominioPmsCodice = Literal[
+    "TRATTAMENTO",
+    "CANALE",
+    "NAZIONE",
+    "SEGMENTO",
+    "TIPO_DITTA",
+    "ROOM_TYPE",
+    "CLASSE_TARIFFA",
+]
+
+
+class PmsCodiceRow(BaseModel):
+    """Schema for d_pms_codici — code→description lookups from HotelCube/Power BI.
+
+    One table, 7 domains (legende prenotazioni: trattamenti, canali, nazioni,
+    segmenti, tipi ditta, room types, classi tariffe). Static hand-curated
+    dimension. Pattern: WRITE_TRUNCATE (full reload from CSV).
+    """
+
+    dominio: DominioPmsCodice
+    codice: str
+    descrizione: str
+
+    @field_validator("codice")
+    @classmethod
+    def codice_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("codice vuoto")
+        return v
+
+
 # ── Validation helper ────────────────────────────────────────────────────────
 
 

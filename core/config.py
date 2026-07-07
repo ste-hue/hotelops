@@ -46,6 +46,8 @@ D_ANAGRAFICA_FORNITORI      = _t("d_anagrafica_fornitori")
 D_MAPPING_PIANO_FINANZIARIO = _t("d_mapping_piano_finanziario")
 D_COEFFICIENTI_STAGIONALITA = _t("d_coefficienti_stagionalita")
 D_PROGETTI                  = _t("d_progetti")
+D_CAMERE                    = _t("d_camere")
+D_PMS_CODICI                = _t("d_pms_codici")
 
 # Views
 V_PIANO_FINANZIARIO_MENSILE = _t("v_piano_finanziario_mensile")
