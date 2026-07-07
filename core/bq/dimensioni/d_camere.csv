@@ -3,7 +3,7 @@ H101,1,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Strada,Finestra,Doccia,Tw
 H102,1,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Strada,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H103,1,DSTA,Standard,Doppia,2,Vista Città,Lato Amalfi Strada,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H104,1,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Interna,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,F,,,HOTEL,ORTI
-H105,1,TCLP,Classic plus,Tripla,3,Vista Città,Lato Amalfi Interna,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
+H105,1,TCLP,Classic plus,Tripla,3,Vista Città,Lato Amalfi Interna,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,Vasca idromassaggio esterna (distingue la Classic plus),HOTEL,ORTI
 H106,1,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,F,H107,,HOTEL,ORTI
 H107,1,DSUP,Superior,Doppia,2,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,,A,H106,,HOTEL,ORTI
 H108,1,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,H109,,HOTEL,ORTI
@@ -42,7 +42,7 @@ H219,2,DCOM,Comfort,Doppia,2,Vista Mare Laterale,Lato Vietri Strada,Balcone,Docc
 H220,2,TCOM,Comfort,Tripla,3,Vista Mare Laterale,Lato Vietri Strada,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H221,2,TCOM,Comfort,Tripla,3,Vista Mare Laterale,Lato Vietri Strada,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H222,2,DSTA,Standard,Doppia,2,Vista Terrazzo,Lato Vietri Interna,Finestra,Doccia,Twin Reg 170x195,,A,,,HOTEL,ORTI
-H223,2,TCLP,Classic plus,Tripla,3,Vista Città,Lato Vietri Interna,Terrazzino,Doccia,Matrimoniale Reg,Sofa 60x180,F,,,HOTEL,ORTI
+H223,2,TCLP,Classic plus,Tripla,3,Vista Città,Lato Vietri Interna,Terrazzino,Doccia,Matrimoniale Reg,Sofa 60x180,F,,Vasca idromassaggio esterna (distingue la Classic plus),HOTEL,ORTI
 H301,3,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Strada,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H302,3,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Strada,Finestra,Doccia,Twin Reg 170x195,,A,,,HOTEL,ORTI
 H303,3,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Strada,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
