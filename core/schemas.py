@@ -618,6 +618,86 @@ class PmsCodiceRow(BaseModel):
         return v
 
 
+# ── f_pec_messages / f_pec_allegati ──────────────────────────────────────────
+
+SourceFolderPec = Literal["RECEIVED", "SENT"]
+TipoPec = Literal[
+    "POSTA_CERTIFICATA",
+    "ACCETTAZIONE",
+    "CONSEGNA",
+    "ANOMALIA",
+    "MESSAGGIO_INVIATO",
+    "ALTRO",
+]
+
+
+class PecMessageRow(BaseModel):
+    """Schema for f_pec_messages — una riga per busta PEC ricevuta o messaggio inviato.
+
+    Le ricevute (ACCETTAZIONE/CONSEGNA) sono righe autonome: fatti immutabili,
+    linkate al messaggio originale via ref_msgid. source_folder è il fatto
+    osservato (derivato dall'anatomia: busta ⇒ RECEIVED, raw ⇒ SENT); ogni
+    semantica derivata vive in v_pec_conversazioni. Fatti documentali, non
+    finanziari: I4 non applicabile. Lifecycle: APPEND, dedup su hash_riga=md5(msgid).
+    """
+
+    msgid: str
+    source_folder: SourceFolderPec
+    tipo: TipoPec
+    ref_msgid: Optional[str] = None
+    data_evento: datetime
+    data_certificata: bool
+    mittente: Optional[str] = None
+    destinatari: Optional[str] = None  # ";"-joined
+    n_destinatari: int = 0
+    subject: Optional[str] = None
+    body_text: Optional[str] = None
+    provider: Optional[str] = None  # dominio busta — solo RECEIVED
+    casella: str
+    societa_id: SocietaId
+    n_allegati: int = 0
+    ha_postacert: bool = False
+    parse_warning: Optional[str] = None
+    hash_riga: str
+    raw_object_id: str
+    data_caricamento: datetime
+
+    @field_validator("msgid", "casella", "hash_riga", "raw_object_id")
+    @classmethod
+    def pec_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("campo vuoto")
+        return v
+
+
+class PecAllegatoRow(BaseModel):
+    """Schema for f_pec_allegati — un allegato reale trasmesso in una PEC.
+
+    Esclusi gli artefatti di busta (daticert.xml, smime.p7s, postacert.eml).
+    Il binario vive su GCS content-addressed; gcs_uri è NULL solo se
+    l'estrazione è fallita (parse_warning sul messaggio). APPEND, dedup su
+    hash_riga=md5(msgid|sha256|nome_file).
+    """
+
+    msgid: str
+    nome_file: str
+    mime_type: Optional[str] = None
+    size_bytes: int = 0
+    sha256: str
+    is_firmato: bool = False
+    gcs_uri: Optional[str] = None
+    hash_riga: str
+    raw_object_id: str
+    data_caricamento: datetime
+
+    @field_validator("msgid", "nome_file", "sha256", "hash_riga", "raw_object_id")
+    @classmethod
+    def pec_all_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("campo vuoto")
+        return v
+
+
 # ── Validation helper ────────────────────────────────────────────────────────
 
 
