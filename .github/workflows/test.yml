@@ -14,7 +14,8 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -e ".[dev]"
+      # dashboard/drive/jobs: i test importano streamlit, apify_client, ecc.
+      - run: pip install -e ".[dev,dashboard,drive,jobs]"
       # I test marcati `bq` interrogano BigQuery live: il CI non ha (e non deve
       # avere) credenziali GCP, quindi restano esclusi qui e girano solo in locale.
       - run: pytest tests/ -q -m "not bq"
