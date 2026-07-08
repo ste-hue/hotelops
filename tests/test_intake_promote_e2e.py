@@ -16,6 +16,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+# Come test_intake: il mock non copre la factory del client GCP, senza ADC il
+# costruttore esplode. Marcato bq finché il mock non copre anche il client.
+pytestmark = pytest.mark.bq
+
 
 @pytest.fixture
 def fixture_file(tmp_path: Path) -> Path:

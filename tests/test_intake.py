@@ -6,6 +6,11 @@ import pytest
 
 from ingest.intake import IntakeResult, intake_file
 
+# Il path di intake costruisce comunque un client GCP reale (il monkeypatch non
+# copre la factory): senza ADC il costruttore esplode. Marcato bq finché il
+# mock non copre anche la creazione del client.
+pytestmark = pytest.mark.bq
+
 
 def _fixture_xlsx(tmp_path: Path) -> Path:
     f = tmp_path / "ESOLVER_BILANCINO_ORTI_apr.xls"
