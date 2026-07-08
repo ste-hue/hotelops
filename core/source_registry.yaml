@@ -582,6 +582,34 @@ sources:
       ⚠️ La data dello snapshot NON è nel contenuto: fa fede la data di intake.
       RAW_ONLY (hard gate): canonical_table/parser sono nomi TARGET futuri.
 
+  # ── PEC in.tur@pec.it — buste ricevute + inviate (export webmail mbox) ────
+  PEC_MAILBOX_INTUR_APPEND:
+    system: PEC
+    dataset: MAILBOX
+    dataset_label: "PEC in.tur@pec.it — buste ricevute + messaggi inviati (export webmail mbox)"
+    societa: INTUR
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_pec_messages
+    parser_module: ingest.flussi.ingest_pec_mbox
+    hash_basis: msgid
+    loop_targets: [pec_archive]
+    promotion_policy: AUTO
+    detector_category: pec_mbox
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "pec/mailbox/INTUR"
+    notes: |
+      Archeologia aziendale: export mbox della webmail PEC (received 2021→,
+      sent 2018→). Due forme distinte dal CONTENUTO (mai dal filename):
+      busta di trasporto (From=posta-certificata@..., daticert.xml autoritativo)
+      e messaggio inviato (From=casella, raw). Il parser scrive anche
+      f_pec_allegati e carica gli allegati reali su GCS content-addressed.
+      Dedup a 3 livelli: file (MD5 intake), messaggio (msgid certificato),
+      allegato (sha256). Spec: docs/superpowers/specs/2026-07-08-pec-mbox-*.md.
+      Nuove caselle (es. ORTI) = nuove entry con la stessa grammar.
+
   # ── RistoCube Orders Report — APPEND ─────────────────────────────────────
   RISTOCUBE_ORDERS_ORTI_APPEND:
     system: RISTOCUBE

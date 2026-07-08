@@ -66,3 +66,15 @@ def test_pec_allegato_row_valida():
         "data_caricamento": datetime(2026, 7, 8, 12, 0),
     }
     validate_batch([row], PecAllegatoRow, context="test")
+
+
+def test_registry_pec_mailbox_intur():
+    from core.lineage.source_resolver import load_registry
+
+    reg = load_registry()
+    s = reg.resolve("pec_mbox", "INTUR")
+    assert s.source_name == "PEC_MAILBOX_INTUR_APPEND"
+    assert s.canonical_table == "f_pec_messages"
+    assert s.parser_module == "ingest.flussi.ingest_pec_mbox"
+    assert s.promotion_policy == "AUTO"
+    assert s.loop_targets == ["pec_archive"]
