@@ -89,7 +89,7 @@ ricevute sono righe: fatti immutabili, è il punto legale della PEC):
 | campo | tipo | note |
 |---|---|---|
 | msgid | STRING REQ | chiave dedup (daticert o Message-ID) |
-| direzione | STRING REQ | RICEVUTA \| INVIATA |
+| source_folder | STRING REQ | RECEIVED \| SENT — cartella d'origine, derivata dall'anatomia del messaggio (busta ⇒ RECEIVED, raw con From=casella ⇒ SENT), non dal filename |
 | tipo | STRING REQ | POSTA_CERTIFICATA \| ACCETTAZIONE \| CONSEGNA \| ANOMALIA \| MESSAGGIO_INVIATO \| ALTRO |
 | ref_msgid | STRING | ricevute → msgid del messaggio originale (da daticert) |
 | data_evento | TIMESTAMP REQ | certificata (daticert) per buste; Date header per inviate |
@@ -99,7 +99,7 @@ ricevute sono righe: fatti immutabili, è il punto legale della PEC):
 | n_destinatari | INT | |
 | subject | STRING | del messaggio reale quando esiste (postacert), altrimenti della busta |
 | body_text | STRING | testo estratto (no HTML raw, no binari) |
-| provider | STRING | dominio busta (aruba, legalmail, …) — solo RICEVUTA |
+| provider | STRING | dominio busta (aruba, legalmail, …) — solo RECEIVED |
 | casella | STRING REQ | in.tur@pec.it |
 | societa_id | STRING REQ | INTUR (dal contenuto) |
 | n_allegati | INT | allegati reali (esclusi daticert/smime/postacert) |
@@ -130,9 +130,10 @@ Schemi Pydantic `PecMessageRow`/`PecAllegatoRow` + `validate_batch`; scrittura s
 via `bq_write_validated` (I1). Nessun LLM nel parser (I5): entità/temi/contenziosi
 = prompt successivo col pattern reviews.
 
-**`v_pec_conversazioni`** (vista, I8): per ogni messaggio (INVIATA o
-POSTA_CERTIFICATA) aggrega le ricevute via `ref_msgid` → stato del ciclo
-(accettata? consegnata? quando?). I consumer non re-implementano il join.
+**`v_pec_conversazioni`** (vista, I8): per ogni messaggio (tipo
+MESSAGGIO_INVIATO o POSTA_CERTIFICATA) aggrega le ricevute via `ref_msgid` →
+stato del ciclo (accettata? consegnata? quando?). I consumer non re-implementano
+il join. Ogni semantica derivata tipo "direzione" vive qui, non nei fatti.
 
 ### No silent skips — report di promotion
 
