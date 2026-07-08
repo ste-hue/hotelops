@@ -411,12 +411,22 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Ingest mbox PEC → f_pec_messages")
     ap.add_argument("--file", required=True, type=Path, help="export mbox PEC")
     ap.add_argument(
+        "--societa",
+        default=None,
+        help="passata dal promotion path; deve combaciare con la casella (INTUR)",
+    )
+    ap.add_argument(
         "--raw-object-id",
         default=None,
         help="FK a f_raw_objects (stampato su ogni riga — promotion path)",
     )
     ap.add_argument("--dry-run", action="store_true", help="parse senza scrivere")
     args = ap.parse_args()
+
+    if args.societa and args.societa != SOCIETA:
+        ap.error(
+            f"--societa {args.societa} non combacia con la casella {CASELLA} ({SOCIETA})"
+        )
 
     report = ingest_file(
         args.file, raw_object_id=args.raw_object_id, dry_run=args.dry_run

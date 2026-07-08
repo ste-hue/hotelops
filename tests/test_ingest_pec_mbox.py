@@ -557,3 +557,32 @@ def test_ingest_file_dry_run_su_mbox_sintetico(tmp_path, monkeypatch):
     assert report["righe_allegati"] == 2
     assert report["con_warning"] == 0
     assert report["per_tipo"] == {"CONSEGNA": 1}
+
+
+def test_main_accetta_societa_coerente(tmp_path, monkeypatch, capsys):
+    import mailbox
+    import sys
+
+    from ingest.flussi import ingest_pec_mbox as mod
+
+    mbox_path = tmp_path / "t.mbox"
+    mb = mailbox.mbox(str(mbox_path))
+    mb.add(_busta_con_postacert())
+    mb.flush()
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["prog", "--file", str(mbox_path), "--societa", "INTUR", "--dry-run"],
+    )
+    mod.main()  # non deve sollevare
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["prog", "--file", str(mbox_path), "--societa", "ORTI", "--dry-run"],
+    )
+    import pytest
+
+    with pytest.raises(SystemExit):
+        mod.main()
