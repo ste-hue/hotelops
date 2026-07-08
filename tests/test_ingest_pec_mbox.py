@@ -78,3 +78,68 @@ def test_registry_pec_mailbox_intur():
     assert s.parser_module == "ingest.flussi.ingest_pec_mbox"
     assert s.promotion_policy == "AUTO"
     assert s.loop_targets == ["pec_archive"]
+
+
+DATICERT_CONSEGNA = b"""<?xml version="1.0" encoding="UTF-8"?>
+<postacert tipo="avvenuta-consegna" errore="nessuno">
+  <intestazione>
+    <mittente>in.tur@pec.it</mittente>
+    <destinatari tipo="certificato">controparte@pec.it</destinatari>
+    <oggetto>Disdetta contratto</oggetto>
+  </intestazione>
+  <dati>
+    <gestore-emittente>Aruba PEC S.p.A.</gestore-emittente>
+    <data zona="+0200"><giorno>25/03/2024</giorno><ora>10:15:32</ora></data>
+    <identificativo>opec296.consegna.123@pec.aruba.it</identificativo>
+    <msgid>&lt;original.msgid.456@pec.it&gt;</msgid>
+    <ricevuta tipo="completa"/>
+    <consegna>controparte@pec.it</consegna>
+  </dati>
+</postacert>"""
+
+
+def test_parse_daticert_consegna():
+    from ingest.flussi.ingest_pec_mbox import parse_daticert
+
+    d = parse_daticert(DATICERT_CONSEGNA)
+    assert d["tipo_raw"] == "avvenuta-consegna"
+    assert d["msgid"] == "opec296.consegna.123@pec.aruba.it"
+    assert d["ref_msgid"] == "original.msgid.456@pec.it"  # senza <>
+    assert d["mittente"] == "in.tur@pec.it"
+    assert d["destinatari"] == ["controparte@pec.it"]
+    assert d["data_evento"].year == 2024 and d["data_evento"].month == 3
+
+
+def test_parse_daticert_malformato_ritorna_none():
+    from ingest.flussi.ingest_pec_mbox import parse_daticert
+
+    assert parse_daticert(b"not xml at all <<<") is None
+
+
+def test_is_busta():
+    import email.message
+
+    from ingest.flussi.ingest_pec_mbox import is_busta
+
+    busta = email.message.EmailMessage()
+    busta["From"] = "Per conto di X <posta-certificata@pec.aruba.it>"
+    inviata = email.message.EmailMessage()
+    inviata["From"] = "in.tur <in.tur@pec.it>"
+    assert is_busta(busta) is True
+    assert is_busta(inviata) is False
+
+
+def test_map_tipo():
+    from ingest.flussi.ingest_pec_mbox import map_tipo
+
+    assert map_tipo("posta-certificata", "x", True) == "POSTA_CERTIFICATA"
+    assert map_tipo("accettazione", "x", True) == "ACCETTAZIONE"
+    assert map_tipo("avvenuta-consegna", "x", True) == "CONSEGNA"
+    assert map_tipo("errore-consegna", "x", True) == "ANOMALIA"
+    # fallback dal subject quando daticert manca
+    assert map_tipo(None, "CONSEGNA: Disdetta", True) == "CONSEGNA"
+    assert map_tipo(None, "ACCETTAZIONE: Disdetta", True) == "ACCETTAZIONE"
+    assert map_tipo(None, "POSTA CERTIFICATA: Diffida", True) == "POSTA_CERTIFICATA"
+    assert map_tipo(None, "qualunque", True) == "ALTRO"
+    # inviata: sempre MESSAGGIO_INVIATO
+    assert map_tipo(None, "qualunque", False) == "MESSAGGIO_INVIATO"
