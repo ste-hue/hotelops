@@ -171,6 +171,23 @@ def iter_allegati_reali(msg: email.message.Message) -> list[tuple[str, bytes, st
 SOURCE_NAME = "PEC_MAILBOX_INTUR_APPEND"
 
 
+def _safe_object_name(nome: str, max_len: int = 180) -> str:
+    """Componente path GCS sicuro: via i control char, cap sulla lunghezza.
+
+    Il nome ORIGINALE resta fedele nella riga f_pec_allegati; qui si sanitizza
+    solo il segmento dell'object name (l'unicità la dà già lo sha256 nel path).
+    """
+    safe = "".join("_" if (ord(c) < 32 or 0x7F <= ord(c) <= 0x9F) else c for c in nome)
+    safe = safe.strip() or "allegato"
+    if len(safe) > max_len:
+        stem, dot, ext = safe.rpartition(".")
+        if dot and len(ext) <= 10:
+            safe = stem[: max_len - len(ext) - 1] + "." + ext
+        else:
+            safe = safe[:max_len]
+    return safe
+
+
 class AllegatiStore:
     """Binari allegati su GCS, indirizzati per contenuto.
 
@@ -197,7 +214,7 @@ class AllegatiStore:
 
     def store(self, nome: str, content: bytes) -> tuple[str, str]:
         sha = hashlib.sha256(content).hexdigest()
-        path = f"{SOURCE_NAME}/allegati/{sha[:2]}/{sha}/{nome}"
+        path = f"{SOURCE_NAME}/allegati/{sha[:2]}/{sha}/{_safe_object_name(nome)}"
         uri = f"gs://{self.bucket_name}/{path}"
         if self.dry_run:
             return sha, uri

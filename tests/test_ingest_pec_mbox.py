@@ -586,3 +586,23 @@ def test_main_accetta_societa_coerente(tmp_path, monkeypatch, capsys):
 
     with pytest.raises(SystemExit):
         mod.main()
+
+
+def test_safe_object_name():
+    from ingest.flussi.ingest_pec_mbox import _safe_object_name
+
+    assert _safe_object_name("Documento\r\n finale.pdf") == "Documento__ finale.pdf"
+    assert _safe_object_name("ok.pdf") == "ok.pdf"
+    lungo = "a" * 300 + ".pdf"
+    out = _safe_object_name(lungo)
+    assert len(out) <= 180 and out.endswith(".pdf")
+
+
+def test_allegati_store_sanitizza_object_name():
+    from ingest.flussi.ingest_pec_mbox import AllegatiStore
+
+    client = _FakeGcsClient()
+    s = AllegatiStore(dry_run=False, client=client)
+    _, uri = s.store("Documento\r\n finale.pdf", b"contenuto")
+    assert "\r" not in uri and "\n" not in uri
+    assert all("\r" not in k and "\n" not in k for k in client.store)
