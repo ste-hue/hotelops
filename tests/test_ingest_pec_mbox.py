@@ -310,3 +310,77 @@ def test_allegati_store_dry_run_non_tocca_rete():
     s = AllegatiStore(dry_run=True, client=None)  # client None: se lo tocca, esplode
     sha, uri = s.store("x.pdf", b"abc")
     assert uri.startswith("gs://")
+
+
+def _extract(msg):
+    from datetime import datetime
+
+    from ingest.flussi.ingest_pec_mbox import AllegatiStore, extract_message
+
+    return extract_message(
+        msg,
+        raw_object_id="raw-001",
+        store=AllegatiStore(dry_run=True),
+        now=datetime(2026, 7, 8, 12, 0),
+    )
+
+
+def test_extract_busta_completa():
+    riga, allegati = _extract(_busta_con_postacert())
+    assert riga["source_folder"] == "RECEIVED"
+    assert riga["tipo"] == "CONSEGNA"  # dal daticert (autoritativo), non dal subject
+    assert riga["msgid"] == "opec296.consegna.123@pec.aruba.it"
+    assert riga["ref_msgid"] == "original.msgid.456@pec.it"
+    assert riga["mittente"] == "in.tur@pec.it"  # dal daticert, non dalla busta
+    assert riga["data_certificata"] is True
+    assert riga["provider"] == "pec.aruba.it"
+    assert riga["ha_postacert"] is True
+    assert riga["subject"] == "Diffida"  # del messaggio reale
+    assert riga["n_allegati"] == 2
+    assert riga["parse_warning"] is None
+    assert len(allegati) == 2
+    assert allegati[1]["is_firmato"] is True  # .p7m
+    assert allegati[0]["gcs_uri"].startswith("gs://")
+
+
+def test_extract_inviata():
+    import email.message
+
+    inviata = email.message.EmailMessage()
+    inviata["From"] = "in.tur@pec.it"
+    inviata["To"] = "a@pec.it, b@pec.it"
+    inviata["Subject"] = "Disdetta"
+    inviata["Message-ID"] = "<sent.789@pec.it>"
+    inviata["Date"] = "Mon, 25 Mar 2024 10:00:00 +0100"
+    inviata.set_content("testo disdetta")
+
+    riga, allegati = _extract(inviata)
+    assert riga["source_folder"] == "SENT"
+    assert riga["tipo"] == "MESSAGGIO_INVIATO"
+    assert riga["msgid"] == "sent.789@pec.it"
+    assert riga["data_certificata"] is False  # Date header, non daticert
+    assert riga["n_destinatari"] == 2
+    assert riga["provider"] is None
+    assert allegati == []
+
+
+def test_extract_busta_senza_daticert_ha_warning_e_msgid_sintetico():
+    import email.message
+
+    busta = email.message.EmailMessage()
+    busta["From"] = "posta-certificata@pec.aruba.it"
+    busta["Subject"] = "ACCETTAZIONE: Disdetta"
+    busta["Date"] = "Mon, 25 Mar 2024 10:00:00 +0100"
+    busta.set_content("ricevuta di accettazione")
+
+    riga, _ = _extract(busta)
+    assert riga["tipo"] == "ACCETTAZIONE"  # fallback dal subject
+    assert riga["parse_warning"] is not None
+    assert riga["msgid"]  # sintetico ma presente (sha256 del raw)
+    assert riga["data_certificata"] is False
+
+
+def test_extract_idempotente_hash_stabile():
+    r1, _ = _extract(_busta_con_postacert())
+    r2, _ = _extract(_busta_con_postacert())
+    assert r1["hash_riga"] == r2["hash_riga"]

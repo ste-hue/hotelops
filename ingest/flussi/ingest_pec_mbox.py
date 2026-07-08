@@ -25,6 +25,8 @@ import logging
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
+from core.schemas import make_hash
+
 log = logging.getLogger("ingest.pec_mbox")
 
 CASELLA = "in.tur@pec.it"
@@ -196,3 +198,111 @@ class AllegatiStore:
             blob.upload_from_string(content, content_type="application/octet-stream")
             self.n_uploaded += 1
         return sha, uri
+
+
+def _msgid_sintetico(msg: email.message.Message) -> str:
+    return "synthetic-" + hashlib.sha256(bytes(msg)).hexdigest()[:32]
+
+
+def extract_message(
+    msg: email.message.Message,
+    raw_object_id: str,
+    store: AllegatiStore,
+    now: datetime,
+) -> tuple[dict, list[dict]]:
+    """Una busta/inviata → (riga f_pec_messages, righe f_pec_allegati)."""
+    busta = is_busta(msg)
+    warning = None
+
+    daticert = None
+    if busta:
+        for part in msg.walk():
+            if (part.get_filename() or "").lower() == "daticert.xml":
+                daticert = parse_daticert(part.get_payload(decode=True) or b"")
+                break
+        if daticert is None:
+            warning = "daticert assente o malformato: fallback su header busta"
+
+    inner, ha_postacert = inner_message(msg) if busta else (msg, False)
+
+    # msgid: daticert (certificato) > Message-ID header > sintetico
+    header_msgid = (str(msg.get("Message-ID", "")) or "").strip().strip("<>")
+    if daticert and daticert.get("msgid"):
+        msgid = daticert["msgid"]
+    elif header_msgid:
+        msgid = header_msgid
+    else:
+        msgid = _msgid_sintetico(msg)
+        warning = (warning or "") + " msgid sintetico da sha256"
+
+    # data: daticert (certificata) > Date header
+    data_evento, certificata = None, False
+    if daticert and daticert.get("data_evento"):
+        data_evento, certificata = daticert["data_evento"], True
+    else:
+        try:
+            data_evento = email.utils.parsedate_to_datetime(str(msg.get("Date")))
+        except (TypeError, ValueError):
+            warning = (warning or "") + " data non parsabile"
+    if data_evento is not None and data_evento.tzinfo is not None:
+        data_evento = data_evento.astimezone(tz=None).replace(tzinfo=None)
+
+    if daticert and daticert.get("mittente"):
+        mittente = daticert["mittente"]
+        destinatari = daticert.get("destinatari") or []
+    else:
+        mittente = email.utils.parseaddr(str(inner.get("From", "")))[1] or None
+        destinatari = [
+            a for _, a in email.utils.getaddresses([str(inner.get("To", ""))]) if a
+        ]
+
+    provider = None
+    if busta:
+        fr_busta = email.utils.parseaddr(str(msg.get("From", "")))[1]
+        provider = fr_busta.split("@", 1)[1] if "@" in fr_busta else None
+
+    subject_inner = str(inner.get("Subject", "")) or str(msg.get("Subject", ""))
+
+    allegati_rows: list[dict] = []
+    for nome, content, mime in iter_allegati_reali(inner):
+        sha, uri = store.store(nome, content)
+        allegati_rows.append(
+            {
+                "msgid": msgid,
+                "nome_file": nome,
+                "mime_type": mime,
+                "size_bytes": len(content),
+                "sha256": sha,
+                "is_firmato": nome.lower().endswith((".p7m", ".p7s")),
+                "gcs_uri": uri,
+                "hash_riga": make_hash(msgid, sha, nome),
+                "raw_object_id": raw_object_id,
+                "data_caricamento": now,
+            }
+        )
+
+    riga = {
+        "msgid": msgid,
+        "source_folder": "RECEIVED" if busta else "SENT",
+        "tipo": map_tipo(
+            daticert.get("tipo_raw") if daticert else None, subject_inner, busta
+        ),
+        "ref_msgid": daticert.get("ref_msgid") if daticert else None,
+        "data_evento": data_evento or now,
+        "data_certificata": certificata,
+        "mittente": mittente,
+        "destinatari": ";".join(destinatari) or None,
+        "n_destinatari": len(destinatari),
+        "subject": subject_inner or None,
+        "body_text": estrai_body_text(inner),
+        "provider": provider,
+        "casella": CASELLA,
+        "societa_id": SOCIETA,
+        "n_allegati": len(allegati_rows),
+        "ha_postacert": ha_postacert,
+        "parse_warning": warning.strip() if warning else None,
+        "hash_riga": make_hash(msgid),
+        "raw_object_id": raw_object_id,
+        "data_caricamento": now,
+    }
+    return riga, allegati_rows
