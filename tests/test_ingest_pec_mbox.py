@@ -156,7 +156,7 @@ def _busta_con_postacert() -> "email.message.Message":
         b"From: Per conto di: avvocato <posta-certificata@pec.aruba.it>\r\n"
         b"To: in.tur@pec.it\r\n"
         b"Subject: POSTA CERTIFICATA: Diffida\r\n"
-        b"Message-ID: <opec296.consegna.123@pec.aruba.it>\r\n"
+        b"Message-ID: <busta.consegna.001@pec.aruba.it>\r\n"
         b"MIME-Version: 1.0\r\n"
         b'Content-Type: multipart/mixed; boundary="BB"\r\n'
         b"\r\n"
@@ -263,6 +263,56 @@ def test_inner_message_rfc822_letterale_payload_lista():
     assert inner["Subject"] == "Diffida"
 
 
+def test_inner_message_rfc822_base64_payload_bytes():
+    """Alcuni provider incapsulano postacert.eml come application/octet-stream
+    base64 (non message/rfc822 letterale): get_payload(decode=True) ritorna
+    bytes (non None) → ramo else di inner_message."""
+    import base64
+    import email as email_pkg
+
+    from ingest.flussi.ingest_pec_mbox import inner_message
+
+    inner_raw = (
+        b"From: avvocato@pec.studiolegale.it\r\n"
+        b"To: in.tur@pec.it\r\n"
+        b"Subject: Diffida base64\r\n"
+        b"MIME-Version: 1.0\r\n"
+        b"Content-Type: text/plain\r\n"
+        b"\r\n"
+        b"Testo della diffida.\r\n"
+    )
+    encoded = base64.b64encode(inner_raw)
+    encoded_lines = b"\r\n".join(
+        encoded[i : i + 76] for i in range(0, len(encoded), 76)
+    )
+
+    raw = (
+        b"From: posta-certificata@pec.aruba.it\r\n"
+        b"To: in.tur@pec.it\r\n"
+        b"Subject: POSTA CERTIFICATA: Diffida base64\r\n"
+        b"MIME-Version: 1.0\r\n"
+        b'Content-Type: multipart/mixed; boundary="BB"\r\n'
+        b"\r\n"
+        b"--BB\r\n"
+        b"Content-Type: text/plain\r\n"
+        b"\r\n"
+        b"corpo busta\r\n"
+        b"--BB\r\n"
+        b'Content-Type: application/octet-stream; name="postacert.eml"\r\n'
+        b'Content-Disposition: attachment; filename="postacert.eml"\r\n'
+        b"Content-Transfer-Encoding: base64\r\n"
+        b"\r\n" + encoded_lines + b"\r\n"
+        b"--BB--\r\n"
+    )
+    busta = email_pkg.message_from_bytes(raw)
+    part = [p for p in busta.walk() if (p.get_filename() or "") == "postacert.eml"][0]
+    assert part.get_payload(decode=True) is not None  # precondizione: ramo bytes
+
+    inner, ha_postacert = inner_message(busta)
+    assert ha_postacert is True
+    assert inner["Subject"] == "Diffida base64"
+
+
 def test_iter_allegati_reali_esclude_artefatti():
     from ingest.flussi.ingest_pec_mbox import inner_message, iter_allegati_reali
 
@@ -351,7 +401,7 @@ def test_extract_busta_completa():
     riga, allegati = _extract(_busta_con_postacert())
     assert riga["source_folder"] == "RECEIVED"
     assert riga["tipo"] == "CONSEGNA"  # dal daticert (autoritativo), non dal subject
-    assert riga["msgid"] == "opec296.consegna.123@pec.aruba.it"
+    assert riga["msgid"] == "busta.consegna.001@pec.aruba.it"  # envelope Message-ID
     assert riga["ref_msgid"] == "original.msgid.456@pec.it"
     assert riga["mittente"] == "in.tur@pec.it"  # dal daticert, non dalla busta
     assert riga["data_certificata"] is True
@@ -400,6 +450,76 @@ def test_extract_busta_senza_daticert_ha_warning_e_msgid_sintetico():
     assert riga["parse_warning"] is not None
     assert riga["msgid"]  # sintetico ma presente (sha256 del raw)
     assert riga["data_certificata"] is False
+
+
+def _busta_ricevuta_con_daticert(daticert_bytes: bytes, message_id: str, subject: str):
+    """Busta minima con daticert.xml, senza postacert.eml — per test sulla
+    priorità del msgid (envelope Message-ID vs daticert identificativo)."""
+    import email as email_pkg
+
+    raw = (
+        b"From: Per conto di: avvocato <posta-certificata@pec.aruba.it>\r\n"
+        b"To: in.tur@pec.it\r\n"
+        b"Subject: " + subject.encode() + b"\r\n"
+    )
+    if message_id:
+        raw += b"Message-ID: <" + message_id.encode() + b">\r\n"
+    raw += (
+        b"MIME-Version: 1.0\r\n"
+        b'Content-Type: multipart/mixed; boundary="BB"\r\n'
+        b"\r\n"
+        b"--BB\r\n"
+        b"Content-Type: text/plain\r\n"
+        b"\r\n"
+        b"Ricevuta.\r\n"
+        b"--BB\r\n"
+        b'Content-Type: application/xml; name="daticert.xml"\r\n'
+        b'Content-Disposition: attachment; filename="daticert.xml"\r\n'
+        b"\r\n"
+    )
+    raw += daticert_bytes
+    raw += b"\r\n--BB--\r\n"
+    return email_pkg.message_from_bytes(raw)
+
+
+def test_extract_busta_senza_message_id_usa_identificativo_tipo():
+    """Senza envelope Message-ID, il fallback è l'identificativo daticert
+    COMPOSTO col tipo (l'identificativo da solo è l'id della catena, non
+    dell'evento)."""
+    busta = _busta_ricevuta_con_daticert(
+        DATICERT_CONSEGNA, message_id=None, subject="AVVENUTA CONSEGNA: Diffida"
+    )
+    riga, _ = _extract(busta)
+    assert riga["msgid"] == "opec296.consegna.123@pec.aruba.it#CONSEGNA"
+
+
+def test_extract_catena_ricevute_eventi_distinti():
+    """Il daticert `identificativo` è lo stesso per l'intera catena di ricevute
+    (ACCETTAZIONE + CONSEGNA); l'envelope Message-ID (per-evento) deve produrre
+    msgid e hash_riga distinti — altrimenti 2 fatti legali collassano in 1."""
+    daticert_accettazione = DATICERT_CONSEGNA.replace(
+        b'tipo="avvenuta-consegna"', b'tipo="accettazione"'
+    )
+
+    riga_consegna, _ = _extract(
+        _busta_ricevuta_con_daticert(
+            DATICERT_CONSEGNA,
+            message_id="busta.consegna.001@pec.aruba.it",
+            subject="AVVENUTA CONSEGNA: Diffida",
+        )
+    )
+    riga_accettazione, _ = _extract(
+        _busta_ricevuta_con_daticert(
+            daticert_accettazione,
+            message_id="busta.accettazione.002@pec.aruba.it",
+            subject="ACCETTAZIONE: Diffida",
+        )
+    )
+
+    assert riga_consegna["tipo"] == "CONSEGNA"
+    assert riga_accettazione["tipo"] == "ACCETTAZIONE"
+    assert riga_consegna["msgid"] != riga_accettazione["msgid"]
+    assert riga_consegna["hash_riga"] != riga_accettazione["hash_riga"]
 
 
 def test_extract_idempotente_hash_stabile():

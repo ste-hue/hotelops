@@ -74,10 +74,17 @@ le buste, From per le inviate); mismatch col registry ⇒ errore, non silenzio.
 
 Tre livelli, tutti idempotenti:
 1. **File**: l'intake scarta i file byte-identici (MD5 content-hash — già esiste).
-2. **Messaggio**: chiave = `msgid` da `daticert.xml` (buste) o `Message-ID` header
-   (inviate); fallback sha256 del raw message. `filter_new_rows_by_hash` su
-   `hash_riga = sha256(msgid)`. Due export sovrapposti convergono senza doppioni;
+2. **Messaggio**: chiave = **envelope `Message-ID` header** del messaggio mbox
+   (per-evento, stabile tra re-export), sia per buste che per inviate; fallback
+   sha256 del raw message. `filter_new_rows_by_hash` su `hash_riga =
+   sha256(msgid)`. Due export sovrapposti convergono senza doppioni;
    ri-promuovere lo stesso file produce 0 righe nuove.
+   ⚠️ Il daticert `<identificativo>` NON è la chiave: è l'id della **catena**
+   di ricevute (stesso valore per POSTA_CERTIFICATA + ACCETTAZIONE + CONSEGNA
+   di una stessa PEC) — verificato sul corpus Aruba 2026-07-08 (usarlo da solo
+   collassava 3 fatti legali distinti in 1, 18/80 righe perse nello smoke).
+   Quando l'envelope Message-ID manca, il fallback è l'identificativo
+   **composto col tipo** (`identificativo#TIPO`) per disambiguare la catena.
 3. **Allegato**: binari su GCS indirizzati per sha256 → lo stesso PDF trasmesso
    5 volte è un solo oggetto (le righe f_pec_allegati restano una per trasmissione).
 
@@ -88,7 +95,7 @@ ricevute sono righe: fatti immutabili, è il punto legale della PEC):
 
 | campo | tipo | note |
 |---|---|---|
-| msgid | STRING REQ | chiave dedup (daticert o Message-ID) |
+| msgid | STRING REQ | chiave dedup: envelope Message-ID (per-evento) > daticert identificativo+tipo (fallback, l'identificativo da solo è l'id della catena di ricevute) > sintetico |
 | source_folder | STRING REQ | RECEIVED \| SENT — cartella d'origine, derivata dall'anatomia del messaggio (busta ⇒ RECEIVED, raw con From=casella ⇒ SENT), non dal filename |
 | tipo | STRING REQ | POSTA_CERTIFICATA \| ACCETTAZIONE \| CONSEGNA \| ANOMALIA \| MESSAGGIO_INVIATO \| ALTRO |
 | ref_msgid | STRING | ricevute → msgid del messaggio originale (da daticert) |

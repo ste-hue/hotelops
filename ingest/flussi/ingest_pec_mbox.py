@@ -234,13 +234,21 @@ def extract_message(
             warning = "daticert assente o malformato: fallback su header busta"
 
     inner, ha_postacert = inner_message(msg) if busta else (msg, False)
+    subject_inner = str(inner.get("Subject", "")) or str(msg.get("Subject", ""))
+    tipo = map_tipo(
+        daticert.get("tipo_raw") if daticert else None, subject_inner, busta
+    )
 
-    # msgid: daticert (certificato) > Message-ID header > sintetico
+    # msgid: il daticert `identificativo` è l'id della CATENA di ricevute (lo
+    # stesso per POSTA_CERTIFICATA + ACCETTAZIONE + CONSEGNA), non dell'evento
+    # — verificato sul corpus Aruba 2026-07-08 (18/80 righe collassate).
+    # Priorità: envelope Message-ID header (per-evento, stabile tra re-export)
+    # > daticert identificativo composto col tipo (disambigua la catena) > sintetico.
     header_msgid = (str(msg.get("Message-ID", "")) or "").strip().strip("<>")
-    if daticert and daticert.get("msgid"):
-        msgid = daticert["msgid"]
-    elif header_msgid:
+    if header_msgid:
         msgid = header_msgid
+    elif daticert and daticert.get("msgid"):
+        msgid = f"{daticert['msgid']}#{tipo}"
     else:
         msgid = _msgid_sintetico(msg)
         warning = (warning or "") + " msgid sintetico da sha256"
@@ -271,8 +279,6 @@ def extract_message(
         fr_busta = email.utils.parseaddr(str(msg.get("From", "")))[1]
         provider = fr_busta.split("@", 1)[1] if "@" in fr_busta else None
 
-    subject_inner = str(inner.get("Subject", "")) or str(msg.get("Subject", ""))
-
     allegati_rows: list[dict] = []
     for nome, content, mime in iter_allegati_reali(inner):
         sha, uri = store.store(nome, content)
@@ -294,9 +300,7 @@ def extract_message(
     riga = {
         "msgid": msgid,
         "source_folder": "RECEIVED" if busta else "SENT",
-        "tipo": map_tipo(
-            daticert.get("tipo_raw") if daticert else None, subject_inner, busta
-        ),
+        "tipo": tipo,
         "ref_msgid": daticert.get("ref_msgid") if daticert else None,
         "data_evento": data_evento or now,
         "data_certificata": certificata,
@@ -333,9 +337,13 @@ def ingest_file(
     path: Path, raw_object_id: str | None = None, dry_run: bool = False
 ) -> dict:
     """Un mbox → righe nuove in f_pec_messages/f_pec_allegati + report."""
+    if not dry_run and not raw_object_id:
+        raise ValueError(
+            "raw_object_id obbligatorio in write mode (I9): usa --raw-object-id o --dry-run"
+        )
     store = AllegatiStore(dry_run=dry_run)
     now = datetime.now()
-    ro_id = raw_object_id or ("dry-run" if dry_run else "unknown")
+    ro_id = raw_object_id or "dry-run"
 
     righe: dict[str, dict] = {}  # msgid → riga (dedup in-file)
     allegati: dict[str, list[dict]] = {}  # msgid → righe allegato
