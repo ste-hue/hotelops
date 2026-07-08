@@ -18,14 +18,24 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import email.message
 import email.utils
 import hashlib
 import logging
+import mailbox
 import xml.etree.ElementTree as ET
+from collections import Counter
 from datetime import datetime
+from pathlib import Path
 
-from core.schemas import make_hash
+from core.config import F_PEC_ALLEGATI, F_PEC_MESSAGES
+from core.schemas import (
+    PecAllegatoRow,
+    PecMessageRow,
+    make_hash,
+    validate_batch,
+)
 
 log = logging.getLogger("ingest.pec_mbox")
 
@@ -306,3 +316,110 @@ def extract_message(
         "data_caricamento": now,
     }
     return riga, allegati_rows
+
+
+def coverage_gaps(dates: list, min_gap_days: int = 14) -> list[tuple]:
+    """Vuoti > min_gap_days nella serie date (per il report no-silent-skips)."""
+    out = []
+    ordered = sorted(set(dates))
+    for prev, cur in zip(ordered, ordered[1:]):
+        gap = (cur - prev).days
+        if gap > min_gap_days:
+            out.append((prev, cur, gap))
+    return out
+
+
+def ingest_file(
+    path: Path, raw_object_id: str | None = None, dry_run: bool = False
+) -> dict:
+    """Un mbox → righe nuove in f_pec_messages/f_pec_allegati + report."""
+    store = AllegatiStore(dry_run=dry_run)
+    now = datetime.now()
+    ro_id = raw_object_id or ("dry-run" if dry_run else "unknown")
+
+    righe: dict[str, dict] = {}  # msgid → riga (dedup in-file)
+    allegati: dict[str, list[dict]] = {}  # msgid → righe allegato
+    letti = dedup_in_file = 0
+
+    for msg in mailbox.mbox(str(path)):
+        letti += 1
+        riga, alls = extract_message(msg, ro_id, store, now)
+        if riga["msgid"] in righe:
+            dedup_in_file += 1
+            continue
+        righe[riga["msgid"]] = riga
+        allegati[riga["msgid"]] = alls
+
+    msg_rows = list(righe.values())
+    all_rows = [a for alls in allegati.values() for a in alls]
+
+    validate_batch(msg_rows, PecMessageRow, context="f_pec_messages")
+    validate_batch(all_rows, PecAllegatoRow, context="f_pec_allegati")
+
+    dedup_bq = 0
+    if not dry_run:
+        from core.bq.dedup import filter_new_rows_by_hash
+        from core.bq.write import bq_write_validated
+
+        nuove = filter_new_rows_by_hash(F_PEC_MESSAGES, msg_rows, "hash_riga")
+        dedup_bq = len(msg_rows) - len(nuove)
+        nuovi_msgid = {r["msgid"] for r in nuove}
+        nuove_all = [a for a in all_rows if a["msgid"] in nuovi_msgid]
+
+        if nuove:
+            bq_write_validated(
+                F_PEC_MESSAGES, [PecMessageRow(**r) for r in nuove], mode="append"
+            )
+        if nuove_all:
+            bq_write_validated(
+                F_PEC_ALLEGATI, [PecAllegatoRow(**a) for a in nuove_all], mode="append"
+            )
+        msg_rows, all_rows = nuove, nuove_all
+
+    report = {
+        "file": path.name,
+        "messaggi_letti": letti,
+        "dedup_in_file": dedup_in_file,
+        "dedup_bq": dedup_bq,
+        "righe_messaggi": len(msg_rows),
+        "righe_allegati": len(all_rows),
+        "con_warning": sum(1 for r in msg_rows if r["parse_warning"]),
+        "senza_postacert": sum(1 for r in msg_rows if not r["ha_postacert"]),
+        "per_tipo": dict(Counter(r["tipo"] for r in msg_rows)),
+        "coverage_gaps": [
+            (str(a), str(b), g)
+            for a, b, g in coverage_gaps([r["data_evento"].date() for r in msg_rows])
+        ],
+        "allegati_caricati": store.n_uploaded,
+        "allegati_riusati": store.n_riusati,
+    }
+    for k, v in report.items():
+        log.info("  %s: %s", k, v)
+    return report
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    ap = argparse.ArgumentParser(description="Ingest mbox PEC → f_pec_messages")
+    ap.add_argument("--file", required=True, type=Path, help="export mbox PEC")
+    ap.add_argument(
+        "--raw-object-id",
+        default=None,
+        help="FK a f_raw_objects (stampato su ogni riga — promotion path)",
+    )
+    ap.add_argument("--dry-run", action="store_true", help="parse senza scrivere")
+    args = ap.parse_args()
+
+    report = ingest_file(
+        args.file, raw_object_id=args.raw_object_id, dry_run=args.dry_run
+    )
+    log.info(
+        "DONE %s: %d nuove righe messaggi, %d allegati",
+        args.file.name,
+        report["righe_messaggi"],
+        report["righe_allegati"],
+    )
+
+
+if __name__ == "__main__":
+    main()

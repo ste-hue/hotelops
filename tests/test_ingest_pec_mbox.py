@@ -148,38 +148,60 @@ def test_map_tipo():
     assert map_tipo(None, "qualunque", False) == "MESSAGGIO_INVIATO"
 
 
-def _busta_con_postacert() -> "email.message.EmailMessage":
-    inner = email.message.EmailMessage()
-    inner["From"] = "avvocato@pec.studiolegale.it"
-    inner["To"] = "in.tur@pec.it"
-    inner["Subject"] = "Diffida"
-    inner["Message-ID"] = "<original.msgid.456@pec.it>"
-    inner.set_content("Testo della diffida.")
-    inner.add_attachment(
-        b"%PDF-fake", maintype="application", subtype="pdf", filename="Diffida.pdf"
-    )
-    inner.add_attachment(
-        b"firmato",
-        maintype="application",
-        subtype="pkcs7-mime",
-        filename="Delega.pdf.p7m",
-    )
+def _busta_con_postacert() -> "email.message.Message":
+    """RFC822 busta con postacert preservata attraverso mbox serialization."""
+    import email as email_pkg
 
-    busta = email.message.EmailMessage()
-    busta["From"] = "Per conto di: avvocato <posta-certificata@pec.aruba.it>"
-    busta["To"] = "in.tur@pec.it"
-    busta["Subject"] = "POSTA CERTIFICATA: Diffida"
-    busta.set_content("Messaggio di posta certificata (corpo busta).")
-    busta.add_attachment(
-        DATICERT_CONSEGNA,
-        maintype="application",
-        subtype="xml",
-        filename="daticert.xml",
+    raw = (
+        b"From: Per conto di: avvocato <posta-certificata@pec.aruba.it>\r\n"
+        b"To: in.tur@pec.it\r\n"
+        b"Subject: POSTA CERTIFICATA: Diffida\r\n"
+        b"Message-ID: <opec296.consegna.123@pec.aruba.it>\r\n"
+        b"MIME-Version: 1.0\r\n"
+        b'Content-Type: multipart/mixed; boundary="BB"\r\n'
+        b"\r\n"
+        b"--BB\r\n"
+        b"Content-Type: text/plain\r\n"
+        b"\r\n"
+        b"Messaggio di posta certificata (corpo busta).\r\n"
+        b"--BB\r\n"
+        b'Content-Type: application/xml; name="daticert.xml"\r\n'
+        b'Content-Disposition: attachment; filename="daticert.xml"\r\n'
+        b"\r\n"
     )
-    busta.add_attachment(
-        inner.as_bytes(), maintype="message", subtype="rfc822", filename="postacert.eml"
+    raw += DATICERT_CONSEGNA
+    raw += (
+        b"\r\n--BB\r\n"
+        b'Content-Type: message/rfc822; name="postacert.eml"\r\n'
+        b'Content-Disposition: attachment; filename="postacert.eml"\r\n'
+        b"\r\n"
+        b"From: avvocato@pec.studiolegale.it\r\n"
+        b"To: in.tur@pec.it\r\n"
+        b"Subject: Diffida\r\n"
+        b"Message-ID: <original.msgid.456@pec.it>\r\n"
+        b"MIME-Version: 1.0\r\n"
+        b'Content-Type: multipart/mixed; boundary="CC"\r\n'
+        b"\r\n"
+        b"--CC\r\n"
+        b"Content-Type: text/plain\r\n"
+        b"\r\n"
+        b"Testo della diffida.\r\n"
+        b"--CC\r\n"
+        b"Content-Type: application/pdf\r\n"
+        b'Content-Disposition: attachment; filename="Diffida.pdf"\r\n'
+        b"Content-Transfer-Encoding: base64\r\n"
+        b"\r\n"
+        b"JVBERi1mYWtl\r\n"
+        b"--CC\r\n"
+        b"Content-Type: application/pkcs7-mime\r\n"
+        b'Content-Disposition: attachment; filename="Delega.pdf.p7m"\r\n'
+        b"Content-Transfer-Encoding: base64\r\n"
+        b"\r\n"
+        b"ZmlybWF0bw==\r\n"
+        b"--CC--\r\n"
+        b"--BB--\r\n"
     )
-    return busta
+    return email_pkg.message_from_bytes(raw)
 
 
 def test_inner_message_spacchetta_postacert():
@@ -384,3 +406,34 @@ def test_extract_idempotente_hash_stabile():
     r1, _ = _extract(_busta_con_postacert())
     r2, _ = _extract(_busta_con_postacert())
     assert r1["hash_riga"] == r2["hash_riga"]
+
+
+def test_coverage_gaps():
+    from datetime import date
+
+    from ingest.flussi.ingest_pec_mbox import coverage_gaps
+
+    dates = [date(2024, 1, 1), date(2024, 1, 5), date(2024, 2, 20), date(2024, 2, 25)]
+    gaps = coverage_gaps(dates, min_gap_days=14)
+    assert gaps == [(date(2024, 1, 5), date(2024, 2, 20), 46)]
+    assert coverage_gaps([], min_gap_days=14) == []
+
+
+def test_ingest_file_dry_run_su_mbox_sintetico(tmp_path, monkeypatch):
+    import mailbox
+
+    from ingest.flussi import ingest_pec_mbox as mod
+
+    mbox_path = tmp_path / "test.mbox"
+    mb = mailbox.mbox(str(mbox_path))
+    mb.add(_busta_con_postacert())
+    mb.add(_busta_con_postacert())  # duplicato esatto: stesso msgid
+    mb.flush()
+
+    report = mod.ingest_file(mbox_path, raw_object_id="raw-001", dry_run=True)
+    assert report["messaggi_letti"] == 2
+    assert report["righe_messaggi"] == 1  # dedup in-file su msgid
+    assert report["dedup_in_file"] == 1
+    assert report["righe_allegati"] == 2
+    assert report["con_warning"] == 0
+    assert report["per_tipo"] == {"CONSEGNA": 1}
