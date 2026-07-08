@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import email.message
 import email.utils
+import hashlib
 import logging
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -153,3 +154,45 @@ def iter_allegati_reali(msg: email.message.Message) -> list[tuple[str, bytes, st
             continue
         out.append((nome, content, part.get_content_type()))
     return out
+
+
+SOURCE_NAME = "PEC_MAILBOX_INTUR_APPEND"
+
+
+class AllegatiStore:
+    """Binari allegati su GCS, indirizzati per contenuto.
+
+    Path: <SOURCE_NAME>/allegati/<sha256[:2]>/<sha256>/<nome> — lo stesso
+    contenuto trasmesso N volte è un solo oggetto per nome; il fan-out sulle
+    trasmissioni vive nelle righe f_pec_allegati.
+    """
+
+    def __init__(
+        self, bucket_name: str = "hotelops-raw", dry_run: bool = False, client=None
+    ):
+        self.bucket_name = bucket_name
+        self.dry_run = dry_run
+        self._client = client
+        self.n_uploaded = 0
+        self.n_riusati = 0
+
+    def _get_client(self):
+        if self._client is None:
+            from google.cloud import storage
+
+            self._client = storage.Client()
+        return self._client
+
+    def store(self, nome: str, content: bytes) -> tuple[str, str]:
+        sha = hashlib.sha256(content).hexdigest()
+        path = f"{SOURCE_NAME}/allegati/{sha[:2]}/{sha}/{nome}"
+        uri = f"gs://{self.bucket_name}/{path}"
+        if self.dry_run:
+            return sha, uri
+        blob = self._get_client().bucket(self.bucket_name).blob(path)
+        if blob.exists():
+            self.n_riusati += 1
+        else:
+            blob.upload_from_string(content, content_type="application/octet-stream")
+            self.n_uploaded += 1
+        return sha, uri

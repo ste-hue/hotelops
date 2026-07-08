@@ -257,3 +257,56 @@ def test_estrai_body_text():
 
     inner, _ = inner_message(_busta_con_postacert())
     assert "Testo della diffida" in estrai_body_text(inner)
+
+
+# GCS mock classes for AllegatiStore tests
+class _FakeBlob:
+    def __init__(self, store, path):
+        self.store, self.path = store, path
+
+    def exists(self):
+        return self.path in self.store
+
+    def upload_from_string(self, data, content_type=None):
+        self.store[self.path] = data
+
+
+class _FakeBucket:
+    def __init__(self, store):
+        self.store = store
+
+    def blob(self, path):
+        return _FakeBlob(self.store, path)
+
+
+class _FakeGcsClient:
+    def __init__(self):
+        self.store = {}
+
+    def bucket(self, name):
+        return _FakeBucket(self.store)
+
+
+def test_allegati_store_content_addressed():
+    from ingest.flussi.ingest_pec_mbox import AllegatiStore
+
+    client = _FakeGcsClient()
+    s = AllegatiStore(dry_run=False, client=client)
+    sha1, uri1 = s.store("Diffida.pdf", b"%PDF-fake")
+    sha2, uri2 = s.store("Copia di Diffida.pdf", b"%PDF-fake")  # stesso contenuto
+    assert sha1 == sha2
+    assert len(client.store) == 2  # due path (nome diverso) ...
+    assert uri1.startswith("gs://hotelops-raw/PEC_MAILBOX_INTUR_APPEND/allegati/")
+    assert sha1[:8] in uri1
+    # ... ma ricaricare lo stesso (nome, contenuto) non riscrive
+    before = dict(client.store)
+    s.store("Diffida.pdf", b"%PDF-fake")
+    assert client.store == before
+
+
+def test_allegati_store_dry_run_non_tocca_rete():
+    from ingest.flussi.ingest_pec_mbox import AllegatiStore
+
+    s = AllegatiStore(dry_run=True, client=None)  # client None: se lo tocca, esplode
+    sha, uri = s.store("x.pdf", b"abc")
+    assert uri.startswith("gs://")
