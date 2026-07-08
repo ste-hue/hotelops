@@ -149,8 +149,6 @@ def test_map_tipo():
 
 
 def _busta_con_postacert() -> "email.message.EmailMessage":
-    import email.message
-
     inner = email.message.EmailMessage()
     inner["From"] = "avvocato@pec.studiolegale.it"
     inner["To"] = "in.tur@pec.it"
@@ -204,6 +202,43 @@ def test_inner_message_senza_postacert_ritorna_busta():
     inner, ha_postacert = inner_message(busta)
     assert ha_postacert is False
     assert inner is busta
+
+
+def test_inner_message_rfc822_letterale_payload_lista():
+    """Negli export reali il postacert è message/rfc822 letterale (non base64):
+    get_payload(decode=True) è None e il payload è una lista di Message."""
+    import email
+
+    from ingest.flussi.ingest_pec_mbox import inner_message
+
+    raw = (
+        b"From: posta-certificata@pec.aruba.it\r\n"
+        b"To: in.tur@pec.it\r\n"
+        b"Subject: POSTA CERTIFICATA: Diffida\r\n"
+        b"MIME-Version: 1.0\r\n"
+        b'Content-Type: multipart/mixed; boundary="BB"\r\n'
+        b"\r\n"
+        b"--BB\r\n"
+        b"Content-Type: text/plain\r\n"
+        b"\r\n"
+        b"corpo busta\r\n"
+        b"--BB\r\n"
+        b'Content-Type: message/rfc822; name="postacert.eml"\r\n'
+        b'Content-Disposition: attachment; filename="postacert.eml"\r\n'
+        b"\r\n"
+        b"From: avvocato@pec.studiolegale.it\r\n"
+        b"To: in.tur@pec.it\r\n"
+        b"Subject: Diffida\r\n"
+        b"\r\n"
+        b"Testo della diffida.\r\n"
+        b"--BB--\r\n"
+    )
+    busta = email.message_from_bytes(raw)
+    part = [p for p in busta.walk() if (p.get_filename() or "") == "postacert.eml"][0]
+    assert part.get_payload(decode=True) is None  # precondizione: ramo lista
+    inner, ha_postacert = inner_message(busta)
+    assert ha_postacert is True
+    assert inner["Subject"] == "Diffida"
 
 
 def test_iter_allegati_reali_esclude_artefatti():
