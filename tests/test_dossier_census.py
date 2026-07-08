@@ -1,6 +1,8 @@
 from workspace.miners.dossier_census import (
     append_ledger,
     dedupe_items,
+    drive_query,
+    gmail_query,
     item_key,
     load_ledger,
 )
@@ -23,7 +25,12 @@ def test_dedupe_merges_holders():
 
 
 def test_dedupe_does_not_mutate_inputs():
-    original = {"source": "drive", "file_id": "abc", "holders": ["a@x.it"], "name": "doc"}
+    original = {
+        "source": "drive",
+        "file_id": "abc",
+        "holders": ["a@x.it"],
+        "name": "doc",
+    }
     dup = {"source": "drive", "file_id": "abc", "holders": ["b@x.it"], "name": "doc"}
     dedupe_items([original, dup])
     assert original["holders"] == ["a@x.it"]
@@ -36,3 +43,13 @@ def test_ledger_roundtrip(tmp_path):
     append_ledger(p, ["drive:abc", "hash:ff00"])
     append_ledger(p, ["drive:xyz"])
     assert load_ledger(p) == {"drive:abc", "hash:ff00", "drive:xyz"}
+
+
+def test_drive_query_escapes_and_wraps():
+    q = drive_query('"ORTI SRL"')
+    assert q == "fullText contains '\"ORTI SRL\"' and trashed = false"
+
+
+def test_gmail_query_joins_terms():
+    assert gmail_query(["INTUR OR 00553430653"]) == "(INTUR OR 00553430653)"
+    assert gmail_query(["a", "b"]) == "(a) OR (b)"
