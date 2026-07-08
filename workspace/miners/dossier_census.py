@@ -111,7 +111,7 @@ def census_drive_user(
                 svc.files()
                 .list(
                     q=drive_query(phrase),
-                    corpora="user",
+                    corpora="allDrives",
                     pageToken=token,
                     pageSize=100,
                     includeItemsFromAllDrives=True,

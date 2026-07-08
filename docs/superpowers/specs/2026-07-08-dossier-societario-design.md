@@ -52,7 +52,7 @@ CF/P.IVA, `drive_folder_id`. Termini di ricerca:
    stefano@). Tutti i 12 account; i sospesi (`am@`) si tentano e, se l'impersonation
    fallisce, finiscono nel report come "non accessibile" → voce di gap list.
 2. **Drive per utente**: per ogni utente, per ogni termine, `files.list` con
-   `fullText contains '<term>'` (corpus `user`, `includeItemsFromAllDrives`).
+   `fullText contains '<term>'` (corpus `allDrives`, `includeItemsFromAllDrives`).
    Raccoglie: fileId, nome, mime, owner, parents/path, modifiedTime, size.
 3. **Gmail per utente**: `threads.list` con query sui termini; per i thread match,
    messaggi completi + allegati non-immagine (pattern CapEx pass 1+2; niente pass
