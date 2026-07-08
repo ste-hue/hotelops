@@ -119,7 +119,7 @@ ricevute sono righe: fatti immutabili, è il punto legale della PEC):
 | size_bytes | INT | |
 | sha256 | STRING REQ | |
 | is_firmato | BOOL | .p7m o firma rilevata |
-| gcs_uri | STRING REQ | gs://hotelops-raw/PEC_MAILBOX_INTUR_APPEND/allegati/<sha256>/<nome> |
+| gcs_uri | STRING | gs://hotelops-raw/PEC_MAILBOX_INTUR_APPEND/allegati/<sha256[:2]>/<sha256>/<nome> — NULL solo se estrazione fallita (parse_warning) |
 | hash_riga | STRING REQ | sha256(msgid + sha256 + nome) |
 | raw_object_id | STRING REQ | |
 | data_caricamento | DATETIME REQ | |
