@@ -27,7 +27,7 @@ def dedupe_items(items: list[dict]) -> list[dict]:
         else:
             it = dict(it)
             it["key"] = key
-            it.setdefault("holders", [])
+            it["holders"] = list(it.get("holders", []))
             seen[key] = it
     return list(seen.values())
 

@@ -22,6 +22,14 @@ def test_dedupe_merges_holders():
     assert out[0]["holders"] == ["a@x.it", "b@x.it"]
 
 
+def test_dedupe_does_not_mutate_inputs():
+    original = {"source": "drive", "file_id": "abc", "holders": ["a@x.it"], "name": "doc"}
+    dup = {"source": "drive", "file_id": "abc", "holders": ["b@x.it"], "name": "doc"}
+    dedupe_items([original, dup])
+    assert original["holders"] == ["a@x.it"]
+    assert "key" not in original
+
+
 def test_ledger_roundtrip(tmp_path):
     p = tmp_path / "sub" / "ledger.jsonl"
     assert load_ledger(p) == set()
