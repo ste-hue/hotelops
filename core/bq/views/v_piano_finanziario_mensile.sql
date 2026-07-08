@@ -70,7 +70,14 @@ consuntivo AS (
   GROUP BY 1, 2, 3, 4
 ),
 
--- ── Budget da f_budget_mensile (codice_conto puntato → normalizzato via REPLACE) ─
+-- ── Budget da v_budget_canonical (fonti già risolte, grana 1 riga per conto×mese) ─
+-- Leggere il pool grezzo f_budget_mensile qui creava la "budget lottery": più
+-- fonti per lo stesso conto×mese pareggiavano nel ROW_NUMBER (stessa voce ⇒
+-- stessa LENGTH e stesso ord) e la riga vincente era indefinita — swing reali
+-- fino a ~480k su una cella. La precedenza fonti vive SOLO nella canonical (I8).
+-- Il ROW_NUMBER resta per il suo scopo originale: una riga budget che matcha
+-- più voci tiene la voce col pattern più specifico; voce_id chiude l'ordine
+-- totale (nessun tie possibile).
 budget_costi_raw AS (
   SELECT
     b.societa_id,
@@ -78,18 +85,17 @@ budget_costi_raw AS (
     b.anno,
     b.mese,
     b.importo,
-    -- Prefer longer (more specific) pattern match; ties broken by voce ord
     ROW_NUMBER() OVER (
-      PARTITION BY b.societa_id, REPLACE(b.codice_conto, '.', ''), b.anno, b.mese
-      ORDER BY LENGTH(COALESCE(v.cod_conto_pattern, '')) DESC, v.ord
+      PARTITION BY b.societa_id, b.cod_conto, b.anno, b.mese
+      ORDER BY LENGTH(COALESCE(v.cod_conto_pattern, '')) DESC, v.ord, v.voce_id
     ) AS rn
-  FROM `hotelops-suite.hotelops.f_budget_mensile` b
+  FROM `hotelops-suite.hotelops.v_budget_canonical` b
   JOIN `hotelops-suite.hotelops.d_voci_piano_finanziario` v
     ON v.fonte = 'ESOLVER'
     AND (
-         REPLACE(b.codice_conto, '.', '') LIKE CONCAT(v.cod_conto_pattern, '%')
-      OR (v.cod_conto_pat2 IS NOT NULL AND REPLACE(b.codice_conto, '.', '') LIKE CONCAT(v.cod_conto_pat2, '%'))
-      OR (v.cod_conto_pat3 IS NOT NULL AND REPLACE(b.codice_conto, '.', '') LIKE CONCAT(v.cod_conto_pat3, '%'))
+         b.cod_conto LIKE CONCAT(v.cod_conto_pattern, '%')
+      OR (v.cod_conto_pat2 IS NOT NULL AND b.cod_conto LIKE CONCAT(v.cod_conto_pat2, '%'))
+      OR (v.cod_conto_pat3 IS NOT NULL AND b.cod_conto LIKE CONCAT(v.cod_conto_pat3, '%'))
     )
     AND (v.societa_id IS NULL OR v.societa_id = b.societa_id)
 ),
