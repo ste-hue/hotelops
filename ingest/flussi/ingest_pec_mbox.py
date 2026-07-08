@@ -104,3 +104,52 @@ def map_tipo(tipo_raw: str | None, subject: str, busta: bool) -> str:
         if subj.startswith(prefix):
             return tipo
     return "ALTRO"
+
+
+def inner_message(
+    msg: email.message.Message,
+) -> tuple[email.message.Message, bool]:
+    """Il messaggio reale: postacert.eml se presente, altrimenti la busta stessa.
+
+    Le ricevute di accettazione spesso non hanno postacert: è normale (il
+    contenuto informativo è nel daticert), non un errore.
+    """
+    import email as email_pkg
+
+    for part in msg.walk():
+        if (part.get_filename() or "").lower() == "postacert.eml":
+            payload = part.get_payload(decode=True)
+            if payload is None:  # message/rfc822: payload è già un Message
+                sub = part.get_payload()
+                if isinstance(sub, list) and sub:
+                    return sub[0], True
+            else:
+                return email_pkg.message_from_bytes(payload), True
+    return msg, False
+
+
+def estrai_body_text(msg: email.message.Message) -> str | None:
+    """text/plain preferito; niente HTML raw, niente binari."""
+    for part in msg.walk():
+        if part.get_content_type() == "text/plain" and not part.get_filename():
+            payload = part.get_payload(decode=True)
+            if payload:
+                charset = part.get_content_charset() or "utf-8"
+                return payload.decode(charset, errors="replace").strip()
+    return None
+
+
+def iter_allegati_reali(msg: email.message.Message) -> list[tuple[str, bytes, str]]:
+    """(nome, bytes, mime) per ogni allegato reale — esclusi artefatti busta."""
+    out: list[tuple[str, bytes, str]] = []
+    for part in msg.walk():
+        nome = part.get_filename()
+        if not nome or nome.lower() in ARTEFATTI_BUSTA:
+            continue
+        if part.get_content_disposition() != "attachment":
+            continue
+        content = part.get_payload(decode=True)
+        if content is None:
+            continue
+        out.append((nome, content, part.get_content_type()))
+    return out

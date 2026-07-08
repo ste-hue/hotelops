@@ -1,5 +1,8 @@
 """PEC mbox ingestion — schemi, parser, dedup, report."""
 
+from __future__ import annotations
+
+import email.message
 from datetime import datetime, timezone
 
 import pytest
@@ -143,3 +146,79 @@ def test_map_tipo():
     assert map_tipo(None, "qualunque", True) == "ALTRO"
     # inviata: sempre MESSAGGIO_INVIATO
     assert map_tipo(None, "qualunque", False) == "MESSAGGIO_INVIATO"
+
+
+def _busta_con_postacert() -> "email.message.EmailMessage":
+    import email.message
+
+    inner = email.message.EmailMessage()
+    inner["From"] = "avvocato@pec.studiolegale.it"
+    inner["To"] = "in.tur@pec.it"
+    inner["Subject"] = "Diffida"
+    inner["Message-ID"] = "<original.msgid.456@pec.it>"
+    inner.set_content("Testo della diffida.")
+    inner.add_attachment(
+        b"%PDF-fake", maintype="application", subtype="pdf", filename="Diffida.pdf"
+    )
+    inner.add_attachment(
+        b"firmato",
+        maintype="application",
+        subtype="pkcs7-mime",
+        filename="Delega.pdf.p7m",
+    )
+
+    busta = email.message.EmailMessage()
+    busta["From"] = "Per conto di: avvocato <posta-certificata@pec.aruba.it>"
+    busta["To"] = "in.tur@pec.it"
+    busta["Subject"] = "POSTA CERTIFICATA: Diffida"
+    busta.set_content("Messaggio di posta certificata (corpo busta).")
+    busta.add_attachment(
+        DATICERT_CONSEGNA,
+        maintype="application",
+        subtype="xml",
+        filename="daticert.xml",
+    )
+    busta.add_attachment(
+        inner.as_bytes(), maintype="message", subtype="rfc822", filename="postacert.eml"
+    )
+    return busta
+
+
+def test_inner_message_spacchetta_postacert():
+    from ingest.flussi.ingest_pec_mbox import inner_message
+
+    inner, ha_postacert = inner_message(_busta_con_postacert())
+    assert ha_postacert is True
+    assert inner["Subject"] == "Diffida"
+
+
+def test_inner_message_senza_postacert_ritorna_busta():
+    import email.message
+
+    from ingest.flussi.ingest_pec_mbox import inner_message
+
+    busta = email.message.EmailMessage()
+    busta["From"] = "posta-certificata@pec.aruba.it"
+    busta["Subject"] = "ACCETTAZIONE: x"
+    busta.set_content("ricevuta")
+    inner, ha_postacert = inner_message(busta)
+    assert ha_postacert is False
+    assert inner is busta
+
+
+def test_iter_allegati_reali_esclude_artefatti():
+    from ingest.flussi.ingest_pec_mbox import inner_message, iter_allegati_reali
+
+    inner, _ = inner_message(_busta_con_postacert())
+    allegati = iter_allegati_reali(inner)
+    nomi = [a[0] for a in allegati]
+    assert nomi == ["Diffida.pdf", "Delega.pdf.p7m"]
+    assert allegati[0][1] == b"%PDF-fake"
+    assert allegati[0][2] == "application/pdf"
+
+
+def test_estrai_body_text():
+    from ingest.flussi.ingest_pec_mbox import estrai_body_text, inner_message
+
+    inner, _ = inner_message(_busta_con_postacert())
+    assert "Testo della diffida" in estrai_body_text(inner)
