@@ -9,10 +9,12 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from collections import Counter
 from pathlib import Path
 
 from ..config import SKIP_ATTACHMENT_EXTS
 from ..drive import get_drive_reader
+from ..dossier_config import DossierCompany, WRITE_AS
 from ..gmail import get_gmail_service, get_thread, list_attachments, search_messages
 from .dossier_classify import classify, extract_text
 
@@ -263,3 +265,57 @@ def census_company_folder(
         if not token:
             break
     return out
+
+
+def run_census(
+    company: DossierCompany,
+    users: list[dict],
+    out_dir: Path,
+    drive_collector=None,
+    gmail_collector=None,
+    folder_collector=census_company_folder,
+) -> dict:
+    """Run census to collect, deduplicate, and classify company documents.
+
+    Args:
+        company: DossierCompany configuration
+        users: List of user dicts with 'email' and 'suspended' keys
+        out_dir: Output directory for census JSONL file
+        drive_collector: Function to collect from Drive (default: census_drive_user)
+        gmail_collector: Function to collect from Gmail (default: census_gmail_user)
+        folder_collector: Function to collect from company folder (default: census_company_folder)
+
+    Returns:
+        Dict with 'census_path', 'items', 'inaccessible', and 'by_category'
+    """
+    drive_collector = drive_collector or census_drive_user
+    gmail_collector = gmail_collector or census_gmail_user
+    raw: list[dict] = []
+    inaccessible: list[str] = []
+    if folder_collector:
+        raw.extend(folder_collector(company.drive_folder_id, WRITE_AS))
+    for u in users:
+        email = u["email"]
+        if u.get("suspended"):
+            inaccessible.append(email)
+            continue
+        try:
+            raw.extend(drive_collector(email, company.search_phrases))
+            raw.extend(gmail_collector(email, company.gmail_terms))
+        except Exception as e:  # impersonation negata, ecc.
+            print(f"  ! {email}: {type(e).__name__}: {e}")
+            inaccessible.append(email)
+    items = dedupe_items(raw)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    census_path = out_dir / f"census_{company.company_id}.jsonl"
+    with census_path.open("w") as f:
+        for it in items:
+            f.write(json.dumps(it, ensure_ascii=False) + "\n")
+    by_category = Counter(it["category"] for it in items)
+    return {
+        "census_path": str(census_path),
+        "items": items,
+        "inaccessible": inaccessible,
+        "by_category": dict(by_category),
+    }

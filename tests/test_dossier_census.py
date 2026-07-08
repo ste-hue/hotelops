@@ -1,3 +1,6 @@
+from pathlib import Path
+
+from workspace.dossier_config import COMPANIES
 from workspace.miners.dossier_census import (
     append_ledger,
     dedupe_items,
@@ -5,6 +8,7 @@ from workspace.miners.dossier_census import (
     gmail_query,
     item_key,
     load_ledger,
+    run_census,
 )
 
 
@@ -53,3 +57,43 @@ def test_drive_query_escapes_and_wraps():
 def test_gmail_query_joins_terms():
     assert gmail_query(["INTUR OR 00553430653"]) == "(INTUR OR 00553430653)"
     assert gmail_query(["a", "b"]) == "(a) OR (b)"
+
+
+def test_run_census_with_injected_collectors(tmp_path):
+    users = [
+        {"email": "a@p.it", "suspended": False},
+        {"email": "am@p.it", "suspended": True},
+    ]
+
+    def fake_drive(email, phrases, max_files=500):
+        return [
+            {
+                "source": "drive",
+                "file_id": "f1",
+                "name": "doc.pdf",
+                "mime_type": "application/pdf",
+                "size": 1,
+                "owner": email,
+                "holders": [email],
+                "link": "",
+                "modified": "",
+                "category": "01_Societario",
+                "confidence": 0.9,
+            }
+        ]
+
+    def fake_gmail(email, terms, max_threads=200):
+        return []
+
+    res = run_census(
+        COMPANIES["INTUR"],
+        users,
+        tmp_path,
+        drive_collector=fake_drive,
+        gmail_collector=fake_gmail,
+        folder_collector=lambda folder_id, subject: [],
+    )
+    assert Path(res["census_path"]).exists()
+    assert len(res["items"]) == 1
+    assert res["inaccessible"] == ["am@p.it"]
+    assert res["by_category"]["01_Societario"] == 1
