@@ -481,8 +481,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--source",
+        "--file",
+        dest="source",
         default=str(SOURCE_DEFAULT),
-        help="Cartella root con i file consumi (default: Consumi_Economato_2025)",
+        help="Cartella root o singolo file consumi (--file è l'alias usato dal "
+        "promotion path; default: Consumi_Economato_2025)",
     )
     parser.add_argument(
         "--datahub",

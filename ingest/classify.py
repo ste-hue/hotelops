@@ -1014,7 +1014,9 @@ def _build_economato_result(
     return ClassificationResult(
         file_path=path,
         file_type="economato_consolidato" if is_consolidato else "economato",
-        category="economato",
+        # consolidato = export Power BI → source POWERBI_CONSUMI (consumi_powerbi);
+        # base = export economato legacy → source ORTI_ECONOMATO (economato)
+        category="consumi_powerbi" if is_consolidato else "economato",
         societa="ORTI",
         canonical_name=canonical,
         dest_folder="economato",

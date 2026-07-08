@@ -410,7 +410,7 @@ sources:
     hash_basis: hash_riga
     loop_targets: [food_cost]
     promotion_policy: AUTO
-    detector_category: pms_statistiche
+    detector_category: consumi_powerbi
     raw_storage:
       backend: gcs
       bucket: hotelops-raw
