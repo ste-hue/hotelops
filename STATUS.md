@@ -101,8 +101,7 @@ Consolidamento ("torniamo su main, worktree-only d'ora in poi"). Esito:
 - **F&B Looker pipeline** (mergiata su `main` 2026-05-22, commit `06abda7`): view refactor wide + bug fix v_fb_kpi 6.6x + audit tool (Streamlit+Form) + RistoCube Orders pipeline canonical. **v_fb_kpi rifattorizzata 2026-06-08** (3 bucket onesti + 9 UoM esclusi, deployata su BQ, in main). ~~Pendente: aggiornare dashboard Looker F&B al nuovo contratto colonne.~~ **FATTO 2026-06-12**: dashboard Streamlit `verticals/condges/app_fb.py` (sostituisce Looker, hub-ready via `fb_dashboard.render()`, mergiata su main).
 - **Sistema workstream vault** (pilota F&B, 2026-06-08): hub `workstreams/FB.md` + registry `_INDEX.md` — nuovo asse per isolare/navigare un fronte di lavoro (ortogonale a vertical/loop). Replicabile su pf-rotation/cashflow/ingestion/capex. Spec+plan in main.
 - **Audit consumi F&B per direzione**: Streamlit `verticals/condges/audit_consumi_dashboard.py` (6 pagine, canonical-transformation-matrix) + Apps Script `audit_form.gs` (8 sezioni Form). Setup pendente: `createAuditForm()` su script.google.com + aggiornare FORM_URL + condividere col direttore.
-- v_condges_banca_dettaglio: view SQL creata, non ancora materializzata su BQ
-- v_ledger_movimenti: view SQL creata (`core/bq/views/v_ledger_movimenti.sql`), non ancora materializzata su BQ
+- ~~v_condges_banca_dettaglio / v_ledger_movimenti: non ancora materializzate~~ **FALSO, corretto 2026-07-09 (issue #62)**: entrambe ESISTONO su BQ (verificato INFORMATION_SCHEMA), deployate da tempo via `hotelops deploy-views`.
 - ~~xlsx-movimenti-parser: piano scritto (`docs/superpowers/plans/2026-03-30-xlsx-movimenti-parser.md`), non eseguito~~ **KILL 2026-06-12**: superato dal re-baseline via intake→promote su export lista-movimenti (`8bec01b`, `0f52475`).
 - **revman vertical**: mappatura completa 5 fonti HotelCube; Power BI Z_DataSet espone 12 report downstream. Solo Cruscotto/CruscottoMP ha loop dichiarato. **Bozza email a Lara pronta** (non inviata).
 - **condges Rosa->Gasparotto integration**: spec + plan scritti (`c69abc1`, `beddc7e`). 2 task iniziali implementati. Plan in esecuzione.
@@ -259,7 +258,7 @@ Consolidamento ("torniamo su main, worktree-only d'ora in poi"). Esito:
 - **Production run HPAN25PIANO1** -- `hotelops workspace mine-capex --project HPAN25PIANO1`. Dopo smoke verde.
 - **FK end-to-end smoke su MPS file fresh** -- al prossimo export bancario non storico.
 - **Doc Refresh Sprint Step 3-9** -- README rewrite -> CLAUDE.md -> counts/tests -> Cutover decision -> TODO markers -> Agent Epistemology.
-- **Materializzare** v_ledger_movimenti + v_condges_banca_dettaglio su BQ.
+- ~~**Materializzare** v_ledger_movimenti + v_condges_banca_dettaglio su BQ.~~ **GIÀ FATTO** (verificato 2026-07-09, issue #62).
 - **Inviare email a Lara Durisotti** (bozza pronta) -- sblocca revman.
 - **condges Rosa->Gasparotto plan resume** -- continuare esecuzione plan `beddc7e`.
 - **Loop spec `monthly_close`** -- Gasparotto file, COMPETENZA mensile.

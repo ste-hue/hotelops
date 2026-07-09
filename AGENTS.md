@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for Codex and other agentic coding tools in this repository.
+Guidance for agentic coding tools (Copilot CLI, Codex, Claude Code, …) in this repository.
 
 AGENTS.md is an entrypoint, not a second constitution. The canonical invariants
 live in `docs/architecture/INVARIANTS.md`; this file points to them and keeps only
@@ -15,7 +15,7 @@ For any non-trivial work, read in this order:
    operational loop, anti-goals.
 3. `docs/architecture/LE_3_DIMENSIONI.md` — CASSA / COMPETENZA / IMPEGNO.
 4. `STATUS.md` — live operational diary, open fronts, recent drift.
-5. This file — Codex-facing repo mechanics.
+5. This file — agent-facing repo mechanics.
 
 If these disagree, prefer the canonical architecture docs for durable rules and
 `STATUS.md` for current operational state. Do not silently reconcile drift:
@@ -114,5 +114,5 @@ clone of it. If another tool needs instructions, prefer a short tool-specific
 entrypoint that references `AGENTS.md` and `docs/architecture/INVARIANTS.md`
 instead of restating the constitution.
 
-`.agents/` may contain local Codex/source-command skill exports. Treat it as agent
+`.agents/` may contain local agent/source-command skill exports. Treat it as agent
 tooling, not product code, unless Stefano explicitly decides to version it.
