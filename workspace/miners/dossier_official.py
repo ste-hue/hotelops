@@ -21,8 +21,11 @@ src/openapi_ita/visure.py in openapi_ita, non modificato):
 from __future__ import annotations
 
 import base64
+import io
 import json
+import mimetypes
 import time
+import zipfile
 from datetime import date
 
 from ..dossier_config import DOSSIER_STATE_DIR, DossierCompany, WRITE_AS
@@ -105,6 +108,28 @@ def _extract_attachments(raw, fallback_name: str) -> list[tuple[str, bytes]]:
     return out
 
 
+def expand_archives(files: list[tuple[str, bytes]]) -> list[tuple[str, bytes, str]]:
+    """Espande gli archivi ZIP nei file contenuti; ritorna (nome, bytes, mime).
+
+    I download visure (es. bilancio-ottico) arrivano come ZIP base64 con dentro
+    PDF+XBRL: su Drive vanno i file interni, non l'archivio.
+    """
+    out: list[tuple[str, bytes, str]] = []
+    for name, data in files:
+        if zipfile.is_zipfile(io.BytesIO(data)):
+            with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                for member in zf.infolist():
+                    if member.is_dir():
+                        continue
+                    inner_bytes = zf.read(member.filename)
+                    mime = mimetypes.guess_type(member.filename)[0] or "application/octet-stream"
+                    out.append((member.filename, inner_bytes, mime))
+        else:
+            mime = mimetypes.guess_type(name)[0] or "application/pdf"
+            out.append((name, data, mime))
+    return out
+
+
 def place_orders(company: DossierCompany, orders: list[str], poll_minutes: int = 20, anno_chiusura: int | None = None) -> list[dict]:
     """Invia gli ordini a pagamento, fa polling dello stato e carica i PDF su Drive.
 
@@ -147,9 +172,10 @@ def place_orders(company: DossierCompany, orders: list[str], poll_minutes: int =
             continue
         raw = api.download(entry["endpoint"], req_id)
         files = _extract_attachments(raw, fallback_name=f"{entry['order_id']}_{company.company_id}")
+        expanded = expand_archives(files)
         folder = ensure_subfolder(writer, company.drive_folder_id, entry["category"])
-        for fname, data in files:
-            upload_bytes(writer, folder, fname, data, "application/pdf")
+        for fname, data, mime in expanded:
+            upload_bytes(writer, folder, fname, data, mime)
         results.append({"order": entry["order_id"], "status": "ok",
-                        "files": [f for f, _ in files]})
+                        "files": [f for f, _, _ in expanded]})
     return results
