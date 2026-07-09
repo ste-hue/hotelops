@@ -381,15 +381,18 @@ def ingest_file(
     validate_batch(msg_rows, PecMessageRow, context="f_pec_messages")
     validate_batch(all_rows, PecAllegatoRow, context="f_pec_allegati")
 
-    dedup_bq = 0
+    dedup_bq = dedup_bq_allegati = 0
     if not dry_run:
         from core.bq.dedup import filter_new_rows_by_hash
         from core.bq.write import bq_write_validated
 
         nuove = filter_new_rows_by_hash(F_PEC_MESSAGES, msg_rows, "hash_riga")
         dedup_bq = len(msg_rows) - len(nuove)
-        nuovi_msgid = {r["msgid"] for r in nuove}
-        nuove_all = [a for a in all_rows if a["msgid"] in nuovi_msgid]
+        # Dedup allegati sul LORO hash_riga, indipendente dalla novità del
+        # messaggio: le due tabelle sono idempotenti ciascuna per sé (abilita
+        # il backfill allegati anche quando i messaggi sono già in BQ).
+        nuove_all = filter_new_rows_by_hash(F_PEC_ALLEGATI, all_rows, "hash_riga")
+        dedup_bq_allegati = len(all_rows) - len(nuove_all)
 
         if nuove:
             bq_write_validated(
@@ -406,6 +409,7 @@ def ingest_file(
         "messaggi_letti": letti,
         "dedup_in_file": dedup_in_file,
         "dedup_bq": dedup_bq,
+        "dedup_bq_allegati": dedup_bq_allegati,
         "righe_messaggi": len(msg_rows),
         "righe_allegati": len(all_rows),
         "con_warning": sum(1 for r in msg_rows if r["parse_warning"]),

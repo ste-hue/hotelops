@@ -559,6 +559,45 @@ def test_ingest_file_dry_run_su_mbox_sintetico(tmp_path, monkeypatch):
     assert report["per_tipo"] == {"CONSEGNA": 1}
 
 
+def test_ingest_file_dedup_allegati_indipendente_dai_messaggi(tmp_path, monkeypatch):
+    """Messaggi tutti già in BQ ma allegati assenti: le righe allegato vengono
+    scritte comunque (backfill) — il dedup allegati è sul loro hash_riga,
+    non sulla novità del msgid."""
+    import mailbox
+
+    from core.bq import dedup as dedup_mod
+    from core.bq import write as write_mod
+    from ingest.flussi import ingest_pec_mbox as mod
+
+    mbox_path = tmp_path / "t.mbox"
+    mb = mailbox.mbox(str(mbox_path))
+    mb.add(_busta_con_postacert())
+    mb.flush()
+
+    def fake_filter(table, rows, hash_column):
+        # tutti i messaggi sono dedup; tutti gli allegati sono nuovi
+        return [] if "f_pec_messages" in table else list(rows)
+
+    written: dict[str, list] = {}
+
+    def fake_write(table, rows, mode=None):
+        written[table] = rows
+
+    monkeypatch.setattr(dedup_mod, "filter_new_rows_by_hash", fake_filter)
+    monkeypatch.setattr(write_mod, "bq_write_validated", fake_write)
+    monkeypatch.setattr(
+        mod.AllegatiStore, "_get_client", lambda self: _FakeGcsClient()
+    )
+
+    report = mod.ingest_file(mbox_path, raw_object_id="raw-001", dry_run=False)
+    assert report["righe_messaggi"] == 0
+    assert report["dedup_bq"] == 1
+    assert report["righe_allegati"] == 2  # scritte nonostante il msg sia dedup
+    assert report["dedup_bq_allegati"] == 0
+    assert mod.F_PEC_MESSAGES not in written  # nessun messaggio nuovo
+    assert len(written[mod.F_PEC_ALLEGATI]) == 2
+
+
 def test_main_accetta_societa_coerente(tmp_path, monkeypatch, capsys):
     import mailbox
     import sys
