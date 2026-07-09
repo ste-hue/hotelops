@@ -97,3 +97,56 @@ def test_run_census_with_injected_collectors(tmp_path):
     assert len(res["items"]) == 1
     assert res["inaccessible"] == ["am@p.it"]
     assert res["by_category"]["01_Societario"] == 1
+
+
+def test_run_census_survives_folder_collector_failure(tmp_path):
+    users = [{"email": "a@p.it", "suspended": False}]
+
+    def boom(folder_id, subject):
+        raise RuntimeError("drive down")
+
+    res = run_census(
+        COMPANIES["INTUR"],
+        users,
+        tmp_path,
+        drive_collector=lambda e, p, max_files=500: [],
+        gmail_collector=lambda e, t, max_threads=200: [],
+        folder_collector=boom,
+    )
+    assert Path(res["census_path"]).exists()
+    assert "cartella INTUR" in res["inaccessible"]
+
+
+def test_run_census_partial_user_failure_keeps_items_and_labels_source(tmp_path):
+    users = [{"email": "a@p.it", "suspended": False}]
+
+    def fake_drive(email, phrases, max_files=500):
+        return [
+            {
+                "source": "drive",
+                "file_id": "f1",
+                "name": "doc.pdf",
+                "mime_type": "application/pdf",
+                "size": 1,
+                "owner": email,
+                "holders": [email],
+                "link": "",
+                "modified": "",
+                "category": "01_Societario",
+                "confidence": 0.9,
+            }
+        ]
+
+    def fail_gmail(email, terms, max_threads=200):
+        raise RuntimeError("gmail 403")
+
+    res = run_census(
+        COMPANIES["INTUR"],
+        users,
+        tmp_path,
+        drive_collector=fake_drive,
+        gmail_collector=fail_gmail,
+        folder_collector=lambda folder_id, subject: [],
+    )
+    assert len(res["items"]) == 1
+    assert res["inaccessible"] == ["a@p.it (gmail)"]

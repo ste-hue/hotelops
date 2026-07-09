@@ -293,23 +293,30 @@ def run_census(
     raw: list[dict] = []
     inaccessible: list[str] = []
     if folder_collector:
-        raw.extend(folder_collector(company.drive_folder_id, WRITE_AS))
+        try:
+            raw.extend(folder_collector(company.drive_folder_id, WRITE_AS))
+        except Exception as e:
+            print(f"  ! cartella {company.company_id}: {type(e).__name__}: {e}")
+            inaccessible.append(f"cartella {company.company_id}")
     for u in users:
         email = u["email"]
         if u.get("suspended"):
             inaccessible.append(email)
             continue
-        try:
-            raw.extend(drive_collector(email, company.search_phrases))
-            raw.extend(gmail_collector(email, company.gmail_terms))
-        except Exception as e:  # impersonation negata, ecc.
-            print(f"  ! {email}: {type(e).__name__}: {e}")
-            inaccessible.append(email)
+        for label, call in (
+            ("drive", lambda: drive_collector(email, company.search_phrases)),
+            ("gmail", lambda: gmail_collector(email, company.gmail_terms)),
+        ):
+            try:
+                raw.extend(call())
+            except Exception as e:
+                print(f"  ! {email} ({label}): {type(e).__name__}: {e}")
+                inaccessible.append(f"{email} ({label})")
     items = dedupe_items(raw)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     census_path = out_dir / f"census_{company.company_id}.jsonl"
-    with census_path.open("w") as f:
+    with census_path.open("w", encoding="utf-8") as f:
         for it in items:
             f.write(json.dumps(it, ensure_ascii=False) + "\n")
     by_category = Counter(it["category"] for it in items)
