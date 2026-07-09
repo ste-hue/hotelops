@@ -520,6 +520,25 @@ def test_extract_inviata():
     assert allegati == []
 
 
+def test_extract_data_utc_convertita_a_wall_time_roma():
+    """Date header in UTC → DATETIME naive in ora di Roma (pinned, non fuso
+    della macchina): giugno = CEST, +2h."""
+    import email.message
+    from datetime import datetime
+
+    inviata = email.message.EmailMessage()
+    inviata["From"] = "in.tur@pec.it"
+    inviata["To"] = "a@pec.it"
+    inviata["Subject"] = "x"
+    inviata["Message-ID"] = "<sent.utc.001@pec.it>"
+    inviata["Date"] = "Tue, 25 Jun 2024 10:00:00 +0000"
+    inviata.set_content("testo")
+
+    riga, _ = _extract(inviata)
+    assert riga["data_evento"] == datetime(2024, 6, 25, 12, 0)
+    assert riga["data_evento"].tzinfo is None
+
+
 def test_extract_busta_senza_daticert_ha_warning_e_msgid_sintetico():
     import email.message
 

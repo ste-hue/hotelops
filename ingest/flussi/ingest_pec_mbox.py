@@ -30,6 +30,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from core.config import F_PEC_ALLEGATI, F_PEC_MESSAGES
 from core.schemas import (
@@ -43,6 +44,9 @@ log = logging.getLogger("ingest.pec_mbox")
 
 CASELLA = "in.tur@pec.it"
 SOCIETA = "INTUR"
+# Wall time canonico delle DATETIME in BQ: Roma, non il fuso della macchina.
+# I datetime naive del daticert sono già ora italiana e restano intatti.
+TZ_ROMA = ZoneInfo("Europe/Rome")
 
 # Nomi degli artefatti di busta: non sono allegati reali.
 ARTEFATTI_BUSTA = {"daticert.xml", "postacert.eml", "smime.p7s"}
@@ -339,7 +343,7 @@ def extract_message(
         except (TypeError, ValueError):
             warning = (warning or "") + " data non parsabile"
     if data_evento is not None and data_evento.tzinfo is not None:
-        data_evento = data_evento.astimezone(tz=None).replace(tzinfo=None)
+        data_evento = data_evento.astimezone(TZ_ROMA).replace(tzinfo=None)
 
     if daticert and daticert.get("mittente"):
         mittente = daticert["mittente"]
