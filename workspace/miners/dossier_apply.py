@@ -1,6 +1,12 @@
-"""Fase apply del dossier: copia i documenti censiti nelle cartelle Drive.
+"""Fase apply del dossier: scorciatoie per i file Drive, upload per gli
+allegati Gmail, nelle cartelle di categoria del dossier.
 
-Idempotente via ledger; mai move/delete degli originali, solo copie.
+Per i file Drive non condivisi con WRITE_AS la scorciatoia sarebbe un link
+morto: prima dello shortcut si tenta una condivisione reader silenziosa via
+DWD impersonando owner/holder interno al dominio (best-effort; owner esterni
+finiscono in `not_shared` per la gap list).
+
+Idempotente via ledger; mai move/delete degli originali.
 """
 
 from __future__ import annotations
@@ -11,12 +17,20 @@ from pathlib import Path
 
 from ..dossier_config import (
     CONFIDENCE_THRESHOLD,
+    DOMAIN,
     DOSSIER_STATE_DIR,
     DossierCompany,
     TAXONOMY,
     WRITE_AS,
 )
-from ..drive import ensure_subfolder, get_drive_reader, get_drive_writer, upload_bytes
+from ..drive import (
+    create_shortcut,
+    ensure_shared_with,
+    ensure_subfolder,
+    get_drive_reader,
+    get_drive_writer,
+    upload_bytes,
+)
 from ..gmail import get_gmail_service, get_thread, list_attachments
 from .dossier_census import GOOGLE_EXPORT_AS_PDF
 
@@ -32,6 +46,18 @@ def plan_apply(items: list[dict], ledger_keys: set[str], threshold: float) -> li
         )
         plan.append(it)
     return plan
+
+
+def _grant_subject(item: dict) -> str | None:
+    """Utente del dominio da impersonare per il grant (owner, poi holders)."""
+    suffix = f"@{DOMAIN}"
+    owner = item.get("owner") or ""
+    if owner.endswith(suffix):
+        return owner
+    for h in item.get("holders", []):
+        if h.endswith(suffix):
+            return h
+    return None
 
 
 def _fetch_bytes(item: dict) -> bytes | None:
@@ -61,25 +87,40 @@ def apply_census(company: DossierCompany, census_path: Path, dry_run: bool = Fal
     if dry_run:
         for p in plan:
             print(f"  [{p['target_category']}] {p['name']}  ({p['key']})")
-        return {"applied": 0, "skipped": len(items) - len(plan), "failed": [], "planned": len(plan)}
+        return {"applied": 0, "skipped": len(items) - len(plan), "failed": [],
+                "planned": len(plan), "not_shared": []}
 
     writer = get_drive_writer(WRITE_AS)
     folder_ids = {cat: ensure_subfolder(writer, company.drive_folder_id, cat)
                   for cat in TAXONOMY}
-    applied, failed = [], []
+    applied, failed, not_shared = [], [], []
     for p in plan:
         try:
-            data = _fetch_bytes(p)
-            if data is None:
-                raise RuntimeError("contenuto non recuperabile")
-            name = p["name"]
-            if p["mime_type"] in GOOGLE_EXPORT_AS_PDF and not name.lower().endswith(".pdf"):
-                name += ".pdf"
-            mime = "application/pdf" if p["mime_type"] in GOOGLE_EXPORT_AS_PDF else p["mime_type"]
-            upload_bytes(writer, folder_ids[p["target_category"]], name, data, mime)
+            if p["source"] == "drive":
+                # condivisione silenziosa best-effort: senza accesso per
+                # WRITE_AS la scorciatoia sarebbe un link morto.
+                subject = _grant_subject(p)
+                shared = bool(subject) and ensure_shared_with(
+                    subject, p["file_id"], WRITE_AS
+                )
+                create_shortcut(
+                    writer, folder_ids[p["target_category"]], p["name"], p["file_id"]
+                )
+                # solo dopo che la scorciatoia esiste: se non condivisa, gap list.
+                if not shared:
+                    not_shared.append(p["key"])
+            else:
+                data = _fetch_bytes(p)
+                if data is None:
+                    raise RuntimeError("contenuto non recuperabile")
+                name = p["name"]
+                if p["mime_type"] in GOOGLE_EXPORT_AS_PDF and not name.lower().endswith(".pdf"):
+                    name += ".pdf"
+                mime = "application/pdf" if p["mime_type"] in GOOGLE_EXPORT_AS_PDF else p["mime_type"]
+                upload_bytes(writer, folder_ids[p["target_category"]], name, data, mime)
             append_ledger(ledger_path, [p["key"]])
             applied.append(p["key"])
         except Exception as e:
             failed.append({"key": p["key"], "name": p.get("name"), "error": str(e)})
     return {"applied": len(applied), "skipped": len(items) - len(plan),
-            "failed": failed, "planned": len(plan)}
+            "failed": failed, "planned": len(plan), "not_shared": not_shared}
