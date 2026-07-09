@@ -178,19 +178,31 @@ def estrai_body_text(msg: email.message.Message) -> str | None:
     return None
 
 
-def iter_allegati_reali(msg: email.message.Message) -> list[tuple[str, bytes, str]]:
-    """(nome, bytes, mime) per ogni allegato reale — esclusi artefatti busta."""
-    out: list[tuple[str, bytes, str]] = []
+def iter_allegati_reali(
+    msg: email.message.Message,
+) -> list[tuple[str, bytes | None, str, str | None]]:
+    """(nome, bytes|None, mime, sha_fallback) per ogni allegato reale.
+
+    Esclusi SOLO i 3 artefatti di busta e le parti senza filename: una parte
+    con filename è un documento anche se Content-Disposition è inline (o
+    assente). Payload non decodificabile (es. message/rfc822 annidato) →
+    content=None + sha_fallback dal payload raw quando è una stringa
+    (no-silent-skips: il chiamante emette comunque la riga, senza gcs_uri).
+    """
+    out: list[tuple[str, bytes | None, str, str | None]] = []
     for part in msg.walk():
         nome = _decode_header(part.get_filename())
         if not nome or nome.lower() in ARTEFATTI_BUSTA:
             continue
-        if part.get_content_disposition() != "attachment":
-            continue
         content = part.get_payload(decode=True)
+        sha_fallback = None
         if content is None:
-            continue
-        out.append((nome, content, part.get_content_type()))
+            raw = part.get_payload()
+            if isinstance(raw, str) and raw:
+                sha_fallback = hashlib.sha256(
+                    raw.encode("utf-8", errors="replace")
+                ).hexdigest()
+        out.append((nome, content, part.get_content_type(), sha_fallback))
     return out
 
 
@@ -344,14 +356,29 @@ def extract_message(
         provider = fr_busta.split("@", 1)[1] if "@" in fr_busta else None
 
     allegati_rows: list[dict] = []
-    for nome, content, mime in iter_allegati_reali(inner):
-        sha, uri = store.store(nome, content)
+    for nome, content, mime, sha_fallback in iter_allegati_reali(inner):
+        if content is None:
+            # Allegato non estraibile: la riga esce comunque (no-silent-skips)
+            # ma senza gcs_uri. sha256 è REQUIRED nello schema: si usa lo
+            # sha256 del payload raw non decodificato quando esiste, altrimenti
+            # il placeholder deterministico sha256("<msgid>|<nome>") — stabile
+            # tra run e non confondibile con lo sha di un contenuto reale
+            # (il preimage contiene il msgid, mai i byte del documento).
+            sha = (
+                sha_fallback
+                or hashlib.sha256(f"{msgid}|{nome}".encode()).hexdigest()
+            )
+            uri, size = None, 0
+            warning = (warning or "") + f" allegato non estraibile: {nome}"
+        else:
+            sha, uri = store.store(nome, content)
+            size = len(content)
         allegati_rows.append(
             {
                 "msgid": msgid,
                 "nome_file": nome,
                 "mime_type": mime,
-                "size_bytes": len(content),
+                "size_bytes": size,
                 "sha256": sha,
                 "is_firmato": nome.lower().endswith((".p7m", ".p7s")),
                 "gcs_uri": uri,

@@ -324,6 +324,90 @@ def test_iter_allegati_reali_esclude_artefatti():
     assert allegati[0][2] == "application/pdf"
 
 
+def test_iter_allegati_include_inline_con_filename():
+    """Una parte inline CON filename è un documento, non va scartata."""
+    import email as email_pkg
+
+    from ingest.flussi.ingest_pec_mbox import iter_allegati_reali
+
+    raw = (
+        b"From: in.tur@pec.it\r\n"
+        b"Subject: x\r\n"
+        b"MIME-Version: 1.0\r\n"
+        b'Content-Type: multipart/mixed; boundary="EE"\r\n'
+        b"\r\n"
+        b"--EE\r\n"
+        b"Content-Type: text/plain\r\n"
+        b"\r\n"
+        b"corpo\r\n"
+        b"--EE\r\n"
+        b"Content-Type: application/pdf\r\n"
+        b'Content-Disposition: inline; filename="Planimetria.pdf"\r\n'
+        b"Content-Transfer-Encoding: base64\r\n"
+        b"\r\n"
+        b"JVBERi1mYWtl\r\n"
+        b"--EE--\r\n"
+    )
+    allegati = iter_allegati_reali(email_pkg.message_from_bytes(raw))
+    assert [a[0] for a in allegati] == ["Planimetria.pdf"]
+    assert allegati[0][1] == b"%PDF-fake"
+
+
+def _inviata_con_eml_annidato() -> "email.message.Message":
+    """Inviata con allegato message/rfc822 (non postacert): payload non
+    decodificabile via get_payload(decode=True)."""
+    import email as email_pkg
+
+    raw = (
+        b"From: in.tur@pec.it\r\n"
+        b"To: controparte@pec.it\r\n"
+        b"Subject: inoltro\r\n"
+        b"Message-ID: <sent.fwd.001@pec.it>\r\n"
+        b"Date: Tue, 25 Jun 2024 10:00:00 +0200\r\n"
+        b"MIME-Version: 1.0\r\n"
+        b'Content-Type: multipart/mixed; boundary="FF"\r\n'
+        b"\r\n"
+        b"--FF\r\n"
+        b"Content-Type: text/plain\r\n"
+        b"\r\n"
+        b"vedi allegato\r\n"
+        b"--FF\r\n"
+        b'Content-Type: message/rfc822; name="vecchia_mail.eml"\r\n'
+        b'Content-Disposition: attachment; filename="vecchia_mail.eml"\r\n'
+        b"\r\n"
+        b"From: terzo@pec.it\r\n"
+        b"Subject: vecchia\r\n"
+        b"\r\n"
+        b"testo vecchio\r\n"
+        b"--FF--\r\n"
+    )
+    return email_pkg.message_from_bytes(raw)
+
+
+def test_extract_allegato_non_estraibile_riga_tracciata():
+    """Payload non decodificabile → riga f_pec_allegati senza gcs_uri, sha256
+    placeholder deterministico, warning sul messaggio (no-silent-skips)."""
+    import hashlib
+
+    riga, allegati = _extract(_inviata_con_eml_annidato())
+    assert riga["n_allegati"] == 1
+    assert "allegato non estraibile: vecchia_mail.eml" in riga["parse_warning"]
+    a = allegati[0]
+    assert a["nome_file"] == "vecchia_mail.eml"
+    assert a["gcs_uri"] is None
+    assert a["size_bytes"] == 0
+    expected_sha = hashlib.sha256(
+        f"{riga['msgid']}|vecchia_mail.eml".encode()
+    ).hexdigest()
+    assert a["sha256"] == expected_sha  # deterministico tra run
+    validate_batch(allegati, PecAllegatoRow, context="test")
+
+    # idempotenza: seconda estrazione → stesso sha256 e hash_riga
+    _, allegati2 = _extract(_inviata_con_eml_annidato())
+    assert allegati2[0]["sha256"] == a["sha256"]
+    assert allegati2[0]["hash_riga"] == a["hash_riga"]
+
+
 def test_estrai_body_text():
     from ingest.flussi.ingest_pec_mbox import estrai_body_text, inner_message
 
