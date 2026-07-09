@@ -120,5 +120,5 @@ def _dossier_official(args):
         if not args.yes:
             print("  Nessun ordine inviato (aggiungi --yes per confermare).")
             return
-        for r in place_orders(company, orders):
+        for r in place_orders(company, orders, anno_chiusura=args.anno):
             print(f"  {r['order']}: {r['status']}")

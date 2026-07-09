@@ -1368,6 +1368,7 @@ def main():
     p_off.add_argument("--company", required=True, choices=["ORTI", "INTUR", "orti", "intur"])
     p_off.add_argument("--profile", action="store_true", help="scarica profilo advanced (€0.10)")
     p_off.add_argument("--order", default="", help="comma list: visura,bilancio,soci")
+    p_off.add_argument("--anno", type=int, default=None, help="anno chiusura bilancio (default: anno precedente)")
     p_off.add_argument("--yes", action="store_true", help="conferma la spesa")
 
     args = parser.parse_args()

@@ -23,20 +23,16 @@ from __future__ import annotations
 import base64
 import json
 import time
+from datetime import date
 
 from ..dossier_config import DOSSIER_STATE_DIR, DossierCompany, WRITE_AS
 from ..drive import ensure_subfolder, get_drive_writer, upload_bytes
 
-# NOTA: i costi qui sotto sono quelli definiti per il catalogo hotelops (voce
-# dossier ufficiale) e NON sono stati riallineati 1:1 a openapi_ita.visure.COSTS
-# (che a oggi riporta storica-societa-capitale=5.90 e bilancio-ottico=4.50,
-# contro i 4.95/2.95 usati qui). Vedi task-10-report.md per il dettaglio: da
-# risincronizzare prima di autorizzare spesa reale, per non mostrare un
-# preventivo piu' basso del costo effettivo all'utente in fase di --yes.
+# prezzi base (senza sconti best-price): il gate mostra il caso peggiore
 ORDER_CATALOG: dict[str, dict] = {
-    "visura": {"endpoint": "storica-societa-capitale", "cost": 4.95,
+    "visura": {"endpoint": "storica-societa-capitale", "cost": 5.90,
                "category": "01_Societario", "label": "Visura storica"},
-    "bilancio": {"endpoint": "bilancio-ottico", "cost": 2.95,
+    "bilancio": {"endpoint": "bilancio-ottico", "cost": 4.50,
                  "category": "03_Bilanci", "label": "Bilancio ottico (ultimo)"},
     "soci": {"endpoint": "soci-attivi", "cost": 2.30,
              "category": "01_Societario", "label": "Elenco soci attivi"},
@@ -109,7 +105,7 @@ def _extract_attachments(raw, fallback_name: str) -> list[tuple[str, bytes]]:
     return out
 
 
-def place_orders(company: DossierCompany, orders: list[str], poll_minutes: int = 20) -> list[dict]:
+def place_orders(company: DossierCompany, orders: list[str], poll_minutes: int = 20, anno_chiusura: int | None = None) -> list[dict]:
     """Invia gli ordini a pagamento, fa polling dello stato e carica i PDF su Drive.
 
     Adattato al contratto reale di openapi_ita.visure.VisureAPI (vedi docstring
@@ -117,6 +113,12 @@ def place_orders(company: DossierCompany, orders: list[str], poll_minutes: int =
     (quindi l'id richiesta e' req["id"], non req["data"]["id"]), e download()
     NON ritorna coppie (filename, bytes) pronte ma un payload eterogeneo che va
     normalizzato via _extract_attachments().
+
+    Args:
+        company: DossierCompany da elaborare
+        orders: lista di order_id (chiavi in ORDER_CATALOG)
+        poll_minutes: timeout polling in minuti
+        anno_chiusura: anno chiusura bilancio per bilancio-ottico (default: anno precedente)
     """
     from openapi_ita import VisureAPI
 
@@ -124,8 +126,12 @@ def place_orders(company: DossierCompany, orders: list[str], poll_minutes: int =
     writer = get_drive_writer(WRITE_AS)
     results = []
     plan, _ = order_summary(orders)
+    default_anno = anno_chiusura or (date.today().year - 1)
     for entry in plan:
-        req = api.submit(entry["endpoint"], cf_piva_id=company.tax_code)
+        body = {"cf_piva_id": company.tax_code}
+        if entry["endpoint"] == "bilancio-ottico":
+            body["anno_chiusura"] = default_anno
+        req = api.submit(entry["endpoint"], **body)
         req_id = req.get("id") or req.get("request_id")
         print(f"  {entry['label']}: richiesta {req_id}, polling…")
         deadline = time.time() + poll_minutes * 60
