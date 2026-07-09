@@ -349,3 +349,51 @@ def test_apply_drive_external_owner_still_creates_shortcut(monkeypatch, tmp_path
     ]
     assert len(shortcut_calls) == 2
     assert result["not_shared"] == ["drive:F1", "drive:F2"]
+
+
+def test_apply_shortcut_create_fails_not_in_not_shared(monkeypatch, tmp_path):
+    company = COMPANIES["INTUR"]
+
+    class BoomFiles(FakeFiles):
+        def create(self, **kwargs):
+            if kwargs.get("body", {}).get("mimeType") == (
+                "application/vnd.google-apps.shortcut"
+            ):
+                raise RuntimeError("shortcut boom")
+            return super().create(**kwargs)
+
+    class BoomDriveService(FakeDriveService):
+        def __init__(self):
+            self.files_ = BoomFiles()
+
+    fake_writer = BoomDriveService()
+    monkeypatch.setattr(
+        "workspace.miners.dossier_apply.get_drive_writer", lambda subject: fake_writer
+    )
+    monkeypatch.setattr("workspace.miners.dossier_apply.DOSSIER_STATE_DIR", tmp_path)
+    # owner esterno → share=False; ma la scorciatoia solleva prima di poter
+    # finire in not_shared.
+    monkeypatch.setattr(
+        "workspace.miners.dossier_apply.ensure_shared_with", lambda *a: False
+    )
+
+    items = [{
+        "key": "drive:F1",
+        "source": "drive",
+        "file_id": "F1",
+        "name": "esterno.pdf",
+        "mime_type": "application/pdf",
+        "category": "01_Societario",
+        "confidence": 0.9,
+        "owner": "ext@gmail.com",
+        "holders": ["ext@gmail.com"],
+    }]
+    census_path = _write_census(tmp_path, items)
+
+    result = apply_census(company, census_path)
+
+    assert result["applied"] == 0
+    assert result["not_shared"] == []
+    assert [f["key"] for f in result["failed"]] == ["drive:F1"]
+    ledger_path = tmp_path / f"applied_{company.company_id}.jsonl"
+    assert load_ledger(ledger_path) == set()

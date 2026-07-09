@@ -100,13 +100,15 @@ def apply_census(company: DossierCompany, census_path: Path, dry_run: bool = Fal
                 # condivisione silenziosa best-effort: senza accesso per
                 # WRITE_AS la scorciatoia sarebbe un link morto.
                 subject = _grant_subject(p)
-                if subject is None or not ensure_shared_with(
+                shared = bool(subject) and ensure_shared_with(
                     subject, p["file_id"], WRITE_AS
-                ):
-                    not_shared.append(p["key"])
+                )
                 create_shortcut(
                     writer, folder_ids[p["target_category"]], p["name"], p["file_id"]
                 )
+                # solo dopo che la scorciatoia esiste: se non condivisa, gap list.
+                if not shared:
+                    not_shared.append(p["key"])
             else:
                 data = _fetch_bytes(p)
                 if data is None:
