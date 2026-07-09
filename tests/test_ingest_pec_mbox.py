@@ -559,6 +559,60 @@ def test_ingest_file_dry_run_su_mbox_sintetico(tmp_path, monkeypatch):
     assert report["per_tipo"] == {"CONSEGNA": 1}
 
 
+def test_decode_header():
+    from ingest.flussi.ingest_pec_mbox import _decode_header
+
+    assert _decode_header(None) == ""
+    assert _decode_header("normale.pdf") == "normale.pdf"
+    assert (
+        _decode_header("=?utf-8?Q?Richiesta=5Fautorizzazione=2Epdf?=")
+        == "Richiesta_autorizzazione.pdf"
+    )
+    # charset sconosciuto → fallback latin-1, mai LookupError
+    assert _decode_header("=?bogus-xyz?Q?caff=E8?=") == "caffè"
+    # control char del folding collassati in uno spazio
+    assert _decode_header("riga\r\n\tpiegata") == "riga piegata"
+
+
+def _inviata_rfc2047() -> "email.message.Message":
+    """Messaggio inviato con subject folded RFC2047 + filename RFC2047."""
+    import email as email_pkg
+
+    raw = (
+        b"From: in.tur@pec.it\r\n"
+        b"To: controparte@pec.it\r\n"
+        b"Subject: =?utf-8?Q?Richiesta_autorizzazione?=\r\n"
+        b" =?utf-8?Q?_scarico_a_mare?=\r\n"
+        b"Message-ID: <sent.enc.001@pec.it>\r\n"
+        b"Date: Tue, 25 Jun 2024 10:00:00 +0200\r\n"
+        b"MIME-Version: 1.0\r\n"
+        b'Content-Type: multipart/mixed; boundary="DD"\r\n'
+        b"\r\n"
+        b"--DD\r\n"
+        b"Content-Type: text/plain\r\n"
+        b"\r\n"
+        b"In allegato la richiesta.\r\n"
+        b"--DD\r\n"
+        b"Content-Type: application/pdf\r\n"
+        b"Content-Disposition: attachment;"
+        b' filename="=?utf-8?Q?Richiesta=5Fautorizzazione=2Epdf?="\r\n'
+        b"Content-Transfer-Encoding: base64\r\n"
+        b"\r\n"
+        b"JVBERi1mYWtl\r\n"
+        b"--DD--\r\n"
+    )
+    return email_pkg.message_from_bytes(raw)
+
+
+def test_extract_decodifica_rfc2047_subject_e_filename():
+    riga, allegati = _extract(_inviata_rfc2047())
+    assert riga["subject"] == "Richiesta autorizzazione scarico a mare"
+    assert len(allegati) == 1
+    assert allegati[0]["nome_file"] == "Richiesta_autorizzazione.pdf"
+    # il nome decodificato fluisce anche nel path GCS
+    assert allegati[0]["gcs_uri"].endswith("/Richiesta_autorizzazione.pdf")
+
+
 def test_ingest_file_dedup_allegati_indipendente_dai_messaggi(tmp_path, monkeypatch):
     """Messaggi tutti già in BQ ma allegati assenti: le righe allegato vengono
     scritte comunque (backfill) — il dedup allegati è sul loro hash_riga,

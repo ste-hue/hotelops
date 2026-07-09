@@ -19,11 +19,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import email.header
 import email.message
 import email.utils
 import hashlib
 import logging
 import mailbox
+import re
 import xml.etree.ElementTree as ET
 from collections import Counter
 from datetime import datetime
@@ -64,6 +66,27 @@ SUBJECT_PREFIX_MAP = [
     ("ANOMALIA", "ANOMALIA"),
     ("MANCATA CONSEGNA", "ANOMALIA"),
 ]
+
+
+def _decode_header(value: str | None) -> str:
+    """RFC2047 → testo leggibile (subject, filename).
+
+    Le parti bytes si decodificano col charset dichiarato (fallback latin-1
+    su charset sconosciuto); i control char residui del folding (\\r\\n\\t)
+    collassano in uno spazio singolo.
+    """
+    if not value:
+        return ""
+    parts: list[str] = []
+    for chunk, charset in email.header.decode_header(value):
+        if isinstance(chunk, bytes):
+            try:
+                parts.append(chunk.decode(charset or "utf-8", errors="replace"))
+            except LookupError:
+                parts.append(chunk.decode("latin-1", errors="replace"))
+        else:
+            parts.append(chunk)
+    return re.sub(r"[\r\n\t]+", " ", "".join(parts)).strip()
 
 
 def is_busta(msg: email.message.Message) -> bool:
@@ -156,7 +179,7 @@ def iter_allegati_reali(msg: email.message.Message) -> list[tuple[str, bytes, st
     """(nome, bytes, mime) per ogni allegato reale — esclusi artefatti busta."""
     out: list[tuple[str, bytes, str]] = []
     for part in msg.walk():
-        nome = part.get_filename()
+        nome = _decode_header(part.get_filename())
         if not nome or nome.lower() in ARTEFATTI_BUSTA:
             continue
         if part.get_content_disposition() != "attachment":
@@ -251,7 +274,9 @@ def extract_message(
             warning = "daticert assente o malformato: fallback su header busta"
 
     inner, ha_postacert = inner_message(msg) if busta else (msg, False)
-    subject_inner = str(inner.get("Subject", "")) or str(msg.get("Subject", ""))
+    subject_inner = _decode_header(str(inner.get("Subject", ""))) or _decode_header(
+        str(msg.get("Subject", ""))
+    )
     tipo = map_tipo(
         daticert.get("tipo_raw") if daticert else None, subject_inner, busta
     )
