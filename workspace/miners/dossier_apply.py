@@ -77,10 +77,9 @@ def apply_census(company: DossierCompany, census_path: Path, dry_run: bool = Fal
                 name += ".pdf"
             mime = "application/pdf" if p["mime_type"] in GOOGLE_EXPORT_AS_PDF else p["mime_type"]
             upload_bytes(writer, folder_ids[p["target_category"]], name, data, mime)
+            append_ledger(ledger_path, [p["key"]])
             applied.append(p["key"])
         except Exception as e:
             failed.append({"key": p["key"], "name": p.get("name"), "error": str(e)})
-    if applied:
-        append_ledger(ledger_path, applied)
     return {"applied": len(applied), "skipped": len(items) - len(plan),
             "failed": failed, "planned": len(plan)}
