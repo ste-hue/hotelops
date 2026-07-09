@@ -1,6 +1,11 @@
 """Fase apply del dossier: scorciatoie per i file Drive, upload per gli
 allegati Gmail, nelle cartelle di categoria del dossier.
 
+Per i file Drive non condivisi con WRITE_AS la scorciatoia sarebbe un link
+morto: prima dello shortcut si tenta una condivisione reader silenziosa via
+DWD impersonando owner/holder interno al dominio (best-effort; owner esterni
+finiscono in `not_shared` per la gap list).
+
 Idempotente via ledger; mai move/delete degli originali.
 """
 
@@ -12,6 +17,7 @@ from pathlib import Path
 
 from ..dossier_config import (
     CONFIDENCE_THRESHOLD,
+    DOMAIN,
     DOSSIER_STATE_DIR,
     DossierCompany,
     TAXONOMY,
@@ -19,6 +25,7 @@ from ..dossier_config import (
 )
 from ..drive import (
     create_shortcut,
+    ensure_shared_with,
     ensure_subfolder,
     get_drive_reader,
     get_drive_writer,
@@ -39,6 +46,18 @@ def plan_apply(items: list[dict], ledger_keys: set[str], threshold: float) -> li
         )
         plan.append(it)
     return plan
+
+
+def _grant_subject(item: dict) -> str | None:
+    """Utente del dominio da impersonare per il grant (owner, poi holders)."""
+    suffix = f"@{DOMAIN}"
+    owner = item.get("owner") or ""
+    if owner.endswith(suffix):
+        return owner
+    for h in item.get("holders", []):
+        if h.endswith(suffix):
+            return h
+    return None
 
 
 def _fetch_bytes(item: dict) -> bytes | None:
@@ -68,15 +87,23 @@ def apply_census(company: DossierCompany, census_path: Path, dry_run: bool = Fal
     if dry_run:
         for p in plan:
             print(f"  [{p['target_category']}] {p['name']}  ({p['key']})")
-        return {"applied": 0, "skipped": len(items) - len(plan), "failed": [], "planned": len(plan)}
+        return {"applied": 0, "skipped": len(items) - len(plan), "failed": [],
+                "planned": len(plan), "not_shared": []}
 
     writer = get_drive_writer(WRITE_AS)
     folder_ids = {cat: ensure_subfolder(writer, company.drive_folder_id, cat)
                   for cat in TAXONOMY}
-    applied, failed = [], []
+    applied, failed, not_shared = [], [], []
     for p in plan:
         try:
             if p["source"] == "drive":
+                # condivisione silenziosa best-effort: senza accesso per
+                # WRITE_AS la scorciatoia sarebbe un link morto.
+                subject = _grant_subject(p)
+                if subject is None or not ensure_shared_with(
+                    subject, p["file_id"], WRITE_AS
+                ):
+                    not_shared.append(p["key"])
                 create_shortcut(
                     writer, folder_ids[p["target_category"]], p["name"], p["file_id"]
                 )
@@ -94,4 +121,4 @@ def apply_census(company: DossierCompany, census_path: Path, dry_run: bool = Fal
         except Exception as e:
             failed.append({"key": p["key"], "name": p.get("name"), "error": str(e)})
     return {"applied": len(applied), "skipped": len(items) - len(plan),
-            "failed": failed, "planned": len(plan)}
+            "failed": failed, "planned": len(plan), "not_shared": not_shared}

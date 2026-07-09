@@ -1,7 +1,7 @@
 import hashlib
 import json
 
-from workspace.dossier_config import COMPANIES
+from workspace.dossier_config import COMPANIES, WRITE_AS
 from workspace.miners.dossier_apply import apply_census, plan_apply
 from workspace.miners.dossier_census import load_ledger
 
@@ -89,6 +89,9 @@ def test_apply_drive_item_creates_shortcut(monkeypatch, tmp_path):
         "workspace.miners.dossier_apply.get_drive_writer", lambda subject: fake_writer
     )
     monkeypatch.setattr("workspace.miners.dossier_apply.DOSSIER_STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        "workspace.miners.dossier_apply.ensure_shared_with", lambda *a: True
+    )
 
     items = [{
         "key": "drive:F1",
@@ -131,6 +134,9 @@ def test_apply_drive_google_doc_shortcut_no_pdf_suffix(monkeypatch, tmp_path):
         "workspace.miners.dossier_apply.get_drive_writer", lambda subject: fake_writer
     )
     monkeypatch.setattr("workspace.miners.dossier_apply.DOSSIER_STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        "workspace.miners.dossier_apply.ensure_shared_with", lambda *a: True
+    )
 
     items = [{
         "key": "drive:F2",
@@ -164,6 +170,9 @@ def test_apply_gmail_item_still_uploads_bytes(monkeypatch, tmp_path):
         "workspace.miners.dossier_apply.get_drive_writer", lambda subject: fake_writer
     )
     monkeypatch.setattr("workspace.miners.dossier_apply.DOSSIER_STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        "workspace.miners.dossier_apply.ensure_shared_with", lambda *a: True
+    )
 
     content = b"hello world"
     sha = hashlib.sha256(content).hexdigest()
@@ -212,6 +221,9 @@ def test_apply_shortcut_appends_ledger_per_item(monkeypatch, tmp_path):
         "workspace.miners.dossier_apply.get_drive_writer", lambda subject: fake_writer
     )
     monkeypatch.setattr("workspace.miners.dossier_apply.DOSSIER_STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        "workspace.miners.dossier_apply.ensure_shared_with", lambda *a: True
+    )
 
     items = [{
         "key": "drive:F1",
@@ -234,3 +246,106 @@ def test_apply_shortcut_appends_ledger_per_item(monkeypatch, tmp_path):
     result2 = apply_census(company, census_path)
     assert result2["applied"] == 0
     assert result2["skipped"] == 1
+
+
+def test_apply_drive_item_self_shares_then_shortcut(monkeypatch, tmp_path):
+    company = COMPANIES["INTUR"]
+    fake_writer = FakeDriveService()
+    monkeypatch.setattr(
+        "workspace.miners.dossier_apply.get_drive_writer", lambda subject: fake_writer
+    )
+    monkeypatch.setattr("workspace.miners.dossier_apply.DOSSIER_STATE_DIR", tmp_path)
+
+    share_calls = []
+
+    def fake_share(owner_or_holder, file_id, grantee):
+        share_calls.append((owner_or_holder, file_id, grantee))
+        return True
+
+    monkeypatch.setattr(
+        "workspace.miners.dossier_apply.ensure_shared_with", fake_share
+    )
+
+    items = [{
+        "key": "drive:F1",
+        "source": "drive",
+        "file_id": "F1",
+        "name": "contratto.pdf",
+        "mime_type": "application/pdf",
+        "category": "01_Societario",
+        "confidence": 0.9,
+        "owner": "b@panoramagroup.it",
+        "holders": ["a@panoramagroup.it"],
+    }]
+    census_path = _write_census(tmp_path, items)
+
+    result = apply_census(company, census_path)
+
+    assert result["applied"] == 1
+    assert share_calls == [("b@panoramagroup.it", "F1", WRITE_AS)]
+    shortcut_calls = [
+        c for c in fake_writer.files_.created
+        if c["body"].get("mimeType") == "application/vnd.google-apps.shortcut"
+    ]
+    assert len(shortcut_calls) == 1
+    assert result["not_shared"] == []
+
+
+def test_apply_drive_external_owner_still_creates_shortcut(monkeypatch, tmp_path):
+    company = COMPANIES["INTUR"]
+    fake_writer = FakeDriveService()
+    monkeypatch.setattr(
+        "workspace.miners.dossier_apply.get_drive_writer", lambda subject: fake_writer
+    )
+    monkeypatch.setattr("workspace.miners.dossier_apply.DOSSIER_STATE_DIR", tmp_path)
+
+    share_calls = []
+
+    def failing_share(owner_or_holder, file_id, grantee):
+        share_calls.append((owner_or_holder, file_id, grantee))
+        return False
+
+    monkeypatch.setattr(
+        "workspace.miners.dossier_apply.ensure_shared_with", failing_share
+    )
+
+    items = [
+        {
+            # owner e holders tutti esterni al dominio: grant saltato del tutto
+            "key": "drive:F1",
+            "source": "drive",
+            "file_id": "F1",
+            "name": "esterno.pdf",
+            "mime_type": "application/pdf",
+            "category": "01_Societario",
+            "confidence": 0.9,
+            "owner": "ext@gmail.com",
+            "holders": ["ext@gmail.com"],
+        },
+        {
+            # owner interno ma grant fallito: shortcut comunque, key in not_shared
+            "key": "drive:F2",
+            "source": "drive",
+            "file_id": "F2",
+            "name": "interno.pdf",
+            "mime_type": "application/pdf",
+            "category": "01_Societario",
+            "confidence": 0.9,
+            "owner": "a@panoramagroup.it",
+            "holders": ["a@panoramagroup.it"],
+        },
+    ]
+    census_path = _write_census(tmp_path, items)
+
+    result = apply_census(company, census_path)
+
+    assert result["applied"] == 2
+    assert result["failed"] == []
+    # per F1 nessun utente interno impersonabile: ensure_shared_with mai chiamato
+    assert share_calls == [("a@panoramagroup.it", "F2", WRITE_AS)]
+    shortcut_calls = [
+        c for c in fake_writer.files_.created
+        if c["body"].get("mimeType") == "application/vnd.google-apps.shortcut"
+    ]
+    assert len(shortcut_calls) == 2
+    assert result["not_shared"] == ["drive:F1", "drive:F2"]

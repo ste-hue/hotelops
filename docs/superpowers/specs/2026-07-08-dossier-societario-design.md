@@ -74,10 +74,17 @@ CF/P.IVA, `drive_folder_id`. Termini di ricerca:
 `mine-dossier --apply`: per i file trovati su Drive crea scorciatoie
 (`application/vnd.google-apps.shortcut`) che puntano al file originale, nelle
 sottocartelle di categoria; per gli allegati Gmail (non esistono su Drive) carica i
-bytes veri nelle stesse sottocartelle. Aggiorna lo Sheet indice con il link
+bytes veri nelle stesse sottocartelle. Molti file Drive non sono condivisi con
+stefano@ (la scorciatoia sarebbe un link morto): prima dello shortcut l'apply
+esegue un'**auto-condivisione silenziosa via DWD** — impersona owner/holder
+interno al dominio e concede a stefano@ accesso reader con
+`sendNotificationEmail=false`. Best-effort: se nessun utente del dominio è
+impersonabile (owner esterno) o il grant fallisce, la scorciatoia viene creata
+comunque e la key finisce in `not_shared` → gap list ("scorciatoia creata ma non
+condivisibile automaticamente"). Aggiorna lo Sheet indice con il link
 (scorciatoia o file caricato). Ledger `applied` per fileId/hash → **idempotente**:
 run successivi processano solo il nuovo. Mai move/delete degli originali: solo
-scorciatoie e upload.
+scorciatoie, permessi in lettura e upload.
 
 ### Fase 3 — Dati ufficiali (openapi-ita, costi vivi)
 

@@ -61,6 +61,35 @@ def ensure_subfolder(service, parent_id: str, name: str) -> str:
     return folder["id"]
 
 
+def ensure_shared_with(owner_or_holder: str, file_id: str, grantee: str) -> bool:
+    """Concede a `grantee` accesso reader su `file_id`, impersonando un utente
+    che possiede/detiene il file (DWD), senza email di notifica. Ritorna True
+    se ora e' condiviso (o lo era gia'), False se non e' stato possibile (es.
+    proprietario esterno al dominio non impersonabile)."""
+    from googleapiclient.errors import HttpError
+
+    try:
+        svc = get_drive_writer(owner_or_holder)
+        svc.permissions().create(
+            fileId=file_id,
+            body={"type": "user", "role": "reader", "emailAddress": grantee},
+            sendNotificationEmail=False,
+            supportsAllDrives=True,
+            fields="id",
+        ).execute()
+        return True
+    except HttpError as e:
+        content = e.content if isinstance(e.content, bytes) else str(e.content).encode()
+        if e.resp.status in (400, 409) and (
+            b"already" in content.lower() or b"duplicate" in content.lower()
+        ):
+            return True
+        return False
+    except Exception:
+        # es. credenziali non ottenibili per un subject esterno al dominio
+        return False
+
+
 def create_shortcut(service, parent_id: str, name: str, target_id: str) -> str:
     """Crea una scorciatoia Drive a `target_id` dentro `parent_id`; ritorna l'id."""
     body = {
