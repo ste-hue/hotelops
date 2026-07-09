@@ -588,6 +588,59 @@ def test_extract_idempotente_hash_stabile():
     assert r1["hash_riga"] == r2["hash_riga"]
 
 
+def test_estrai_body_text_charset_bogus_fallback_latin1():
+    import email as email_pkg
+
+    from ingest.flussi.ingest_pec_mbox import estrai_body_text
+
+    raw = (
+        b"From: x@y.it\r\n"
+        b'Content-Type: text/plain; charset="bogus-charset-xyz"\r\n'
+        b"\r\n"
+        b"testo caff\xe8\r\n"
+    )
+    msg = email_pkg.message_from_bytes(raw)
+    assert estrai_body_text(msg) == "testo caffè"  # latin-1 fallback
+
+
+def test_riga_fallback_deterministica():
+    from datetime import datetime
+
+    from ingest.flussi.ingest_pec_mbox import _riga_fallback
+
+    now = datetime(2026, 7, 8, 12, 0)
+    riga = _riga_fallback(_busta_con_postacert(), "raw-001", now, ValueError("boom"))
+    assert riga["msgid"] == "busta.consegna.001@pec.aruba.it"  # header preservato
+    assert riga["tipo"] == "ALTRO"
+    assert riga["source_folder"] == "RECEIVED"
+    assert riga["parse_warning"].startswith("extract_fail: ValueError: boom")
+    assert riga["raw_object_id"] == "raw-001"
+    validate_batch([riga], PecMessageRow, context="test")
+
+
+def test_ingest_file_extract_fail_non_abortisce(tmp_path, monkeypatch):
+    """extract_message che esplode su un messaggio → riga fallback + counter,
+    mai abort dell'intero file."""
+    import mailbox
+
+    from ingest.flussi import ingest_pec_mbox as mod
+
+    mbox_path = tmp_path / "t.mbox"
+    mb = mailbox.mbox(str(mbox_path))
+    mb.add(_busta_con_postacert())
+    mb.flush()
+
+    def boom(msg, raw_object_id, store, now):
+        raise RuntimeError("parser rotto")
+
+    monkeypatch.setattr(mod, "extract_message", boom)
+    report = mod.ingest_file(mbox_path, raw_object_id="raw-001", dry_run=True)
+    assert report["estrazioni_fallite"] == 1
+    assert report["righe_messaggi"] == 1  # la riga fallback c'è
+    assert report["con_warning"] == 1
+    assert report["per_tipo"] == {"ALTRO": 1}
+
+
 def test_coverage_gaps():
     from datetime import date
 

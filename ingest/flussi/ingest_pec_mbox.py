@@ -171,7 +171,10 @@ def estrai_body_text(msg: email.message.Message) -> str | None:
             payload = part.get_payload(decode=True)
             if payload:
                 charset = part.get_content_charset() or "utf-8"
-                return payload.decode(charset, errors="replace").strip()
+                try:
+                    return payload.decode(charset, errors="replace").strip()
+                except LookupError:  # charset dichiarato inesistente
+                    return payload.decode("latin-1", errors="replace").strip()
     return None
 
 
@@ -383,6 +386,51 @@ def extract_message(
     return riga, allegati_rows
 
 
+def _riga_fallback(
+    msg: email.message.Message,
+    raw_object_id: str,
+    now: datetime,
+    exc: Exception,
+) -> dict:
+    """Riga minima quando extract_message esplode: mai abort dell'intero file.
+
+    msgid: header Message-ID > sintetico da sha256 > deterministico dal testo
+    dell'errore (ultimo paracadute se il messaggio non è nemmeno serializzabile).
+    """
+    warning = f"extract_fail: {type(exc).__name__}: {exc}"[:200]
+    try:
+        msgid = (str(msg.get("Message-ID", "")) or "").strip().strip("<>")
+        msgid = msgid or _msgid_sintetico(msg)
+    except Exception:
+        msgid = "fallback-" + hashlib.sha256(warning.encode()).hexdigest()[:32]
+    try:
+        folder = "RECEIVED" if is_busta(msg) else "SENT"
+    except Exception:
+        folder = "RECEIVED"
+    return {
+        "msgid": msgid,
+        "source_folder": folder,
+        "tipo": "ALTRO",
+        "ref_msgid": None,
+        "data_evento": now,
+        "data_certificata": False,
+        "mittente": None,
+        "destinatari": None,
+        "n_destinatari": 0,
+        "subject": None,
+        "body_text": None,
+        "provider": None,
+        "casella": CASELLA,
+        "societa_id": SOCIETA,
+        "n_allegati": 0,
+        "ha_postacert": False,
+        "parse_warning": warning,
+        "hash_riga": make_hash(msgid),
+        "raw_object_id": raw_object_id,
+        "data_caricamento": now,
+    }
+
+
 def coverage_gaps(dates: list, min_gap_days: int = 14) -> list[tuple]:
     """Vuoti > min_gap_days nella serie date (per il report no-silent-skips)."""
     out = []
@@ -408,11 +456,15 @@ def ingest_file(
 
     righe: dict[str, dict] = {}  # msgid → riga (dedup in-file)
     allegati: dict[str, list[dict]] = {}  # msgid → righe allegato
-    letti = dedup_in_file = 0
+    letti = dedup_in_file = estrazioni_fallite = 0
 
     for msg in mailbox.mbox(str(path)):
         letti += 1
-        riga, alls = extract_message(msg, ro_id, store, now)
+        try:
+            riga, alls = extract_message(msg, ro_id, store, now)
+        except Exception as e:  # no-silent-skips: riga fallback, mai abort
+            estrazioni_fallite += 1
+            riga, alls = _riga_fallback(msg, ro_id, now, e), []
         if riga["msgid"] in righe:
             dedup_in_file += 1
             continue
@@ -454,6 +506,7 @@ def ingest_file(
         "dedup_in_file": dedup_in_file,
         "dedup_bq": dedup_bq,
         "dedup_bq_allegati": dedup_bq_allegati,
+        "estrazioni_fallite": estrazioni_fallite,
         "righe_messaggi": len(msg_rows),
         "righe_allegati": len(all_rows),
         "con_warning": sum(1 for r in msg_rows if r["parse_warning"]),
