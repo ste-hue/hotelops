@@ -4,6 +4,7 @@ from google.oauth2 import service_account
 
 from .config import (
     SA_KEY_PATH,
+    SCOPE_ADMIN_DIRECTORY_RO,
     SCOPE_DRIVE_FILE,
     SCOPE_DRIVE_READ,
     SCOPE_GMAIL_READ,
@@ -38,5 +39,14 @@ def drive_write_credentials(subject: str):
     creds = service_account.Credentials.from_service_account_file(
         str(SA_KEY_PATH),
         scopes=[SCOPE_DRIVE_FILE],
+    )
+    return creds.with_subject(subject)
+
+
+def directory_credentials(subject: str):
+    """Delegated credentials per Admin SDK Directory (lista utenti dominio)."""
+    creds = service_account.Credentials.from_service_account_file(
+        str(SA_KEY_PATH),
+        scopes=[SCOPE_ADMIN_DIRECTORY_RO],
     )
     return creds.with_subject(subject)

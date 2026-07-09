@@ -1356,6 +1356,21 @@ def main():
         "--dry-run", action="store_true", help="Search only, no Drive uploads"
     )
 
+    p_dossier = ws_sub.add_parser("mine-dossier", help="Census/apply dossier societario ORTI/INTUR")
+    p_dossier.add_argument("--company", required=True, choices=["ORTI", "INTUR", "orti", "intur"])
+    p_dossier.add_argument("--census", action="store_true", help="fase census (default)")
+    p_dossier.add_argument("--apply", action="store_true", help="fase apply dal census esistente")
+    p_dossier.add_argument("--dry-run", action="store_true")
+    p_dossier.add_argument("--users", default="", help="lista email per limitare il census")
+    p_dossier.add_argument("--out", default="", help="dir output census (default ~/.config/hotelops/dossier)")
+
+    p_off = ws_sub.add_parser("dossier-official", help="Documenti ufficiali via openapi-ita (costi vivi)")
+    p_off.add_argument("--company", required=True, choices=["ORTI", "INTUR", "orti", "intur"])
+    p_off.add_argument("--profile", action="store_true", help="scarica profilo advanced (€0.10)")
+    p_off.add_argument("--order", default="", help="comma list: visura,bilancio,soci")
+    p_off.add_argument("--anno", type=int, default=None, help="anno chiusura bilancio (default: anno precedente)")
+    p_off.add_argument("--yes", action="store_true", help="conferma la spesa")
+
     args = parser.parse_args()
 
     if not args.command:
