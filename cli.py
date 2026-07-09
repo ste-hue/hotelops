@@ -1364,6 +1364,12 @@ def main():
     p_dossier.add_argument("--users", default="", help="lista email per limitare il census")
     p_dossier.add_argument("--out", default="", help="dir output census (default ~/.config/hotelops/dossier)")
 
+    p_off = ws_sub.add_parser("dossier-official", help="Documenti ufficiali via openapi-ita (costi vivi)")
+    p_off.add_argument("--company", required=True, choices=["ORTI", "INTUR", "orti", "intur"])
+    p_off.add_argument("--profile", action="store_true", help="scarica profilo advanced (€0.10)")
+    p_off.add_argument("--order", default="", help="comma list: visura,bilancio,soci")
+    p_off.add_argument("--yes", action="store_true", help="conferma la spesa")
+
     args = parser.parse_args()
 
     if not args.command:

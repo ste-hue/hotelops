@@ -11,6 +11,8 @@ def cmd_workspace(args):
         _mine_capex(args)
     elif args.workspace_action == "mine-dossier":
         _mine_dossier(args)
+    elif args.workspace_action == "dossier-official":
+        _dossier_official(args)
     else:
         print(f"Unknown workspace action: {args.workspace_action}", file=sys.stderr)
         sys.exit(1)
@@ -100,3 +102,23 @@ def _mine_dossier(args):
     xlsx = build_index_xlsx(res["items"], res["inaccessible"])
     file_id = upload_index(company, xlsx)
     print(f"  Indice caricato: https://drive.google.com/file/d/{file_id}/view")
+
+
+def _dossier_official(args):
+    from .dossier_config import COMPANIES
+    from .miners.dossier_official import fetch_profile, order_summary, place_orders
+
+    company = COMPANIES[args.company.upper()]
+    if args.profile:
+        fetch_profile(company)
+    if args.order:
+        orders = [o.strip() for o in args.order.split(",") if o.strip()]
+        plan, total = order_summary(orders)
+        for e in plan:
+            print(f"  {e['label']:<28s} €{e['cost']:.2f}")
+        print(f"  TOTALE €{total:.2f}")
+        if not args.yes:
+            print("  Nessun ordine inviato (aggiungi --yes per confermare).")
+            return
+        for r in place_orders(company, orders):
+            print(f"  {r['order']}: {r['status']}")
