@@ -1356,6 +1356,14 @@ def main():
         "--dry-run", action="store_true", help="Search only, no Drive uploads"
     )
 
+    p_dossier = ws_sub.add_parser("mine-dossier", help="Census/apply dossier societario ORTI/INTUR")
+    p_dossier.add_argument("--company", required=True, choices=["ORTI", "INTUR", "orti", "intur"])
+    p_dossier.add_argument("--census", action="store_true", help="fase census (default)")
+    p_dossier.add_argument("--apply", action="store_true", help="fase apply dal census esistente")
+    p_dossier.add_argument("--dry-run", action="store_true")
+    p_dossier.add_argument("--users", default="", help="lista email per limitare il census")
+    p_dossier.add_argument("--out", default="", help="dir output census (default ~/.config/hotelops/dossier)")
+
     args = parser.parse_args()
 
     if not args.command:

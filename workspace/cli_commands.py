@@ -9,6 +9,8 @@ def cmd_workspace(args):
     """Dispatch `hotelops workspace ...` subactions."""
     if args.workspace_action == "mine-capex":
         _mine_capex(args)
+    elif args.workspace_action == "mine-dossier":
+        _mine_dossier(args)
     else:
         print(f"Unknown workspace action: {args.workspace_action}", file=sys.stderr)
         sys.exit(1)
@@ -60,3 +62,41 @@ def _mine_capex(args):
                 f"Att: {r.get('attachments', 0)}"
             )
     print(f"{'─' * 70}\n")
+
+
+def _mine_dossier(args):
+    from pathlib import Path
+
+    from .directory import enumerate_domain_users
+    from .dossier_config import COMPANIES, DIRECTORY_SUBJECT, DOSSIER_STATE_DIR
+    from .miners.dossier_apply import apply_census
+    from .miners.dossier_census import run_census
+    from .miners.dossier_index import build_index_xlsx, upload_index
+
+    company = COMPANIES[args.company.upper()]
+    out_dir = Path(args.out) if args.out else DOSSIER_STATE_DIR
+    census_path = out_dir / f"census_{company.company_id}.jsonl"
+
+    if args.apply:
+        result = apply_census(company, census_path, dry_run=args.dry_run)
+        print(f"\n  applied={result['applied']} planned={result.get('planned')} "
+              f"skipped={result['skipped']} failed={len(result['failed'])}")
+        for f in result["failed"]:
+            print(f"  FAIL {f['name']}: {f['error']}")
+        return
+
+    if args.users:
+        users = [{"email": u.strip(), "suspended": False}
+                 for u in args.users.split(",") if u.strip()]
+    else:
+        users = enumerate_domain_users(DIRECTORY_SUBJECT)
+    print(f"  Census {company.company_id} su {len(users)} utenti…")
+    res = run_census(company, users, out_dir)
+    print(f"  {len(res['items'])} documenti unici → {res['census_path']}")
+    for cat, n in sorted(res["by_category"].items()):
+        print(f"    {cat:<22s} {n}")
+    if res["inaccessible"]:
+        print(f"  Non accessibili: {', '.join(res['inaccessible'])}")
+    xlsx = build_index_xlsx(res["items"], res["inaccessible"])
+    file_id = upload_index(company, xlsx)
+    print(f"  Indice caricato: https://drive.google.com/file/d/{file_id}/view")
