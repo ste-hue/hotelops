@@ -452,14 +452,16 @@ def test_extract_busta_senza_daticert_ha_warning_e_msgid_sintetico():
     assert riga["data_certificata"] is False
 
 
-def _busta_ricevuta_con_daticert(daticert_bytes: bytes, message_id: str, subject: str):
+def _busta_ricevuta_con_daticert(
+    daticert_bytes: bytes, message_id: str, subject: str, to: str = "in.tur@pec.it"
+):
     """Busta minima con daticert.xml, senza postacert.eml — per test sulla
     priorità del msgid (envelope Message-ID vs daticert identificativo)."""
     import email as email_pkg
 
     raw = (
         b"From: Per conto di: avvocato <posta-certificata@pec.aruba.it>\r\n"
-        b"To: in.tur@pec.it\r\n"
+        b"To: " + to.encode() + b"\r\n"
         b"Subject: " + subject.encode() + b"\r\n"
     )
     if message_id:
@@ -520,6 +522,64 @@ def test_extract_catena_ricevute_eventi_distinti():
     assert riga_accettazione["tipo"] == "ACCETTAZIONE"
     assert riga_consegna["msgid"] != riga_accettazione["msgid"]
     assert riga_consegna["hash_riga"] != riga_accettazione["hash_riga"]
+
+
+def test_extract_non_busta_from_estraneo_diventa_altro():
+    """Un raw (non-busta) è MESSAGGIO_INVIATO solo se From = casella;
+    altrimenti tipo ALTRO + warning (identità dal contenuto, non silenzio)."""
+    import email.message
+
+    estranea = email.message.EmailMessage()
+    estranea["From"] = "Qualcuno <estraneo@pec.altro.it>"
+    estranea["To"] = "in.tur@pec.it"
+    estranea["Subject"] = "x"
+    estranea["Message-ID"] = "<estraneo.001@pec.altro.it>"
+    estranea["Date"] = "Mon, 25 Mar 2024 10:00:00 +0100"
+    estranea.set_content("testo")
+
+    riga, _ = _extract(estranea)
+    assert riga["tipo"] == "ALTRO"
+    assert "from!=casella" in riga["parse_warning"]
+
+
+def test_extract_busta_posta_certificata_casella_assente_warning():
+    """POSTA_CERTIFICATA in cui NÉ i destinatari daticert NÉ l'envelope To
+    contengono la casella → warning (warning, non abort)."""
+    daticert = DATICERT_CONSEGNA.replace(
+        b'tipo="avvenuta-consegna"', b'tipo="posta-certificata"'
+    )  # destinatari daticert = controparte@pec.it (non la casella)
+    busta = _busta_ricevuta_con_daticert(
+        daticert,
+        message_id="busta.pc.003@pec.aruba.it",
+        subject="POSTA CERTIFICATA: x",
+        to="altra.casella@pec.it",
+    )
+    riga, _ = _extract(busta)
+    assert riga["tipo"] == "POSTA_CERTIFICATA"
+    assert "casella non tra i destinatari" in riga["parse_warning"]
+
+    # ... ma se l'envelope To contiene la casella, nessun warning
+    busta_ok = _busta_ricevuta_con_daticert(
+        daticert,
+        message_id="busta.pc.004@pec.aruba.it",
+        subject="POSTA CERTIFICATA: x",
+    )
+    riga_ok, _ = _extract(busta_ok)
+    assert riga_ok["parse_warning"] is None
+
+
+def test_extract_ricevute_senza_casella_nei_destinatari_nessun_warning():
+    """ACCETTAZIONE/CONSEGNA: i destinatari daticert sono quelli del messaggio
+    ORIGINALE (la controparte) — è normale, mai warning."""
+    busta = _busta_ricevuta_con_daticert(
+        DATICERT_CONSEGNA,
+        message_id="busta.consegna.005@pec.aruba.it",
+        subject="AVVENUTA CONSEGNA: Diffida",
+        to="altra.casella@pec.it",
+    )
+    riga, _ = _extract(busta)
+    assert riga["tipo"] == "CONSEGNA"
+    assert riga["parse_warning"] is None
 
 
 def test_extract_idempotente_hash_stabile():

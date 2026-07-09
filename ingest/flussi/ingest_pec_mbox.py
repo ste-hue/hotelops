@@ -281,6 +281,25 @@ def extract_message(
         daticert.get("tipo_raw") if daticert else None, subject_inner, busta
     )
 
+    # Identità della casella dal CONTENUTO (spec: mismatch col registry ⇒
+    # errore, non silenzio). Non-busta: è MESSAGGIO_INVIATO solo se il From
+    # è la casella. Busta POSTA_CERTIFICATA: la casella deve comparire tra i
+    # destinatari daticert o nell'envelope To (per ACCETTAZIONE/CONSEGNA i
+    # destinatari daticert sono quelli del messaggio originale: normale che
+    # la casella non ci sia — nessun warning).
+    if not busta:
+        fr = email.utils.parseaddr(str(msg.get("From", "")))[1].lower()
+        if CASELLA not in fr:
+            tipo = "ALTRO"
+            warning = (warning or "") + f" from!=casella ({fr or 'assente'})"
+    elif tipo == "POSTA_CERTIFICATA" and daticert and daticert.get("destinatari"):
+        in_daticert = any(CASELLA in d.lower() for d in daticert["destinatari"])
+        to_busta = [
+            a.lower() for _, a in email.utils.getaddresses([str(msg.get("To", ""))])
+        ]
+        if not in_daticert and not any(CASELLA in a for a in to_busta):
+            warning = (warning or "") + " casella non tra i destinatari"
+
     # msgid: il daticert `identificativo` è l'id della CATENA di ricevute (lo
     # stesso per POSTA_CERTIFICATA + ACCETTAZIONE + CONSEGNA), non dell'evento
     # — verificato sul corpus Aruba 2026-07-08 (18/80 righe collassate).
