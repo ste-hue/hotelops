@@ -61,6 +61,22 @@ def ensure_subfolder(service, parent_id: str, name: str) -> str:
     return folder["id"]
 
 
+def create_shortcut(service, parent_id: str, name: str, target_id: str) -> str:
+    """Crea una scorciatoia Drive a `target_id` dentro `parent_id`; ritorna l'id."""
+    body = {
+        "name": name,
+        "mimeType": "application/vnd.google-apps.shortcut",
+        "parents": [parent_id],
+        "shortcutDetails": {"targetId": target_id},
+    }
+    created = (
+        service.files()
+        .create(body=body, fields="id", supportsAllDrives=True)
+        .execute()
+    )
+    return created["id"]
+
+
 def upload_bytes(
     service, parent_id: str, name: str, data: bytes, mime_type: str
 ) -> str:

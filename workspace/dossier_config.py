@@ -14,6 +14,8 @@ DOSSIER_STATE_DIR = Path.home() / ".config" / "hotelops" / "dossier"
 
 CONFIDENCE_THRESHOLD = 0.6
 
+AMM_CEO_FOLDER_ID = "1S81cBxrzPW5NxuCSBoIszAcBuyk_ILr-"  # cartella CEO (vuota, struttura da definire)
+
 TAXONOMY = [
     "01_Societario",
     "02_Fiscale",

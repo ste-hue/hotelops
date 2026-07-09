@@ -1,6 +1,7 @@
-"""Fase apply del dossier: copia i documenti censiti nelle cartelle Drive.
+"""Fase apply del dossier: scorciatoie per i file Drive, upload per gli
+allegati Gmail, nelle cartelle di categoria del dossier.
 
-Idempotente via ledger; mai move/delete degli originali, solo copie.
+Idempotente via ledger; mai move/delete degli originali.
 """
 
 from __future__ import annotations
@@ -16,7 +17,13 @@ from ..dossier_config import (
     TAXONOMY,
     WRITE_AS,
 )
-from ..drive import ensure_subfolder, get_drive_reader, get_drive_writer, upload_bytes
+from ..drive import (
+    create_shortcut,
+    ensure_subfolder,
+    get_drive_reader,
+    get_drive_writer,
+    upload_bytes,
+)
 from ..gmail import get_gmail_service, get_thread, list_attachments
 from .dossier_census import GOOGLE_EXPORT_AS_PDF
 
@@ -69,14 +76,19 @@ def apply_census(company: DossierCompany, census_path: Path, dry_run: bool = Fal
     applied, failed = [], []
     for p in plan:
         try:
-            data = _fetch_bytes(p)
-            if data is None:
-                raise RuntimeError("contenuto non recuperabile")
-            name = p["name"]
-            if p["mime_type"] in GOOGLE_EXPORT_AS_PDF and not name.lower().endswith(".pdf"):
-                name += ".pdf"
-            mime = "application/pdf" if p["mime_type"] in GOOGLE_EXPORT_AS_PDF else p["mime_type"]
-            upload_bytes(writer, folder_ids[p["target_category"]], name, data, mime)
+            if p["source"] == "drive":
+                create_shortcut(
+                    writer, folder_ids[p["target_category"]], p["name"], p["file_id"]
+                )
+            else:
+                data = _fetch_bytes(p)
+                if data is None:
+                    raise RuntimeError("contenuto non recuperabile")
+                name = p["name"]
+                if p["mime_type"] in GOOGLE_EXPORT_AS_PDF and not name.lower().endswith(".pdf"):
+                    name += ".pdf"
+                mime = "application/pdf" if p["mime_type"] in GOOGLE_EXPORT_AS_PDF else p["mime_type"]
+                upload_bytes(writer, folder_ids[p["target_category"]], name, data, mime)
             append_ledger(ledger_path, [p["key"]])
             applied.append(p["key"])
         except Exception as e:

@@ -71,10 +71,13 @@ CF/P.IVA, `drive_folder_id`. Termini di ricerca:
 
 ### Fase 2 — Apply (dopo review del census)
 
-`mine-dossier --apply`: copia i file Drive (`files.copy` impersonando stefano@) e
-carica gli allegati Gmail nelle sottocartelle di categoria; aggiorna lo Sheet indice
-con il link della copia. Ledger `applied` per fileId/hash → **idempotente**: run
-successivi processano solo il nuovo. Mai move/delete degli originali: solo copie.
+`mine-dossier --apply`: per i file trovati su Drive crea scorciatoie
+(`application/vnd.google-apps.shortcut`) che puntano al file originale, nelle
+sottocartelle di categoria; per gli allegati Gmail (non esistono su Drive) carica i
+bytes veri nelle stesse sottocartelle. Aggiorna lo Sheet indice con il link
+(scorciatoia o file caricato). Ledger `applied` per fileId/hash → **idempotente**:
+run successivi processano solo il nuovo. Mai move/delete degli originali: solo
+scorciatoie e upload.
 
 ### Fase 3 — Dati ufficiali (openapi-ita, costi vivi)
 
