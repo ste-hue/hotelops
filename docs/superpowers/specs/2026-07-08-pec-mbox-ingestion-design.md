@@ -77,7 +77,7 @@ Tre livelli, tutti idempotenti:
 2. **Messaggio**: chiave = **envelope `Message-ID` header** del messaggio mbox
    (per-evento, stabile tra re-export), sia per buste che per inviate; fallback
    sha256 del raw message. `filter_new_rows_by_hash` su `hash_riga =
-   sha256(msgid)`. Due export sovrapposti convergono senza doppioni;
+   md5(msgid)` (via `make_hash`). Due export sovrapposti convergono senza doppioni;
    ri-promuovere lo stesso file produce 0 righe nuove.
    ⚠️ Il daticert `<identificativo>` NON è la chiave: è l'id della **catena**
    di ricevute (stesso valore per POSTA_CERTIFICATA + ACCETTAZIONE + CONSEGNA
@@ -104,7 +104,7 @@ ricevute sono righe: fatti immutabili, è il punto legale della PEC):
 | mittente | STRING | mittente reale (non la busta) |
 | destinatari | STRING | ";"-joined |
 | n_destinatari | INT | |
-| subject | STRING | del messaggio reale quando esiste (postacert), altrimenti della busta |
+| subject | STRING | del messaggio reale quando esiste (postacert), altrimenti della busta — RFC2047-decodificato |
 | body_text | STRING | testo estratto (no HTML raw, no binari) |
 | provider | STRING | dominio busta (aruba, legalmail, …) — solo RECEIVED |
 | casella | STRING REQ | in.tur@pec.it |
@@ -112,9 +112,14 @@ ricevute sono righe: fatti immutabili, è il punto legale della PEC):
 | n_allegati | INT | allegati reali (esclusi daticert/smime/postacert) |
 | ha_postacert | BOOL | false normale per accettazioni |
 | parse_warning | STRING | anomalie non fatali (daticert malformato, charset…) |
-| hash_riga | STRING REQ | sha256(msgid) |
+| hash_riga | STRING REQ | md5(msgid) via make_hash |
 | raw_object_id | STRING REQ | FK lineage (I9) |
 | data_caricamento | DATETIME REQ | |
+
+Nota implementativa (deviazione dichiarata): nel DDL deployato `data_evento` e
+`data_caricamento` sono **DATETIME** (wall time Europe/Rome, naive), non
+TIMESTAMP come indicato in tabella. `subject` e `nome_file` sono
+**RFC2047-decodificati** dal parser (charset dichiarato, fallback latin-1).
 
 **`f_pec_allegati`** — una riga per allegato reale trasmesso:
 
@@ -127,7 +132,7 @@ ricevute sono righe: fatti immutabili, è il punto legale della PEC):
 | sha256 | STRING REQ | |
 | is_firmato | BOOL | .p7m o firma rilevata |
 | gcs_uri | STRING | gs://hotelops-raw/PEC_MAILBOX_INTUR_APPEND/allegati/<sha256[:2]>/<sha256>/<nome> — NULL solo se estrazione fallita (parse_warning) |
-| hash_riga | STRING REQ | sha256(msgid + sha256 + nome) |
+| hash_riga | STRING REQ | md5(msgid \| sha256 \| nome) via make_hash |
 | raw_object_id | STRING REQ | |
 | data_caricamento | DATETIME REQ | |
 

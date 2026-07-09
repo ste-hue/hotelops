@@ -855,9 +855,7 @@ def test_ingest_file_dedup_allegati_indipendente_dai_messaggi(tmp_path, monkeypa
 
     monkeypatch.setattr(dedup_mod, "filter_new_rows_by_hash", fake_filter)
     monkeypatch.setattr(write_mod, "bq_write_validated", fake_write)
-    monkeypatch.setattr(
-        mod.AllegatiStore, "_get_client", lambda self: _FakeGcsClient()
-    )
+    monkeypatch.setattr(mod.AllegatiStore, "_get_client", lambda self: _FakeGcsClient())
 
     report = mod.ingest_file(mbox_path, raw_object_id="raw-001", dry_run=False)
     assert report["righe_messaggi"] == 0

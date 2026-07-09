@@ -32,7 +32,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from core.config import F_PEC_ALLEGATI, F_PEC_MESSAGES
+from core.config import F_PEC_ALLEGATI, F_PEC_MESSAGES, PROJECT
 from core.schemas import (
     PecAllegatoRow,
     PecMessageRow,
@@ -251,7 +251,7 @@ class AllegatiStore:
         if self._client is None:
             from google.cloud import storage
 
-            self._client = storage.Client()
+            self._client = storage.Client(project=PROJECT)
         return self._client
 
     def store(self, nome: str, content: bytes) -> tuple[str, str]:
@@ -368,10 +368,7 @@ def extract_message(
             # il placeholder deterministico sha256("<msgid>|<nome>") — stabile
             # tra run e non confondibile con lo sha di un contenuto reale
             # (il preimage contiene il msgid, mai i byte del documento).
-            sha = (
-                sha_fallback
-                or hashlib.sha256(f"{msgid}|{nome}".encode()).hexdigest()
-            )
+            sha = sha_fallback or hashlib.sha256(f"{msgid}|{nome}".encode()).hexdigest()
             uri, size = None, 0
             warning = (warning or "") + f" allegato non estraibile: {nome}"
         else:

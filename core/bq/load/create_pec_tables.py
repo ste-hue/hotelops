@@ -3,7 +3,7 @@
 
 f_pec_messages / f_pec_allegati.
 Lifecycle APPEND (dedup su hash_riga per messaggio, hash_riga per allegato)
-— gestito dal parser ingest.flussi.ingest_pec.
+— gestito dal parser ingest.flussi.ingest_pec_mbox.
 
 Usage:
     python -m core.bq.load.create_pec_tables
