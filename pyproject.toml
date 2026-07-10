@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.4"]
+dev = ["pytest>=8.0", "ruff>=0.4", "reportlab>=4.0.0"]
 dashboard = ["streamlit>=1.35", "plotly>=5.0", "db-dtypes>=1.0"]
 drive = ["google-api-python-client"]
 # Runtime deps dei job schedulati (Cloud Run Jobs). Versioni pinnate dalla venv funzionante.
