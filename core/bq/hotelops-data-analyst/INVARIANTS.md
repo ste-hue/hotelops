@@ -185,7 +185,7 @@ Esolver accounting entries can lag real transactions by days or weeks. This is a
 - ALWAYS check `MAX(data_registrazione)` before interpreting recent months
 - Use `f_banche_movimenti` for more current data (1-3 day lag vs weeks)
 - Never say "costs are zero this month" without verifying data freshness
-- `v_ultima_data` view tracks last available date per data source — use it
+- `hotelops health` reports last available date per data source — use it
 - When reporting, always note the data-as-of date
 
 ---

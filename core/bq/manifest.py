@@ -38,7 +38,7 @@ TABLES = [
     "f_accodamenti",
     "f_ricavi_storici",
     "f_chiusura_mensile",
-    "f_mastrino_consolidato",
+    "f_pf_rotazioni",
     "d_voci_piano_finanziario",
     "d_piano_conti",
     "d_categorie_conti",

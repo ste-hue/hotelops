@@ -1,19 +1,19 @@
-generated_at: '2026-06-18T15:00:49Z'
+generated_at: '2026-07-10T12:09:44Z'
 project: hotelops-suite
 dataset: hotelops
 tables:
   f_banche_movimenti:
-    rows: 7259
+    rows: 7533
     columns:
       id_movimento:
         type: STRING
-        distinct: 7259
+        distinct: 7533
         sample:
         - MOV_INTUR_SELLA_20260309_000032_20260420163218
-        - MOV_INTUR_SELLA_20260414_000010_20260420164018
-        - MOV_INTUR_SELLA_20260417_000004_20260420164018
         - MOV_ORTI_MPS_20260417_000010_20260420164023
-        - MOV_INTUR_SELLA_20260415_000006_20260420164018
+        - MOV_INTUR_SELLA_20260413_000014_20260420164018
+        - MOV_ORTI_MPS_20260416_000014_20260420164023
+        - MOV_INTUR_SELLA_20260415_000008_20260420164018
       societa_id:
         type: STRING
         distinct: 2
@@ -56,16 +56,16 @@ tables:
       data_operazione:
         type: DATE
         min: '2025-01-01'
-        max: '2026-06-16'
-        distinct: 459
+        max: '2026-06-30'
+        distinct: 473
       data_valuta:
         type: DATE
         min: '2024-12-31'
-        max: '2026-06-16'
-        distinct: 484
+        max: '2026-06-30'
+        distinct: 498
       descrizione:
         type: STRING
-        distinct: 5833
+        distinct: 6094
         sample:
         - Pagamento pagoPA effettuato con successo
         - RAIAOIL SANT'EGIDIO DEL MONTE ALBINO
@@ -81,20 +81,20 @@ tables:
         type: FLOAT
         min: -101321.88
         max: 3000004.5
-        distinct: 1924
+        distinct: 1991
       importo_credito:
         type: FLOAT
         min: 0.0
         max: 3000000.0
-        distinct: 2157
+        distinct: 2262
       importo_netto:
         type: FLOAT
         min: -3000004.5
         max: 3000000.0
-        distinct: 3867
+        distinct: 4038
       categoria_raw:
         type: STRING
-        distinct: 74
+        distinct: 76
       sottocategoria_raw:
         type: STRING
         distinct: 32
@@ -120,10 +120,10 @@ tables:
         - SERVIZI_PROFESSIONALI
       tipo_movimento:
         type: STRING
-        distinct: 76
+        distinct: 78
       codice_identificativo_banca:
         type: STRING
-        distinct: 1179
+        distinct: 1242
         sample:
         - ''
         - '2.5001E+13'
@@ -132,7 +132,7 @@ tables:
         - '2.50011E+13'
       etichette:
         type: STRING
-        distinct: 76
+        distinct: 78
       note:
         type: STRING
         distinct: 1
@@ -141,11 +141,11 @@ tables:
       data_ingresso:
         type: DATE
         min: '2025-12-09'
-        max: '2026-06-16'
-        distinct: 16
+        max: '2026-06-30'
+        distinct: 17
       file_sorgente:
         type: STRING
-        distinct: 51
+        distinct: 55
       riga_sorgente:
         type: INTEGER
         min: 2
@@ -155,24 +155,28 @@ tables:
         type: STRING
       raw_object_id:
         type: STRING
-        distinct: 12
+        distinct: 16
         values:
         - 1f22b48f-751a-42e7-8099-8841d3221246
         - 227a0c16-6284-47ac-bb07-85d172e0ab7f
+        - 3361b542-6a9a-4e85-a761-7ddb73c29699
         - 34befd5b-dd3a-4626-bd23-5ae26c5ad8d2
         - 3a2c9b53-a701-4791-bdda-97c0115824cd
         - 3c90b7d0-7040-4bcb-b858-a005a49878df
         - 4d5e1e55-3dbd-4644-b760-4995604fbc2f
         - 5fcbe02b-5fe5-475d-9b96-5f0d88017142
+        - 691841e8-6422-4fb9-b051-6feb4e189814
         - 7db0626e-dcd1-4ae0-a621-c99cc0ead5b5
         - 82c9affe-62c6-40a5-8b7e-a7b483b34c50
+        - 89cacc3a-f886-43cc-8430-682fe14d4edf
         - 973d9b49-085e-41b2-b47b-c962364cbf23
+        - 98eb1412-b049-48d5-8261-e4f224f8fb3f
         - 9a21d49a-4dd5-437d-ba91-61c3d0a69140
         - e3ffa5da-9488-4afa-9e22-144515f9ce51
     freshness:
       date_column: data_operazione
       min: '2025-01-01'
-      max: '2026-06-16'
+      max: '2026-06-30'
     sources:
       file_sorgente:
       - 2025-12-09__FINANZA__INTUR_SELLA__LISTA_MOVIMENTI_010125_091225.csv
@@ -219,15 +223,19 @@ tables:
       - hotelops_raw_6q973o5k_ortikrossfilenameExcel.xlsx
       - hotelops_raw_74z_0rmw_movimenti.xlsx
       - hotelops_raw_96243y2w_ListaMovimenti_ORTI_01052026_31052026.xlsx
+      - hotelops_raw__896zoxq_ListaMovimentiConto.xls
       - hotelops_raw_gj032b_j_MPS_KROSS_ORTI.xlsx
       - hotelops_raw_k_piyfnk_ORTI_MPS_movimenti_totali.xlsx
       - hotelops_raw_nug3bo3q_ListaMovimentiConto (12).xls
       - hotelops_raw_qnnk0ore_INTURMPS_filenameExcel.xlsx
+      - hotelops_raw_r7gpyd16_Banca MPS Movements List.xlsx
       - hotelops_raw_razo57m9_ORTI_conto_ultimi12mesi_11maggio.xlsx
       - hotelops_raw_t65ovgw__SELLA_INTUR.xls
+      - hotelops_raw_tkf76vm7_INTUR_Banca MPS Movements List.xlsx
+      - hotelops_raw_whyvrru0_Banca MPSKROSSMovements List.xlsx
       - hotelops_raw_ybthj6pi_INTUR_INTESA_MAGGIO_2026.xlsx
   f_movimenti_contabili:
-    rows: 65824
+    rows: 67147
     columns:
       hash_riga:
         type: STRING
@@ -263,8 +271,8 @@ tables:
       data_registrazione:
         type: DATE
         min: '2024-01-01'
-        max: '2026-06-08'
-        distinct: 832
+        max: '2026-06-30'
+        distinct: 854
       sigla_doc:
         type: STRING
         distinct: 8
@@ -298,8 +306,8 @@ tables:
       data_originale:
         type: DATE
         min: '2024-03-11'
-        max: '2026-06-07'
-        distinct: 735
+        max: '2026-06-28'
+        distinct: 756
       tipo_documento:
         type: STRING
         distinct: 30
@@ -345,7 +353,7 @@ tables:
         - '199007'
       cod_partitario:
         type: STRING
-        distinct: 1824
+        distinct: 1844
         sample:
         - '1'
         - '2'
@@ -354,67 +362,73 @@ tables:
         - '19'
       rag_sociale:
         type: STRING
-        distinct: 1742
+        distinct: 1763
         sample:
         - Debiti per caparre confirmatorie
         - POS RECEPTION_T
         - Banca c/c - BANCA SELLA
         - BONIFICO
-        - Costo per bonifici verso altre banche
+        - PAY BY LINK_T
       causale_contabile:
         type: STRING
-        distinct: 22727
+        distinct: 23043
         sample:
         - FATTURA
         - CORR_HOTEL
         - CAPARRA_HOTEL
-        - CORR_RES
         - RICAVI HOTEL
+        - CORR_RES
       imp_dare:
         type: FLOAT
         min: -14531.0
         max: 4933685.43
-        distinct: 14239
+        distinct: 14521
       imp_avere:
         type: FLOAT
         min: -14531.0
         max: 4933685.43
-        distinct: 14166
+        distinct: 14452
       cod_divisione:
         type: STRING
         distinct: 0
       file_sorgente:
         type: STRING
-        distinct: 7
+        distinct: 9
         values:
         - 2024_Intur_Esolver.xlsx
         - INTUR_LISTAMOVCONT.XLS
         - ORTI_LISTAMOVCONT.XLS
+        - hotelops_raw_2lec03ct_nuovofilemovimenti.xlsx
         - hotelops_raw_5g6uo_f7_esolver_lista-movimenti_INTUR_2026-01-01_2026-06-10.xlsx
+        - hotelops_raw_cjl8ohmq_ortimovimenti.xlsx
         - hotelops_raw_dxcfc7zu_esolver_lista-movimenti_ORTI_2026-01-01_2026-06-10.xlsx
         - hotelops_raw_rvzu9qjd_movimentiORTI.xlsx
         - movimentiINTUR.xlsx
       data_ingresso:
         type: DATE
         min: '2026-03-13'
-        max: '2026-06-11'
-        distinct: 5
+        max: '2026-07-01'
+        distinct: 6
       raw_object_id:
         type: STRING
-        distinct: 2
+        distinct: 4
         values:
         - 436eb605-b2cd-4614-9fa0-eea01f333a41
         - 8a81f356-475c-4e66-9bca-2e8277056675
+        - d069b544-6d58-4045-a575-9f3bbfc0b940
+        - f7cf46ca-ec5d-4173-adc2-9d96c5f64989
     freshness:
       date_column: data_registrazione
       min: '2024-01-01'
-      max: '2026-06-08'
+      max: '2026-06-30'
     sources:
       file_sorgente:
       - 2024_Intur_Esolver.xlsx
       - INTUR_LISTAMOVCONT.XLS
       - ORTI_LISTAMOVCONT.XLS
+      - hotelops_raw_2lec03ct_nuovofilemovimenti.xlsx
       - hotelops_raw_5g6uo_f7_esolver_lista-movimenti_INTUR_2026-01-01_2026-06-10.xlsx
+      - hotelops_raw_cjl8ohmq_ortimovimenti.xlsx
       - hotelops_raw_dxcfc7zu_esolver_lista-movimenti_ORTI_2026-01-01_2026-06-10.xlsx
       - hotelops_raw_rvzu9qjd_movimentiORTI.xlsx
       - movimentiINTUR.xlsx
@@ -622,7 +636,7 @@ tables:
       - ORTI - Piano Finanziario - 03_mar2026.xlsx
       - scadenziario_mutui.csv
   f_consumi_economato:
-    rows: 24467
+    rows: 26393
     columns:
       hash_riga:
         type: STRING
@@ -684,7 +698,7 @@ tables:
         - MEETING
       codice_prodotto:
         type: STRING
-        distinct: 1615
+        distinct: 1649
         sample:
         - VAR.CAR.00015
         - BEV.ACQ.00005
@@ -693,7 +707,7 @@ tables:
         - PUL.STR.00013
       descrizione:
         type: STRING
-        distinct: 1602
+        distinct: 1641
         sample:
         - BOBINA CARTA STRONG 800 STRAPPIX10
         - ACQUA NATURALE 50CL X 24
@@ -723,36 +737,40 @@ tables:
         type: FLOAT
         min: -5956.0
         max: 6601.0
-        distinct: 1447
+        distinct: 1527
       importo:
         type: FLOAT
         min: -98658.4549
         max: 31855.047
-        distinct: 8017
+        distinct: 8610
       file_sorgente:
         type: STRING
-        distinct: 2
+        distinct: 3
         values:
         - Consumptions F&B Data (1).xlsx
         - Consumptions F&B Data.xlsx
+        - hotelops_raw_sgqk9me6_Consumptions F&B Data.xlsx
       data_caricamento:
         type: TIMESTAMP
         min: '2026-05-21'
-        max: '2026-06-09'
-        distinct: 2
+        max: '2026-07-05'
+        distinct: 3
       raw_object_id:
         type: STRING
-        distinct: 0
+        distinct: 1
+        values:
+        - c2e73d88-2806-43bf-99d6-4edacf758d07
     freshness:
       date_column: data_caricamento
       min: '2026-05-21'
-      max: '2026-06-09'
+      max: '2026-07-05'
     sources:
       file_sorgente:
       - Consumptions F&B Data (1).xlsx
       - Consumptions F&B Data.xlsx
+      - hotelops_raw_sgqk9me6_Consumptions F&B Data.xlsx
   f_coperti_giornalieri:
-    rows: 1847
+    rows: 2012
     columns:
       societa_id:
         type: STRING
@@ -772,8 +790,8 @@ tables:
       data_servizio:
         type: DATE
         min: '2025-04-16'
-        max: '2026-06-18'
-        distinct: 274
+        max: '2026-07-10'
+        distinct: 296
       tipo_pasto:
         type: STRING
         distinct: 3
@@ -804,7 +822,7 @@ tables:
         type: INTEGER
         min: 1
         max: 188
-        distinct: 147
+        distinct: 152
       fonte:
         type: STRING
         distinct: 4
@@ -817,16 +835,16 @@ tables:
         type: STRING
       data_caricamento:
         type: TIMESTAMP
-        min: '2026-06-18'
-        max: '2026-06-18'
+        min: '2026-07-10'
+        max: '2026-07-10'
         distinct: 1
       raw_object_id:
         type: STRING
         distinct: 0
     freshness:
       date_column: data_caricamento
-      min: '2026-06-18'
-      max: '2026-06-18'
+      min: '2026-07-10'
+      max: '2026-07-10'
     sources:
       fonte:
       - coperti_gsheet.xlsx::Breakfast
@@ -834,7 +852,7 @@ tables:
       - coperti_gsheet.xlsx::Lunch
       - coperti_gsheet.xlsx::Mensa Dipendenti
   f_bilancino:
-    rows: 1006
+    rows: 1464
     columns:
       hash_riga:
         type: STRING
@@ -857,22 +875,22 @@ tables:
         - 2026-05
       codice_conto:
         type: STRING
-        distinct: 208
+        distinct: 212
         sample:
         - 19.01.01
         - 11.03.01
-        - 15.05.03
-        - 19.03.03
         - 15.01.07
+        - 19.03.03
+        - 15.05.03
       descrizione:
         type: STRING
-        distinct: 199
+        distinct: 203
         sample:
         - Banca c/c
         - Clienti terzi Italia
-        - Depositi cauzionali vari
-        - Cassa contanti
         - Anticipi a fornitori terzi
+        - Cassa contanti
+        - Depositi cauzionali vari
       tipo_conto:
         type: STRING
         distinct: 2
@@ -890,19 +908,19 @@ tables:
         - Ricavi
       dare:
         type: FLOAT
-        min: -3500000.0
-        max: 3000000.0
-        distinct: 270
+        min: -16058380.02
+        max: 15156708.09
+        distinct: 281
       avere:
         type: FLOAT
-        min: -286296.52
-        max: 251331.26
-        distinct: 321
+        min: -1200000.0
+        max: 972623.33
+        distinct: 547
       saldo:
         type: FLOAT
-        min: -3500000.0
-        max: 3000000.0
-        distinct: 678
+        min: -16058380.02
+        max: 15236226.39
+        distinct: 835
       business_unit_id:
         type: STRING
         distinct: 5
@@ -923,59 +941,71 @@ tables:
         - RICAVI
       file_sorgente:
         type: STRING
-        distinct: 12
+        distinct: 15
         values:
         - 01_gennaio_orti_.xlsx
-        - 02_Febbraio_orti.xlsx
-        - 03_marzo_orti.XLSX
         - GENNAIO2026ESOLVER.xls
         - esolver_bilancino_INTUR_2026-04.xlsx
         - esolver_bilancino_INTUR_2026-05.xlsx
         - esolver_bilancino_ORTI_2026-05.xlsx
+        - hotelops_raw_7bfr6hm3_ORTI_MARZO_2026.xlsx
+        - hotelops_raw_ajj1g6ho_INTUR_FEBBRAIO_2026_.xlsx
         - hotelops_raw_c0wj0fpw_esolver_bilancino_ORTI_2026-04.xls
         - hotelops_raw_jvy7_96l_esolver_bilancino_ORTI_2025-04.xlsx
         - hotelops_raw_ncaw2_2a_esolver_bilancino_INTUR_2025-05.xlsx
+        - hotelops_raw_t68zty7b_INTUR_MARZO_2026_.xlsx
         - hotelops_raw_vl_vo6ld_esolver_bilancino_INTUR_2025-04.xlsx
+        - hotelops_raw_vm4_tml2_INTUR_GENNAIO_2026_.xlsx
+        - hotelops_raw_y1y42vwe_ORTI_FEBBRAIO_2026.xls
         - hotelops_raw_zdzgijnq_esolver_bilancino_ORTI_2025-05.xlsx
       data_ingresso:
         type: STRING
-        distinct: 3
+        distinct: 4
         values:
         - '2026-03-13'
         - '2026-04-02'
         - '2026-06-11'
+        - '2026-06-22'
       raw_object_id:
         type: STRING
-        distinct: 8
+        distinct: 13
         values:
         - 0b8d70b7-f32f-42a6-91b0-f553e351758b
         - 0f33ecf1-1e26-4673-b3b0-eb410d9dfc21
         - 3e8e1649-600f-463d-87f1-422d2ea2c31f
+        - 42b3493d-bb4a-4241-8508-242685093426
         - 47f94128-aa2a-4349-b387-300e447ffc4b
+        - 537ee196-2d99-4331-8bc0-08355dc2bda1
         - 697a80ec-1420-4ac5-9c41-0874b0d3213d
+        - 797cedd9-af13-4610-9f68-719ffc288306
+        - 882c3cc2-4a38-4eec-8778-8024dc902461
         - bc2febad-789b-431f-979c-9824e8a91d6b
         - c076d231-e176-4ed9-913c-fc5ed0071147
         - e72438ee-a1c9-48e9-9f9e-247181582846
+        - f361aaa1-02e4-47dd-af03-0ad4a4ca158d
     freshness:
       date_column: data_ingresso
       min: '2026-03-13'
-      max: '2026-06-11'
+      max: '2026-06-22'
     sources:
       file_sorgente:
       - 01_gennaio_orti_.xlsx
-      - 02_Febbraio_orti.xlsx
-      - 03_marzo_orti.XLSX
       - GENNAIO2026ESOLVER.xls
       - esolver_bilancino_INTUR_2026-04.xlsx
       - esolver_bilancino_INTUR_2026-05.xlsx
       - esolver_bilancino_ORTI_2026-05.xlsx
+      - hotelops_raw_7bfr6hm3_ORTI_MARZO_2026.xlsx
+      - hotelops_raw_ajj1g6ho_INTUR_FEBBRAIO_2026_.xlsx
       - hotelops_raw_c0wj0fpw_esolver_bilancino_ORTI_2026-04.xls
       - hotelops_raw_jvy7_96l_esolver_bilancino_ORTI_2025-04.xlsx
       - hotelops_raw_ncaw2_2a_esolver_bilancino_INTUR_2025-05.xlsx
+      - hotelops_raw_t68zty7b_INTUR_MARZO_2026_.xlsx
       - hotelops_raw_vl_vo6ld_esolver_bilancino_INTUR_2025-04.xlsx
+      - hotelops_raw_vm4_tml2_INTUR_GENNAIO_2026_.xlsx
+      - hotelops_raw_y1y42vwe_ORTI_FEBBRAIO_2026.xls
       - hotelops_raw_zdzgijnq_esolver_bilancino_ORTI_2025-05.xlsx
   f_partite_aperte_fornitori:
-    rows: 698
+    rows: 1108
     columns:
       societa_id:
         type: STRING
@@ -986,22 +1016,22 @@ tables:
       data_snapshot:
         type: DATE
         min: '2026-03-20'
-        max: '2026-05-13'
-        distinct: 3
+        max: '2026-06-30'
+        distinct: 4
       codice_fornitore:
         type: INTEGER
         min: 1
-        max: 1701
-        distinct: 158
+        max: 1765
+        distinct: 202
       nome_fornitore:
         type: STRING
-        distinct: 158
+        distinct: 203
         sample:
         - FORNITORE ANTE 2024
         - LE CROISSANT SRL
-        - ATTIANESE ALFONSO S.A.S. DI ATTIANESE ALFONSO E C.
-        - AUSINO - S.P.A. SERVIZI IDRICI INTEGRATI
         - 4G ENERGIA SRL
+        - BELLAGAIA S.R.L.
+        - FABBROCINO MICHELE S.R.L.
       tipo_documento:
         type: STRING
         distinct: 4
@@ -1012,33 +1042,33 @@ tables:
         - PNC
       numero_documento:
         type: STRING
-        distinct: 416
+        distinct: 653
         sample:
         - '5'
         - '1'
         - S/887
         - '2'
-        - '3'
+        - '4'
       data_documento:
         type: DATE
         min: '2023-01-01'
-        max: '2026-05-12'
-        distinct: 168
+        max: '2026-06-30'
+        distinct: 208
       data_scadenza:
         type: DATE
         min: '2023-01-01'
-        max: '2026-08-31'
-        distinct: 125
+        max: '2026-09-30'
+        distinct: 161
       importo_residuo:
         type: FLOAT
         min: -299427.16
         max: 22647.95
-        distinct: 438
+        distinct: 661
       importo_abs:
         type: FLOAT
         min: 0.01
         max: 299427.16
-        distinct: 435
+        distinct: 656
       codice_pagamento:
         type: STRING
         distinct: 8
@@ -1067,30 +1097,36 @@ tables:
         type: BOOLEAN
       file_sorgente:
         type: STRING
-        distinct: 4
+        distinct: 6
         values:
         - INTUR_PARTITE_FORNITORI_20260428.xlsx
+        - hotelops_raw_k5d7dy27_SituazioneFornitoriOrtial30Giugno.xlsx
+        - hotelops_raw_ktsq6w39_situazionefornitoriINTURal30GIUGNO.xlsx
         - hotelops_raw_p572rkoz_situazionepartitesintetica.xlsx
         - hotelops_raw_z_3kbyln_situazionepartiteperfornitoriINTUR.xlsx
         - situazionepartitafornitorial20marzo2026.xlsx
       raw_object_id:
         type: STRING
-        distinct: 2
+        distinct: 4
         values:
+        - 4bfb0496-adec-482b-9767-9254239663e4
         - 82729755-0f75-4f7a-b462-8110dd49e8ab
+        - f0493a2e-5dad-4b88-9601-d8f620f9d2ee
         - f4f79023-ff02-45d1-a7c4-2f668532913e
     freshness:
       date_column: data_snapshot
       min: '2026-03-20'
-      max: '2026-05-13'
+      max: '2026-06-30'
     sources:
       file_sorgente:
       - INTUR_PARTITE_FORNITORI_20260428.xlsx
+      - hotelops_raw_k5d7dy27_SituazioneFornitoriOrtial30Giugno.xlsx
+      - hotelops_raw_ktsq6w39_situazionefornitoriINTURal30GIUGNO.xlsx
       - hotelops_raw_p572rkoz_situazionepartitesintetica.xlsx
       - hotelops_raw_z_3kbyln_situazionepartiteperfornitoriINTUR.xlsx
       - situazionepartitafornitorial20marzo2026.xlsx
   f_saldi_banca_snapshot:
-    rows: 964
+    rows: 1128
     columns:
       societa_id:
         type: STRING
@@ -1109,24 +1145,27 @@ tables:
       data_snapshot:
         type: DATE
         min: '2025-01-01'
-        max: '2026-06-16'
-        distinct: 427
+        max: '2026-07-03'
+        distinct: 476
       saldo_finale:
         type: NUMERIC
         min: !!python/object/apply:decimal.Decimal
         - '-300263.81'
         max: !!python/object/apply:decimal.Decimal
         - '3456231.68'
-        distinct: 958
+        distinct: 1125
       raw_object_id:
         type: STRING
-        distinct: 0
+        distinct: 2
+        values:
+        - 437453f7-a605-4970-960c-81b12dccefbb
+        - b4ad6114-b144-45c6-8d0b-07602e783a53
     freshness:
       date_column: data_snapshot
       min: '2025-01-01'
-      max: '2026-06-16'
+      max: '2026-07-03'
   f_saldi_banca_chiusura_mensile:
-    rows: 15
+    rows: 21
     columns:
       societa_id:
         type: STRING
@@ -1137,25 +1176,28 @@ tables:
       data_riferimento:
         type: DATE
         min: '2026-03-31'
-        max: '2026-05-31'
-        distinct: 3
+        max: '2026-06-30'
+        distinct: 4
       banca_id:
         type: STRING
-        distinct: 3
+        distinct: 4
         values:
         - INTESA
         - MPS
         - SELLA
+        - UNICREDIT
       saldo_eur:
         type: FLOAT
         min: 1457.78
-        max: 682801.07
-        distinct: 15
+        max: 791654.1
+        distinct: 21
       note:
         type: STRING
-        distinct: 7
+        distinct: 9
         values:
         - Rosa 30/04/2026 Intesa ORTI
+        - Rosa 30/06/2026 — Saldi Banca Fine Mese (1).xlsx
+        - Rosa 30/06/2026 — nuovo conto Cc4 Unicredit
         - Rosa 31/05/2026 — Saldi Banca Fine Mese
         - certificato Stefano 2026-06-12 (corregge Rosa 251897.54)
         - da estratto Intesa Sanpaolo
@@ -1163,54 +1205,210 @@ tables:
         - da estratto mensile MPS
         - manuale verificato fine mese
   f_accodamenti:
-    rows: 0
+    rows: 5276
     columns:
       id_registrazione:
         type: STRING
+        distinct: 2601
+        sample:
+        - ACC_ORTI_HOTEL_20260628_001612_20260706173756
+        - ACC_ORTI_HOTEL_20260705_001792_20260706173756
+        - ACC_ORTI_HOTEL_20260502_000467_20260622124125
+        - ACC_ORTI_CVM_20260107_000001_20260706173739
+        - ACC_ORTI_HOTEL_20260621_001435_20260706173756
       societa_id:
         type: STRING
+        distinct: 1
+        values:
+        - ORTI
       business_unit_id:
         type: STRING
+        distinct: 3
+        values:
+        - CVM
+        - HOTEL
+        - RESIDENCE
       funzione_id:
         type: STRING
+        distinct: 1
+        values:
+        - CONTABILITA
       location_id:
         type: STRING
+        distinct: 1
+        values:
+        - N_A
       oggetto_id:
         type: STRING
+        distinct: 8
+        values:
+        - 110301_CREDITI
+        - 190303_CASSA
+        - 199001_POS
+        - 199002_GESTPAY
+        - 199003_PAY_BY_LINK
+        - 199006_POS
+        - 199007_BONIFICO
+        - 390521_CAPARRA
       banca_id:
         type: STRING
+        distinct: 1
+        values:
+        - ESOLVER
       data_registrazione:
         type: DATE
+        min: '2026-01-01'
+        max: '2026-07-06'
+        distinct: 147
       descrizione:
         type: STRING
+        distinct: 1353
+        sample:
+        - RICAVI HOTEL
+        - CAPARRA_HOTEL
+        - CORR_HOTEL
+        - CAPARRA_RES
+        - CORR_RES
       importo:
         type: FLOAT
+        min: -122528.0
+        max: 122528.0
+        distinct: 2995
       importo_dare:
         type: FLOAT
+        min: -1611.3
+        max: 122528.0
+        distinct: 1845
       importo_avere:
         type: FLOAT
+        min: -1611.3
+        max: 122528.0
+        distinct: 1169
       divisa:
         type: STRING
+        distinct: 1
+        values:
+        - EUR
       riferimento_registrazione:
         type: STRING
+        distinct: 1
+        values:
+        - ''
       documento:
         type: STRING
+        distinct: 607
+        sample:
+        - ''
+        - '8'
+        - '10'
+        - '9'
+        - '7'
       riferimenti_iva:
         type: STRING
+        distinct: 1
+        values:
+        - ''
       centro_imputazione:
         type: STRING
+        distinct: 12
+        values:
+        - ''
+        - AMEX
+        - BANCOMAT
+        - BON
+        - CASH
+        - CASHROOF
+        - CCROOF
+        - GESTPAY
+        - MAESTRO
+        - MASTER
+        - PAYBYLIN
+        - VISA
       data_ingresso:
         type: DATE
+        min: '2026-06-22'
+        max: '2026-07-06'
+        distinct: 2
       file_sorgente:
         type: STRING
+        distinct: 18
+        values:
+        - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/C_Corrispettivi.txt
+        - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/C_Fatture.txt
+        - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/C_Movimenti.txt
+        - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/H_Corrispettivi.txt
+        - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/H_Fatture.txt
+        - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/H_Movimenti.txt
+        - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/R_Corrispettivi.txt
+        - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/R_Fatture.txt
+        - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/R_Movimenti.txt
+        - C_Corrispettivi.txt
+        - C_Fatture.txt
+        - C_Movimenti.txt
+        - H_Corrispettivi.txt
+        - H_Fatture.txt
+        - H_Movimenti.txt
+        - R_Corrispettivi.txt
+        - R_Fatture.txt
+        - R_Movimenti.txt
       riga_sorgente:
         type: INTEGER
+        min: 1
+        max: 2921
+        distinct: 1668
       hash_riga:
         type: STRING
       raw_object_id:
         type: STRING
+        distinct: 9
+        values:
+        - 07e608c6-e65d-47f4-8db6-b785ecd039eb
+        - 16555eb0-cc6e-41f1-8033-5f160b443b06
+        - 4eff6fb9-29b3-4080-85be-42ba6e1d058b
+        - 50ef9656-00a7-4566-913f-c9ba1794ee19
+        - 683ea736-4d19-40be-ac38-d5b81c9f78d6
+        - a337429f-8f79-43aa-ae5b-af5f8524e06f
+        - c24c0161-5e76-4b2e-a0f7-b9361aab65a8
+        - d545ea4e-303c-4559-bcfd-352e96bba203
+        - da89f5f2-c699-4e44-b376-2876356693f8
       categoria_cassa:
         type: STRING
+        distinct: 10
+        values:
+        - caparra_evasa
+        - caparra_incassata_contanti
+        - caparra_incassata_pos
+        - caparra_incasso_contropartita
+        - corrispettivo_contanti
+        - corrispettivo_pos
+        - corrispettivo_storno_caparra
+        - fattura
+        - giro_contropartita
+        - movimento_generico
+    freshness:
+      date_column: data_registrazione
+      min: '2026-01-01'
+      max: '2026-07-06'
+    sources:
+      file_sorgente:
+      - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/C_Corrispettivi.txt
+      - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/C_Fatture.txt
+      - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/C_Movimenti.txt
+      - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/H_Corrispettivi.txt
+      - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/H_Fatture.txt
+      - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/H_Movimenti.txt
+      - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/R_Corrispettivi.txt
+      - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/R_Fatture.txt
+      - /private/tmp/claude-501/-Users-stefanodellapietra-dev-Projects-hotelops/6fb81a66-8b01-49ff-8b21-bc6d9d672094/scratchpad/accodamenti_0706/R_Movimenti.txt
+      - C_Corrispettivi.txt
+      - C_Fatture.txt
+      - C_Movimenti.txt
+      - H_Corrispettivi.txt
+      - H_Fatture.txt
+      - H_Movimenti.txt
+      - R_Corrispettivi.txt
+      - R_Fatture.txt
+      - R_Movimenti.txt
   f_ricavi_storici:
     rows: 108
     columns:
@@ -1363,86 +1561,85 @@ tables:
         min: '2026-05-04'
         max: '2026-05-04'
         distinct: 1
-  f_mastrino_consolidato:
-    rows: 901
+  f_pf_rotazioni:
+    rows: 393
     columns:
+      hash_riga:
+        type: STRING
       societa_id:
         type: STRING
         distinct: 2
         values:
         - INTUR
         - ORTI
+      voce_id:
+        type: STRING
+        distinct: 17
+        values:
+        - ENTRATE_AFFITTI_INTUR
+        - ENTRATE_AFFITTI_MINORI
+        - ENTRATE_CVM
+        - ENTRATE_HOTEL
+        - ENTRATE_RESIDENCE
+        - ENTRATE_SPIAGGIA
+        - ENTRATE_SUPERMERCATO
+        - USCITE_CANONI
+        - USCITE_COMMISSIONI
+        - USCITE_CONSULENZE
+        - USCITE_GODIMENTO_BENI
+        - USCITE_MATERIE_PRIME
+        - USCITE_MUTUI
+        - USCITE_SALARI
+        - USCITE_TASSE
+        - USCITE_UTENZE
+        - USCITE_VARIE
       anno:
         type: INTEGER
-        min: 2025
-        max: 2025
+        min: 2026
+        max: 2026
         distinct: 1
       mese:
         type: INTEGER
-        min: 1
+        min: 3
         max: 12
-        distinct: 12
-      codice_conto:
-        type: STRING
-        distinct: 132
-        sample:
-        - 57.01.51
-        - 75.01.91
-        - 75.01.92
-        - 67.01.01
-        - 75.01.07
-      descrizione:
-        type: STRING
-        distinct: 124
-        sample:
-        - Ricavi per alloggi
-        - Ricavi parcheggi
-        - Altri servizi per la produzione
-        - Costo per bonifici verso altre banche
-        - Ricavi F&B
+        distinct: 10
       importo:
         type: FLOAT
-        min: -120000.0
-        max: 671070.01
-        distinct: 770
-      tipo_costo:
+        min: 74.61
+        max: 830000.0
+        distinct: 117
+      fonte:
         type: STRING
-        distinct: 5
+        distinct: 1
         values:
-        - F
-        - IP
-        - P
-        - V
-        - X
-      business_unit_id:
+        - PIANO_FINANZIARIO
+      file_sorgente:
         type: STRING
-        distinct: 5
+        distinct: 6
         values:
-        - CVM
-        - HOTEL
-        - HQ
-        - LIDO
-        - RESIDENCE
-      categoria:
-        type: STRING
-        distinct: 5
-        values:
-        - COSTO_FISSO
-        - COSTO_VAR
-        - EXTRA_EBITDA
-        - PERSONALE
-        - RICAVO
-      categoria_ce:
-        type: STRING
-        distinct: 7
-        values:
-        - Acquisti
-        - Costi Amministrativi
-        - Costi Commerciali
-        - Costi Produttivi
-        - Costo del Personale
-        - Oneri Finanziari
-        - Ricavi
+        - INTUR_PF_2026-05.xlsx
+        - INTUR_PF_2026_03.xlsx
+        - INTUR_PF_2026_04.xlsx
+        - ORTI_PF_2026-05.xlsx
+        - ORTI_PF_2026_03.xlsx
+        - ORTI_PF_2026_04.xlsx
+      data_caricamento:
+        type: TIMESTAMP
+        min: '2026-06-09'
+        max: '2026-06-09'
+        distinct: 1
+    freshness:
+      date_column: data_caricamento
+      min: '2026-06-09'
+      max: '2026-06-09'
+    sources:
+      file_sorgente:
+      - INTUR_PF_2026-05.xlsx
+      - INTUR_PF_2026_03.xlsx
+      - INTUR_PF_2026_04.xlsx
+      - ORTI_PF_2026-05.xlsx
+      - ORTI_PF_2026_03.xlsx
+      - ORTI_PF_2026_04.xlsx
   d_voci_piano_finanziario:
     rows: 28
     columns:
@@ -1741,25 +1938,25 @@ tables:
         max: 2025
         distinct: 1
   d_fornitori:
-    rows: 236
+    rows: 264
     columns:
       codice_fornitore:
         type: INTEGER
         min: 1
-        max: 1734
-        distinct: 180
+        max: 1748
+        distinct: 199
       nome_esolver:
         type: STRING
-        distinct: 188
+        distinct: 207
         sample:
-        - Giordano Associati S.r.l Socio Unico
-        - DELLA PIETRA ANNAMARIA
-        - DELLA PIERTA PAOLA
-        - Geologo Antonio Apicella
         - DELLA PIETRA STEFANO
+        - DELLA PIERTA PAOLA
+        - DELLA PIETRA ANNAMARIA
+        - Giordano Associati S.r.l Socio Unico
+        - CE.DI.S. S.R.L.
       nome_pf:
         type: STRING
-        distinct: 167
+        distinct: 191
         sample:
         - Vulaj (Ceramica)
         - Geologo Antonio Apicella
@@ -1785,11 +1982,13 @@ tables:
         type: BOOLEAN
       exclude_reason:
         type: STRING
-        distinct: 4
+        distinct: 6
         values:
+        - ''
         - HPAN25PIANO1
+        - escluso da app cashflow
         - intercompany
-        - intercompany gruppo - fitto ramo azienda - no pressione cassa
+        - 'tracciato: cash reale ORTI->INTUR (netta solo nel consolidato)'
         - una_tantum
       societa_id:
         type: STRING

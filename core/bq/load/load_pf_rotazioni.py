@@ -23,13 +23,13 @@ from pathlib import Path
 from google.cloud import bigquery
 
 from core.bq.client import get_client
-from core.config import PROJECT
+from core.config import F_PF_ROTAZIONI
 from ingest.flussi.ingest_piano_finanziario_xlsx import (
     parse_piano_finanziario,
     setup_logger,
 )
 
-BQ_TABLE = f"{PROJECT}.hotelops.f_pf_rotazioni"
+BQ_TABLE = F_PF_ROTAZIONI
 
 SCHEMA = [
     bigquery.SchemaField("hash_riga", "STRING", mode="REQUIRED"),

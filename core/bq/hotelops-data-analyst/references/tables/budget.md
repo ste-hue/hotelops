@@ -68,15 +68,6 @@ Budget data from consultant spreadsheets, manual forecasts, and financial planni
 
 ---
 
-## f_mastrino_consolidato
-
-**Location**: `hotelops-suite.hotelops.f_mastrino_consolidato`
-**Description**: Consolidated management ledger from `Costi Ricavi 2025-2026 Budget.xlsx`, sheet `mastrino_consolidato`.
-**Row Count**: 901
-**Note**: This is NOT the Esolver bank mastrino — it's the management-level consolidated ledger.
-
----
-
 ## Sample Queries
 
 ### Budget mensile per BU (ORTI 2026)

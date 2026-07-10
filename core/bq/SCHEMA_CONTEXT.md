@@ -199,13 +199,6 @@
 
 ---
 
-### `f_mastrino_consolidato`
-**Fonte**: `Costi Ricavi 2025-2026 Budget.xlsx`, foglio `mastrino_consolidato`
-**Righe**: 901
-*(NB: questo non è il mastrino banca Esolver — è il mastrino di gestione consolidata)*
-
----
-
 ## Tabelle Dimensione (d_*)
 
 ### `d_voci_piano_finanziario`
@@ -355,9 +348,6 @@ Vista incassi per canale (POS, bonifico, contante...).
 
 ### `v_pl_movimenti`
 Vista P&L movimenti contabili.
-
-### `v_ultima_data`
-Vista con ultima data disponibile per fonte dati.
 
 ---
 

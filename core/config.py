@@ -38,6 +38,7 @@ F_SPIAGGIA_CORRISPETTIVI    = _t("f_spiaggia_corrispettivi")
 F_SPIAGGIA_FB_ORDINI        = _t("f_spiaggia_fb_ordini")
 F_PEC_MESSAGES              = _t("f_pec_messages")
 F_PEC_ALLEGATI              = _t("f_pec_allegati")
+F_PF_ROTAZIONI              = _t("f_pf_rotazioni")
 
 # Dimension tables
 D_VOCI_PIANO_FINANZIARIO    = _t("d_voci_piano_finanziario")

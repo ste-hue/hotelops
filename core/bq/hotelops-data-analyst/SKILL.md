@@ -62,7 +62,7 @@ A **voce del piano finanziario** — a conceptual financial line item that maps 
 | "Scadenziario" | Informal payment schedule | `f_piano_finanziario_input` with `fonte = 'SCADENZIARIO'` |
 | "Budget Gasparotto" | Consultant's budget categorization | `f_budget_mensile` + `d_budget_costi_fissi` |
 | "Bilancino" | Bilancio di verifica (trial balance) | `f_bilancino` |
-| "Mastrino" | Ledger detail by account | `f_mastrino_consolidato` (gestionale, NOT bank-side) |
+| "Mastrino" | Ledger detail by account | `f_movimenti_contabili` (prima nota); il mastrino banca Esolver arriva via `ingest_scheda_contabile` → `f_saldi_banca_snapshot` |
 | "Accodamenti" | Bank-side entries in Esolver | `f_accodamenti` |
 | "PNC" | Prima Nota Contabile | Reference in `rif_registrazione` |
 | "Giroconti" | Internal accounting transfers | No real cash flow — exclude from cashflow analysis |
@@ -167,7 +167,7 @@ Use these reference files for detailed table documentation:
 |--------|----------------|---------|
 | Contabilità (fact tables) | `references/tables/contabilita.md` | f_movimenti_contabili, f_bilancino, f_accodamenti |
 | Banche (bank movements) | `references/tables/banche.md` | f_banche_movimenti, incassi, cashflow |
-| Budget & Planning | `references/tables/budget.md` | f_budget_mensile, f_piano_finanziario_input, f_mastrino_consolidato |
+| Budget & Planning | `references/tables/budget.md` | f_budget_mensile, f_piano_finanziario_input |
 | Dimensioni | `references/tables/dimensioni.md` | d_voci_piano_finanziario, d_piano_conti, d_budget_costi_fissi, etc. |
 | Entities & Relationships | `references/entities.md` | Entity definitions, join keys, LIKE-pattern logic |
 | Metrics | `references/metrics.md` | KPI calculations and formulas |
