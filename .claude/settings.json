@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bq query --use_legacy_sql=false *)",
+      "Bash(bq show *)",
+      "Bash(bq ls *)",
+      "Bash(pytest *)",
+      "Bash(ruff check *)",
+      "Bash(gcloud run jobs list *)",
+      "Bash(gcloud run jobs describe *)",
+      "Bash(gcloud run services list *)",
+      "Bash(gcloud run services describe *)",
+      "Bash(gcloud run revisions list *)",
+      "Bash(gcloud scheduler jobs list *)",
+      "Bash(gcloud scheduler jobs describe *)",
+      "Bash(gcloud logging read *)",
+      "Bash(gcloud config get-value *)",
+      "Bash(gcloud secrets list *)",
+      "Bash(gcloud builds list *)",
+      "Bash(hotelops health *)",
+      "Bash(hotelops sources *)",
+      "Bash(rclone lsf *)",
+      "mcp__claude_ai_Google_Drive__read_file_content",
+      "mcp__claude_ai_Google_Drive__search_files",
+      "mcp__claude_ai_Google_Drive__get_file_metadata",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__plugin_cloudflare_cloudflare-observability__query_worker_observability"
+    ]
+  }
+}
