@@ -2,115 +2,108 @@
 name: save-game
 description: >
   Checkpoint the hotelops CLAUDE.md so it accurately reflects the current codebase.
-  Scans config.py, schemas.py, SQL views, dimension CSVs, ingest pipelines, condges modules,
-  CLI entry points, and root files — then rewrites CLAUDE.md with no stale references.
-  Use this skill whenever Stefano says "save game", "checkpoint", "update the claude.md",
-  "sync the docs", or any variation of "make sure CLAUDE.md is up to date". Also use it
-  proactively at the end of any session where significant code changes were made.
+  Verifies concepts, pointers, and invariants against the repo — architecture layout,
+  CLI surface, referenced paths, domain rules — then applies surgical fixes with no
+  stale references. Use this skill whenever Stefano says "save game", "checkpoint",
+  "update the claude.md", "sync the docs", or any variation of "make sure CLAUDE.md
+  is up to date". Also use it proactively at the end of any session where significant
+  code changes were made.
 ---
 
 # Save Game — hotelops CLAUDE.md Checkpoint
 
-You are updating the hotelops project's CLAUDE.md to match reality. This is a context engineering task: CLAUDE.md is the primary memory file that future Claude sessions read to understand the project. If it's wrong, every future session starts confused. If it's right, every future session hits the ground running.
+You are updating the hotelops project's CLAUDE.md to match reality. CLAUDE.md is the
+primary memory file every future session reads first: if it's wrong, every session
+starts confused; if it's right, every session hits the ground running.
 
-## Philosophy
+## Philosophy — concetti + puntatori, NON catalogo
 
-Think of CLAUDE.md as a save file in a video game. The codebase is the game world — it changes constantly. CLAUDE.md is the snapshot that lets you reload exactly where you left off. Your job is to walk through the world, compare it to the last save, and write a new save that's perfectly aligned.
+Two golden rules, in tension by design:
 
-**The golden rule: every claim in CLAUDE.md must be verifiable from the codebase.** No "I think this table exists." No "this file is probably at...". Read the file, confirm it's there, confirm what it contains.
+1. **Every claim must be verifiable from the codebase.** No "I think this exists".
+   Read the file, confirm it's there, confirm what it claims.
+2. **CLAUDE.md holds only what does NOT regenerate**: architecture, invariants,
+   domain (INTUR/ORTI), operational rules, pointers. **Catalogs live elsewhere** —
+   the schema truth is BigQuery itself (`bq show` / INFORMATION_SCHEMA), curated
+   detail is `core/bq/SCHEMA_CONTEXT.md` + the `hotelops-data-analyst` skill, the
+   snapshot is `hotelops manifest` → `core/bq/manifest.yaml`.
 
-## What to scan
+The sbrinamento of 2026-06-18 cut CLAUDE.md from 525 to 178 lines by moving catalogs
+out. A save that re-inflates it with table lists is a regression, not an update:
+when you find a growing catalog (tables, views, per-file inventories), the fix is
+to **move it out and leave a pointer**, not to refresh it in place.
 
-Work through these sources in order. For each one, extract the facts and compare them against what CLAUDE.md currently claims.
+## What to scan (in order)
 
-### 1. Version and metadata
-- `pyproject.toml` → version number, dependencies, optional deps, entry points
-- Update the checkpoint date to today
-- Update the version if it changed
+### 1. Version, date, checkpoint blocks
+- `pyproject.toml` → version; update the header line (`Last checkpoint | Version`).
+- The `> **YYYY-MM-DD checkpoint:**` blocks near the top: write the new one from
+  this session's real changes; keep at most the 2 most recent, older ones roll off
+  (their content lives in STATUS.md / vault sessions, not here).
 
-### 2. Schema layer (this is the most important part)
+### 2. Architecture block
+Verify the layer map against reality: `core/`, `ingest/`, `verticals/`
+(`condges`, `reviews`, `spiaggia`, `hub`), `cli.py`. Check the claims about key
+modules it names (e.g. `core/bq/write.py::bq_write_validated` as the only writer,
+`core/lineage/`, `ingest/drive_fetch.py`) — the file must exist and still play
+the stated role (read enough of it to confirm, don't assume).
 
-**config.py** (`core/config.py`):
-- Extract every `F_*`, `D_*`, `V_*` constant. These are the canonical table/view IDs.
-- Any new table ID that's not in CLAUDE.md needs to be added.
-- Any table ID in CLAUDE.md that's gone from config.py needs to be removed.
+### 3. Pointer integrity (the cheap, high-yield pass)
+Extract every repo path CLAUDE.md references (backticked paths, docs, skills,
+specs) and check each exists:
 
-**schemas.py** (`core/schemas.py`):
-- Extract every Pydantic model class. Each one corresponds to a fact table.
-- Note the fields — these tell you column names and types.
-- Check if any model has been added, removed, or had fields changed since the last save.
+```bash
+grep -oE '`[a-zA-Z0-9_./-]+\.(py|md|yaml|sql)`' CLAUDE.md | tr -d '`' | sort -u \
+  | while read p; do [ -e "$p" ] || echo "STALE: $p"; done
+```
 
-**View SQL files** (`core/bq/views/*.sql`):
-- List every .sql file. Each one is a view.
-- For each view, scan the first ~20 lines for the column list and key JOINs.
-- Cross-reference: does CLAUDE.md list this view? Is the description still accurate?
-- Check for views referenced in CLAUDE.md that have no .sql file (like v_budget_vs_consuntivo which is BQ-only — that's fine, but it should be noted).
+The output is a **triage list, not a verdict**: expected false positives are
+shorthand mentions (`pf_rotate/pf_writer.py` for the full `verticals/...` path)
+and files cited *as* deleted ("app_scadenzario.py cancellato"). Judge each hit;
+what remains is either a moved file (fix the pointer) or a removed one (remove
+the claim). Also check referenced constants it singles out (e.g. orphan-constant
+warnings) are still accurate in `core/config.py`.
 
-**Dimension CSVs** (`core/bq/dimensioni/*.csv`):
-- Count rows (wc -l minus header) to verify documented row counts.
-- Check column headers match what CLAUDE.md describes.
+### 4. CLI cheat-sheet
+Compare the Commands block against `cli.py` subparsers (`grep "add_parser" cli.py`).
+The cheat-sheet is deliberately partial ("la superficie completa è --help") — the
+check is that every command it *does* show still exists with those flags, and that
+major new commands (new verticals, new workspace actions) get a line.
 
-### 3. Pipeline layer
+### 5. Domain and rules sections
+Entities, Banks/`ESOLVER_CC_MAP`, Financial Data/pf-rotate rules, Vertical Spiaggia,
+Governance Rules: these are domain knowledge and change rarely — keep them stable
+unless you can point at a specific stale fact. Where a claim is code-verifiable
+(e.g. the Cc#→banca mapping vs `ESOLVER_CC_MAP` in
+`ingest/flussi/ingest_scheda_contabile.py`), verify it.
 
-**ingest/orchestrate.py**:
-- Read it to confirm the pipeline groups (banca, amministrativa, dimensioni) and available flags.
-
-**ingest/banca/**:
-- List all .py files. Each one is a pipeline. Compare against CLAUDE.md's pipeline inventory.
-
-**ingest/amministrativa/**:
-- List all .py files. Same drill — are they all documented?
-
-### 4. Vertical layer
-
-**condges/**:
-- List all .py files. Check each one is documented with its current purpose.
-- Read the first 20 lines of app.py to verify imports are correct (this has had bugs before).
-
-### 5. CLI
-
-**cli.py**:
-- Read the argparse/click setup to confirm subcommand names and flags match what CLAUDE.md documents.
-- Count total lines (it's a useful reference).
-
-### 6. Root files
-
-- `ls` the repo root. Check that every file CLAUDE.md mentions exists, and that significant files that exist are mentioned.
-- Pay special attention to: nanoclaw prompt file name, BRIEF docs, CHANGELOG, meta/ contents.
-
-### 7. Deprecated directories
-
-- Check which deprecated dirs (lib/, pipelines/, actions/, dashboard/, bq/, _archive/) still exist.
-- If any have been removed since last save, update the list.
+### 6. Cross-check with STATUS.md
+CLAUDE.md checkpoint ≠ STATUS.md diary. If the new checkpoint block would duplicate
+what STATUS already narrates, compress: CLAUDE.md gets the durable one-liner +
+pointer, STATUS keeps the story. Contradictions between the two → surface to
+Stefano, don't silently pick one.
 
 ## How to write the update
 
-Don't start from scratch. Read the current CLAUDE.md, then apply surgical fixes:
-
-1. **Preserve the structure.** The section order and headings in CLAUDE.md are deliberate. Don't reorganize unless something is clearly wrong.
-
-2. **Fix facts, not prose.** If a table count changed from 28 to 30, change the number. Don't rewrite the surrounding paragraph.
-
-3. **Use the Edit tool for small changes.** If only 3-5 things changed, use targeted edits rather than a full rewrite. If many things changed (new tables, new pipelines, restructured code), a full rewrite of the affected sections is fine.
-
-4. **The "Known Issues / Tech Debt" section is special.** Remove issues that have been fixed. Add new ones you discover during the scan (e.g., missing SQL files, import bugs, undefined schemas). This section is the "bugs I noticed while saving" list.
-
-5. **Keep the INTUR/ORTI relationship docs, stakeholder notes, and monthly routine sections stable** unless you find specific stale references in them. These are domain knowledge, not code facts — they change rarely.
+1. **Surgical edits, not rewrites.** Preserve section order and headings. Fix
+   facts, not prose. Use Edit for the 3-5 things that changed.
+2. **Every changed line traceable** to something you verified in this scan.
+3. **Anti-catalog pass**: if your update is adding a list of tables/files, stop —
+   pointer + `hotelops manifest` instead.
 
 ## Verification pass
 
-After writing the update, do a quick verification:
-
-- Pick 3-5 specific claims from the updated CLAUDE.md (a table name, a file path, a row count, a CLI flag) and verify them directly against the codebase.
-- If any fail, fix them and check 3 more.
-- Stop when a full pass of spot-checks comes back clean.
+Pick 3-5 specific claims from the updated CLAUDE.md (a path, a CLI flag, a mapping,
+a rule) and verify them directly against the codebase. Any failure → fix and check
+3 more. Stop when a full pass comes back clean. If BQ-side claims can't be checked
+(auth expired), say so — don't claim them verified.
 
 ## Output
 
-When done, tell Stefano what changed in a brief summary. Group changes into:
+Tell Stefano what changed, grouped:
 - **Fixed** (was wrong, now correct)
 - **Added** (was missing, now documented)
-- **Removed** (was documented but no longer exists)
-- **Verified** (was correct, confirmed still correct)
+- **Removed** (was documented but no longer exists / rolled off to STATUS)
+- **Verified** (spot-checked, confirmed correct)
 
-Keep the summary concise — the point is confidence that the save is clean, not a lengthy report.
+Keep it concise — the point is confidence that the save is clean, not a report.

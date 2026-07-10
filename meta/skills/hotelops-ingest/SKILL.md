@@ -139,6 +139,10 @@ Discovery-first → RAW_ONLY. Intervista breve, poi scaffold:
 | File "simile" a source esistente | Caso AEGRI/occupazione: contenuto ≠ semantica → source separata |
 | RistoCube nativo = LORDO IVA, Power BI = imponibile | Per food cost serve imponibile. Verifica la base prima di caricare vendite |
 | Drive su account panoramagroup, MCP su account personale | Scarica via token gcloud (Drive API), non via MCP |
+| Primo promote su canonical NUOVA = chicken-egg (PEC 2026-07-08): `filter_new_rows_by_hash` fa SELECT su tabella inesistente → VALIDATE_FAIL | Pre-crea SEMPRE le canonical con uno script `core/bq/load/create_*_tables.py` PRIMA del primo promote |
+| Contratto promotion reale: `--file X --societa <SOC> --raw-object-id Y` — il docstring dei parser esistenti non mostra `--societa` | Ogni parser nuovo DEVE accettare `--societa` (con check di coerenza sul contenuto), o il promote esce REJECTED exit 2 |
+| Nomi allegato/file con control char (RFC2047 multi-riga) → GCS rifiuta l'object name (400 Disallowed unicode) | Sanitizza il componente path (control char → `_`), fedeltà del nome originale nella riga BQ; revive da REJECTED = evento RECLASSIFIED via `emit_event` (non esiste comando CLI) |
+| PROMOTED è terminale nella state machine: `hotelops promote` su oggetto già PROMOTED = noop by design (PEC 2026-07-09: truncate+re-promote 32 → 0 righe scritte) | Re-parse di massa dopo un fix parser: truncate scoped della canonical + riusa `_invoke_parser` di `ingest/promotion.py` (stesso download GCS pinnato alla generation, stesso contratto `--societa`/`--raw-object-id`, FK intatta). Mai parser a mano su file locali |
 
 ## Anti-goals
 

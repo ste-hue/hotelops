@@ -135,15 +135,15 @@ La cartella `07_fornitori/F<NNN>_<NOME>/` di un progetto è **solo l'archivio-do
 Quando l'utente apre un progetto nuovo:
 
 1. **Conferma il project_id** (naming canonico) e il committente canonico (UNA società).
-2. **Crea le cartelle Drive**:
-   ```bash
-   BASE="mywork:04_Progetti_Investimenti/Investimenti<YYYY>/<project_id>"
-   for d in 00_contesto FATTURE_<SCOPE> Preventivi_<SCOPE> 07_fornitori 99_OOS; do
-     rclone mkdir "$BASE/$d"
-   done
+2. **Crea le cartelle Drive** via il layer canonico `workspace/drive.py` (DWD,
+   impersona `stefano@panoramagroup.it` — vedi §Tool):
+   ```python
+   svc = get_drive_writer("stefano@panoramagroup.it")
+   for d in ["00_contesto", "FATTURE_<SCOPE>", "Preventivi_<SCOPE>", "07_fornitori", "99_OOS"]:
+       ensure_subfolder(svc, project_folder_id, d)   # idempotente
    ```
 3. **Non pre-creare le F-folder.** `07_fornitori/` resta vuota allo scaffold — le cartelle nascono per ingaggio (vedi §Anagrafica fornitori — globale, non per-progetto). Solo se ci sono fornitori già ingaggiati con documenti in mano, crea le F-folder *per quelli* (`07_fornitori/F<NNN>_<NOME>/{01_preventivi,02_ordini_contratti,03_fatture,04_comunicazioni}`) e linkale all'entità nel registry globale. Mai copiare la lista F-folder di un altro progetto.
-4. **Crea il master xlsx** `<project_id>_Tracking.xlsx` con i 5 fogli vuoti (header pronti). openpyxl, salva locale, `rclone copyto` su Drive.
+4. **Crea il master xlsx** `<project_id>_Tracking.xlsx` con i 5 fogli vuoti (header pronti). openpyxl, salva locale, poi `upload_bytes(svc, project_folder_id, name, data, XLSX_MIME)`. Annota il **fileID** ritornato: è l'identità stabile del tracking.
 5. **Registra il progetto** nel vault: `HotelOps/ontology/projects/<project_id>.md` (stato: avviato).
 6. Comunica all'utente il link Drive del tracking + dove droppare fatture/preventivi.
 
@@ -152,13 +152,13 @@ Quando l'utente apre un progetto nuovo:
 Loop operativo standard (idempotente, ri-eseguibile):
 
 1. **Backup** del master xlsx (`cp <master>.xlsx <master>.BACKUP_<timestamp>.xlsx`).
-2. **Lista le sorgenti**: `rclone lsf` su `FATTURE_<SCOPE>/` e `Preventivi_<SCOPE>/`.
-3. **Per ogni PDF sorgente**: identifica F-code dal nome fornitore; se manca lo shortcut in `F*/0X_.../`, crealo (`rclone backend shortcut`); estrai importo (`pdftotext -layout`, o vision per PDF scansionati).
+2. **Lista le sorgenti**: `svc.files().list(q="'<folder_id>' in parents and trashed=false", ...)` su `FATTURE_<SCOPE>/` e `Preventivi_<SCOPE>/`.
+3. **Per ogni PDF sorgente**: identifica F-code dal nome fornitore; se manca lo shortcut in `F*/0X_.../`, crealo (`create_shortcut(svc, f_folder_id, name, target_id)`); estrai importo (`pdftotext -layout`, o vision per PDF scansionati).
 4. **Aggiorna `Documents`**: una riga per documento, con importo + link Drive. Dedup per numero fattura (gestisci formati SDI tipo `FPR 12/26`, `IT00126V0001851`, `V326-00470`).
 5. **Ricalcola `Tracking_Fornitori`**: # Prev, € Prev, # Fatt, € Fatt, Totale = MAX, Status.
 6. **Ricalcola `Chiusura_Fornitori`**: incrocia con partite Esolver per € Pagato / € Da Pagare; deriva Stato Operativo + Prossima Azione.
 7. **Ricostruisci `Summary`**: budget, totali, macro breakdown, lista scoperti.
-8. **Salva sullo stesso file** e `rclone copyto` con lo stesso nome → il fileID Drive resta stabile → **stesso link**. Mai creare `_v2`, `_v3`: aggiorna in place.
+8. **Salva sullo stesso file** e aggiorna in place via `svc.files().update(fileId=<tracking_id>, media_body=...)` → il fileID Drive resta stabile → **stesso link**. Mai creare `_v2`, `_v3`, mai delete+ricrea (cambierebbe il fileID).
 
 ## Playbook per evento (modalità prospettiva)
 
@@ -171,7 +171,7 @@ Loop operativo standard (idempotente, ri-eseguibile):
 ## Retrospettivo — recupero evidenze a posteriori
 
 Se il progetto è già avviato senza tracking: stesso modello, ma le sorgenti vanno *ricostruite* prima.
-1. Raccogli i PDF da dove sono (email, Drive sparso, WhatsApp) → consolidali in `FATTURE_<SCOPE>/` e `Preventivi_<SCOPE>/`.
+1. **Mining automatico delle email**: `hotelops workspace mine-capex --project <id> --mailboxes gm@panoramagroup.it,amministrazione@panoramagroup.it --output-folder <DriveFolderID> [--keywords ...] [--fuzzy preventivo,offerta] [--extra 'after:2024/01/01']` — estrae thread + allegati dalle caselle e li deposita su Drive (miners: `triage_capex`, `classify_attachments`). Poi raccogli il resto a mano (Drive sparso, WhatsApp) → consolida in `FATTURE_<SCOPE>/` e `Preventivi_<SCOPE>/`.
 2. Cross-check con Esolver "Lista fatture acquisto" per scoprire cosa manca ("nell'etere").
 3. Poi gira la modalità UPDATE normale.
 
@@ -197,20 +197,38 @@ Se il progetto è già avviato senza tracking: stesso modello, ma le sorgenti va
 
 ## Tool e comandi frequenti
 
-```bash
-BASE="mywork:04_Progetti_Investimenti/Investimenti<YYYY>/<project_id>"
+Layer Drive canonico = **`workspace/drive.py`** (service account DWD; per le scritture
+impersona `stefano@panoramagroup.it`, che ha la quota storage). ⚠️ Il MCP Google Drive
+gira sull'account personale, NON su panoramagroup: per questo flusso usa il workspace
+layer. `rclone`/`mywork:` è il path legacy in dismissione — non costruirci sopra.
 
-rclone lsf "$BASE/FATTURE_<SCOPE>/" --files-only          # lista sorgente fatture
-rclone mkdir "$BASE/07_fornitori/F<NNN>_<NOME>/03_fatture" # crea F-folder
-rclone backend shortcut mywork: \                          # shortcut (non copia)
-  "<project>/FATTURE_<SCOPE>/<file>.pdf" \
-  "<project>/07_fornitori/F<NNN>_<NOME>/03_fatture/<file>.pdf"
-rclone moveto "$BASE/<old>" "$BASE/<new>"                  # rename in place (fileID stabile)
-rclone lsjson "$BASE/<file>.xlsx"                          # verifica fileID dopo upload
-pdftotext -layout "<file>.pdf" -                           # estrai testo preventivo/fattura
+```python
+# ~/.virtualenvs/hotelops_core/bin/python, dalla repo hotelops
+from workspace.drive import (
+    get_drive_writer, get_drive_reader,      # service Google API (DWD)
+    ensure_subfolder,                        # mkdir idempotente → folder_id
+    create_shortcut,                         # shortcut (non copia) → shortcut_id
+    upload_bytes,                            # upload nuovo file → file_id
+    ensure_shared_with,                      # condivisione silenziosa
+)
+svc = get_drive_writer("stefano@panoramagroup.it")
+
+# lista sorgente fatture
+svc.files().list(q="'<folder_id>' in parents and trashed=false",
+                 fields="files(id,name,mimeType)", supportsAllDrives=True).execute()
+# rename in place (fileID stabile) / update contenuto in place
+svc.files().update(fileId="<id>", body={"name": "<nuovo>"}, supportsAllDrives=True).execute()
+svc.files().update(fileId="<id>", media_body=MediaIoBaseUpload(...)).execute()
+# download PDF
+svc.files().get_media(fileId="<id>").execute()
+```
+
+```bash
+pdftotext -layout "<file>.pdf" -    # estrai testo preventivo/fattura
 ```
 
 PDF scansionati (senza text layer) → leggili con vision invece di pdftotext.
+Mining retrospettivo email → `hotelops workspace mine-capex` (vedi §Retrospettivo).
 
 ## Chiusura progetto
 
