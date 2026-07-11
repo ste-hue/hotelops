@@ -81,7 +81,6 @@ def render() -> None:
 
     st.subheader("Livello B — Consolidato società (mese)")
     mesi = sorted({(m.year, m.month) for m in df["mese"]}, reverse=True)
-    anno, mese = mesi[0]
     scelta = st.selectbox("Mese", mesi, format_func=lambda am: f"{am[0]}-{am[1]:02d}")
     anno, mese = scelta
     cons = _consolidato(societa, anno, mese)
@@ -90,6 +89,11 @@ def render() -> None:
     c2.metric("Pagamenti esterni", f"{cons['pagamenti_esterni']:,.2f} €")
     c3.metric("Trasferimenti interni", f"{cons['trasferimenti_interni']:,.2f} €")
     c4.metric("Variazione netta", f"{cons['variazione_netta']:,.2f} €")
+    st.caption(
+        "Matcher Fase 1 (deterministico): importo esatto ±0,01 €, finestra ±3 giorni, "
+        "stessa banca solo con causale di giro. Coppie fuori soglia non vengono "
+        "segnalate — arriva con la review queue (C.2)."
+    )
     if cons["candidati_trasferimento"]:
         st.warning(
             f"Candidati trasferimento non confermati: "
