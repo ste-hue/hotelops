@@ -739,6 +739,92 @@ class PmsStatisticheRow(BaseModel):
         return v
 
 
+class PrenotazioniOtbRow(BaseModel):
+    """Schema for f_prenotazioni_otb — portafoglio prenotazioni on-the-books.
+
+    Source: Power BI "Andamento Prenotazioni" (POWERBI_ANDAMENTOPRENOTAZIONI).
+    Ogni export = una FOTOGRAFIA del portafoglio (consumato + futuro) alla
+    snapshot_date; le fotografie si accumulano (booking pace), la SNAPSHOT
+    delete è scoped a (snapshot_date, business_unit_id, dim_tipologia).
+    dim_tipologia distingue le varianti del report: ASSEGNATA (camera
+    assegnata), VENDUTA (camera pagata), NESSUNA (export senza tipologia).
+    Mai sommare varianti diverse della stessa snapshot_date: sono la stessa
+    fotografia aggregata su dimensioni diverse.
+    """
+
+    snapshot_date: str  # YYYY-MM-DD (data intake del raw object)
+    societa_id: SocietaId
+    business_unit_id: str
+    data: str  # YYYY-MM-DD, data soggiorno
+    dim_tipologia: Literal["ASSEGNATA", "VENDUTA", "NESSUNA"]
+    tipologia: Optional[str] = None
+    camere: int
+    presenze_arb: int
+    importo_lordo: float
+    adr_lordo: float
+    imponibile: float
+    adr_imponibile: float
+    fonte: str
+    hash_riga: str
+    data_caricamento: str
+    raw_object_id: Optional[str] = None
+
+
+class BookingsTipologiaRow(BaseModel):
+    """Schema for f_bookings_tipologia — venduto giornaliero per tipologia venduta.
+
+    Source: Power BI "Detailed Data for Bookings" (POWERBI_BOOKINGSTIPOLOGIA).
+    Consuntivo (fotografia rivedibile) → SNAPSHOT replace per
+    (business_unit_id, data). Imponibile; codici tipologia decodificati da
+    d_pms_codici (dominio ROOM_TYPE).
+    """
+
+    societa_id: SocietaId
+    business_unit_id: str
+    data: str  # YYYY-MM-DD
+    tipologia: str
+    camere: int
+    pax_arb: int
+    infant: int
+    adr: float
+    ricavo_camera: float
+    ricavo_camera_extra: float
+    ricavo_extra: float
+    ricavo_totale: float
+    fonte: str
+    hash_riga: str
+    data_caricamento: str
+    raw_object_id: Optional[str] = None
+
+
+class ConsprevMensileRow(BaseModel):
+    """Schema for f_consprev_mensile — rollup mensile forecast PMS.
+
+    Source: Power BI "Consuntivo + Previsione" (POWERBI_CONSPREV).
+    Per (mese × classe × categoria × addebito): consumato, consumato +
+    portafoglio prenotazioni, budget PMS, anno precedente. Ogni export è
+    una FOTOGRAFIA alla snapshot_date (le fotografie si accumulano);
+    SNAPSHOT delete scoped a (snapshot_date, business_unit_id).
+    """
+
+    snapshot_date: str  # YYYY-MM-DD (data intake del raw object)
+    societa_id: SocietaId
+    business_unit_id: str
+    anno: int
+    mese: int  # 1-12
+    classe: str
+    categoria: Optional[str] = None
+    addebito: Optional[str] = None
+    mese_cons: float
+    mese_prev_cons: float
+    mese_bdg: float
+    mese_ap: float
+    fonte: str
+    hash_riga: str
+    data_caricamento: str
+    raw_object_id: Optional[str] = None
+
+
 class CoefficienteConsumoRow(BaseModel):
     """Schema for f_coefficienti_consumo — consumption coefficients per product/dept/month.
 

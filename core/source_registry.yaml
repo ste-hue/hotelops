@@ -509,9 +509,9 @@ sources:
     lifecycle: SNAPSHOT
     canonical_table: f_prenotazioni_otb
     parser_module: ingest.flussi.ingest_andamento_prenotazioni
-    natural_key: [business_unit_id, data, tipologia]
-    loop_targets: []
-    promotion_policy: RAW_ONLY
+    natural_key: [snapshot_date, business_unit_id, dim_tipologia]
+    loop_targets: [season_forecast]
+    promotion_policy: MANUAL
     detector_category: andamento_prenotazioni
     raw_storage:
       backend: gcs
@@ -522,9 +522,12 @@ sources:
       fine stagione) per data soggiorno × tipologia. Due varianti dello stesso
       report: dimensione "Tipologia" (camera assegnata) o "Tipologia Venduta"
       (camera pagata) — la variante è nel footer 'Applied filters' dentro il file.
-      ⚠️ La data dello snapshot NON è nel contenuto: fa fede la data di intake.
-      RAW_ONLY (hard gate): canonical_table/parser sono nomi TARGET futuri, non
-      esistono ancora. Flip a AUTO + parser quando si storicizza il booking pace.
+      ⚠️ La data dello snapshot NON è nel contenuto: il parser la risolve
+      dall'intake_at del raw object. Le fotografie si ACCUMULANO (booking pace):
+      snapshot_date è nella natural key, ogni promote aggiunge una fotografia.
+      dim_tipologia (ASSEGNATA/VENDUTA/NESSUNA, dedotta dall'header) è in chiave:
+      mai sommare varianti diverse della stessa snapshot_date.
+      Flip a MANUAL 2026-07-11 (loop season_forecast, parser+tabella live).
 
   # ── Detailed Data Prenotations (on-the-books giornaliero) — RAW_ONLY ─────
   POWERBI_DETTAGLIOPRENOTAZIONI_ORTI_SNAPSHOT:
@@ -564,9 +567,9 @@ sources:
     lifecycle: SNAPSHOT
     canonical_table: f_bookings_tipologia
     parser_module: ingest.flussi.ingest_bookings_tipologia
-    natural_key: [business_unit_id, data, tipologia]
-    loop_targets: []
-    promotion_policy: RAW_ONLY
+    natural_key: [business_unit_id, data]
+    loop_targets: [season_forecast]
+    promotion_policy: MANUAL
     detector_category: bookings_tipologia
     raw_storage:
       backend: gcs
@@ -579,8 +582,61 @@ sources:
       maggio-giugno 2026. È la base delle "tariffe medie effettivamente
       pagate per tipologia". Codici tipologia decodificati da d_pms_codici
       (dominio ROOM_TYPE); BU dal prefisso filename.
-      ⚠️ La data dello snapshot NON è nel contenuto: fa fede la data di intake.
-      RAW_ONLY (hard gate): canonical_table/parser sono nomi TARGET futuri.
+      Consuntivo (fotografia rivedibile) → SNAPSHOT replace per (bu, data).
+      Flip a MANUAL 2026-07-11 (loop season_forecast, parser+tabella live).
+
+  # ── Consuntivo+Previsione mensile per classe (rollup forecast PMS) ────────
+  POWERBI_CONSPREV_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: CONSPREV
+    dataset_label: "Consuntivo + Previsione mensile per classe — Mese Cons / Prev+Cons / BDG / Anno Precedente, per struttura"
+    societa: ORTI
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_consprev_mensile
+    parser_module: ingest.flussi.ingest_consprev_mensile
+    natural_key: [snapshot_date, business_unit_id]
+    loop_targets: [season_forecast]
+    promotion_policy: MANUAL
+    detector_category: consprev_mensile
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/consprev/ORTI"
+    notes: |
+      Rollup mensile del forecast PMS: per (mese × classe × categoria ×
+      addebito) porta Mese Cons (consumato), Mese Prev+Cons (consumato +
+      portafoglio), Mese BDG (budget PMS, oggi vuoto) e Mese AP (anno
+      precedente). Complemento mensile delle fotografie OTB giornaliere
+      (ANDAMENTOPRENOTAZIONI). Ogni export = una FOTOGRAFIA: snapshot_date
+      (da intake_at) è nella natural key, le fotografie si accumulano.
+      ⚠️ BU dal FOOTER per negazione ("CodiceHotel is not X or Y" → la
+      struttura è il complemento) — né filename né colonna sono affidabili.
+
+  # ── Consuntivo+Previsione mensile camere/pax — RAW_ONLY ──────────────────
+  POWERBI_CONSPREVPAX_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: CONSPREVPAX
+    dataset_label: "Consuntivo + Previsione mensile camere/pax (Tipo Camere|Pax) per struttura"
+    societa: ORTI
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_consprev_pax
+    parser_module: ingest.flussi.ingest_consprev_pax
+    natural_key: [snapshot_date, business_unit_id]
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: consprev_pax
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/consprev_pax/ORTI"
+    notes: |
+      Variante camere/pax dello stesso report CONSPREV (layout diverso:
+      Tipo Camere|Pax invece del taglio per classe). Notti/presenze
+      consuntive già coperte da f_pms_statistiche; il "previsto notti"
+      non ha ancora un loop → RAW_ONLY (canonical/parser = nomi TARGET).
+      Flip quando il season_forecast vorrà anche le notti previste.
 
   # ── PEC in.tur@pec.it — buste ricevute + inviate (export webmail mbox) ────
   PEC_MAILBOX_INTUR_APPEND:
