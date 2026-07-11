@@ -37,6 +37,19 @@ e che riproduce i numeri validati a mano l'11/07 (§Verifica).
 File `core/bq/views/v_booking_curve.sql`, deploy via `hotelops deploy-views`.
 **Grana: 1 riga = BU × mese soggiorno × snapshot_date** (~60 righe oggi).
 
+**Struttura CTE obbligatoria** (ogni passaggio verificabile separatamente, in
+questo ordine esplicito — la selezione variante e l'aggregazione mensile
+PRECEDONO il LAG, mai window su righe alla granularità originaria):
+
+1. `source_ranked` — rank delle varianti per (snapshot_date, BU);
+2. `selected_variant` — UNA variante per (snapshot_date, BU);
+3. `otb_monthly` — aggregazione a BU × mese_soggiorno × snapshot_date;
+4. `otb_with_pickup` — LAG partizionato per BU × mese_soggiorno, ordinato
+   per snapshot_date;
+5. `ly_monthly` — benchmark 2025 per BU × mese;
+6. `capacity_by_year` — capacità osservata per BU × anno;
+7. `curve_metrics` — select finale con le metriche.
+
 ### Selezione variante (input da `f_prenotazioni_otb`)
 
 Le foto non condividono la variante (14/5 solo NESSUNA; 6/7 ASSEGNATA+VENDUTA;
@@ -66,18 +79,37 @@ variante-invarianti — verificata sul 6/7 dove esistono entrambe (§Verifica).
   (MAX(camere_totali) per BU per anno: 86/76, 20/20, 10/10 — non hardcoded);
 - `target_imponibile` = ly_imponibile × cap_ratio (**parità-camera**, il vero
   zero dell'ambizione);
-- `notti_attese` = ly_notti × cap_ratio.
+- `notti_attese` = ly_notti × cap_ratio;
+- **colonne diagnostiche** (il benchmark LY assume calendario operativo
+  comparabile — aperture parziali, inventario fuori servizio, giorni mancanti
+  nella fonte PMS lo indeboliscono; non si corregge in v1, si ESPONE):
+  `ly_giorni_con_capacita`, `cy_giorni_con_capacita_osservati`,
+  `ly_capacita_massima`, `cy_capacita_massima`.
 
-**4. Verdetto:**
+**4. Verdetto (numeri in SQL, semantica in Python):**
 - `saturazione_pct` = otb_notti / notti_attese (la batteria);
 - `gap_target` = target_imponibile − otb_imponibile;
-- `notti_vendibili` = notti_attese − otb_notti (floor a 0);
-- `adr_richiesto` = gap_target / notti_vendibili (NULL se notti_vendibili = 0).
+- `gap_notti_target` = notti_attese − otb_notti — **le notti MANCANTI per
+  raggiungere il volume LY riproporzionato**, NON la capacità residua reale
+  (quella sarebbe capacità disponibile futura − OTB: oggetto diverso, fuori
+  scope v1);
+- `adr_richiesto` = gap_target / gap_notti_target (NULL se
+  gap_notti_target ≤ 0) — **l'ADR medio necessario sulle notti aggiuntive
+  richieste per raggiungere il target**, non l'ADR sulle camere fisicamente
+  ancora disponibili.
 
-Lettura (non calcolata in SQL, è la semantica): `adr_richiesto` vs
-`adr_marginale` → 3 zone: richiesto ≪ marginale = target scontato; marginale ok
-ma pace insufficiente = problema di domanda; richiesto > marginale = serve
-repricing.
+**Semantica del verdetto** — funzione pura Python (`verdetto(row) -> str`,
+testabile senza BQ), con stati preliminari PRIMA delle 3 zone:
+1. mese consumato (mese < mese della foto) → `CONSUNTIVO` (nessun verdetto
+   operativo);
+2. prima foto o pickup_notti ≤ 0 → `DATI_INSUFFICIENTI`;
+3. gap_target ≤ 0 → `TARGET_RAGGIUNTO`;
+4. gap_notti_target ≤ 0 con gap_target > 0 → `TARGET_INCOERENTE` (gap
+   economico positivo senza volume atteso residuo);
+5. adr_marginale NULL → `NESSUN_CONFRONTO`;
+poi le 3 zone: adr_richiesto < 0,6 × adr_marginale → `TARGET_SCONTATO`;
+adr_richiesto > adr_marginale → `SERVE_REPRICING`; altrimenti →
+`SERVE_DOMANDA`.
 
 ### Caveat dichiarati (commento in testa al SQL)
 
@@ -111,10 +143,13 @@ ruoli in un punto solo, non hex sparsi):
      colore da solo**: ✓ good `#0ca30c` "target scontato" · ⚠ warning
      `#fab219` "serve domanda" · ⛔ serious `#ec835a` "serve repricing"
      (warning/serious sotto 3:1 su superficie chiara by design — icona+label
-     è la mitigazione). Zone: good se adr_richiesto < adr_marginale × 0,6;
-     serious se adr_richiesto > adr_marginale; warning altrimenti. Soglia 0,6
-     = prima calibrazione (lug 218/476 ≈ 0,46 = good; ott 175/206 ≈ 0,85 =
-     warning, coerente col verdetto umano dell'11/07);
+     è la mitigazione). Il verdetto viene dalla funzione pura Python (§vista):
+     TARGET_SCONTATO=good, SERVE_DOMANDA=warning, SERVE_REPRICING=serious;
+     gli stati preliminari (CONSUNTIVO, DATI_INSUFFICIENTI, TARGET_RAGGIUNTO,
+     TARGET_INCOERENTE, NESSUN_CONFRONTO) in inchiostro neutro con etichetta,
+     senza status color. Soglia 0,6 = prima calibrazione (lug 218/476 ≈ 0,46
+     = good; ott 175/206 ≈ 0,85 = warning, coerente col verdetto umano
+   dell'11/07);
    - mesi consumati in grigio (contesto, non curva).
 3. **Curva delle foto** — saturazione % per foto, **emphasis**: mese
    selezionato in slot-1 blu `#2a78d6`, altri mesi linee grigie de-enfatizzate;
@@ -131,8 +166,11 @@ numeri finti (pattern delle altre pagine).
 ## Verifica (gate, in ordine)
 
 1. **Check variante (una tantum, prima di scrivere la vista):** sul 6/7,
-   totali mensili ASSEGNATA vs VENDUTA per BU — se divergono oltre il
-   rumore, l'assunzione variante-invariante cade → STOP, si riporta a Stefano.
+   ASSEGNATA vs VENDUTA confrontate **per BU × mese_soggiorno** (mai solo sul
+   totale BU: divergenze compensate tra mesi passerebbero). Criterio
+   ripetibile: differenza assoluta notti = **0**; differenza assoluta
+   imponibile ≤ **€1** per cella (arrotondamenti fonte). Se fallisce,
+   l'assunzione variante-invariante cade → STOP, si riporta a Stefano.
 2. **Check base LY (una tantum):** `f_pms_statistiche.revenue_room` vs
    `f_produzione_pms` classe 01ROOM su un mese campione — deve essere
    imponibile (basi omogenee). Se è lordo → STOP, si sceglie la fonte LY
@@ -141,8 +179,9 @@ numeri finti (pattern delle altre pagine).
    (pickup, marginale con Δnotti ≤ 0, richiesto, cap_ratio).
 4. **Verifica finale contro i numeri validati a mano l'11/07 (HOTEL):**
    luglio marginale ~476 vs media ~230, saturazione ~80,7%; agosto ~306 vs
-   ~257; ottobre ~206 vs ~213 e adr_richiesto ~175 con ~380 notti vendibili
-   mancanti al pace. Se la vista non li riproduce, è sbagliata lei.
+   ~257; ottobre ~206 vs ~213 e adr_richiesto ~175 con gap_notti_target
+   ~736 (di cui ~380 non coperte al pace attuale). Se la vista non li
+   riproduce, è sbagliata lei.
 5. Smoke pagina: `streamlit run verticals/hub/app.py` → pagina Revenue con
    dati reali, 3 BU selezionabili.
 
