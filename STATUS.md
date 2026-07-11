@@ -12,6 +12,7 @@
 ## 2026-07-11 — Thread GC: 372 checkbox sessioni → 11 workstream hub
 
 I thread vivi ora vivono nei **workstream hub** del vault (`workstreams/_INDEX.md`) — non più nei session file (tutti flippati `closed`, BACKLOG.md archiviato). Report: `vault/reports/2026-07-11_thread_gc.md`. Le skill session-reflect/hotelops-threads aggiornate perché la pila non si riformi.
+- ✅ **Cashflow consuntivo Fase 1 (A+B) verificato su giugno ORTI** (worktree `cashflow-consuntivo`, Task 5): scarti giugno ORTI — MPS 1.106,55 € **non spiegato al 100%** (nessun buco export, nessun duplicato; pattern trimestrale di competenze a valuta retrodatata confermato ma insufficiente in ordine di grandezza; scarti mensili non cumulativi → HANDOFF export inizio luglio), INTESA gap export noto (05/06→30/06) ma scarto misurato solo 1.133,80 € (**non "grande" come atteso**, materialità bassa nonostante il gap). Livello B live su dati reali: ORTI giugno 0 trasferimenti interni rilevati; caso-zia INTUR maggio confermato sui dati veri — matcher becca girofondi 8k + assegni circolari 1,15M×2 (AUTO) ma **manca il giroconto ~900k** (Δimporto 4€ + Δdata 12gg oltre soglie, comportamento noto Fase 1 deterministic-first, non CANDIDATE). Report completo: `.superpowers/sdd/task-5-report.md`.
 
 **HANDOFF Stefano (azioni manuali, dai hub):**
 - Cestinare `~/Downloads/ORTI PF 2026 Post Rotate July 10.xlsx` (file rotto del 10/07).
