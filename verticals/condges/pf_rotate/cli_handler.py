@@ -137,6 +137,7 @@ def add_subparser(subparsers: argparse._SubParsersAction):
 def _handle(args: argparse.Namespace) -> int:
     from io import BytesIO
 
+    from verticals.condges.pf_rotate.rotate import ScadenzarioVuotoError
     from verticals.condges.pf_rotate.step1_saldi import SaldiIncompletiError
     from verticals.condges.scadenze_parse import parse_scadenze
 
@@ -188,7 +189,7 @@ def _handle(args: argparse.Namespace) -> int:
             allow_partial_saldi=args.allow_partial_saldi,
             extra_excluded=extra_excluded,
         )
-    except SaldiIncompletiError as e:
+    except (SaldiIncompletiError, ScadenzarioVuotoError) as e:
         print(f"ERRORE: {e}", file=sys.stderr)
         return 2
 

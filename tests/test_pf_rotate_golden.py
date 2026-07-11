@@ -6,7 +6,7 @@ import openpyxl
 import pandas as pd
 import pytest
 
-from verticals.condges.pf_rotate.rotate import rotate
+from verticals.condges.pf_rotate.rotate import ScadenzarioVuotoError, rotate
 from verticals.condges.pf_rotate.step1_saldi import SaldiIncompletiError
 from verticals.condges.pf_rotate.step3_scadenzario import UnmappedPolicy
 
@@ -178,10 +178,8 @@ def test_rotate_writes_failed_suffix_on_check_failure(
 
     result = rotate(
         pf_path=pf_path,
-        scad_df=pd.DataFrame(
-            columns=["codice_fornitore", "nome", "totale", "scaduto", "mese_5"]
-        ),
-        bucket_months=[5],
+        scad_df=_minimal_scad_df(),
+        bucket_months=[5, 6],
         societa="ORTI",
         mese_chiuso=4,
         data_saldo=date(2026, 4, 30),
@@ -196,3 +194,37 @@ def test_rotate_writes_failed_suffix_on_check_failure(
     assert result.failed is False  # C4 ora è 340000.0 hardcoded
     # Suffisso assente:
     assert "_FAILED_CHECKS" not in result.out_path.name
+
+
+def test_rotate_hard_fail_su_scadenzario_vuoto(
+    minimal_pf_orti_bytes,
+    fornitori_csv_orti,
+    tmp_path,
+):
+    """0 scadenze parsate (export sbagliato) → hard fail PRIMA di toccare il PF.
+
+    Regressione del 2026-07-10: un registro documenti (senza date scadenza) parsava
+    a 0 righe e la rotation proseguiva, cancellando le uscite pianificate dei mesi
+    aperti senza riscrivere nulla.
+    """
+    pf_path = tmp_path / "in.xlsx"
+    pf_path.write_bytes(minimal_pf_orti_bytes)
+    out_dir = tmp_path / "out"
+
+    with pytest.raises(ScadenzarioVuotoError):
+        rotate(
+            pf_path=pf_path,
+            scad_df=pd.DataFrame(
+                columns=["codice_fornitore", "nome", "totale", "scaduto"]
+            ),
+            bucket_months=[],
+            societa="ORTI",
+            mese_chiuso=4,
+            data_saldo=date(2026, 4, 30),
+            saldi={"MPS": 250000.0, "Intesa": 90000.0},
+            fornitori_csv=fornitori_csv_orti,
+            out_dir=out_dir,
+            unmapped_policy=UnmappedPolicy.SKIP,
+        )
+
+    assert not out_dir.exists(), "nessun file deve essere scritto su scadenzario vuoto"
