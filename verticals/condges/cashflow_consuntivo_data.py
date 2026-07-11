@@ -103,13 +103,14 @@ def fetch_movimenti_mese(societa_id: str, anno: int, mese: int) -> list[dict]:
     """Movimenti banca del mese, nel formato atteso da detect_trasferimenti_interni."""
     from google.cloud import bigquery
 
-    from core.config import PROJECT
+    from core.bq.client import get_client
+    from core.config import F_BANCHE_MOVIMENTI
 
-    client = bigquery.Client(project=PROJECT)
+    client = get_client()
     sql = f"""
     SELECT id_movimento, banca_id, data_operazione,
            CAST(importo_netto AS FLOAT64) AS importo_netto, descrizione
-    FROM `{PROJECT}.hotelops.f_banche_movimenti`
+    FROM `{F_BANCHE_MOVIMENTI}`
     WHERE societa_id = @societa
       AND DATE_TRUNC(data_operazione, MONTH) = DATE(@anno, @mese, 1)
       AND descrizione IS NOT NULL
