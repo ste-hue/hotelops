@@ -111,3 +111,14 @@ def test_consolidato_candidate_resta_nei_flussi_esterni():
     assert cons["candidati_trasferimento"] == 30_000.0
     assert cons["incassi_esterni"] == 20_000.0
     assert cons["pagamenti_esterni"] == 10_000.0
+
+
+def test_pagina_hub_importabile_e_senza_page_config():
+    """render() esiste e il modulo non chiama st.set_page_config (vincolo hub)."""
+    import inspect
+
+    from verticals.hub.pages_ import cassa_consuntivo
+
+    assert callable(cassa_consuntivo.render)
+    src = inspect.getsource(cassa_consuntivo)
+    assert "set_page_config" not in src
