@@ -9,6 +9,19 @@
 > - **PURSUE (sceglie Stefano)**: viste cashflow/tesoreria — escludere partite di giro (aggancia `PARTITE_DI_GIRO.md`). **HANDOFF**: export Esolver (movimenti/fatture/scheda/bilancino) + buco Moolty 19/06.
 > - Superficie sanata vs triage 06-20: `.worktrees/gardener-22` **sparito** (potato).
 
+## 2026-07-11 — Thread GC: 372 checkbox sessioni → 11 workstream hub
+
+I thread vivi ora vivono nei **workstream hub** del vault (`workstreams/_INDEX.md`) — non più nei session file (tutti flippati `closed`, BACKLOG.md archiviato). Report: `vault/reports/2026-07-11_thread_gc.md`. Le skill session-reflect/hotelops-threads aggiornate perché la pila non si riformi.
+
+**HANDOFF Stefano (azioni manuali, dai hub):**
+- Cestinare `~/Downloads/ORTI PF 2026 Post Rotate July 10.xlsx` (file rotto del 10/07).
+- Export quando Rosa registra giugno: movimenti INTUR (+coda ORTI) + bilancini giugno ×2 + mastrini 2026 (un giro solo).
+- Homebanking: INTESA ORTI da 05/06, INTESA INTUR da 10/06, UNICREDIT ORTI mai in BQ; residui MPS/SELLA con Rosa (#69).
+- Moolty: export 04/07 + conferma buco 19/06; registro corrispettivi spiaggia fermo al 02/07 (job SANO — far aggiornare il file al Lido).
+- Chiedere a Rosa: "Canoni locazione CVM SDP" 50k giugno ORTI (one-off/annuale/intercompany?).
+- Rotation INTUR giugno: saldi 31/05 SELLA+MPS+INTESA + export partite INTUR.
+- Conteggio camere restyling: rilievo Amalia. · Re-export anagrafica fornitori Esolver (ferma a marzo). · IAP allowlist da restringere in console. · Issue GitHub chiudibili: #20 #28 #29 #33 #47 (+#62).
+
 ## Sessione 2026-07-09 — Dossier societario ORTI/INTUR (miner Workspace + dati ufficiali) → MERGED
 - ✅ **Fronte `dossier-societario` mergiato su main** (`1847974`, spinto su origin; Task 1-10 già in `398a4cc`, Task 11a in questo merge). Branch `feat/dossier-societario`. Spec+piano in `docs/superpowers/{specs,plans}/2026-07-08-dossier-societario-*`. **942 test verdi** su main dopo merge.
 - **Cosa fa**: `hotelops workspace mine-dossier --company ORTI|INTUR [--census|--apply]` + `dossier-official`. Census read-only: cerca su Drive (fullText) + Gmail SOLO le frasi societarie precise (INTUR: `INTUR`/CF `00553430653`; ORTI: `"ORTI S.R.L."`/`"ORTI SRL"`/P.IVA `04391390657` — **mai** "orti" nudo), dedup per fileId+sha256 allegati con mappa detentori, classificazione **content-only** (mai sul nome) in tassonomia CEO (01_Societario…08_Contratti + _DaRivedere), indice xlsx + gap list su Drive. Zero scritture in census.
