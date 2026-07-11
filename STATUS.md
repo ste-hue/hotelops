@@ -103,7 +103,7 @@ Consolidamento ("torniamo su main, worktree-only d'ora in poi"). Esito:
 - **Audit consumi F&B per direzione**: Streamlit `verticals/condges/audit_consumi_dashboard.py` (6 pagine, canonical-transformation-matrix) + Apps Script `audit_form.gs` (8 sezioni Form). Setup pendente: `createAuditForm()` su script.google.com + aggiornare FORM_URL + condividere col direttore.
 - ~~v_condges_banca_dettaglio / v_ledger_movimenti: non ancora materializzate~~ **FALSO, corretto 2026-07-09 (issue #62)**: entrambe ESISTONO su BQ (verificato INFORMATION_SCHEMA), deployate da tempo via `hotelops deploy-views`.
 - ~~xlsx-movimenti-parser: piano scritto (`docs/superpowers/plans/2026-03-30-xlsx-movimenti-parser.md`), non eseguito~~ **KILL 2026-06-12**: superato dal re-baseline via intake→promote su export lista-movimenti (`8bec01b`, `0f52475`).
-- **revman vertical**: mappatura completa 5 fonti HotelCube; Power BI Z_DataSet espone 12 report downstream. Solo Cruscotto/CruscottoMP ha loop dichiarato. **Bozza email a Lara pronta** (non inviata).
+- **revman vertical**: ~~mappatura 5 fonti + bozza email a Lara~~ **RILANCIATO 2026-07-11 su base nuova** (Lara = superata, KILL scelta Stefano): la spina dorsale ora esiste — loop `season_forecast` + `f_prenotazioni_otb`/`f_bookings_tipologia`/`f_consprev_mensile` + metodologia in vault `BOOKING_PACE_E_BASI` (batteria/ADR marginale/ADR richiesto). Fronte tracciato in **issue #81** (booking curve → v_booking_curve → pagina hub Revenue → loop umano; primo caso d'uso: ottobre −380 notti). Prerequisito dati: export `DataPrenotazione` 2025+2026.
 - **condges Rosa->Gasparotto integration**: spec + plan scritti (`c69abc1`, `beddc7e`). 2 task iniziali implementati. Plan in esecuzione.
 - **Projects event-sourced Step 1**: spec scritta `docs/superpowers/specs/2026-04-22-projects-event-sourced-design.md`. Plan TDD da generare, defer a Doc Refresh + cassa loop chiusi.
 - **Vault loops restructure**: 2/12 loop specs scritti (`daily_reconciliation`, `cash_control`). Next candidate: `monthly_close`.
@@ -261,7 +261,7 @@ Consolidamento ("torniamo su main, worktree-only d'ora in poi"). Esito:
 - **FK end-to-end smoke su MPS file fresh** -- al prossimo export bancario non storico.
 - **Doc Refresh Sprint Step 3-9** -- README rewrite -> CLAUDE.md -> counts/tests -> Cutover decision -> TODO markers -> Agent Epistemology.
 - ~~**Materializzare** v_ledger_movimenti + v_condges_banca_dettaglio su BQ.~~ **GIÀ FATTO** (verificato 2026-07-09, issue #62).
-- **Inviare email a Lara Durisotti** (bozza pronta) -- sblocca revman.
+- ~~**Inviare email a Lara Durisotti** (bozza pronta) -- sblocca revman.~~ **KILL 2026-07-11** (Stefano: superato; revman rilanciato su base season_forecast — issue #81).
 - **condges Rosa->Gasparotto plan resume** -- continuare esecuzione plan `beddc7e`.
 - **Loop spec `monthly_close`** -- Gasparotto file, COMPETENZA mensile.
 - **Capture `vault/concepts/SEGMENTO_CLIENTE.md`** -- glossario codici Ristocube.
