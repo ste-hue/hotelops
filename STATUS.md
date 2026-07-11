@@ -80,7 +80,7 @@
 - ✅ **Run-log RIMOSSO** (`f_cash_projection_runs` creata e droppata): **governance — proiezioni NON nel pool `f_*`** (= solo fatti); memoria proiezioni = xlsx versionati. Decision: `vault/decisions/2026-06-19_Modello_Proiezione_Cassa`.
 - ✅ **4 PF prodotti** (mag/giu ORTI+INTUR), nome canonico `SOC_PF_2026-0M_post-rotate_<ts>.xlsx`, 0 ERR, saldi verificati. In `Desktop/WORK/condges/pianfin/PF/`.
 - 🟡 **PR #38 aperto**: **mappatura fornitori BQ-backed** (`load_fornitori_bq`/`upsert_fornitore_bq` MERGE → persistente, niente CSV effimero su Cloud Run, niente doppioni) + **esclusione per-rotation** (`extra_excluded`, transiente) vs permanente (`is_excluded`). Da review/merge.
-- 🟡 **Open**: refactor unificazione (estrarre motore `write_pf` da `app_scadenzario` deprecato-ma-load-bearing → cancellare gusci `app_scadenzario`/`tesoreria`); deploy Cloud Run hub (cashflow live, gated; ora mapping persiste); control-discrepancy (conteggio CLI 13/0/7 vs in-foglio 22/1/0 + label-mese header stale); footgun `load_fornitori.py` (CSV→BQ TRUNCATE sovrascrive upsert → guard).
+- 🟡 **Open**: refactor unificazione (estrarre motore `write_pf` da `app_scadenzario` deprecato-ma-load-bearing → cancellare gusci `app_scadenzario`/`tesoreria`); deploy Cloud Run hub (cashflow live, gated; ora mapping persiste); control-discrepancy — **ridotto 2026-07-11**: le formule in-foglio ancorate al mese chiuso ora avanzano a ogni rotation (`controlli_sheet.advance_controlli`, ERRORE finti eliminati); resta il label-mese header riga 3 stale; footgun `load_fornitori.py` (CSV→BQ TRUNCATE sovrascrive upsert → guard).
 
 ## Triage worktree/branch — 2026-06-18 ✅ ESEGUITO
 Consolidamento ("torniamo su main, worktree-only d'ora in poi"). Esito:
@@ -192,7 +192,7 @@ Consolidamento ("torniamo su main, worktree-only d'ora in poi"). Esito:
 > **Residui REALI cashflow (carry-over sessioni 06-19, non dal triage 06-16):**
 > - ~~**Deploy Cloud Run hub**~~ ✅ **FATTO 2026-06-20** (rev. `00013-hfb`). ⚠️ **scoperta**: serve `app_viewer.py` (read-only) → NON espone il cashflow; il cashflow gira solo nell'admin `app.py` in locale. "Cashflow online" = decisione separata (vedi Completato 06-20).
 > - **D2 — `tesoreria.py` standalone**: investigare se duplica il tab tesoreria di `app_cdg` (`page_tesoreria`) prima di cancellare. Layer dati (`bq_tesoreria_core`/`gen_tesoreria_xlsx`) NON ridondante. Scope da scrivere.
-> - **Control-discrepancy** (debug P2): conteggio CLI `RotateResult` 13/0/7 vs controlli in-foglio 22/1/0 + label-mese header riga 3 stale.
+> - **Control-discrepancy** (debug P2): ~~formule in-foglio ancorate al mese chiuso vecchio (ERRORE finti)~~ ✅ **FATTO 2026-07-11** (`advance_controlli` in rotation + guard hard-fail su scadenziario parsato a 0 righe, nato dall'incidente rotation-vuota del 10/07). Resta: label-mese header riga 3 stale.
 > - Campo "Motivo" custom esclusi (deferred) · casa memoria-proiezioni se mai serve (dataset fuori dal pool `f_*`, non urgente).
 > **PURSUE (sceglie Stefano):**
 > - **Rotation maggio→giugno** — timing-due (oggi 06-20, "~fine giugno"). Pura esecuzione, zero design: input = post-rotate 06-19 in `pianfin/PF/`, saldi 31/05 nell'anchor. Quick win operativo.

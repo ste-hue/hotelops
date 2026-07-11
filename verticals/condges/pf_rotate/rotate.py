@@ -24,12 +24,21 @@ from verticals.condges.pf_rotate.step1_saldi import (
     preflight_saldi,
     write_saldi_banca,
 )
+from verticals.condges.pf_rotate.controlli_sheet import advance_controlli
 from verticals.condges.pf_rotate.step2_azzera import azzera_mese
 from verticals.condges.pf_rotate.step3_scadenzario import (
     UnmappedPolicy,
     apply_scadenzario,
 )
 from verticals.condges.pf_rotate.step5_controlli import verifica_controlli, CheckOutcome
+
+
+class ScadenzarioVuotoError(RuntimeError):
+    """Scadenziario parsato a 0 righe: quasi certamente un export Esolver sbagliato.
+
+    Proseguire cancellerebbe le uscite pianificate dei mesi aperti (pulizia
+    idempotente di write_pf) senza riscrivere nulla — hard fail prima di toccare il PF.
+    """
 
 
 @dataclass
@@ -71,6 +80,13 @@ def rotate(
     allow_partial_saldi: se True, non hard-fail su conti obbligatori mancanti — scrive
         un PF parziale marcato _FAILED_CHECKS (escape hatch del gate O-A).
     """
+    if scad_df.empty:
+        raise ScadenzarioVuotoError(
+            "Scadenziario con 0 scadenze: probabile export sbagliato — serve la "
+            "'Situazione partite sintetica per fornitori' di Esolver (con data "
+            "scadenza e saldo scadenza), non un registro documenti."
+        )
+
     pf_bytes = pf_path.read_bytes()
 
     # Step 1: saldi
@@ -91,6 +107,10 @@ def rotate(
 
     # Step 2: azzera
     changes = azzera_mese(wb, mese_chiuso=mese_chiuso)
+
+    # Step 2b: allinea i controlli in-foglio al nuovo mese chiuso
+    # (altrimenti restano ancorati al mese della rotation precedente → ERRORE finti)
+    advance_controlli(wb, mese_chiuso=mese_chiuso)
 
     # Serialize after step 1+2 prima dello step 3 (write_pf legge bytes)
     buf = BytesIO()
