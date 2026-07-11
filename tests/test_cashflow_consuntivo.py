@@ -3,7 +3,7 @@
 from datetime import date
 
 from verticals.condges.cashflow_consuntivo_data import (
-    consolidato_societa,  # noqa: F401 — usata dai test del Task 3
+    consolidato_societa,
     detect_trasferimenti_interni,
 )
 
@@ -80,3 +80,34 @@ def test_greedy_preferisce_distanza_minore():
     assert by_id["m1"]["transfer_group"] == by_id["m2"]["transfer_group"]
     assert by_id["m3"]["transfer_group"] == by_id["m4"]["transfer_group"]
     assert by_id["m1"]["transfer_group"] != by_id["m3"]["transfer_group"]
+
+
+def test_consolidato_neutralizza_solo_auto_caso_zia():
+    """Caso canonico: 2M in/out come giro → variazione netta = solo flussi esterni."""
+    movs = [
+        _mov(1, "MPS", 10, +2_000_000.0, "Versamento ns. a/c assegni circolari"),
+        _mov(2, "MPS", 12, -2_000_000.0, "Emissione ass. circolari"),
+        _mov(3, "MPS", 15, +40_000.0, "POS incassi"),
+        _mov(4, "INTESA", 20, -100_000.0, "Pagamento fornitori"),
+    ]
+    tagged = detect_trasferimenti_interni(movs)
+    cons = consolidato_societa(tagged)
+    assert cons["trasferimenti_interni"] == 4_000_000.0  # lordo movimentato nei giri
+    assert cons["incassi_esterni"] == 40_000.0
+    assert cons["pagamenti_esterni"] == 100_000.0
+    assert cons["variazione_netta"] == -60_000.0
+
+
+def test_consolidato_candidate_resta_nei_flussi_esterni():
+    """I CANDIDATE non vengono neutralizzati (naming honesty: solo AUTO esce dal consolidato)."""
+    movs = [
+        _mov(1, "INTESA", 10, -10_000.0),
+        _mov(2, "MPS", 10, +10_000.0),
+        _mov(3, "SELLA", 11, +10_000.0),
+    ]
+    tagged = detect_trasferimenti_interni(movs)
+    cons = consolidato_societa(tagged)
+    assert cons["trasferimenti_interni"] == 0.0
+    assert cons["candidati_trasferimento"] == 30_000.0
+    assert cons["incassi_esterni"] == 20_000.0
+    assert cons["pagamenti_esterni"] == 10_000.0

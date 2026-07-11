@@ -73,4 +73,56 @@ def detect_trasferimenti_interni(
 
 
 def consolidato_societa(movimenti_tagged: list[dict]) -> dict:
-    raise NotImplementedError  # Task 3
+    """Livello B: flussi esterni con trasferimenti interni (AUTO) neutralizzati.
+
+    I CANDIDATE restano nei flussi esterni ma sono quantificati a parte:
+    verranno risolti dalla review queue (C.2), mai neutralizzati in silenzio.
+    """
+    incassi = pagamenti = trasferimenti = candidati = 0.0
+    for m in movimenti_tagged:
+        imp = m["importo_netto"]
+        if m["transfer_status"] == "AUTO":
+            trasferimenti += abs(imp)
+            continue
+        if m["transfer_status"] == "CANDIDATE":
+            candidati += abs(imp)
+        if imp > 0:
+            incassi += imp
+        else:
+            pagamenti += abs(imp)
+    return {
+        "incassi_esterni": round(incassi, 2),
+        "pagamenti_esterni": round(pagamenti, 2),
+        "trasferimenti_interni": round(trasferimenti, 2),
+        "candidati_trasferimento": round(candidati, 2),
+        "variazione_netta": round(incassi - pagamenti, 2),
+    }
+
+
+def fetch_movimenti_mese(societa_id: str, anno: int, mese: int) -> list[dict]:
+    """Movimenti banca del mese, nel formato atteso da detect_trasferimenti_interni."""
+    from google.cloud import bigquery
+
+    from core.config import PROJECT
+
+    client = bigquery.Client(project=PROJECT)
+    sql = f"""
+    SELECT id_movimento, banca_id, data_operazione,
+           CAST(importo_netto AS FLOAT64) AS importo_netto, descrizione
+    FROM `{PROJECT}.hotelops.f_banche_movimenti`
+    WHERE societa_id = @societa
+      AND DATE_TRUNC(data_operazione, MONTH) = DATE(@anno, @mese, 1)
+      AND descrizione IS NOT NULL
+      AND descrizione NOT IN ('Totale (€)', 'TOTALE')
+    """
+    job = client.query(
+        sql,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("societa", "STRING", societa_id),
+                bigquery.ScalarQueryParameter("anno", "INT64", anno),
+                bigquery.ScalarQueryParameter("mese", "INT64", mese),
+            ]
+        ),
+    )
+    return [dict(r) for r in job.result()]
