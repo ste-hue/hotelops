@@ -77,6 +77,8 @@ FROM stat JOIN prod USING (mese) ORDER BY mese'
 
 Expected: `ratio` ≈ **1.0 (±2%)** su entrambi i mesi → `revenue_room` è imponibile, si usa come LY. Se ratio ≈ 1.10 (IVA camere) → è lordo → STOP: il LY va preso da `f_produzione_pms` classe 01ROOM (ma quella non ha le notti → riportare a Stefano prima di scegliere).
 
+> **ESEGUITO 2026-07-11 — esito STOP, risolto.** Ratio 1,0906 (mag) / 1,0364 (giu): base terza. Decisione Stefano: LY € = `f_produzione_pms` 01ROOM (imponibile, per BU), LY notti = `f_pms_statistiche.camere_vendute`. Il SQL del Task 2 già riflette la decisione (CTE `room_revenue_monthly`). Gate 1 PASS (0 righe fuori tolleranza). Report: `.superpowers/sdd/task-1-report.md`.
+
 ---
 
 ### Task 2: Vista `v_booking_curve` + invariant test
@@ -265,25 +267,40 @@ otb_with_pickup AS (
   )
 ),
 pms_monthly AS (
-  -- notti/€/diagnostiche per BU × anno × mese dalla fonte PMS
+  -- notti + diagnostiche calendario per BU × anno × mese (fonte statistiche)
   SELECT
     business_unit_id,
     EXTRACT(YEAR FROM DATE(data))  AS anno,
     EXTRACT(MONTH FROM DATE(data)) AS mese,
     SUM(camere_vendute)            AS notti,
-    SUM(revenue_room)              AS imponibile,
     COUNTIF(camere_totali > 0)     AS giorni_con_capacita,
     MAX(camere_totali)             AS capacita_massima
   FROM `hotelops-suite.hotelops.f_pms_statistiche`
   GROUP BY 1, 2, 3
 ),
+room_revenue_monthly AS (
+  -- ricavo camere imponibile per BU × anno × mese (decisione gate 2:
+  -- 01ROOM di f_produzione_pms, NON revenue_room di f_pms_statistiche
+  -- che è una base terza — ratio 1,09/1,04 vs 01ROOM)
+  SELECT
+    business_unit_id,
+    EXTRACT(YEAR FROM DATE(data))  AS anno,
+    EXTRACT(MONTH FROM DATE(data)) AS mese,
+    SUM(importo_imponibile)        AS imponibile
+  FROM `hotelops-suite.hotelops.f_produzione_pms`
+  WHERE classe = '01ROOM'
+  GROUP BY 1, 2, 3
+),
 ly_monthly AS (
   -- benchmark: l'anno N legge il PMS dell'anno N-1
-  SELECT business_unit_id, anno + 1 AS anno_target, mese,
-         notti AS ly_notti, imponibile AS ly_imponibile,
-         giorni_con_capacita AS ly_giorni_con_capacita,
-         capacita_massima AS ly_capacita_massima
-  FROM pms_monthly
+  SELECT p.business_unit_id, p.anno + 1 AS anno_target, p.mese,
+         p.notti AS ly_notti, r.imponibile AS ly_imponibile,
+         p.giorni_con_capacita AS ly_giorni_con_capacita,
+         p.capacita_massima AS ly_capacita_massima
+  FROM pms_monthly p
+  LEFT JOIN room_revenue_monthly r
+    ON r.business_unit_id = p.business_unit_id
+   AND r.anno = p.anno AND r.mese = p.mese
 ),
 capacity_by_year AS (
   -- capacità osservata; esclusa l'anomalia RESIDENCE 2025 (giorni con 55)

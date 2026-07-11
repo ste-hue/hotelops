@@ -70,9 +70,13 @@ variante-invarianti — verificata sul 6/7 dove esistono entrambe (§Verifica).
 - `adr_marginale` = Δimponibile / Δnotti — **NULL sulla prima foto e quando
   Δnotti ≤ 0** (niente marginali fantasma su cancellazioni nette).
 
-**3. LY e target (da `f_pms_statistiche` 2025):**
-- `ly_notti` = SUM(camere_vendute), `ly_imponibile` = SUM(revenue_room),
-  `ly_adr` — stesso mese, anno 2025;
+**3. LY e target (fonti PMS 2025 — decisione gate 2, 2026-07-11):**
+- `ly_notti` = SUM(camere_vendute) da `f_pms_statistiche`;
+- `ly_imponibile` = SUM(importo_imponibile) da **`f_produzione_pms` classe
+  01ROOM** (per BU — la base già validata l'11/07: ADR ott 206 = 01ROOM/5.279).
+  NON `f_pms_statistiche.revenue_room`: il gate 2 ha mostrato che è una base
+  terza (ratio vs 01ROOM: 1,09 maggio, 1,04 giugno — né imponibile né lordo);
+- `ly_adr` = ly_imponibile / ly_notti;
 - filtro anomalia: righe RESIDENCE 2025 con `camere_totali > 20` escluse dal
   calcolo capacità (alcuni giorni segnano 55);
 - `cap_ratio` = capacità 2026 / capacità 2025, **misurata dai dati**
@@ -171,10 +175,10 @@ numeri finti (pattern delle altre pagine).
    ripetibile: differenza assoluta notti = **0**; differenza assoluta
    imponibile ≤ **€1** per cella (arrotondamenti fonte). Se fallisce,
    l'assunzione variante-invariante cade → STOP, si riporta a Stefano.
-2. **Check base LY (una tantum):** `f_pms_statistiche.revenue_room` vs
-   `f_produzione_pms` classe 01ROOM su un mese campione — deve essere
-   imponibile (basi omogenee). Se è lordo → STOP, si sceglie la fonte LY
-   giusta e si aggiorna la spec.
+2. **Check base LY (una tantum):** ESEGUITO 2026-07-11, esito STOP →
+   risolto per decisione di Stefano: `revenue_room` scartata (ratio vs
+   01ROOM instabile: 1,09 mag, 1,04 giu), LY € da `f_produzione_pms`
+   01ROOM + notti da `f_pms_statistiche` (vedi §3 colonne).
 3. **Test unitario SQL:** fixture con foto sintetiche → golden numbers
    (pickup, marginale con Δnotti ≤ 0, richiesto, cap_ratio).
 4. **Verifica finale contro i numeri validati a mano l'11/07 (HOTEL):**
