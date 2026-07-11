@@ -47,3 +47,19 @@ def test_giugno_orti_mps_presente_con_anchor(bq_client):
     assert r.saldo_iniziale_cert == 469192.55
     assert r.saldo_finale_cert == 791654.10
     assert r.accrediti > 0 and r.addebiti > 0
+
+
+@pytest.mark.bq
+def test_conto_con_anchor_senza_movimenti_visibile(bq_client):
+    """Un conto certificato ma senza movimenti nel mese deve comparire (movimenti a 0),
+    non sparire: caso reale ORTI/UNICREDIT giugno 2026."""
+    sql = """
+    SELECT accrediti, addebiti, netto, saldo_finale_cert
+    FROM `hotelops-suite.hotelops.v_cash_position`
+    WHERE mese = '2026-06-01' AND societa_id = 'ORTI' AND banca_id = 'UNICREDIT'
+    """
+    rows = list(bq_client.query(sql).result())
+    assert len(rows) == 1
+    r = rows[0]
+    assert (r.accrediti, r.addebiti, r.netto) == (0.0, 0.0, 0.0)
+    assert r.saldo_finale_cert == 10000.0
