@@ -225,6 +225,26 @@ def test_bkg_detect_bu_da_filename():
         detect_bu("Data from Power BI.xlsx")
 
 
+def test_bkg_detect_bu_fallback_footer(tmp_path):
+    # export non rinominato: BU dal footer per negazione (regola di casa —
+    # il filename non è affidabile, il footer sì). Workbook costruito a mano:
+    # _xlsx appende il suo footer di default (PANORAMAHT) e inquinerebbe il test.
+    f = tmp_path / "Data from Power BI (14).xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Giorno", "Tipologia Venduta", "Camere", "ARB", "Infant",
+               "ADR", "Appartamento", "Appartamento Extra", "Extra", "Totale"])
+    ws.append(["01/05/2026 ven", "BILO", 2, 4, 0, 100.0, 200.0, 0, 0, 200.0])
+    ws.append(["Total", None, None])
+    ws.append(["Applied filters:\nCodiceHotel is not HOMEHOLIDAY or PANORAMAHT\n"
+               "Descrizione is Imponibile"])
+    wb.save(f)
+    assert detect_bu(f.name, path=f) == "RESIDENCE"
+    # senza path il comportamento resta l'errore esplicito
+    with pytest.raises(ValueError):
+        detect_bu(f.name)
+
+
 def test_bkg_parse_e_build(tmp_path):
     f = _xlsx(
         tmp_path / "PANORAMAData from Power BI (1).xlsx",

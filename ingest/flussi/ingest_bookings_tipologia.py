@@ -44,11 +44,22 @@ NAME_TO_BU = {
 }
 
 
-def detect_bu(file_name: str) -> str:
+def detect_bu(file_name: str, path: Path | None = None) -> str:
+    """BU dal prefisso nel filename; fallback: footer 'Applied filters' per
+    negazione (export non rinominati — il filename non è affidabile)."""
     upper = file_name.upper()
     for key, bu in NAME_TO_BU.items():
         if key in upper:
             return bu
+    if path is not None:
+        from ingest.flussi.ingest_consprev_mensile import detect_bu_from_footer
+
+        wb = load_workbook(path, read_only=True, data_only=True)
+        try:
+            rows = list(wb.active.iter_rows(values_only=True))
+        finally:
+            wb.close()
+        return detect_bu_from_footer(rows)
     raise ValueError(
         f"BU non deducibile dal nome '{file_name}' (atteso uno di {list(NAME_TO_BU)})"
     )
@@ -155,7 +166,7 @@ def build_rows(righe: list[dict], bu: str, raw_object_id: str | None) -> list[di
 def ingest_file(
     path: Path, raw_object_id: str | None = None, dry_run: bool = False
 ) -> int:
-    bu = detect_bu(path.name)
+    bu = detect_bu(path.name, path=path)
     righe = parse_xlsx(path)
     rows = build_rows(righe, bu, raw_object_id)
     validate_batch(
