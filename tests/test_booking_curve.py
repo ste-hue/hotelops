@@ -72,7 +72,7 @@ def test_cap_ratio(bq_client):
         bq_client,
         f"""
         SELECT business_unit_id, ANY_VALUE(cap_ratio) cap_ratio
-        FROM {VIEW} WHERE cap_ratio IS NOT NULL GROUP BY 1
+        FROM {VIEW} WHERE cap_ratio IS NOT NULL AND anno = 2026 GROUP BY 1
     """,
     )
     ratio = {r["business_unit_id"]: r["cap_ratio"] for r in rows}

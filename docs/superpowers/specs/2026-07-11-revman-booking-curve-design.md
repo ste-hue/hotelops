@@ -77,8 +77,7 @@ variante-invarianti — verificata sul 6/7 dove esistono entrambe (§Verifica).
   NON `f_pms_statistiche.revenue_room`: il gate 2 ha mostrato che è una base
   terza (ratio vs 01ROOM: 1,09 maggio, 1,04 giugno — né imponibile né lordo);
 - `ly_adr` = ly_imponibile / ly_notti;
-- filtro anomalia: righe RESIDENCE 2025 con `camere_totali > 20` escluse dal
-  calcolo capacità (alcuni giorni segnano 55);
+- anomalia RESIDENCE 2025 (giorni con `camere_totali` = 55): assorbita dalla capacità modale, nessun filtro esplicito;
 - `cap_ratio` = capacità 2026 / capacità 2025, **misurata dai dati**:
   capacità **MODALE** (valore più frequente di `camere_totali`) per BU per
   anno sui soli giorni operativi (`camere_vendute > 0`). Non MAX: robusta
@@ -188,8 +187,7 @@ numeri finti (pattern delle altre pagine).
    risolto per decisione di Stefano: `revenue_room` scartata (ratio vs
    01ROOM instabile: 1,09 mag, 1,04 giu), LY € da `f_produzione_pms`
    01ROOM + notti da `f_pms_statistiche` (vedi §3 colonne).
-3. **Test unitario SQL:** fixture con foto sintetiche → golden numbers
-   (pickup, marginale con Δnotti ≤ 0, richiesto, cap_ratio).
+3. **Invariant + golden test live** (`tests/test_booking_curve.py`, `@pytest.mark.bq`): grain, pickup NULL su prima foto, marginale mai su Δnotti ≤ 0, cap_ratio, golden 11/07.
 4. **Verifica finale contro i numeri validati a mano l'11/07 (HOTEL):**
    luglio marginale ~476 vs media ~230, saturazione ~80,7%; agosto ~306 vs
    ~257; ottobre ~206 vs ~213 e adr_richiesto ~175 con gap_notti_target

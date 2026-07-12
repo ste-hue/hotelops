@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from core.bq.client import get_client
-from core.config import DATASET, PROJECT
+from core.config import V_BOOKING_CURVE
 
 # ── palette (dataviz reference instance — ruoli, non hex sparsi) ─────────────
 BLUE = "#2a78d6"  # slot-1: emphasis + riempimento meter
@@ -73,7 +73,7 @@ def _f(v) -> float | None:
 @st.cache_data(ttl=300)
 def load_curve() -> pd.DataFrame:
     sql = (
-        f"SELECT * FROM `{PROJECT}.{DATASET}.v_booking_curve` "
+        f"SELECT * FROM `{V_BOOKING_CURVE}` "
         "ORDER BY business_unit_id, mese_soggiorno, snapshot_date"
     )
     df = get_client().query(sql).to_dataframe()
