@@ -21,18 +21,23 @@ def _rows(bq_client, sql):
 @pytest.mark.bq
 def test_grain_uniqueness(bq_client):
     """Una riga per (business_unit_id, mese_soggiorno, snapshot_date)."""
-    rows = _rows(bq_client, f"""
+    rows = _rows(
+        bq_client,
+        f"""
         SELECT business_unit_id, mese_soggiorno, snapshot_date, COUNT(*) n
         FROM {VIEW}
         GROUP BY 1, 2, 3 HAVING n > 1 LIMIT 5
-    """)
+    """,
+    )
     assert not rows, f"grain violato: {rows[:2]}"
 
 
 @pytest.mark.bq
 def test_prima_foto_pickup_null(bq_client):
     """La foto più vecchia di ogni (BU, mese) non ha pickup né marginale."""
-    rows = _rows(bq_client, f"""
+    rows = _rows(
+        bq_client,
+        f"""
         WITH prima AS (
           SELECT business_unit_id, mese_soggiorno, MIN(snapshot_date) s
           FROM {VIEW} GROUP BY 1, 2
@@ -42,27 +47,34 @@ def test_prima_foto_pickup_null(bq_client):
           AND v.mese_soggiorno = p.mese_soggiorno AND v.snapshot_date = p.s
         WHERE v.pickup_notti IS NOT NULL OR v.adr_marginale IS NOT NULL
         LIMIT 5
-    """)
+    """,
+    )
     assert not rows, f"prima foto con pickup non NULL: {rows[:2]}"
 
 
 @pytest.mark.bq
 def test_marginale_null_su_pickup_non_positivo(bq_client):
     """adr_marginale mai calcolato su Δnotti <= 0 (niente marginali fantasma)."""
-    rows = _rows(bq_client, f"""
+    rows = _rows(
+        bq_client,
+        f"""
         SELECT * FROM {VIEW}
         WHERE pickup_notti <= 0 AND adr_marginale IS NOT NULL LIMIT 5
-    """)
+    """,
+    )
     assert not rows, f"marginale su pickup <= 0: {rows[:2]}"
 
 
 @pytest.mark.bq
 def test_cap_ratio(bq_client):
     """cap_ratio misurato dai dati: HOTEL 86/76, RESIDENCE 1.0, CVM 1.0."""
-    rows = _rows(bq_client, f"""
+    rows = _rows(
+        bq_client,
+        f"""
         SELECT business_unit_id, ANY_VALUE(cap_ratio) cap_ratio
         FROM {VIEW} WHERE cap_ratio IS NOT NULL GROUP BY 1
-    """)
+    """,
+    )
     ratio = {r["business_unit_id"]: r["cap_ratio"] for r in rows}
     assert abs(ratio["HOTEL"] - 86 / 76) < 0.001, ratio
     assert abs(ratio["RESIDENCE"] - 1.0) < 0.001, ratio
@@ -72,13 +84,16 @@ def test_cap_ratio(bq_client):
 @pytest.mark.bq
 def test_golden_hotel_foto_11_07(bq_client):
     """Riproduce i numeri validati a mano l'11/07 (HOTEL, foto 2026-07-11)."""
-    rows = _rows(bq_client, f"""
+    rows = _rows(
+        bq_client,
+        f"""
         SELECT mese, otb_adr, adr_marginale, saturazione_pct,
                adr_richiesto, gap_notti_target
         FROM {VIEW}
         WHERE business_unit_id = 'HOTEL' AND snapshot_date = '2026-07-11'
           AND mese IN (7, 10)
-    """)
+    """,
+    )
     per_mese = {r["mese"]: r for r in rows}
     lug, ott = per_mese[7], per_mese[10]
     # luglio: marginale ~476 vs media ~230, saturazione ~80,7%

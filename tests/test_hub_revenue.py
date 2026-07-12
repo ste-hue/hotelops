@@ -6,9 +6,15 @@ from verticals.hub.pages_.revenue import verdetto
 
 
 def _base(**kw):
-    d = dict(mese_consumato=False, prima_foto=False, pickup_notti=10.0,
-             gap_target=50_000.0, gap_notti_target=300.0,
-             adr_marginale=250.0, adr_richiesto=150.0)
+    d = dict(
+        mese_consumato=False,
+        prima_foto=False,
+        pickup_notti=10.0,
+        gap_target=50_000.0,
+        gap_notti_target=300.0,
+        adr_marginale=250.0,
+        adr_richiesto=150.0,
+    )
     d.update(kw)
     return d
 
@@ -27,11 +33,17 @@ def test_stati_preliminari_in_ordine():
 
 def test_tre_zone_calibrazione_11_07():
     # luglio 11/07: richiesto 218 vs marginale 476 -> 0.46 < 0.6
-    assert verdetto(**_base(adr_richiesto=218.0, adr_marginale=476.0)) == "TARGET_SCONTATO"
+    assert (
+        verdetto(**_base(adr_richiesto=218.0, adr_marginale=476.0)) == "TARGET_SCONTATO"
+    )
     # ottobre 11/07: richiesto 175 vs marginale 206 -> 0.85, tra 0.6 e 1
-    assert verdetto(**_base(adr_richiesto=175.0, adr_marginale=206.0)) == "SERVE_DOMANDA"
+    assert (
+        verdetto(**_base(adr_richiesto=175.0, adr_marginale=206.0)) == "SERVE_DOMANDA"
+    )
     # richiesto sopra il marginale
-    assert verdetto(**_base(adr_richiesto=250.0, adr_marginale=206.0)) == "SERVE_REPRICING"
+    assert (
+        verdetto(**_base(adr_richiesto=250.0, adr_marginale=206.0)) == "SERVE_REPRICING"
+    )
 
 
 def test_render_montabile():
