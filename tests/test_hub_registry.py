@@ -36,6 +36,7 @@ def test_pages_solo_kind_page():
         "fb",
         "spiaggia",
         "reviews",
+        "revenue",
     }
 
 
@@ -44,6 +45,7 @@ def test_by_group_ordine_e_contenuto():
     assert list(g.keys()) == GROUPS
     assert "cashflow" in {a.id for a in g["Finanza"]}
     assert "accodamenti" in {a.id for a in g["Finanza"]}
+    assert "revenue" in {a.id for a in g["Finanza"]}
     assert "fb" in {a.id for a in g["Operations"]}
     assert g["Sistema"] == []  # ingest non è una sezione: è funzione del vertical
 

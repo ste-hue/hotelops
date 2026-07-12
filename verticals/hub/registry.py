@@ -16,6 +16,7 @@ from verticals.hub.pages_ import (
     cassa_consuntivo,
     fb,
     mutui,
+    revenue,
     reviews,
     spiaggia,
 )
@@ -57,6 +58,7 @@ APPS: list[HubApp] = [
     HubApp("accodamenti", "Accodamenti", "📒", "Finanza", "page", accodamenti.render, "raccolta cassa → Gaia", sensitive=True),
     HubApp("banche", "Banche", "🏛", "Finanza", "bind", _BANCHE_LOOKER, "movimenti & saldi (Looker)"),
     HubApp("mutui", "Mutui", "🏦", "Finanza", "page", mutui.render, "ammortamenti & simulatore"),
+    HubApp("revenue", "Revenue", "📈", "Finanza", "page", revenue.render, "booking curve & pace"),
     # CdG spento 2026-07-05 (troppi dati, redesign "budget vs reale" in arrivo);
     # riaccendere = ripristinare kind=page + import (pages_/cdg.py resta nel codice).
     HubApp("cdg", "CdG", "📊", "Finanza", "soon", None, "controllo di gestione (in redesign)"),
