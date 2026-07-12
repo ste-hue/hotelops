@@ -169,3 +169,64 @@ def fetch_movimenti_mese(societa_id: str, anno: int, mese: int) -> list[dict]:
         ),
     )
     return [dict(r) for r in job.result()]
+
+
+def classifica_registrazione(
+    righe: list[dict],
+    fornitori_voci: dict[int, str],
+    voci_patterns: list[dict],
+) -> dict:
+    """Classifica una registrazione di prima nota che tocca la banca.
+
+    Esolver spiega, non determina: il flusso è quello dei bracci banca; le
+    sorelle dicono la voce. Conservazione garantita dalla partita doppia.
+    """
+    from ingest.flussi.ingest_scheda_contabile import ESOLVER_CC_MAP  # riuso, no dup
+
+    bracci = [r for r in righe if str(r["cod_conto"]).startswith("1901")]
+    sorelle = [r for r in righe if not str(r["cod_conto"]).startswith("1901")]
+
+    flusso_banca = round(sum(r["imp_dare"] - r["imp_avere"] for r in bracci), 2)
+
+    banche = set()
+    for r in bracci:
+        chiave = (r.get("societa_id", "ORTI"), str(r["cod_partitario"]))
+        banche.add(ESOLVER_CC_MAP.get(chiave, f"CC{r['cod_partitario']}"))
+    banca_id = banche.pop() if len(banche) == 1 else ("MULTI" if banche else None)
+
+    lordo_sorelle = sum(abs(r["imp_dare"] - r["imp_avere"]) for r in sorelle)
+    if (
+        len(bracci) >= 2
+        and len(banche) >= 2
+        and abs(flusso_banca) <= 0.01
+        and lordo_sorelle <= 0.01
+    ):
+        lordo = round(sum(abs(r["imp_dare"] - r["imp_avere"]) for r in bracci), 2)
+        return {
+            "flusso_banca": flusso_banca,
+            "banca_id": "MULTI",
+            "tipo": "GIRO_REGISTRATO",
+            "allocazioni": [("TRASFERIMENTO_INTERNO", lordo / 2)],
+        }
+
+    allocazioni: list[tuple[str, float]] = []
+    for r in sorelle:
+        importo = round(-(r["imp_dare"] - r["imp_avere"]), 2)
+        if importo == 0:
+            continue
+        part = r.get("cod_partitario")
+        if part is not None and str(part).isdigit():
+            voce = fornitori_voci.get(int(part), "NON_MAPPATO_FORNITORE")
+        else:
+            voce = (
+                voce_per_conto(str(r["cod_conto"]), voci_patterns)
+                or "NON_MAPPATO_CONTO"
+            )
+        allocazioni.append((voce, importo))
+
+    return {
+        "flusso_banca": flusso_banca,
+        "banca_id": banca_id,
+        "tipo": "NORMALE",
+        "allocazioni": allocazioni,
+    }

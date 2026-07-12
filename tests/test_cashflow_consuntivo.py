@@ -3,6 +3,8 @@
 from datetime import date
 
 from verticals.condges.cashflow_consuntivo_data import (
+    carica_voci_patterns,
+    classifica_registrazione,
     consolidato_societa,
     detect_trasferimenti_interni,
 )
@@ -151,3 +153,73 @@ def test_voci_patterns_filtra_societa():
     assert voce_per_conto("479102", patterns_intur) != "ENTRATE_HOTEL"
     # le righe a società vuota valgono per entrambe
     assert voce_per_conto("750198", patterns_intur) == "USCITE_SPESE_BANCARIE"
+
+
+def _riga(conto, dare, avere, partitario=None):
+    return {
+        "cod_conto": conto,
+        "cod_partitario": partitario,
+        "imp_dare": dare,
+        "imp_avere": avere,
+    }
+
+
+def _patterns_orti():
+    return carica_voci_patterns("ORTI")
+
+
+def test_classifica_acconto_stipendio_anatomia_reale():
+    """PNC 11 del 08/06 ORTI: banca -560,70 = personale 560 (non mappato fino a Task 4) + spese 0,70."""
+    righe = [
+        _riga("390701", 560.0, 0.0),
+        _riga("190101", 0.0, 560.70, partitario="2"),
+        _riga("750198", 0.70, 0.0),
+    ]
+    out = classifica_registrazione(righe, {}, _patterns_orti())
+    assert out["tipo"] == "NORMALE"
+    assert out["flusso_banca"] == -560.70
+    assert ("NON_MAPPATO_CONTO", -560.0) in out["allocazioni"]
+    assert ("USCITE_SPESE_BANCARIE", -0.70) in out["allocazioni"]
+    assert abs(sum(i for _, i in out["allocazioni"]) - out["flusso_banca"]) < 0.01
+
+
+def test_classifica_pagamento_fornitore_via_partitario():
+    """Pagamento fattura: banca in avere, debito fornitore in dare, voce da d_fornitori."""
+    righe = [
+        _riga("330301", 1000.0, 0.0, partitario="18"),
+        _riga("190101", 0.0, 1000.0, partitario="2"),
+    ]
+    out = classifica_registrazione(righe, {18: "USCITE_UTENZE"}, _patterns_orti())
+    assert out["allocazioni"] == [("USCITE_UTENZE", -1000.0)]
+
+
+def test_classifica_fornitore_sconosciuto():
+    righe = [
+        _riga("330301", 500.0, 0.0, partitario="9999"),
+        _riga("190101", 0.0, 500.0, partitario="2"),
+    ]
+    out = classifica_registrazione(righe, {18: "USCITE_UTENZE"}, _patterns_orti())
+    assert out["allocazioni"] == [("NON_MAPPATO_FORNITORE", -500.0)]
+
+
+def test_classifica_incasso_entrata():
+    """Cassa hotel: banca in dare, ricavo in avere → allocazione positiva."""
+    righe = [
+        _riga("190101", 1135.0, 0.0, partitario="2"),
+        _riga("479102", 0.0, 1135.0),
+    ]
+    out = classifica_registrazione(righe, {}, _patterns_orti())
+    assert out["flusso_banca"] == 1135.0
+    assert out["allocazioni"] == [("ENTRATE_HOTEL", 1135.0)]
+
+
+def test_classifica_giro_registrato():
+    """Giroconto fra banche: 2 bracci 1901 opposti, nessuna sorella → GIRO_REGISTRATO."""
+    righe = [
+        _riga("190101", 0.0, 50_000.0, partitario="2"),
+        _riga("190102", 50_000.0, 0.0, partitario="1"),
+    ]
+    out = classifica_registrazione(righe, {}, _patterns_orti())
+    assert out["tipo"] == "GIRO_REGISTRATO"
+    assert out["allocazioni"] == [("TRASFERIMENTO_INTERNO", 50_000.0)]
+    assert out["banca_id"] == "MULTI"
