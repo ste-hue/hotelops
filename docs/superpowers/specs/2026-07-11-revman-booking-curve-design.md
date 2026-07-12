@@ -79,8 +79,10 @@ variante-invarianti — verificata sul 6/7 dove esistono entrambe (§Verifica).
 - `ly_adr` = ly_imponibile / ly_notti;
 - filtro anomalia: righe RESIDENCE 2025 con `camere_totali > 20` escluse dal
   calcolo capacità (alcuni giorni segnano 55);
-- `cap_ratio` = capacità 2026 / capacità 2025, **misurata dai dati**
-  (MAX(camere_totali) per BU per anno: 86/76, 20/20, 10/10 — non hardcoded);
+- `cap_ratio` = capacità 2026 / capacità 2025, **misurata dai dati**:
+  MAX(camere_totali) per BU per anno **sui soli giorni operativi**
+  (`camere_vendute > 0` — i mesi di chiusura hanno inventario configurato
+  diverso, es. HOTEL gen-feb 2025 = 78): 86/76, 20/20, 10/10 — non hardcoded;
 - `target_imponibile` = ly_imponibile × cap_ratio (**parità-camera**, il vero
   zero dell'ambizione);
 - `notti_attese` = ly_notti × cap_ratio;
@@ -91,7 +93,12 @@ variante-invarianti — verificata sul 6/7 dove esistono entrambe (§Verifica).
   `ly_capacita_massima`, `cy_capacita_massima`.
 
 **4. Verdetto (numeri in SQL, semantica in Python):**
-- `saturazione_pct` = otb_notti / notti_attese (la batteria);
+- `saturazione_pct` = otb_notti / (capacità_cy × giorni del mese) — **la
+  batteria: occupancy OTB vs capacità FISICA** (è il "luglio 80,7% pieno"
+  validato l'11/07: 2152/(86×31));
+- `avanzamento_volume_pct` = otb_notti / notti_attese — progresso verso il
+  volume LY riproporzionato (metrica DIVERSA dalla batteria: luglio 94,4%
+  sulla stessa foto — riconciliato in build 2026-07-11);
 - `gap_target` = target_imponibile − otb_imponibile;
 - `gap_notti_target` = notti_attese − otb_notti — **le notti MANCANTI per
   raggiungere il volume LY riproporzionato**, NON la capacità residua reale

@@ -90,7 +90,7 @@ Expected: `ratio` ≈ **1.0 (±2%)** su entrambi i mesi → `revenue_room` è im
 
 **Interfaces:**
 - Consumes: esito Task 1 (entrambi i check passati).
-- Produces: vista `hotelops-suite.hotelops.v_booking_curve` deployata; costante `V_BOOKING_CURVE` in `core.config`. Colonne (usate dal Task 3): `snapshot_date DATE, business_unit_id STRING, mese_soggiorno DATE, anno INT, mese INT, otb_notti, otb_imponibile, otb_adr, gg_tra_foto, pickup_notti, pickup_imponibile, pickup_notti_gg, pickup_eur_gg, adr_marginale, ly_notti, ly_imponibile, ly_adr, ly_giorni_con_capacita, ly_capacita_massima, cy_giorni_con_capacita_osservati, cy_capacita_massima, cap_ratio, target_imponibile, notti_attese, saturazione_pct, gap_target, gap_notti_target, adr_richiesto`.
+- Produces: vista `hotelops-suite.hotelops.v_booking_curve` deployata; costante `V_BOOKING_CURVE` in `core.config`. Colonne (usate dal Task 3): `snapshot_date DATE, business_unit_id STRING, mese_soggiorno DATE, anno INT, mese INT, otb_notti, otb_imponibile, otb_adr, gg_tra_foto, pickup_notti, pickup_imponibile, pickup_notti_gg, pickup_eur_gg, adr_marginale, ly_notti, ly_imponibile, ly_adr, ly_giorni_con_capacita, ly_capacita_massima, cy_giorni_con_capacita_osservati, cy_capacita_massima, capacita_cy, cap_ratio, target_imponibile, notti_attese, saturazione_pct (batteria: OTB/capacità fisica), avanzamento_volume_pct (OTB/notti_attese), gap_target, gap_notti_target, adr_richiesto`.
 
 - [ ] **Step 1: Scrivi i test invariant (falliranno: vista inesistente)**
 
@@ -303,13 +303,16 @@ ly_monthly AS (
    AND r.anno = p.anno AND r.mese = p.mese
 ),
 capacity_by_year AS (
-  -- capacità osservata; esclusa l'anomalia RESIDENCE 2025 (giorni con 55)
+  -- capacità osservata sui SOLI giorni operativi (camere_vendute > 0): i
+  -- mesi chiusi hanno inventario configurato diverso (HOTEL gen-feb 2025 =
+  -- 78); esclusa anche l'anomalia RESIDENCE 2025 (giorni con 55)
   SELECT
     business_unit_id,
     EXTRACT(YEAR FROM DATE(data)) AS anno,
     MAX(camere_totali)            AS capacita
   FROM `hotelops-suite.hotelops.f_pms_statistiche`
-  WHERE NOT (business_unit_id = 'RESIDENCE' AND camere_totali > 20)
+  WHERE camere_vendute > 0
+    AND NOT (business_unit_id = 'RESIDENCE' AND camere_totali > 20)
   GROUP BY 1, 2
 ),
 curve_metrics AS (
@@ -345,6 +348,7 @@ curve_metrics AS (
     ly.ly_capacita_massima,
     cy.giorni_con_capacita AS cy_giorni_con_capacita_osservati,
     cy.capacita_massima    AS cy_capacita_massima,
+    cap_cy.capacita        AS capacita_cy,
     SAFE_DIVIDE(cap_cy.capacita, cap_ly.capacita) AS cap_ratio,
     ly.ly_imponibile * SAFE_DIVIDE(cap_cy.capacita, cap_ly.capacita) AS target_imponibile,
     ly.ly_notti      * SAFE_DIVIDE(cap_cy.capacita, cap_ly.capacita) AS notti_attese
@@ -366,7 +370,11 @@ curve_metrics AS (
 )
 SELECT
   *,
-  SAFE_DIVIDE(otb_notti, notti_attese) AS saturazione_pct,
+  -- batteria: occupancy OTB vs capacità FISICA (il "luglio 80,7%" validato)
+  SAFE_DIVIDE(otb_notti,
+              capacita_cy * EXTRACT(DAY FROM LAST_DAY(mese_soggiorno))) AS saturazione_pct,
+  -- progresso verso il volume LY riproporzionato (metrica diversa dalla batteria)
+  SAFE_DIVIDE(otb_notti, notti_attese) AS avanzamento_volume_pct,
   target_imponibile - otb_imponibile   AS gap_target,
   notti_attese - otb_notti             AS gap_notti_target,
   CASE
