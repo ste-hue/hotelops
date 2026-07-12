@@ -303,16 +303,16 @@ ly_monthly AS (
    AND r.anno = p.anno AND r.mese = p.mese
 ),
 capacity_by_year AS (
-  -- capacità osservata sui SOLI giorni operativi (camere_vendute > 0): i
-  -- mesi chiusi hanno inventario configurato diverso (HOTEL gen-feb 2025 =
-  -- 78); esclusa anche l'anomalia RESIDENCE 2025 (giorni con 55)
+  -- capacità dell'anno = capacità MODALE (valore più frequente) sui giorni
+  -- operativi (camere_vendute > 0): robusta ai giorni di pre-apertura con
+  -- inventario di config diverso (HOTEL mar 2025: 5 gg a 78) e alle
+  -- anomalie puntuali (RESIDENCE 2025: giorni a 55)
   SELECT
     business_unit_id,
     EXTRACT(YEAR FROM DATE(data)) AS anno,
-    MAX(camere_totali)            AS capacita
+    APPROX_TOP_COUNT(camere_totali, 1)[OFFSET(0)].value AS capacita
   FROM `hotelops-suite.hotelops.f_pms_statistiche`
   WHERE camere_vendute > 0
-    AND NOT (business_unit_id = 'RESIDENCE' AND camere_totali > 20)
   GROUP BY 1, 2
 ),
 curve_metrics AS (

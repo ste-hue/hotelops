@@ -80,9 +80,11 @@ variante-invarianti — verificata sul 6/7 dove esistono entrambe (§Verifica).
 - filtro anomalia: righe RESIDENCE 2025 con `camere_totali > 20` escluse dal
   calcolo capacità (alcuni giorni segnano 55);
 - `cap_ratio` = capacità 2026 / capacità 2025, **misurata dai dati**:
-  MAX(camere_totali) per BU per anno **sui soli giorni operativi**
-  (`camere_vendute > 0` — i mesi di chiusura hanno inventario configurato
-  diverso, es. HOTEL gen-feb 2025 = 78): 86/76, 20/20, 10/10 — non hardcoded;
+  capacità **MODALE** (valore più frequente di `camere_totali`) per BU per
+  anno sui soli giorni operativi (`camere_vendute > 0`). Non MAX: robusta
+  ai giorni di pre-apertura con inventario di config diverso (HOTEL mar
+  2025: 5 gg a 78 con 1-2 vendute) e alle anomalie puntuali (RESIDENCE
+  2025: giorni a 55). Attesi: 86/76, 20/20, 10/10 — non hardcoded;
 - `target_imponibile` = ly_imponibile × cap_ratio (**parità-camera**, il vero
   zero dell'ambizione);
 - `notti_attese` = ly_notti × cap_ratio;
