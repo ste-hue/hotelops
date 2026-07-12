@@ -244,3 +244,40 @@ def test_classifica_incasso_cliente_non_ruba_voce_fornitore():
     out = classifica_registrazione(righe, {18: "USCITE_UTENZE"}, _patterns_orti())
     assert out["allocazioni"] != [("USCITE_UTENZE", 500.0)]
     assert out["allocazioni"] == [("NON_MAPPATO_CONTO", 500.0)]
+
+
+def test_classificato_da_registrazioni_aggregato():
+    """3 registrazioni sintetiche: fornitore mappato, acconto con NON_MAPPATO+voce, giro."""
+    from verticals.condges.cashflow_consuntivo_data import classificato_da_registrazioni
+
+    registrazioni = {
+        ("2026-06-05", "PNC 1"): [
+            _riga("330301", 1000.0, 0.0, partitario="18"),
+            _riga("190101", 0.0, 1000.0, partitario="2"),
+        ],
+        ("2026-06-08", "PNC 11"): [
+            _riga("390701", 560.0, 0.0),
+            _riga("190101", 0.0, 560.70, partitario="2"),
+            _riga("750198", 0.70, 0.0),
+        ],
+        ("2026-06-10", "PNC 20"): [
+            _riga("190101", 0.0, 50_000.0, partitario="2"),
+            _riga("190102", 50_000.0, 0.0, partitario="1"),
+        ],
+    }
+    fornitori_voci = {18: "USCITE_UTENZE"}
+    out = classificato_da_registrazioni(registrazioni, fornitori_voci, _patterns_orti())
+
+    assert out["per_voce"] == {"USCITE_UTENZE": -1000.0, "USCITE_SPESE_BANCARIE": -0.70}
+    assert out["non_mappato_conto"] == -560.0
+    assert out["non_mappato_fornitore"] == 0.0
+    assert out["giri_registrati"] == 50_000.0
+    assert out["registrato_per_banca"] == {"MPS": -1560.70, "MULTI": 0.0}
+    assert out["totale_registrato"] == -1560.70
+
+    somma = (
+        sum(out["per_voce"].values())
+        + out["non_mappato_conto"]
+        + out["non_mappato_fornitore"]
+    )
+    assert abs(somma - out["totale_registrato"]) < 0.05

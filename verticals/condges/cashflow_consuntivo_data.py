@@ -228,3 +228,145 @@ def classifica_registrazione(
         "tipo": "NORMALE",
         "allocazioni": allocazioni,
     }
+
+
+def classificato_da_registrazioni(
+    registrazioni: dict[tuple, list[dict]],
+    fornitori_voci: dict[int, str],
+    voci_patterns: list[dict],
+) -> dict:
+    """Aggrega le registrazioni classificate in un consuntivo mensile per voce (Livello C).
+
+    Esolver spiega, non determina: il totale reale resta quello della banca
+    (Livello B); qui si classifica il *registrato* — lo scarto si chiama
+    "differenza banca–contabilità", mai "non registrato".
+    """
+    per_voce: dict[str, float] = {}
+    non_mappato_conto = 0.0
+    non_mappato_fornitore = 0.0
+    giri_registrati = 0.0
+    registrato_per_banca: dict[str, float] = {}
+    totale_registrato = 0.0
+
+    for righe in registrazioni.values():
+        out = classifica_registrazione(righe, fornitori_voci, voci_patterns)
+        flusso = out["flusso_banca"]
+        totale_registrato += flusso
+        banca_key = out["banca_id"] or "MULTI"
+        registrato_per_banca[banca_key] = (
+            registrato_per_banca.get(banca_key, 0.0) + flusso
+        )
+
+        if out["tipo"] == "GIRO_REGISTRATO":
+            giri_registrati += sum(importo for _, importo in out["allocazioni"])
+            continue
+
+        for voce, importo in out["allocazioni"]:
+            if voce == "NON_MAPPATO_CONTO":
+                non_mappato_conto += importo
+            elif voce == "NON_MAPPATO_FORNITORE":
+                non_mappato_fornitore += importo
+            else:
+                per_voce[voce] = per_voce.get(voce, 0.0) + importo
+
+    return {
+        "per_voce": {k: round(v, 2) for k, v in per_voce.items()},
+        "non_mappato_conto": round(non_mappato_conto, 2),
+        "non_mappato_fornitore": round(non_mappato_fornitore, 2),
+        "giri_registrati": round(giri_registrati, 2),
+        "registrato_per_banca": {
+            k: round(v, 2) for k, v in registrato_per_banca.items()
+        },
+        "totale_registrato": round(totale_registrato, 2),
+    }
+
+
+def fetch_registrazioni_banca(
+    societa_id: str, anno: int, mese: int
+) -> dict[tuple, list[dict]]:
+    """Righe di prima nota per le registrazioni con almeno un braccio banca (1901xx) nel mese.
+
+    Two-step: CTE `reg` isola le chiavi (data_registrazione, gruppo_doc) toccate
+    dalla banca nel mese; il join riprende TUTTE le righe di quelle registrazioni
+    (le sorelle che dicono la voce). Chiave dict = (data_registrazione ISO, gruppo_doc):
+    gruppo_doc da solo non è unico cross-data (es. "PNC 1" ricorre ogni mese).
+    """
+    from google.cloud import bigquery
+
+    from core.bq.client import get_client
+    from core.config import F_MOVIMENTI_CONTABILI
+
+    client = get_client()
+    sql = f"""
+    WITH reg AS (
+        SELECT DISTINCT data_registrazione, gruppo_doc
+        FROM `{F_MOVIMENTI_CONTABILI}`
+        WHERE societa_id = @societa
+          AND DATE_TRUNC(data_registrazione, MONTH) = DATE(@anno, @mese, 1)
+          AND cod_conto LIKE '1901%'
+    )
+    SELECT m.cod_conto, m.cod_partitario, m.imp_dare, m.imp_avere,
+           m.societa_id, m.data_registrazione, m.gruppo_doc
+    FROM `{F_MOVIMENTI_CONTABILI}` m
+    JOIN reg r
+      ON m.data_registrazione = r.data_registrazione
+      AND m.gruppo_doc = r.gruppo_doc
+    WHERE m.societa_id = @societa
+    """
+    job = client.query(
+        sql,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("societa", "STRING", societa_id),
+                bigquery.ScalarQueryParameter("anno", "INT64", anno),
+                bigquery.ScalarQueryParameter("mese", "INT64", mese),
+            ]
+        ),
+    )
+    out: dict[tuple, list[dict]] = {}
+    for r in job.result():
+        chiave = (r.data_registrazione.isoformat(), r.gruppo_doc)
+        out.setdefault(chiave, []).append(
+            {
+                "cod_conto": r.cod_conto,
+                "cod_partitario": r.cod_partitario,
+                "imp_dare": float(r.imp_dare),
+                "imp_avere": float(r.imp_avere),
+                "societa_id": r.societa_id,
+            }
+        )
+    return out
+
+
+def fetch_fornitori_voci(societa_id: str) -> dict[int, str]:
+    """Mapping vivo fornitore→voce da d_fornitori (single mapping layer per fornitore)."""
+    from google.cloud import bigquery
+
+    from core.bq.client import get_client
+    from core.config import D_FORNITORI
+
+    client = get_client()
+    sql = f"""
+    SELECT codice_fornitore, voce_id
+    FROM `{D_FORNITORI}`
+    WHERE societa_id = @societa
+      AND voce_id IS NOT NULL
+      AND NOT is_excluded
+    """
+    job = client.query(
+        sql,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("societa", "STRING", societa_id),
+            ]
+        ),
+    )
+    return {int(r.codice_fornitore): r.voce_id for r in job.result()}
+
+
+def classificato_mensile(societa_id: str, anno: int, mese: int) -> dict:
+    """Livello C: aggregato mensile per voce via prima nota (composizione thin)."""
+    registrazioni = fetch_registrazioni_banca(societa_id, anno, mese)
+    fornitori_voci = fetch_fornitori_voci(societa_id)
+    voci_patterns = carica_voci_patterns(societa_id)
+    return classificato_da_registrazioni(registrazioni, fornitori_voci, voci_patterns)
