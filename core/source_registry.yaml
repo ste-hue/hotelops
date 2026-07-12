@@ -361,6 +361,41 @@ sources:
       bucket: hotelops-raw
       path_template: "accodamenti/ORTI"
 
+  # ── HotelCube Stampa Cassa (documenti fiscali) — RAW_ONLY ─────────────────
+  HOTELCUBE_STAMPACASSA_ORTI_APPEND:
+    system: HOTELCUBE
+    dataset: STAMPACASSA
+    dataset_label: "Stampa Cassa PMS — documenti fiscali emessi (fatture F / ricevute R) con incassi per modalità (contanti/POS/sospesi/caparra)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_stampa_cassa
+    parser_module: ingest.flussi.ingest_stampa_cassa
+    hash_basis: hash_riga
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: stampa_cassa
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "hotelcube/stampa_cassa/ORTI"
+    notes: |
+      Export nativo HotelCube "Stampa Cassa": una riga per documento fiscale
+      (serie F=fatture, R=ricevute), colonne Data/Ora, camera, incasso
+      spaccato Pagato/Pos/Sospesi/Caparra, N° Scontrino/Azzeramento/Matricola RT.
+      Export PER STRUTTURA (primo file 2026-07-12 = solo Hotel Panorama, camere
+      H_; Angelina e CVM in export separati) → BU per-file, dal prefisso camera.
+      ⚠️ N. Documento NON è univoco per riga: con Pagante (agenzia/TO) il
+      documento si spacca su più righe (una per pagante, importi separati) →
+      la futura chiave naturale include Pagante, e le righe NON vanno sommate
+      come documenti distinti.
+      ⚠️ Il cap export a 1000 righe taglia in ordine ALFABETICO di N. Documento,
+      NON per data: una serie può risultare bucata su tutto il periodo anche se
+      la data massima è recente. Verificare gap numerici per serie (F/R) a ogni
+      intake; riesportare per serie/tipo documento, non "dall'ultima data".
+      RAW_ONLY (hard gate): canonical_table/parser sono nomi TARGET futuri
+      (candidata unificazione in un flusso incassi cassa).
+
   # ── Coperti — APPEND ──────────────────────────────────────────────────────
   ORTI_COPERTI_ORTI_APPEND:
     system: ORTI
