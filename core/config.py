@@ -65,6 +65,7 @@ V_CASHFLOW_MENSILE           = _t("v_cashflow_mensile")
 V_INCASSI_PER_CANALE         = _t("v_incassi_per_canale")
 V_PROGETTO_VOCI_STATO        = _t("v_progetto_voci_stato")
 V_PEC_CONVERSAZIONI          = _t("v_pec_conversazioni")
+V_CASH_POSITION              = _t("v_cash_position")
 
 # Looker Studio views
 V_CONDGES_BUDGET_CONSUNTIVO  = _t("v_condges_budget_consuntivo")

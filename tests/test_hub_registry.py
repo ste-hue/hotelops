@@ -29,7 +29,13 @@ def test_target_coerente_col_kind():
 def test_pages_solo_kind_page():
     assert all(a.kind == "page" for a in pages())
     assert {a.id for a in pages()} == {
-        "cashflow", "accodamenti", "mutui", "fb", "spiaggia", "reviews",
+        "cashflow",
+        "cassa-consuntivo",
+        "accodamenti",
+        "mutui",
+        "fb",
+        "spiaggia",
+        "reviews",
     }
 
 
@@ -63,7 +69,7 @@ def test_cashflow_accodamenti_sono_sensibili():
     from verticals.hub.registry import APPS
 
     sens = {a.id for a in APPS if a.sensitive}
-    assert sens == {"cashflow", "accodamenti"}
+    assert sens == {"cashflow", "cassa-consuntivo", "accodamenti"}
 
 
 def test_pages_for_filtra_su_allowed():
