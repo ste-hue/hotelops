@@ -161,3 +161,23 @@ classificato (C) · scostamento · residuo rinviato nei PF successivi.
 - INTUR v1 (segue quando Rosa completa giugno; il design è identico).
 - Entrate per voce raffinate (v1: incassi come famiglia unica + POS/cassa; il dettaglio
   ricavi vive già in PMS/corrispettivi, non in banca).
+
+
+## Amendment 2026-07-12 — Exception queue e disciplina di classificazione (Stefano)
+
+**Mai classificare i casi ignoti in silenzio.** Si applicano le regole/mappature canoniche
+esistenti; tutto ciò che resta irrisolto o ambiguo finisce in una **exception queue**.
+
+- **Raggruppata per pattern ricorrente**, mai per transazione. Ogni caso espone: conto
+  Esolver + descrizione · fornitore/cliente se presente · causale ricorrente · totale e
+  numero transazioni · mesi coinvolti · voce PF suggerita · livello di confidenza ·
+  motivazione · **decisione di business richiesta**.
+- **Routing**: giudizio gestionale → Stefano; prassi contabile / come viene davvero
+  gestito un pagamento → Rosa/amministrazione.
+- **Ogni risposta confermata diventa una regola riusabile nel mapping canonico, con
+  provenienza e data.** Le eccezioni temporanee restano transaction-specific e non
+  alterano mai la regola generale.
+- **Cinque stati espliciti**: (1) mappato correttamente · (2) non mappato · (3) ambiguo ·
+  (4) non rilevante per il PF · (5) dato contabile che non riconcilia con la banca.
+- **Obiettivo di ottimizzazione**: spiegare accuratamente i movimenti BANCARI e
+  confrontare il cash flow reale col PF artigianale — NON mappare il 100% di Esolver.
