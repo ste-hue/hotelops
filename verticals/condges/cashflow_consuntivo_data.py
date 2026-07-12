@@ -99,6 +99,48 @@ def consolidato_societa(movimenti_tagged: list[dict]) -> dict:
     }
 
 
+def carica_voci_patterns(societa_id: str) -> list[dict]:
+    """Pattern conto→voce dal CSV canonico d_voci_piano_finanziario.
+
+    Single mapping layer (governance): niente dizionari paralleli. Prefix match,
+    fino a 3 pattern per voce, fonte ESOLVER, societa_id vuoto = entrambe.
+    """
+    import csv
+    from pathlib import Path
+
+    csv_path = (
+        Path(__file__).resolve().parents[2]
+        / "core"
+        / "bq"
+        / "dimensioni"
+        / "d_voci_piano_finanziario.csv"
+    )
+    out: list[dict] = []
+    with csv_path.open(encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            if row["fonte"].strip() != "ESOLVER":
+                continue
+            if row["societa_id"].strip() and row["societa_id"].strip() != societa_id:
+                continue
+            patterns = [
+                row[k].strip()
+                for k in ("cod_conto_pattern", "cod_conto_pat2", "cod_conto_pat3")
+                if row[k].strip()
+            ]
+            if patterns:
+                out.append({"voce_id": row["voce_id"].strip(), "patterns": patterns})
+    return out
+
+
+def voce_per_conto(cod_conto: str, voci_patterns: list[dict]) -> str | None:
+    """Prima voce il cui pattern è prefisso di cod_conto (ordine CSV)."""
+    for v in voci_patterns:
+        for p in v["patterns"]:
+            if cod_conto.startswith(p):
+                return v["voce_id"]
+    return None
+
+
 def fetch_movimenti_mese(societa_id: str, anno: int, mese: int) -> list[dict]:
     """Movimenti banca del mese, nel formato atteso da detect_trasferimenti_interni."""
     from google.cloud import bigquery

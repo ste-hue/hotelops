@@ -122,3 +122,32 @@ def test_pagina_hub_importabile_e_senza_page_config():
     assert callable(cassa_consuntivo.render)
     src = inspect.getsource(cassa_consuntivo)
     assert "set_page_config" not in src
+
+
+def test_voci_patterns_orti_prefix_match():
+    from verticals.condges.cashflow_consuntivo_data import (
+        carica_voci_patterns,
+        voce_per_conto,
+    )
+
+    patterns = carica_voci_patterns("ORTI")
+    assert voce_per_conto("750198", patterns) == "USCITE_SPESE_BANCARIE"  # pat 7501
+    assert voce_per_conto("570913", patterns) == "USCITE_UTENZE"  # pat 5709
+    assert (
+        voce_per_conto("651101", patterns) == "USCITE_CANONE_PASSIVO"
+    )  # pat 6511, riga ORTI
+    assert voce_per_conto("479102", patterns) == "ENTRATE_HOTEL"  # pat 4791
+    assert voce_per_conto("390701", patterns) is None  # nessun pattern (fino al Task 4)
+
+
+def test_voci_patterns_filtra_societa():
+    from verticals.condges.cashflow_consuntivo_data import (
+        carica_voci_patterns,
+        voce_per_conto,
+    )
+
+    patterns_intur = carica_voci_patterns("INTUR")
+    # ENTRATE_HOTEL è riga solo-ORTI: non deve matchare per INTUR
+    assert voce_per_conto("479102", patterns_intur) != "ENTRATE_HOTEL"
+    # le righe a società vuota valgono per entrambe
+    assert voce_per_conto("750198", patterns_intur) == "USCITE_SPESE_BANCARIE"
