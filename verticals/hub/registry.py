@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from verticals.hub.pages_ import accodamenti, cashflow, fb, mutui, reviews, revenue, spiaggia
+from verticals.hub.pages_ import accodamenti, cashflow, fb, mutui, revenue, reviews, spiaggia
 
 # Ordine dei gruppi nella Home gateway.
 GROUPS = ["Finanza", "Operations", "Sistema"]

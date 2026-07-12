@@ -16,6 +16,7 @@ from core.config import DATASET, PROJECT
 # ── palette (dataviz reference instance — ruoli, non hex sparsi) ─────────────
 BLUE = "#2a78d6"        # slot-1: emphasis + riempimento meter
 GRAY_CTX = "#c3c2b7"    # de-enfasi (linee contesto)
+GRAY_MUTED = "#898781"  # inchiostro muted (righe consuntivo)
 STATUS_COLOR = {        # status riservati, sempre con icona+etichetta
     "TARGET_SCONTATO": "#0ca30c",   # good
     "SERVE_DOMANDA": "#fab219",     # warning
@@ -142,11 +143,24 @@ def render() -> None:
         "Gap € target": last["gap_target"].round(0),
         "Verdetto": last.apply(_row_verdetto, axis=1),
     })
+    _label_color = {STATUS_LABEL[k]: v for k, v in STATUS_COLOR.items()}
+
+    def _riga_consuntivo(row):
+        if row["Verdetto"] == STATUS_LABEL["CONSUNTIVO"]:
+            return [f"color: {GRAY_MUTED}"] * len(row)
+        return [""] * len(row)
+
+    styled = show.style.apply(_riga_consuntivo, axis=1).map(
+        lambda v: f"color: {_label_color[v]}; font-weight: 600"
+        if v in _label_color else "",
+        subset=["Verdetto"],
+    )
     st.dataframe(
-        show, hide_index=True, use_container_width=True,
+        styled, hide_index=True, use_container_width=True,
         column_config={
             "Batteria": st.column_config.ProgressColumn(
                 "Batteria", min_value=0.0, max_value=1.0, format=" ",
+                color=BLUE,
             ),
         },
     )
