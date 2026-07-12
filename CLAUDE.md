@@ -36,6 +36,11 @@ Formula un'ipotesi in una frase prima di esplorare; esegui il minimo comando che
 ### Check STATUS.md prima di pianificare
 Prima di plan multi-step/cutover/migration o scope cross-cutting: leggi `STATUS.md` (decisioni recenti, thread aperti) + ADR/`docs/architecture/INVARIANTS.md`. Se trovi contraddizioni tra STATUS.md e il piano, **fermati e segnalale**.
 
+### Pagine hub: la lettura è un gate, come i numeri
+Due regole nate dal caso Revenue (2026-07-12: golden test perfetti dentro una pagina illeggibile — verifica dei numeri ≠ verifica della lettura):
+1. **Nessuna pagina hub si mergia senza che Stefano abbia visto il render con dati REALI** (smoke AppTest/screenshot incollato in chat, PRIMA del merge — gate bloccante, non verifica a posteriori).
+2. **Una pagina, una domanda**: la spec dichiara LA singola domanda a cui la pagina risponde; ogni elemento si giustifica contro quella, due domande = due sezioni. I **segni in presentazione** hanno la stessa dignità dei segni nei dati (gap negativo che significa "sopra il target" si mostra "+35% ✓", mai come numero negativo grigio) — è la stessa famiglia di trappole dei segni Esolver in §BigQuery.
+
 ## Project Overview
 
 hotelops è la piattaforma dati finanziaria di Gruppo Panorama. Ingerisce banche, ERP (Esolver), PMS (HotelCube), budget manuali in BigQuery, e serve 3 vertical (condges, reviews, spiaggia). Il vertical #1 **condges** (Controllo di Gestione) ha due lenti: **Rosa (CASSA)** "quando il soldo entra/esce?" e **Gasparotto (COMPETENZA)** "quanto consumo/genero?". Ogni evento finanziario ha 3 dimensioni temporali: COMPETENZA, CASSA, IMPEGNO. BigQuery è la source of truth.
