@@ -10,6 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from verticals.condges.cashflow_consuntivo_data import (
+    classificato_mensile,
     consolidato_societa,
     detect_trasferimenti_interni,
     fetch_movimenti_mese,
@@ -46,6 +47,11 @@ def _cash_position(societa: str) -> pd.DataFrame:
 def _consolidato(societa: str, anno: int, mese: int) -> dict:
     movs = fetch_movimenti_mese(societa, anno, mese)
     return consolidato_societa(detect_trasferimenti_interni(movs))
+
+
+@st.cache_data(ttl=600)
+def _classificato(societa: str, anno: int, mese: int) -> dict:
+    return classificato_mensile(societa, anno, mese)
 
 
 def render() -> None:
@@ -100,3 +106,21 @@ def render() -> None:
             f"{cons['candidati_trasferimento']:,.2f} € — restano nei flussi esterni "
             "(review in arrivo con C.2)."
         )
+
+    st.subheader("Livello C — Classificazione contabile (per voce PF)")
+    st.caption(
+        "Esolver spiega, non determina: il totale reale resta quello della banca. "
+        "Lo scarto aggregato è la 'differenza banca–contabilità' (il matching "
+        "per movimento arriva con C.2)."
+    )
+    cls = _classificato(societa, anno, mese)
+    df_voci = pd.DataFrame(
+        sorted(cls["per_voce"].items(), key=lambda kv: kv[1]),
+        columns=["voce", "importo"],
+    )
+    st.dataframe(df_voci, use_container_width=True)
+    r1, r2, r3 = st.columns(3)
+    r1.metric("Non mappato (conto)", f"{cls['non_mappato_conto']:,.2f} €")
+    r2.metric("Non mappato (fornitore)", f"{cls['non_mappato_fornitore']:,.2f} €")
+    diff = cons["variazione_netta"] - cls["totale_registrato"]
+    r3.metric("Differenza banca–contabilità", f"{diff:,.2f} €")
