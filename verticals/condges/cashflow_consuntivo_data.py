@@ -215,13 +215,11 @@ def classifica_registrazione(
         if importo == 0:
             continue
         part = r.get("cod_partitario")
-        if part is not None and str(part).isdigit():
+        cod_conto = str(r["cod_conto"])
+        if cod_conto.startswith("33") and part is not None and str(part).isdigit():
             voce = fornitori_voci.get(int(part), "NON_MAPPATO_FORNITORE")
         else:
-            voce = (
-                voce_per_conto(str(r["cod_conto"]), voci_patterns)
-                or "NON_MAPPATO_CONTO"
-            )
+            voce = voce_per_conto(cod_conto, voci_patterns) or "NON_MAPPATO_CONTO"
         allocazioni.append((voce, importo))
 
     return {

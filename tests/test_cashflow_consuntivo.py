@@ -223,3 +223,24 @@ def test_classifica_giro_registrato():
     assert out["tipo"] == "GIRO_REGISTRATO"
     assert out["allocazioni"] == [("TRASFERIMENTO_INTERNO", 50_000.0)]
     assert out["banca_id"] == "MULTI"
+
+
+def test_classifica_cespite_con_partitario_usa_pattern_conto():
+    """Partitario numerico su conto NON-33 (cespite): la voce viene dal pattern conto."""
+    righe = [
+        _riga("550711", 772.57, 0.0, partitario="20"),
+        _riga("190101", 0.0, 772.57, partitario="2"),
+    ]
+    out = classifica_registrazione(righe, {20: "USCITE_UTENZE"}, _patterns_orti())
+    assert out["allocazioni"] == [("USCITE_MATERIE_PRIME", -772.57)]
+
+
+def test_classifica_incasso_cliente_non_ruba_voce_fornitore():
+    """Partitario cliente che collide con un codice fornitore: MAI la voce del fornitore."""
+    righe = [
+        _riga("190101", 500.0, 0.0, partitario="2"),
+        _riga("110301", 0.0, 500.0, partitario="18"),
+    ]
+    out = classifica_registrazione(righe, {18: "USCITE_UTENZE"}, _patterns_orti())
+    assert out["allocazioni"] != [("USCITE_UTENZE", 500.0)]
+    assert out["allocazioni"] == [("NON_MAPPATO_CONTO", 500.0)]
