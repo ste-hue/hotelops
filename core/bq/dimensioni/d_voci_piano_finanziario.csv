@@ -10,7 +10,7 @@ ENTRATE_CVM,Entrate CVM,ENTRATE,Ricavi,ORTI,ESOLVER,4793,,,,80,CVM,Ricavi,IP
 ENTRATE_SUPERMERCATO,Entrate Supermercato,ENTRATE,Ricavi,ORTI,ESOLVER,479502,,,,90,,Ricavi,IP
 ENTRATE_RIENTRO_SOSPESI,Rientro Sospesi,ENTRATE,Banca,ORTI,BANCHE,,,,SOSPESI,100,,Ricavi,IP
 ENTRATE_CAPARRE,Caparre da Intur,ENTRATE,Caparre,ORTI,ESOLVER,390521,,,,110,,Ricavi,IP
-USCITE_SALARI,Salari e Stipendi,USCITE,Personale,,ESOLVER,67,,,,200,,Costi del Personale,P
+USCITE_SALARI,Salari e Stipendi,USCITE,Personale,,ESOLVER,67,3907,,,200,,Costi del Personale,P
 USCITE_UTENZE,Utenze (Energia+Acqua+Gas+Tel+Internet),USCITE,Utenze,,ESOLVER,5709,,,,210,,Costi Produttivi,F
 USCITE_MATERIE_PRIME,Materie Prime / Consumo,USCITE,Acquisti,,ESOLVER,55,,,,250,,Costi Produttivi,V
 USCITE_TASSE,Tasse e Imposte,USCITE,Fiscale,,ESOLVER,63051,710104,710107,,260,,Oneri Tributari,F

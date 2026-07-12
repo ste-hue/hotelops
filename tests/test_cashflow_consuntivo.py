@@ -139,7 +139,20 @@ def test_voci_patterns_orti_prefix_match():
         voce_per_conto("651101", patterns) == "USCITE_CANONE_PASSIVO"
     )  # pat 6511, riga ORTI
     assert voce_per_conto("479102", patterns) == "ENTRATE_HOTEL"  # pat 4791
-    assert voce_per_conto("390701", patterns) is None  # nessun pattern (fino al Task 4)
+    assert voce_per_conto("390701", patterns) == "USCITE_SALARI"  # pat 3907 (Task 4)
+
+
+def test_pattern_cassa_salari_390701():
+    """I pagamenti stipendi passano da 3907xx (personale c/retribuzioni), non dal costo 67xx."""
+    from verticals.condges.cashflow_consuntivo_data import (
+        carica_voci_patterns,
+        voce_per_conto,
+    )
+
+    patterns = carica_voci_patterns("ORTI")
+    assert voce_per_conto("390701", patterns) == "USCITE_SALARI"
+    # nessuna collisione col pattern caparre (390521 → ENTRATE_CAPARRE, riga ORTI)
+    assert voce_per_conto("390521", patterns) == "ENTRATE_CAPARRE"
 
 
 def test_voci_patterns_filtra_societa():
@@ -169,7 +182,7 @@ def _patterns_orti():
 
 
 def test_classifica_acconto_stipendio_anatomia_reale():
-    """PNC 11 del 08/06 ORTI: banca -560,70 = personale 560 (non mappato fino a Task 4) + spese 0,70."""
+    """PNC 11 del 08/06 ORTI: banca -560,70 = salari 560 (pattern 3907, Task 4) + spese 0,70."""
     righe = [
         _riga("390701", 560.0, 0.0),
         _riga("190101", 0.0, 560.70, partitario="2"),
@@ -178,7 +191,7 @@ def test_classifica_acconto_stipendio_anatomia_reale():
     out = classifica_registrazione(righe, {}, _patterns_orti())
     assert out["tipo"] == "NORMALE"
     assert out["flusso_banca"] == -560.70
-    assert ("NON_MAPPATO_CONTO", -560.0) in out["allocazioni"]
+    assert ("USCITE_SALARI", -560.0) in out["allocazioni"]
     assert ("USCITE_SPESE_BANCARIE", -0.70) in out["allocazioni"]
     assert abs(sum(i for _, i in out["allocazioni"]) - out["flusso_banca"]) < 0.01
 
@@ -247,7 +260,7 @@ def test_classifica_incasso_cliente_non_ruba_voce_fornitore():
 
 
 def test_classificato_da_registrazioni_aggregato():
-    """3 registrazioni sintetiche: fornitore mappato, acconto con NON_MAPPATO+voce, giro."""
+    """3 registrazioni sintetiche: fornitore mappato, salari (pattern 3907 Task 4), giro."""
     from verticals.condges.cashflow_consuntivo_data import classificato_da_registrazioni
 
     registrazioni = {
@@ -268,8 +281,12 @@ def test_classificato_da_registrazioni_aggregato():
     fornitori_voci = {18: "USCITE_UTENZE"}
     out = classificato_da_registrazioni(registrazioni, fornitori_voci, _patterns_orti())
 
-    assert out["per_voce"] == {"USCITE_UTENZE": -1000.0, "USCITE_SPESE_BANCARIE": -0.70}
-    assert out["non_mappato_conto"] == -560.0
+    assert out["per_voce"] == {
+        "USCITE_UTENZE": -1000.0,
+        "USCITE_SALARI": -560.0,
+        "USCITE_SPESE_BANCARIE": -0.70,
+    }
+    assert out["non_mappato_conto"] == 0.0
     assert out["non_mappato_fornitore"] == 0.0
     assert out["giri_registrati"] == 50_000.0
     assert out["registrato_per_banca"] == {"MPS": -1560.70, "MULTI": 0.0}
