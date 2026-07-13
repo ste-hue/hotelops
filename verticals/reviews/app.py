@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlencode
 
 import pandas as pd
 import streamlit as st
@@ -11,6 +12,33 @@ from core import config as cfg
 from verticals.reviews.scan import build_scan, render_scan_html
 
 PIATTAFORME = ["BOOKING", "TRIPADVISOR", "GOOGLE", "EXPEDIA", "TRIP"]
+ANNI = [2025, 2026, 2027]
+ANNO_DEFAULT = 2026
+BUSINESS_UNITS = ["HOTEL", "RESIDENCE", "CVM", "LIDO"]
+
+# Modalità ?scan=full: solo lo scan, senza chrome hub/Streamlit.
+# Sfondo allineato a --paper dello scan (light/dark come in scan.py).
+_FULLSCREEN_CSS = """<style>
+header[data-testid="stHeader"] {display: none;}
+.block-container {padding: 0 !important; max-width: 100% !important;}
+.stApp {background: #F2F5F4;}
+@media (prefers-color-scheme: dark) {.stApp {background: #0E181C;}}
+</style>"""
+
+
+def parse_scan_params(params) -> tuple[int, list[str], str | None]:
+    """Filtri (anno, piattaforme, bu) dai query param; malformati → default."""
+    try:
+        anno = int(params.get("anno", ""))
+    except ValueError:
+        anno = ANNO_DEFAULT
+    if anno not in ANNI:
+        anno = ANNO_DEFAULT
+    piattaforme = [
+        p for p in str(params.get("piattaforme", "")).split(",") if p in PIATTAFORME
+    ] or list(PIATTAFORME)
+    bu = params.get("bu")
+    return anno, piattaforme, bu if bu in BUSINESS_UNITS else None
 
 
 @st.cache_resource
@@ -48,15 +76,30 @@ def load_reviews(
     return df
 
 
+def _render_scan_fullscreen():
+    """Solo lo scan, a tutta finestra — filtri dai query param (?scan=full)."""
+    anno, piattaforme, bu = parse_scan_params(st.query_params)
+    st.markdown(_FULLSCREEN_CSS, unsafe_allow_html=True)
+    with st.spinner("Caricamento reviews..."):
+        df = load_reviews(anno, piattaforme, bu, _bq=get_bq())
+    if df.empty:
+        st.warning("Nessuna review trovata con questi filtri.")
+        return
+    scan = build_scan(df.to_dict("records"))
+    components.html(render_scan_html(scan, anno), height=4300, scrolling=True)
+
+
 def render():
+    if st.query_params.get("scan") == "full":
+        _render_scan_fullscreen()
+        return
+
     # ── Sidebar ──────────────────────────────────────────────────────────────
     with st.sidebar:
         st.header("⭐ Reviews Dashboard")
-        anno = st.selectbox("Anno", [2025, 2026, 2027], index=1)
+        anno = st.selectbox("Anno", ANNI, index=ANNI.index(ANNO_DEFAULT))
         piattaforme = st.multiselect("Piattaforme", PIATTAFORME, default=PIATTAFORME)
-        bu = st.selectbox(
-            "Business Unit", ["Tutte", "HOTEL", "RESIDENCE", "CVM", "LIDO"]
-        )
+        bu = st.selectbox("Business Unit", ["Tutte", *BUSINESS_UNITS])
         sentiment_filter = st.selectbox(
             "Sentiment", ["Tutti", "POSITIVO", "NEGATIVO", "MISTO"]
         )
@@ -79,6 +122,12 @@ def render():
     # ── Quadro generale (scan NLP) ───────────────────────────────────────────
     # Calcolato sulle righe filtrate anno/piattaforme/BU, PRIMA del filtro
     # sentiment: il corpus pos/neg è già distinto dentro lo scan.
+    fs_params = {"scan": "full", "anno": str(anno)}
+    if piattaforme and set(piattaforme) != set(PIATTAFORME):
+        fs_params["piattaforme"] = ",".join(piattaforme)
+    if bu_filter:
+        fs_params["bu"] = bu_filter
+    st.link_button("↗ Apri a schermo intero", "?" + urlencode(fs_params))
     scan = build_scan(df.to_dict("records"))
     components.html(render_scan_html(scan, anno), height=4300, scrolling=True)
 

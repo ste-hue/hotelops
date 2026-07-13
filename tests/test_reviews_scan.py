@@ -155,3 +155,37 @@ def test_render_fotografia_is_data_driven():
     # tema positivo top e tema negativo top compaiono nella sintesi
     assert "Staff" in out
     assert "Rumore" in out
+
+
+# ── parse_scan_params (modalità fullscreen ?scan=full) ──────────────────────
+
+
+def test_parse_scan_params_default_su_param_assenti():
+    from verticals.reviews.app import PIATTAFORME, parse_scan_params
+
+    anno, piattaforme, bu = parse_scan_params({})
+    assert anno == 2026
+    assert piattaforme == PIATTAFORME
+    assert bu is None
+
+
+def test_parse_scan_params_filtri_validi():
+    from verticals.reviews.app import parse_scan_params
+
+    anno, piattaforme, bu = parse_scan_params(
+        {"anno": "2025", "piattaforme": "BOOKING,GOOGLE", "bu": "HOTEL"}
+    )
+    assert anno == 2025
+    assert piattaforme == ["BOOKING", "GOOGLE"]
+    assert bu == "HOTEL"
+
+
+def test_parse_scan_params_malformati_cadono_sul_default():
+    from verticals.reviews.app import PIATTAFORME, parse_scan_params
+
+    anno, piattaforme, bu = parse_scan_params(
+        {"anno": "boom", "piattaforme": "NOPE,,", "bu": "MARTE"}
+    )
+    assert anno == 2026
+    assert piattaforme == PIATTAFORME  # nessuna piattaforma valida → tutte
+    assert bu is None
