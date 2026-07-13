@@ -70,7 +70,7 @@ _GRANTS: dict[str, frozenset[str]] = {
     "gm@panoramagroup.it": FINANZA
     | OPERATIONS
     | {"cashflow", "cdg"},  # Antonio Russo (direttore)
-    "stedepi@gmail.com": FINANZA | OPERATIONS | {"cashflow"},  # padre
+    "stedepi@gmail.com": frozenset({"reviews", "mutui"}),  # padre
     "magazzino@panoramagroup.it": frozenset({"fb", "spiaggia"}),  # Mario (economato)
 }
 

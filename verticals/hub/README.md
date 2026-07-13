@@ -46,7 +46,8 @@ Browser ──▶ [IAP edge]  ──▶  [roles.py grants]  ──▶  app conce
 | Email | Vede |
 |---|---|
 | `stefano@panoramagroup.it` / `ste.dellapietra@gmail.com` | tutto (admin) |
-| `gm@panoramagroup.it` (direttore) / `stedepi@gmail.com` | Finanza + Operations + Cashflow |
+| `gm@panoramagroup.it` (direttore) | Finanza + Operations + Cashflow |
+| `stedepi@gmail.com` (padre) | reviews, mutui |
 | `amministrazione@panoramagroup.it` (Rosa) | Finanza + Cashflow |
 | `fom@panoramagroup.it` (Anna) / `fb@panoramagroup.it` (S. Amato) | fb, spiaggia, reviews |
 | `magazzino@panoramagroup.it` (Mario) | fb, spiaggia |
