@@ -1,49 +1,23 @@
-"""Pagina Revenue — verdetto puro + contratto di montaggio."""
+"""Pagina Revenue — logica pura + contratto di montaggio."""
 
 import inspect
 
-from verticals.hub.pages_.revenue import verdetto
+from verticals.hub.pages_.revenue import calendario_confrontabile
 
 
-def _base(**kw):
-    d = dict(
-        mese_consumato=False,
-        prima_foto=False,
-        pickup_notti=10.0,
-        gap_target=50_000.0,
-        gap_notti_target=300.0,
-        adr_marginale=250.0,
-        adr_richiesto=150.0,
-    )
-    d.update(kw)
-    return d
-
-
-def test_stati_preliminari_in_ordine():
-    assert verdetto(**_base(mese_consumato=True)) == "CONSUNTIVO"
-    assert verdetto(**_base(prima_foto=True)) == "DATI_INSUFFICIENTI"
-    assert verdetto(**_base(pickup_notti=0.0)) == "DATI_INSUFFICIENTI"
-    assert verdetto(**_base(pickup_notti=None)) == "DATI_INSUFFICIENTI"
-    assert verdetto(**_base(gap_target=0.0)) == "TARGET_RAGGIUNTO"
-    assert verdetto(**_base(gap_target=-1.0)) == "TARGET_RAGGIUNTO"
-    assert verdetto(**_base(gap_notti_target=0.0)) == "TARGET_INCOERENTE"
-    assert verdetto(**_base(adr_marginale=None)) == "NESSUN_CONFRONTO"
-    assert verdetto(**_base(adr_richiesto=None)) == "NESSUN_CONFRONTO"
-
-
-def test_tre_zone_calibrazione_11_07():
-    # luglio 11/07: richiesto 218 vs marginale 476 -> 0.46 < 0.6
-    assert (
-        verdetto(**_base(adr_richiesto=218.0, adr_marginale=476.0)) == "TARGET_SCONTATO"
-    )
-    # ottobre 11/07: richiesto 175 vs marginale 206 -> 0.85, tra 0.6 e 1
-    assert (
-        verdetto(**_base(adr_richiesto=175.0, adr_marginale=206.0)) == "SERVE_DOMANDA"
-    )
-    # richiesto sopra il marginale
-    assert (
-        verdetto(**_base(adr_richiesto=250.0, adr_marginale=206.0)) == "SERVE_REPRICING"
-    )
+def test_calendario_confrontabile():
+    # aprile: 2025 aperto 16/4 (15 gg operativi) vs 2026 dal 3/4 (28 gg)
+    assert calendario_confrontabile(15, 28) is False
+    # maggio/giugno: mesi pieni in entrambi gli anni
+    assert calendario_confrontabile(31, 31) is True
+    assert calendario_confrontabile(30, 30) is True
+    # entro la tolleranza del 15%
+    assert calendario_confrontabile(30, 27) is True
+    assert calendario_confrontabile(30, 25) is False
+    # dati mancanti = non confrontabile, mai default silenzioso
+    assert calendario_confrontabile(None, 30) is False
+    assert calendario_confrontabile(30, None) is False
+    assert calendario_confrontabile(0, 30) is False
 
 
 def test_render_montabile():

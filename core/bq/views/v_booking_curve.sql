@@ -11,7 +11,7 @@
 --  * aprile 2026 drogato dall'apertura anticipata (3/4 vs 16/4 2025): non si
 --    aggiusta qui, si legge col benchmark giusto (concept §3);
 --  * il benchmark LY assume calendario operativo comparabile: le colonne
---    diagnostiche ly_/cy_giorni_con_capacita e *_capacita_massima espongono
+--    diagnostiche ly_/cy_giorni_operativi e *_capacita_massima espongono
 --    quando l'assunzione è debole (NON corrette in v1, solo esposte);
 --  * gap_notti_target = notti mancanti al volume LY riproporzionato, NON la
 --    capacità residua reale; adr_richiesto = ADR medio necessario su quelle
@@ -65,7 +65,7 @@ pms_monthly AS (
     EXTRACT(YEAR FROM DATE(data))  AS anno,
     EXTRACT(MONTH FROM DATE(data)) AS mese,
     SUM(camere_vendute)            AS notti,
-    COUNTIF(camere_totali > 0)     AS giorni_con_capacita,
+    COUNTIF(camere_vendute > 0)    AS giorni_operativi,
     MAX(camere_totali)             AS capacita_massima
   FROM `hotelops-suite.hotelops.f_pms_statistiche`
   GROUP BY 1, 2, 3
@@ -87,7 +87,7 @@ ly_monthly AS (
   -- benchmark: l'anno N legge il PMS dell'anno N-1
   SELECT p.business_unit_id, p.anno + 1 AS anno_target, p.mese,
          p.notti AS ly_notti, r.imponibile AS ly_imponibile,
-         p.giorni_con_capacita AS ly_giorni_con_capacita,
+         p.giorni_operativi AS ly_giorni_operativi,
          p.capacita_massima AS ly_capacita_massima
   FROM pms_monthly p
   LEFT JOIN room_revenue_monthly r
@@ -136,9 +136,9 @@ curve_metrics AS (
     ly.ly_notti,
     ly.ly_imponibile,
     SAFE_DIVIDE(ly.ly_imponibile, ly.ly_notti) AS ly_adr,
-    ly.ly_giorni_con_capacita,
+    ly.ly_giorni_operativi,
     ly.ly_capacita_massima,
-    cy.giorni_con_capacita AS cy_giorni_con_capacita_osservati,
+    cy.giorni_operativi AS cy_giorni_operativi_osservati,
     cy.capacita_massima    AS cy_capacita_massima,
     cap_cy.capacita        AS capacita_cy,
     SAFE_DIVIDE(cap_cy.capacita, cap_ly.capacita) AS cap_ratio,
