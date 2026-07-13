@@ -9,6 +9,11 @@
 > - **PURSUE (sceglie Stefano)**: viste cashflow/tesoreria — escludere partite di giro (aggancia `PARTITE_DI_GIRO.md`). **HANDOFF**: export Esolver (movimenti/fatture/scheda/bilancino) + buco Moolty 19/06.
 > - Superficie sanata vs triage 06-20: `.worktrees/gardener-22` **sparito** (potato).
 
+## 2026-07-13 — Hub: sbloccati gli utenti esterni (gmail) su IAP
+
+- 🐛→✅ **Padre (`stedepi@gmail.com`) e `ste.dellapietra@gmail.com` bloccati all'edge IAP** nonostante allowlist IAP + grant `roles.py` a posto (Policy Troubleshooter: GRANTED, IAP: deny). Causa: l'integrazione IAP nativa di Cloud Run usa un **client OAuth Google-managed che ammette SOLO account interni all'org** (limitazione documentata, invisibile dall'IAM). Fix: client OAuth custom `hotelops-hub-iap` creato in Console (redirect URI `.../oauth/clientIds/<ID>:handleRedirect`) e agganciato con `gcloud iap settings set` (`accessSettings.oauthSettings`). Verificato live: gmail entra, padre vede reviews+mutui. Dettagli nel README hub (§Modello accessi).
+- Side-effect diagnostici lasciati attivi: **data-access audit log IAP** sul progetto (le denial ora loggano il motivo) + API `policytroubleshooter` abilitata.
+
 ## 2026-07-11 — Thread GC: 372 checkbox sessioni → 11 workstream hub
 
 I thread vivi ora vivono nei **workstream hub** del vault (`workstreams/_INDEX.md`) — non più nei session file (tutti flippati `closed`, BACKLOG.md archiviato). Report: `vault/reports/2026-07-11_thread_gc.md`. Le skill session-reflect/hotelops-threads aggiornate perché la pila non si riformi.

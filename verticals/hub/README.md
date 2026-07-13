@@ -29,6 +29,13 @@ Browser ──▶ [IAP edge]  ──▶  [roles.py grants]  ──▶  app conce
 1. **IAP (edge, "chi entra")** — Cloud Run è dietro Identity-Aware Proxy. Solo le email
    nell'**allowlist IAP** passano il cancello (config in GCP Console, *non* nel codice).
    IAP inietta l'header `X-Goog-Authenticated-User-Email`.
+   ⚠️ **Utenti esterni al dominio (gmail ecc.)**: il client OAuth *Google-managed* di IAP
+   fa entrare SOLO account dell'organizzazione — un esterno viene rifiutato anche con
+   l'allowlist IAP e i grant a posto (IAM dice GRANTED, IAP nega comunque). Fix applicato
+   2026-07-13: client OAuth custom `hotelops-hub-iap` (APIs & Services → Credentials, con
+   redirect URI `https://iap.googleapis.com/v1/oauth/clientIds/<CLIENT_ID>:handleRedirect`)
+   agganciato via `gcloud iap settings set` (`accessSettings.oauthSettings`). Non toccare
+   quel client: rimuoverlo ri-blocca tutti i gmail.
 2. **Grants (`roles.py`, "chi vede cosa")** — l'email autenticata → set di app-id concesse
    ([`roles.py:59`](roles.py) `_GRANTS`). Email **ignota → `frozenset()`** = non vede niente
    (fail-closed). Le pagine non concesse **non vengono nemmeno registrate** in `st.navigation`:
