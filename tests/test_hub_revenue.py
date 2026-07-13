@@ -34,4 +34,5 @@ def test_registry_ha_revenue():
     validate()
     app = {a.id: a for a in APPS}["revenue"]
     assert app.kind == "page" and app.group == "Finanza"
-    assert app.sensitive is False
+    # upload foto = write-path via lineage → superficie sensibile (S1)
+    assert app.sensitive is True

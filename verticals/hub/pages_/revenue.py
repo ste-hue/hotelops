@@ -5,6 +5,10 @@ abbiamo fatto rispetto al 2025 a parità di camera?" Due sezioni: consuntivo
 (mesi chiusi, fatto vs target) e ritmo (mesi aperti, batteria + pickup).
 Nessun verdetto calcolato: i numeri col segno giusto, la lettura è di chi
 decide. Metodologia: vault concepts/BOOKING_PACE_E_BASI.
+
+Write-path (sensitive): upload della foto settimanale — validazione basi
+omogenee (valida_basi_export) e poi SOLO il percorso lineage
+(intake → GCS → promote), mai scorciatoie verso BQ.
 """
 
 from __future__ import annotations
@@ -18,6 +22,46 @@ from core.config import V_BOOKING_CURVE
 # ── palette (dataviz reference instance — ruoli, non hex sparsi) ─────────────
 BLUE = "#2a78d6"  # slot-1: emphasis + riempimento meter
 GRAY_CTX = "#c3c2b7"  # de-enfasi (linee contesto)
+
+SOURCE_FOTO = "POWERBI_ANDAMENTOPRENOTAZIONI_ORTI_SNAPSHOT"
+
+
+def _ingest_foto(upload) -> None:
+    """Valida e ingerisce l'export settimanale via lineage (intake → promote)."""
+    import tempfile
+    from pathlib import Path
+
+    from ingest.flussi.ingest_andamento_prenotazioni import valida_basi_export
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / (upload.name or "foto_otb.xlsx")
+        path.write_bytes(upload.getvalue())
+        ok, motivo = valida_basi_export(path)
+        if not ok:
+            st.error(f"Export rifiutato — {motivo}")
+            return
+
+        from ingest.intake import intake_file
+        from ingest.promotion import promote_raw_object
+
+        with st.spinner("Carico su GCS e promuovo…"):
+            r = intake_file(path, source_name=SOURCE_FOTO, actor="hub:revenue")
+            if r.deduped:
+                st.info("Foto già presente (contenuto identico) — niente da fare.")
+                return
+            if not r.raw_object_id:
+                st.error("Intake fallito (lineage gate): file NON caricato.")
+                return
+            p = promote_raw_object(r.raw_object_id, actor="hub:revenue")
+    if p.status == "PROMOTED":
+        st.success("Foto caricata — curve aggiornate.")
+        load_curve.clear()
+        st.rerun()
+    else:
+        st.error(
+            f"Promote {p.status} ({p.reason or '-'}): il file è al sicuro in "
+            "GCS ma non è entrato in tabella — da investigare, non ricaricarlo."
+        )
 
 
 def calendario_confrontabile(
@@ -103,8 +147,18 @@ def render() -> None:
     if gg_fa > 10:
         st.warning(
             "Foto più recente di oltre 10 giorni — manca l'export settimanale "
-            '"Andamento Prenotazioni" (rituale: export → intake → promote).'
+            '"Andamento Prenotazioni" (caricalo qui sotto).'
         )
+
+    with st.expander('📥 Carica la foto settimanale (export "Andamento Prenotazioni")'):
+        st.caption(
+            "Un export a settimana, tutte le strutture, senza filtro tipologia. "
+            "Il file viene validato (basi omogenee) prima di entrare: se i "
+            "filtri sono diversi dalla serie, viene rifiutato col motivo."
+        )
+        up = st.file_uploader("Export xlsx", type=["xlsx"], key="foto_otb")
+        if up is not None and st.button("Ingerisci", type="primary"):
+            _ingest_foto(up)
 
     last = d[d["snapshot_date"] == ultima].sort_values("mese_soggiorno")
     mese_foto = ultima.replace(day=1)

@@ -71,7 +71,8 @@ def test_cashflow_accodamenti_sono_sensibili():
     from verticals.hub.registry import APPS
 
     sens = {a.id for a in APPS if a.sensitive}
-    assert sens == {"cashflow", "cassa-consuntivo", "accodamenti"}
+    # revenue: sensibile dal 2026-07-13 (upload foto OTB = write-path via lineage)
+    assert sens == {"cashflow", "cassa-consuntivo", "accodamenti", "revenue"}
 
 
 def test_pages_for_filtra_su_allowed():

@@ -22,6 +22,9 @@ from ingest.flussi.ingest_andamento_prenotazioni import (
 from ingest.flussi.ingest_andamento_prenotazioni import (
     parse_xlsx as parse_otb,
 )
+from ingest.flussi.ingest_andamento_prenotazioni import (
+    valida_basi_export,
+)
 from ingest.flussi.ingest_bookings_tipologia import (
     build_rows as build_bkg_rows,
 )
@@ -364,3 +367,54 @@ def test_cp_build_rows_snapshot_e_hash(tmp_path):
     rows = build_cp_rows(parsed, snapshot_date="2026-07-11", raw_object_id="rid-9")
     assert all(r["snapshot_date"] == "2026-07-11" for r in rows)
     assert len({r["hash_riga"] for r in rows}) == 2
+
+
+# ── Guardiano basi-omogenee (upload foto dalla pagina Revenue) ─────────────
+
+
+def _foto_xlsx(path, footer, header=None):
+    wb = Workbook()
+    ws = wb.active
+    ws.append(header or ["Giorno", "CodiceHotel", "Camere", "Presenze ARB",
+                         "Importo Lordo", "ADR Lordo", "Imponibile",
+                         "ADR Imponibile"])
+    ws.append(["03/04/2026 ven", "PANORAMAHT", 1, 2, 178.9, 133.9, 162.64, 121.73])
+    ws.append(["Total", None, 1])
+    ws.append([footer])
+    wb.save(path)
+    return path
+
+
+def test_valida_basi_export_ok(tmp_path):
+    f = _foto_xlsx(tmp_path / "foto.xlsx",
+                   "Applied filters:\nAnno is 2026 or 2025\nParamDimRange is Giorno\n"
+                   "Data is on or after 4/1/2026 and is before 10/30/2026\n"
+                   "DataPrenotazione is not blank")
+    ok, motivo = valida_basi_export(f)
+    assert ok, motivo
+
+
+def test_valida_basi_export_anno_singolo(tmp_path):
+    # il caso reale del 13/7: 'Anno is 2026' esclude ~2.800 notti prenotate nel 2025
+    f = _foto_xlsx(tmp_path / "foto.xlsx",
+                   "Applied filters:\nAnno is 2026\nParamDimRange is Giorno\n"
+                   "DataPrenotazione is not blank")
+    ok, motivo = valida_basi_export(f)
+    assert not ok and "Anno" in motivo
+
+
+def test_valida_basi_export_manca_dataprenotazione(tmp_path):
+    f = _foto_xlsx(tmp_path / "foto.xlsx",
+                   "Applied filters:\nAnno is 2026 or 2025\nParamDimRange is Giorno")
+    ok, motivo = valida_basi_export(f)
+    assert not ok and "DataPrenotazione" in motivo
+
+
+def test_valida_basi_export_layout_sbagliato(tmp_path):
+    # layout bookings-tipologia (senza CodiceHotel/Imponibile foto) = report sbagliato
+    f = _foto_xlsx(tmp_path / "foto.xlsx",
+                   "Applied filters:\nAnno is 2026 or 2025\nDataPrenotazione is not blank",
+                   header=["Giorno", "Tipologia Venduta", "Camere", "ARB", "Infant",
+                           "ADR", "Appartamento", "Appartamento Extra", "Extra", "Totale"])
+    ok, motivo = valida_basi_export(f)
+    assert not ok and "layout" in motivo.lower()
