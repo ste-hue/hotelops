@@ -71,8 +71,10 @@ def test_cashflow_accodamenti_sono_sensibili():
     from verticals.hub.registry import APPS
 
     sens = {a.id for a in APPS if a.sensitive}
-    # revenue/spiaggia: sensibili dal 2026-07-13 (upload via lineage in pagina)
-    assert sens == {"cashflow", "cassa-consuntivo", "accodamenti", "revenue", "spiaggia"}
+    # revenue: sensibile dal 2026-07-13 (upload foto OTB = write-path via lineage).
+    # spiaggia NON è sensibile: l'uploader Moolty è gated per-utente nel wrapper
+    # (pages_/spiaggia._MOOLTY_UPLOADERS) — la pagina resta lettura per Operations.
+    assert sens == {"cashflow", "cassa-consuntivo", "accodamenti", "revenue"}
 
 
 def test_pages_for_filtra_su_allowed():

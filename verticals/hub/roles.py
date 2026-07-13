@@ -99,12 +99,17 @@ def _resolve(email: str | None, allow_all: bool) -> frozenset[str]:
     return ALL if allow_all else frozenset()
 
 
-def current_apps() -> frozenset[str]:
-    """App-id concesse all'utente del run corrente. Non eccepisce mai."""
+def current_email() -> str | None:
+    """Email autenticata dall'edge per il run corrente (None se assente)."""
     try:
         headers = st.context.headers
     except Exception:
         headers = None
-    email = _email_from_headers(headers)
+    return _email_from_headers(headers)
+
+
+def current_apps() -> frozenset[str]:
+    """App-id concesse all'utente del run corrente. Non eccepisce mai."""
+    email = current_email()
     allow_all = os.environ.get(_DEV_BYPASS_ENV) == "1"
     return _resolve(email, allow_all)

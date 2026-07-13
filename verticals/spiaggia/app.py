@@ -94,22 +94,28 @@ def _ingest_moolty(upload) -> None:
         )
 
 
-def render() -> None:
-    """Panorama Beach — soldi totali per giorno, interattiva. Montabile nell'hub."""
+def render(can_upload: bool = False) -> None:
+    """Panorama Beach — soldi totali per giorno, interattiva. Montabile nell'hub.
+
+    can_upload: mostra l'uploader Moolty (write-path). Lo decide il wrapper
+    hub in base all'identità edge (pages_/spiaggia.py) — la pagina resta in
+    sola lettura per tutti gli altri e nei run standalone.
+    """
     st.markdown(_BRAND_CSS, unsafe_allow_html=True)
     st.title("Panorama Beach")
     st.markdown('<div class="pb-sub">Soldi totali spiaggia · per giorno</div>',
                 unsafe_allow_html=True)
 
-    with st.expander("📥 Carica export Moolty (report POS)"):
-        st.caption(
-            "L'export viene controllato prima di entrare (layout, duplicati "
-            "interni); le righe già caricate si deduplicano da sole, quindi "
-            "puoi caricare export che si sovrappongono."
-        )
-        up = st.file_uploader("Report Moolty xlsx", type=["xlsx"], key="moolty_up")
-        if up is not None and st.button("Ingerisci", type="primary", key="moolty_go"):
-            _ingest_moolty(up)
+    if can_upload:
+        with st.expander("📥 Carica export Moolty (report POS)"):
+            st.caption(
+                "L'export viene controllato prima di entrare (layout, duplicati "
+                "interni); le righe già caricate si deduplicano da sole, quindi "
+                "puoi caricare export che si sovrappongono."
+            )
+            up = st.file_uploader("Report Moolty xlsx", type=["xlsx"], key="moolty_up")
+            if up is not None and st.button("Ingerisci", type="primary", key="moolty_go"):
+                _ingest_moolty(up)
 
     g = load_giornaliero()
     if g.empty:

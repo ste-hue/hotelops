@@ -64,7 +64,7 @@ APPS: list[HubApp] = [
     HubApp("cdg", "CdG", "📊", "Finanza", "soon", None, "controllo di gestione (in redesign)"),
     # ── Operations ───────────────────────────────────────────────────────────
     HubApp("fb", "Food & Beverage", "🍽", "Operations", "page", fb.render, "food cost & coperti"),
-    HubApp("spiaggia", "Spiaggia", "🏖️", "Operations", "page", spiaggia.render, "ricavo stabilimento & quadratura", sensitive=True),
+    HubApp("spiaggia", "Spiaggia", "🏖️", "Operations", "page", spiaggia.render, "ricavo stabilimento & quadratura"),
     HubApp("reviews", "Reviews", "⭐", "Operations", "page", reviews.render, "reputation & sentiment"),
     # ── Sistema ──────────────────────────────────────────────────────────────
     # L'ingest NON è una sezione trasversale: è una funzione di ciascun vertical
