@@ -97,3 +97,14 @@ def test_audience_senza_grant_non_riceve_accodamenti():
 
     for email in ("gm@panoramagroup.it", "fom@panoramagroup.it"):
         assert "accodamenti" not in _resolve(email, allow_all=False)
+
+
+def test_spiaggia_upload_gated_per_utente():
+    # la pagina spiaggia resta read-only di default: l'uploader Moolty compare
+    # solo se il wrapper hub passa can_upload=True (identità edge)
+    import inspect
+
+    from verticals.spiaggia.app import render
+
+    sig = inspect.signature(render)
+    assert sig.parameters["can_upload"].default is False

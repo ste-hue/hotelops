@@ -2,15 +2,14 @@
 from datetime import date, datetime, timezone
 
 import openpyxl
-import pytest
 
 from ingest.flussi.ingest_spiaggia_fb import (
     build_fb_rows,
     ingest_file,
     parse_dt,
-    parse_mese_report,
     parse_ordine_id,
     to_float,
+    valida_export_moolty,
 )
 
 _NOW = datetime(2026, 6, 17, 12, 0, tzinfo=timezone.utc)
@@ -235,3 +234,63 @@ def test_registry_moolty_fields():
     assert src.parser_module == "ingest.flussi.ingest_spiaggia_fb"
     assert "cash_control" in src.loop_targets
     assert src.promotion_policy == "MANUAL"
+
+
+# ── Guardiano export (drop dalla pagina Spiaggia) ────────────────────────────
+
+
+def _moolty_wb(tmp_path, righe, titolo="Report 06/2026", sheet="Report"):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = sheet
+    ws.cell(row=1, column=1, value=titolo)
+    headers = ["Data", "Pagato", "Rata", "Metodo", "Entrata", "Uscita",
+               "Causale", "Descrizione"]
+    for col, h in enumerate(headers, 1):
+        ws.cell(row=2, column=col, value=h)
+    for i, r in enumerate(righe, start=3):
+        for col, v in enumerate(r, 1):
+            ws.cell(row=i, column=col, value=v)
+    f = tmp_path / "moolty.xlsx"
+    wb.save(f)
+    return f
+
+
+_RIGA = [datetime(2026, 6, 1, 8, 43), 1, "1/1", "Contanti", 25.0, None,
+         "Ordine", "# 101 del 01/06/2026 0..."]
+
+
+def test_valida_moolty_ok(tmp_path):
+    riga2 = list(_RIGA)
+    riga2[7] = "# 102 del 01/06/2026 0..."
+    f = _moolty_wb(tmp_path, [_RIGA, riga2])
+    ok, motivo = valida_export_moolty(f)
+    assert ok, motivo
+
+
+def test_valida_moolty_foglio_sbagliato(tmp_path):
+    f = _moolty_wb(tmp_path, [_RIGA], sheet="Sheet1", titolo="qualcosa")
+    ok, motivo = valida_export_moolty(f)
+    assert not ok and "Moolty" in motivo
+
+
+def test_valida_moolty_vuoto(tmp_path):
+    f = _moolty_wb(tmp_path, [])
+    ok, motivo = valida_export_moolty(f)
+    assert not ok and "nessun" in motivo.lower()
+
+
+def test_valida_moolty_duplicati_interni(tmp_path):
+    # trappola storica: righe ripetute NON byte-identiche dentro l'export —
+    # l'hash BQ non le può prendere (stessa tripla data/descrizione/entrata)
+    f = _moolty_wb(tmp_path, [_RIGA, list(_RIGA), list(_RIGA)])
+    ok, motivo = valida_export_moolty(f)
+    assert not ok and "duplicat" in motivo.lower()
+
+
+def test_valida_moolty_report_giornaliero_ok(tmp_path):
+    # i report reali possono avere testa 'Report DD/MM/YYYY' (giornaliero):
+    # la firma del layout è l'header di riga 2, non il formato della testa
+    f = _moolty_wb(tmp_path, [_RIGA], titolo="Report 19/06/2026")
+    ok, motivo = valida_export_moolty(f)
+    assert ok, motivo

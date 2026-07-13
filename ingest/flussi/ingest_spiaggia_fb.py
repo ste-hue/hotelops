@@ -92,6 +92,59 @@ def parse_mese_report(ws) -> Optional[str]:
     return m.group(1) if m else None
 
 
+def valida_export_moolty(path: Path) -> tuple[bool, str]:
+    """Guardiano per il drop dell'export Moolty dalla pagina Spiaggia.
+
+    Il dedup BQ (hash_riga) protegge dai RICARICAMENTI, non dai duplicati
+    INTERNI a un export (righe ripetute — trappola storica "×2,4"): quelli
+    vanno fermati PRIMA di toccare la tabella. Controlla: foglio 'Report'
+    con titolo 'Report MM/YYYY', almeno un ordine, nessuna tripla
+    (data_ora, descrizione, entrata) ripetuta. Ritorna (ok, motivo).
+    """
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    try:
+        if "Report" not in wb.sheetnames:
+            return False, "non sembra un report Moolty: manca il foglio 'Report'"
+        ws = wb["Report"]
+        # firma del layout = header di riga 2 (la testa può essere
+        # 'Report MM/YYYY' o 'Report DD/MM/YYYY' — il parser tollera entrambe)
+        header = set()
+        for i, row in enumerate(ws.iter_rows(min_row=2, max_row=2, values_only=True)):
+            header = {str(c).strip().lower() for c in row if c is not None}
+        if not {"data", "entrata", "descrizione"} <= header:
+            return False, (
+                "non sembra un report Moolty: header senza "
+                "Data/Entrata/Descrizione"
+            )
+        viste: dict = {}
+        n = 0
+        for row in ws.iter_rows(min_row=3, values_only=True):
+            if not row:
+                continue
+            dt = parse_dt(row[0] if len(row) > 0 else None)
+            if dt is None:
+                continue
+            n += 1
+            chiave = (
+                dt.isoformat(),
+                to_str(row[7] if len(row) > 7 else None),
+                to_float(row[4] if len(row) > 4 else None),
+            )
+            viste[chiave] = viste.get(chiave, 0) + 1
+    finally:
+        wb.close()
+    if n == 0:
+        return False, "nessun ordine nel report (export venuto male: rifallo)"
+    doppioni = sum(c - 1 for c in viste.values() if c > 1)
+    if doppioni:
+        return False, (
+            f"{doppioni} righe duplicate DENTRO l'export (stessa data/"
+            "descrizione/importo): copie non byte-identiche non si puliscono "
+            "a valle — rifai l'export pulito da Moolty"
+        )
+    return True, ""
+
+
 def build_fb_rows(
     ws,
     file_name: str,
