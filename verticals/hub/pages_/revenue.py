@@ -1,8 +1,10 @@
-"""Pagina Revenue — booking curve & pace (read-only su v_booking_curve).
+"""Pagina Revenue — a che ritmo riempiamo, e com'è andata (v_booking_curve).
 
-Spec: docs/superpowers/specs/2026-07-11-revman-booking-curve-design.md
-Metodologia: vault concepts/BOOKING_PACE_E_BASI (batteria / ADR marginale /
-ADR richiesto). NON è un motore di pricing: lente + loop umano settimanale.
+LA domanda della pagina: "a che ritmo riempiamo le prenotazioni, e come
+abbiamo fatto rispetto al 2025 a parità di camera?" Due sezioni: consuntivo
+(mesi chiusi, fatto vs target) e ritmo (mesi aperti, batteria + pickup).
+Nessun verdetto calcolato: i numeri col segno giusto, la lettura è di chi
+decide. Metodologia: vault concepts/BOOKING_PACE_E_BASI.
 """
 
 from __future__ import annotations
@@ -16,58 +18,20 @@ from core.config import V_BOOKING_CURVE
 # ── palette (dataviz reference instance — ruoli, non hex sparsi) ─────────────
 BLUE = "#2a78d6"  # slot-1: emphasis + riempimento meter
 GRAY_CTX = "#c3c2b7"  # de-enfasi (linee contesto)
-GRAY_MUTED = "#898781"  # inchiostro muted (righe consuntivo)
-STATUS_COLOR = {  # status riservati, sempre con icona+etichetta
-    "TARGET_SCONTATO": "#0ca30c",  # good
-    "SERVE_DOMANDA": "#fab219",  # warning
-    "SERVE_REPRICING": "#ec835a",  # serious
-}
-STATUS_LABEL = {
-    "CONSUNTIVO": "· consuntivo",
-    "DATI_INSUFFICIENTI": "— dati insufficienti",
-    "TARGET_RAGGIUNTO": "✓ target raggiunto",
-    "TARGET_INCOERENTE": "≠ target incoerente",
-    "NESSUN_CONFRONTO": "— nessun confronto",
-    "TARGET_SCONTATO": "✓ target scontato",
-    "SERVE_DOMANDA": "⚠ serve domanda",
-    "SERVE_REPRICING": "⛔ serve repricing",
-}
 
 
-def verdetto(
-    *,
-    mese_consumato: bool,
-    prima_foto: bool,
-    pickup_notti: float | None,
-    gap_target: float | None,
-    gap_notti_target: float | None,
-    adr_marginale: float | None,
-    adr_richiesto: float | None,
-) -> str:
-    """Semantica del verdetto (spec §vista) — pura, testabile senza BQ.
+def calendario_confrontabile(
+    ly_gg: float | None, cy_gg: float | None, tolleranza: float = 0.15
+) -> bool:
+    """True se i giorni operativi dei due anni sono comparabili (±15%).
 
-    Stati preliminari in quest'ordine, poi le 3 zone richiesto-vs-marginale.
+    Aprile 2026 (28 gg) vs 2025 (15 gg, apertura 16/4) → NON confrontabile:
+    un delta vs target mentirebbe in entrambe le direzioni.
     """
-    if mese_consumato:
-        return "CONSUNTIVO"
-    if prima_foto or pickup_notti is None or pickup_notti <= 0:
-        return "DATI_INSUFFICIENTI"
-    if gap_target is not None and gap_target <= 0:
-        return "TARGET_RAGGIUNTO"
-    if gap_notti_target is not None and gap_notti_target <= 0:
-        return "TARGET_INCOERENTE"
-    if adr_marginale is None or adr_richiesto is None:
-        return "NESSUN_CONFRONTO"
-    if adr_richiesto < 0.6 * adr_marginale:
-        return "TARGET_SCONTATO"
-    if adr_richiesto > adr_marginale:
-        return "SERVE_REPRICING"
-    return "SERVE_DOMANDA"
-
-
-def _f(v) -> float | None:
-    """NaN/NA pandas -> None (il verdetto ragiona su Optional)."""
-    return None if v is None or pd.isna(v) else float(v)
+    if not ly_gg or not cy_gg:
+        return False
+    r = cy_gg / ly_gg
+    return (1 - tolleranza) <= r <= (1 + tolleranza)
 
 
 @st.cache_data(ttl=300)
@@ -102,11 +66,18 @@ def _mese_label(d) -> str:
     return f"{_MESI[d.month - 1]} {d.year}"
 
 
+def _eur(v) -> str:
+    try:
+        return f"{float(v):,.0f} €".replace(",", ".")
+    except (TypeError, ValueError):
+        return "—"
+
+
 def render() -> None:
     st.title("📈 Revenue")
     st.caption(
-        "Booking curve & pace — fotografie OTB che si accumulano · "
-        "batteria / ADR marginale / ADR richiesto (base imponibile)"
+        "A che ritmo riempiamo, e com'è andata — fotografie OTB settimanali, "
+        "base imponibile, target = 2025 a parità di camera"
     )
     df = load_curve()
     if df.empty:
@@ -119,10 +90,8 @@ def render() -> None:
     )
     d = df[df["business_unit_id"] == bu]
 
-    # ── freshness (stat tile) ────────────────────────────────────────────
     ultima = d["snapshot_date"].max()
     gg_fa = (pd.Timestamp.today().date() - ultima).days
-    n_foto = d["snapshot_date"].nunique()
     c1, c2 = st.columns(2)
     c1.metric(
         "Ultima foto",
@@ -130,59 +99,72 @@ def render() -> None:
         f"{gg_fa} giorni fa",
         delta_color="off",
     )
-    c2.metric("Fotografie", n_foto)
+    c2.metric("Fotografie", d["snapshot_date"].nunique())
     if gg_fa > 10:
         st.warning(
             "Foto più recente di oltre 10 giorni — manca l'export settimanale "
             '"Andamento Prenotazioni" (rituale: export → intake → promote).'
         )
 
-    # ── tabella batteria (ultima foto) ───────────────────────────────────
-    last = d[d["snapshot_date"] == ultima].sort_values("mese_soggiorno").copy()
-    prime_foto = d.groupby("mese_soggiorno")["snapshot_date"].min()
+    last = d[d["snapshot_date"] == ultima].sort_values("mese_soggiorno")
+    mese_foto = ultima.replace(day=1)
+    consumati = last[last["mese_soggiorno"] < mese_foto]
+    aperti = last[last["mese_soggiorno"] >= mese_foto]
 
-    def _row_verdetto(r) -> str:
-        stato = verdetto(
-            mese_consumato=r["mese_soggiorno"] < ultima.replace(day=1),
-            prima_foto=prime_foto[r["mese_soggiorno"]] == r["snapshot_date"],
-            pickup_notti=_f(r["pickup_notti"]),
-            gap_target=_f(r["gap_target"]),
-            gap_notti_target=_f(r["gap_notti_target"]),
-            adr_marginale=_f(r["adr_marginale"]),
-            adr_richiesto=_f(r["adr_richiesto"]),
+    # ── Com'è andata (mesi chiusi: fatto vs 2025 × capacità) ────────────────
+    if not consumati.empty:
+        st.subheader("Com'è andata")
+        st.caption(
+            "Ricavo camere dei mesi chiusi vs target parità-camera "
+            "(= 2025 × capacità). Sopra il target = crescita organica."
         )
-        return STATUS_LABEL[stato]
 
-    show = pd.DataFrame(
-        {
-            "Mese": last["mese_soggiorno"].map(_mese_label),
-            "Batteria": last["saturazione_pct"].clip(upper=1.0),
-            "Sat. %": (last["saturazione_pct"] * 100).round(1),
-            "OTB notti": last["otb_notti"],
-            "OTB €": last["otb_imponibile"].round(0),
-            "Pickup €/gg": last["pickup_eur_gg"].round(0),
-            "ADR medio": last["otb_adr"].round(0),
-            "ADR marginale": last["adr_marginale"].round(0),
-            "ADR richiesto": last["adr_richiesto"].round(0),
-            "Gap € target": last["gap_target"].round(0),
-            "Verdetto": last.apply(_row_verdetto, axis=1),
-        }
-    )
-    _label_color = {STATUS_LABEL[k]: v for k, v in STATUS_COLOR.items()}
+        def _vs_target(r) -> str:
+            if not calendario_confrontabile(
+                r["ly_giorni_operativi"], r["cy_giorni_operativi_osservati"]
+            ):
+                return (
+                    f"n/c — calendario diverso "
+                    f"({int(r['ly_giorni_operativi'])} gg operativi 2025 "
+                    f"vs {int(r['cy_giorni_operativi_osservati'])})"
+                )
+            if pd.isna(r["target_imponibile"]) or not r["target_imponibile"]:
+                return "n/c — target assente"
+            delta = r["otb_imponibile"] / r["target_imponibile"] - 1
+            return f"{delta:+.0%}"
 
-    def _riga_consuntivo(row):
-        if row["Verdetto"] == STATUS_LABEL["CONSUNTIVO"]:
-            return [f"color: {GRAY_MUTED}"] * len(row)
-        return [""] * len(row)
+        st.dataframe(
+            pd.DataFrame(
+                {
+                    "Mese": consumati["mese_soggiorno"].map(_mese_label),
+                    "Ricavo camere": consumati["otb_imponibile"].map(_eur),
+                    "Target (2025 × cap.)": consumati["target_imponibile"].map(_eur),
+                    "vs target": consumati.apply(_vs_target, axis=1),
+                }
+            ),
+            hide_index=True,
+            width="stretch",
+        )
 
-    styled = show.style.apply(_riga_consuntivo, axis=1).map(
-        lambda v: (
-            f"color: {_label_color[v]}; font-weight: 600" if v in _label_color else ""
-        ),
-        subset=["Verdetto"],
+    # ── A che ritmo carichiamo (mesi aperti) ────────────────────────────────
+    st.subheader("A che ritmo carichiamo")
+    st.caption(
+        "Batteria = occupazione OTB vs capacità fisica. ADR marginale = a "
+        "quanto si vende l'ultima camera (tra le ultime due foto); ADR "
+        "richiesto = quanto serve sulle notti mancanti per arrivare al target."
     )
     st.dataframe(
-        styled,
+        pd.DataFrame(
+            {
+                "Mese": aperti["mese_soggiorno"].map(_mese_label),
+                "Batteria": aperti["saturazione_pct"].clip(upper=1.0),
+                "Pickup notti": aperti["pickup_notti"],
+                "Pickup €/gg": aperti["pickup_eur_gg"].round(0),
+                "ADR medio": aperti["otb_adr"].round(0),
+                "ADR marginale": aperti["adr_marginale"].round(0),
+                "ADR richiesto": aperti["adr_richiesto"].round(0),
+            }
+        ),
         hide_index=True,
         width="stretch",
         column_config={
@@ -190,59 +172,58 @@ def render() -> None:
                 "Batteria",
                 min_value=0.0,
                 max_value=1.0,
-                format=" ",
+                format="percent",
                 color=BLUE,
             ),
         },
-    )
-    st.caption(
-        "gap_notti_target = notti mancanti al volume 2025 riproporzionato "
-        "sulla capacità — non la capacità residua reale. ADR richiesto = "
-        "ADR medio necessario su quelle notti aggiuntive."
     )
 
     # ── curva delle foto (emphasis: un mese in evidenza, il resto contesto) ─
     import plotly.graph_objects as go
 
-    mesi = list(last["mese_soggiorno"])
-    ott = [m for m in mesi if m.month == 10]
-    sel = st.selectbox(
-        "Mese in evidenza",
-        mesi,
-        index=mesi.index(ott[0]) if ott else 0,
-        format_func=_mese_label,
-    )
-    fig = go.Figure()
-    for m, grp in d.groupby("mese_soggiorno"):
-        if m == sel:
-            continue
+    mesi = list(aperti["mese_soggiorno"])
+    if mesi:
+        ott = [m for m in mesi if m.month == 10]
+        sel = st.selectbox(
+            "Mese in evidenza",
+            mesi,
+            index=mesi.index(ott[0]) if ott else 0,
+            format_func=_mese_label,
+        )
+        fig = go.Figure()
+        for m, grp in d.groupby("mese_soggiorno"):
+            if m == sel:
+                continue
+            fig.add_trace(
+                go.Scatter(
+                    x=grp["snapshot_date"],
+                    y=grp["saturazione_pct"] * 100,
+                    mode="lines",
+                    line=dict(color=GRAY_CTX, width=1),
+                    hovertemplate=_mese_label(m) + " · %{y:.1f}%<extra></extra>",
+                )
+            )
+        sel_grp = d[d["mese_soggiorno"] == sel]
         fig.add_trace(
             go.Scatter(
-                x=grp["snapshot_date"],
-                y=grp["saturazione_pct"] * 100,
-                mode="lines",
-                line=dict(color=GRAY_CTX, width=1),
-                hovertemplate=_mese_label(m) + " · %{y:.1f}%<extra></extra>",
+                x=sel_grp["snapshot_date"],
+                y=sel_grp["saturazione_pct"] * 100,
+                mode="lines+markers+text",
+                line=dict(color=BLUE, width=2),
+                marker=dict(size=9),
+                text=[""] * (len(sel_grp) - 1) + [_mese_label(sel)],
+                textposition="middle right",
+                hovertemplate=_mese_label(sel) + " · %{y:.1f}%<extra></extra>",
             )
         )
-    sel_grp = d[d["mese_soggiorno"] == sel]
-    fig.add_trace(
-        go.Scatter(
-            x=sel_grp["snapshot_date"],
-            y=sel_grp["saturazione_pct"] * 100,
-            mode="lines+markers+text",
-            line=dict(color=BLUE, width=2),
-            marker=dict(size=9),
-            text=[""] * (len(sel_grp) - 1) + [_mese_label(sel)],
-            textposition="middle right",
-            hovertemplate=_mese_label(sel) + " · %{y:.1f}%<extra></extra>",
+        fig.update_layout(
+            showlegend=False,
+            height=380,
+            yaxis_title="batteria %",
+            xaxis_title=None,
+            margin=dict(l=10, r=60, t=10, b=10),
         )
-    )
-    fig.update_layout(
-        showlegend=False,
-        height=380,
-        yaxis_title="saturazione %",
-        xaxis_title=None,
-        margin=dict(l=10, r=60, t=10, b=10),
-    )
-    st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch")
+
+    with st.expander("Dettaglio analista (tutte le colonne, ultima foto)"):
+        st.dataframe(last, hide_index=True, width="stretch")
