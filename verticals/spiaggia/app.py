@@ -53,12 +53,63 @@ def _eur(v) -> str:
         return "—"
 
 
+SOURCE_MOOLTY = "MOOLTY_FBSPIAGGIA_INTUR_APPEND"
+
+
+def _ingest_moolty(upload) -> None:
+    """Valida e ingerisce l'export Moolty via lineage (intake → promote)."""
+    import tempfile
+    from pathlib import Path
+
+    from ingest.flussi.ingest_spiaggia_fb import valida_export_moolty
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / (upload.name or "moolty.xlsx")
+        path.write_bytes(upload.getvalue())
+        ok, motivo = valida_export_moolty(path)
+        if not ok:
+            st.error(f"Export rifiutato — {motivo}")
+            return
+
+        from ingest.intake import intake_file
+        from ingest.promotion import promote_raw_object
+
+        with st.spinner("Carico su GCS e promuovo…"):
+            r = intake_file(path, source_name=SOURCE_MOOLTY, actor="hub:spiaggia")
+            if r.deduped:
+                st.info("Export già presente (contenuto identico) — niente da fare.")
+                return
+            if not r.raw_object_id:
+                st.error("Intake fallito (lineage gate): file NON caricato.")
+                return
+            p = promote_raw_object(r.raw_object_id, actor="hub:spiaggia")
+    if p.status == "PROMOTED":
+        st.success("Export caricato — numeri aggiornati.")
+        load_giornaliero.clear()
+        st.rerun()
+    else:
+        st.error(
+            f"Promote {p.status} ({p.reason or '-'}): il file è al sicuro in GCS "
+            "ma non è entrato in tabella — da investigare, non ricaricarlo."
+        )
+
+
 def render() -> None:
     """Panorama Beach — soldi totali per giorno, interattiva. Montabile nell'hub."""
     st.markdown(_BRAND_CSS, unsafe_allow_html=True)
     st.title("Panorama Beach")
     st.markdown('<div class="pb-sub">Soldi totali spiaggia · per giorno</div>',
                 unsafe_allow_html=True)
+
+    with st.expander("📥 Carica export Moolty (report POS)"):
+        st.caption(
+            "L'export viene controllato prima di entrare (layout, duplicati "
+            "interni); le righe già caricate si deduplicano da sole, quindi "
+            "puoi caricare export che si sovrappongono."
+        )
+        up = st.file_uploader("Report Moolty xlsx", type=["xlsx"], key="moolty_up")
+        if up is not None and st.button("Ingerisci", type="primary", key="moolty_go"):
+            _ingest_moolty(up)
 
     g = load_giornaliero()
     if g.empty:
