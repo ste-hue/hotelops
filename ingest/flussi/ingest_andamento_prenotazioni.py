@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import re
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -69,6 +70,60 @@ def _parse_giorno(v) -> date | None:
         except ValueError:
             return None
     return None
+
+
+def valida_basi_export(path: Path) -> tuple[bool, str]:
+    """Guardiano basi-omogenee per la foto OTB (upload dalla pagina Revenue).
+
+    Il pace è foto-vs-foto della STESSA base (concept BOOKING_PACE_E_BASI):
+    un export coi filtri sbagliati inquinerebbe la serie. Controlla:
+    - layout foto (colonne Giorno/CodiceHotel/Imponibile presenti);
+    - footer con 'DataPrenotazione is not blank';
+    - filtro Anno su ALMENO due anni (caso reale 2026-07-13: 'Anno is 2026'
+      escludeva ~2.800 notti prenotate nel 2025).
+    Ritorna (ok, motivo) — motivo leggibile quando ok=False.
+    """
+    wb = load_workbook(path, read_only=True, data_only=True)
+    try:
+        rows = list(wb.active.iter_rows(values_only=True))
+    finally:
+        wb.close()
+    if not rows:
+        return False, "file vuoto (export venuto male: rifallo)"
+
+    header = {str(c).strip().lower() for c in rows[0] if c is not None}
+    attese = {"giorno", "codicehotel", "camere", "imponibile"}
+    if not attese <= header:
+        return False, (
+            "layout sbagliato: non è l'export 'Andamento Prenotazioni' "
+            f"(mancano le colonne {sorted(attese - header)})"
+        )
+
+    footer = ""
+    for r in reversed(rows[-5:]):
+        if r and r[0] and "Applied filters" in str(r[0]):
+            footer = str(r[0])
+            break
+    if not footer:
+        return False, "footer 'Applied filters' non trovato: export incompleto"
+    if "DataPrenotazione is not blank" not in footer:
+        return False, (
+            "manca il filtro 'DataPrenotazione is not blank': "
+            "base diversa dalla serie storica"
+        )
+    riga_anno = next(
+        (line for line in footer.splitlines() if line.strip().startswith("Anno is")),
+        "",
+    )
+    anni = set(re.findall(r"\b(20\d{2})\b", riga_anno))
+    if len(anni) < 2:
+        return False, (
+            f"filtro Anno su un solo anno ({riga_anno.strip() or 'assente'}): "
+            "servono ENTRAMBI gli anni (le prenotazioni per l'estate N "
+            "arrivano anche nell'anno N-1) — rifai l'export con Anno = "
+            "anno corrente e precedente"
+        )
+    return True, ""
 
 
 def parse_xlsx(path: Path) -> dict:
