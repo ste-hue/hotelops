@@ -370,7 +370,7 @@ sources:
     business_unit: null
     lifecycle: APPEND
     canonical_table: f_stampa_cassa
-    parser_module: ingest.flussi.ingest_stampa_cassa
+    parser_module: ingest.flussi.ingest_stampa_cassa   # parser non ancora scritto — nome TARGET (#87)
     hash_basis: hash_riga
     loop_targets: []
     promotion_policy: RAW_ONLY
@@ -477,6 +477,12 @@ sources:
     notes: |
       File documentale del semantic layer Power BI studiato manualmente.
       Al momento viene registrato come meta-layer RAW_ONLY per lineage.
+      Source LEGACY (#87): f_pms_statistiche oggi si alimenta da
+      POWERBI_OCCUPAZIONE_ORTI_SNAPSHOT — canonical_table/parser qui sono
+      nomi TARGET storici, non un path di promotion attivo. Il parser
+      ingest_pms_statistiche è folder-batch legacy (paths posizionali,
+      niente --file/--raw-object-id): viola il contratto di promotion e
+      produrrebbe righe FK-void → NON flippare ad AUTO senza riscriverlo.
 
   # ── Ricavi F&B Produzione Netta — SNAPSHOT ────────────────────────────────
   POWERBI_RICAVIFB_ORTI_SNAPSHOT:
@@ -573,7 +579,7 @@ sources:
     business_unit: null
     lifecycle: SNAPSHOT
     canonical_table: f_prenotazioni_dettaglio_otb
-    parser_module: ingest.flussi.ingest_dettaglio_prenotazioni
+    parser_module: ingest.flussi.ingest_dettaglio_prenotazioni   # parser non ancora scritto — nome TARGET (#87)
     natural_key: [business_unit_id, data]
     loop_targets: []
     promotion_policy: RAW_ONLY
@@ -657,7 +663,7 @@ sources:
     business_unit: null
     lifecycle: SNAPSHOT
     canonical_table: f_consprev_pax
-    parser_module: ingest.flussi.ingest_consprev_pax
+    parser_module: ingest.flussi.ingest_consprev_pax   # parser non ancora scritto — nome TARGET (#87)
     natural_key: [snapshot_date, business_unit_id]
     loop_targets: []
     promotion_policy: RAW_ONLY
