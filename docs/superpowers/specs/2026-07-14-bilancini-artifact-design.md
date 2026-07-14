@@ -1,7 +1,7 @@
 # Bilancini — artifact consultabile + terzo layout parser
 
 **Data:** 2026-07-14 · **Stato:** design approvato a voce, in review scritta
-**Decisioni prese con Stefano:** niente vertical nuovo (condges resta il dominio); deliverable = artifact Claude statico "tipo i mutui"; maggio ORTI → il re-export sostituisce; scope ORTI+INTUR (INTUR solo navigatore, senza budget).
+**Decisioni prese con Stefano:** niente vertical nuovo (condges resta il dominio); deliverable = artifact Claude statico "tipo i mutui"; maggio ORTI → il re-export sostituisce (stesso trattamento per aprile, droppato dopo: 22 conti rettificati vs BQ); scope ORTI+INTUR (INTUR solo navigatore, senza budget).
 
 ## La domanda della pagina
 
@@ -12,8 +12,9 @@ Ogni elemento dell'artifact si giustifica contro questa domanda (regola "una pag
 ## Contesto
 
 - `f_bilancino` è il backbone COMPETENZA del CdG (decisione 2026-06-22); `v_ce_mensile_bilancino` ricava il mese per differenza YTD.
-- Copertura attuale: ORTI e INTUR fino a 2026-05. Stefano ha droppato due export nuovi ORTI (maggio re-export + giugno) in un **terzo layout** che il parser non supporta.
-- Il re-export maggio contiene rettifiche (es. `47.91.07.02` Ricavi bar 52.747,38 vs 52.780,11 in BQ; 160 conti foglia vs 165 righe caricate). Il dedup per hash li salterebbe in silenzio → serve sostituzione esplicita.
+- Copertura attuale: ORTI e INTUR fino a 2026-05. Stefano ha droppato tre export nuovi ORTI (aprile e maggio re-export + giugno) in un **terzo layout** che il parser non supporta. Il layout ha due varianti: 5 colonne (maggio/giugno) e 11 colonne con Progressivi annui/periodici (aprile) → risoluzione colonne per nome header, obbligatoria.
+- I re-export contengono rettifiche (maggio: es. `47.91.07.02` Ricavi bar 52.747,38 vs 52.780,11 in BQ, 160 foglie vs 165 righe caricate; aprile: 22 conti diversi, tra cui banca `19.01.01` −6,7k e fornitori `33.03.01` −6,9k). Il dedup per hash li salterebbe in silenzio → serve sostituzione esplicita.
+- ⚠️ I file di maggio e giugno sono spariti dal Desktop prima dell'intake (lezione: intake al primo drop, sempre). Aprile è già in GCS (`raw_object_id 0fe78f07-9b49-4369-8fc5-f9685af02477`, stato CLASSIFIED); maggio e giugno vanno ridroppati da Stefano.
 - Budget a livello conto disponibile in `Budget_ORTI_2026.xlsx` (fogli Ricavi/Fissi/Variabili/Personale/Finanziari, `codice_conto × mese`) + `Incidenza_costi_personale.xlsx` (personale per reparto/mese). Stessa chiave del bilancino → join pulito.
 
 ## Parte 1 — Pipeline (prerequisito)
@@ -22,7 +23,7 @@ Ogni elemento dell'artifact si giustifica contro questa domanda (regola "una pag
 
 Nuovo branch in `_parse_xlsx` per il terzo layout, riconosciuto da header
 `('Conto', 'Partitari', 'Descrizione', 'Saldo finale Dare', 'Saldo finale Avere')`
-(match su `header[0] == 'conto'` dopo strip/lower, per non collidere con la griglia che inizia con `codice conto`):
+(match su `header[0] == 'conto'` dopo strip/lower, per non collidere con la griglia che inizia con `codice conto`). Colonne risolte **per nome header**: la variante di aprile aggiunge 6 colonne di Progressivi annui/periodici, si usano solo `Saldo finale Dare`/`Saldo finale Avere`:
 
 - **Leaf detection:** assenza di figli (nessun altro codice inizia con `codice + '.'`). I marker Partitari (S/C/F/B) NON bastano: 147 foglie CE sono senza marker.
 - **Importi:** `dare`/`avere` dal file (positivi); `saldo = dare − avere`. Verificato coerente con le convenzioni esistenti (ricavi < 0, costi > 0, attività > 0).
@@ -30,22 +31,22 @@ Nuovo branch in `_parse_xlsx` per il terzo layout, riconosciuto da header
 - **sezione:** CE → `Ricavi` se prefisso `47`, altrimenti `Costi` (ciò che serve a `v_ce_mensile_bilancino`); SP → stringa vuota (categoria fallback `PATRIMONIALE` — accettato, la vista consumer filtra solo CE).
 - Righe a importo zero: escluse (come gli altri layout).
 
-**Attesi dry-run:** giugno 168 righe, sbilancio dare−avere = −241.772,91 (= risultato a nuovo già in BQ); maggio 160 righe, stesso sbilancio.
+**Attesi dry-run:** giugno 168 righe, maggio 160, aprile ~154; per tutti sbilancio dare−avere = −241.772,91 (= risultato a nuovo già in BQ).
 
 ### 1b. Ingest
 
 Entrambi i file via lineage (source `ESOLVER_BILANCINO_ORTI_SNAPSHOT`, promotion AUTO), con copia rinominata per l'inferenza mese nel path di promotion (che passa solo `--file --societa --raw-object-id`):
 
-1. Copia `bilancioOrtial30giugno.XLSX` → `esolver_bilancino_ORTI_2026-06.xlsx`; `BilancioORTIal30maggio.XLSX` → `esolver_bilancino_ORTI_2026-05_reexport.xlsx` (il pattern numerico `2026-05` basta all'inferenza).
-2. `hotelops intake` di entrambi.
-3. **Maggio (sostituzione decisa):** `DELETE FROM f_bilancino WHERE societa_id='ORTI' AND mese='2026-05'` (165 righe attese cancellate — contarle prima) → promote del re-export → 160 righe nuove. Il vecchio dato resta ricostruibile dal raw GCS.
+1. Copia `bilancioOrtial30giugno.XLSX` → `esolver_bilancino_ORTI_2026-06.xlsx`; `BilancioORTIal30maggio.XLSX` → `esolver_bilancino_ORTI_2026-05_reexport.xlsx` (il pattern numerico basta all'inferenza mese). Aprile già intaken come `esolver_bilancino_ORTI_2026-04_reexport.xlsx`.
+2. `hotelops intake` dei file mancanti appena ridroppati (maggio, giugno).
+3. **Aprile e maggio (sostituzione decisa):** per ciascun mese `DELETE FROM f_bilancino WHERE societa_id='ORTI' AND mese='<M>'` (attese: 157 righe per 2026-04, 165 per 2026-05 — contarle prima) → promote del re-export (attese ~154 e 160 righe nuove). Il vecchio dato resta ricostruibile dal raw GCS.
 4. **Giugno:** promote diretto (0 righe esistenti, nessuna DELETE).
 
 ### 1c. Verifica (output-based)
 
 - FK coverage 100% sulle righe nuove (`raw_object_id IS NOT NULL`).
-- Row count: ORTI 2026-05 = 160, 2026-06 = 168; saldo cumulato = −241.772,91 per entrambi.
-- Stato lineage: entrambi i raw object PROMOTED.
+- Row count: ORTI 2026-04 ≈ 154, 2026-05 = 160, 2026-06 = 168; saldo cumulato = −241.772,91 per tutti.
+- Stato lineage: tutti e tre i raw object PROMOTED.
 - Sanity consumer: `v_ce_mensile_bilancino` giugno ORTI produce delta mensili plausibili (ricavi giugno > maggio, stagione).
 
 ## Parte 2 — Artifact "Bilancini · Gruppo Panorama"
