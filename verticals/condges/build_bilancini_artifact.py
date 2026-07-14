@@ -344,10 +344,19 @@ document.getElementById("csv-btn").addEventListener("click", () => {
   URL.revokeObjectURL(a.href);
 });
 
-// ---------- Schermo intero (si nasconde se il contesto non lo permette, es. iframe senza allowfullscreen) ----------
+// ---------- Schermo intero ----------
+// Dentro un iframe senza allowfullscreen (es. hub Streamlit) il fullscreen nativo è
+// negato: in quel caso il bottone apre la pagina in una NUOVA SCHEDA top-level.
 const fsBtn = document.getElementById("fs-btn");
 if (!document.fullscreenEnabled) {
-  fsBtn.style.display = "none";
+  fsBtn.textContent = "↗ Nuova scheda";
+  fsBtn.title = "Apri la pagina fuori dal riquadro (schermo pieno)";
+  fsBtn.addEventListener("click", () => {
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write("<!doctype html>" + document.documentElement.outerHTML);
+    w.document.close();
+  });
 } else {
   fsBtn.addEventListener("click", () => {
     if (document.fullscreenElement) document.exitFullscreen();
