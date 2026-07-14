@@ -222,7 +222,9 @@ HTML_TEMPLATE = """<!doctype html>
 <body>
 <div class="wrap">
   <header class="top">
-    <h1>Bilancini · Gruppo Panorama</h1>
+    <h1>Bilancini · Gruppo Panorama
+      <button id="fs-btn" title="Schermo intero" style="float:right;appearance:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 12px;cursor:pointer;">⛶ Schermo intero</button>
+    </h1>
     <div class="freshness" id="freshness"></div>
     <div class="navigator-controls" style="margin-top:12px;margin-bottom:0;">
       <div class="soc-pills" id="soc-pills-global">
@@ -317,6 +319,20 @@ function lastMeseFor(soc) {
     }
   }
   return max || MESI[MESI.length - 1];
+}
+
+// ---------- Schermo intero (si nasconde se il contesto non lo permette, es. iframe senza allowfullscreen) ----------
+const fsBtn = document.getElementById("fs-btn");
+if (!document.fullscreenEnabled) {
+  fsBtn.style.display = "none";
+} else {
+  fsBtn.addEventListener("click", () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen();
+  });
+  document.addEventListener("fullscreenchange", () => {
+    fsBtn.textContent = document.fullscreenElement ? "✕ Esci" : "⛶ Schermo intero";
+  });
 }
 
 // ---------- Tabs ----------
