@@ -26,3 +26,18 @@ def test_build_payload_signs_and_presence():
     assert orti["47.91.01"]["delta"]["2026-05"] == -1000.0
     assert orti["67.03.94"]["ytd"]["2026-05"] == 80.0
     assert "budget" not in payload  # v1: solo numeri veri, nessuna stima
+    assert payload["gruppi"] == {}  # nessun gruppi passato → default vuoto
+
+
+def test_build_payload_includes_gruppi_descriptions():
+    bilancino = [
+        {"societa_id": "ORTI", "mese": "2026-05", "codice_conto": "47.91.01",
+         "descrizione": "Ricavi alloggi", "tipo_conto": "CE", "sezione": "Ricavi", "saldo": -1000.0},
+    ]
+    gruppi = {"47.91": "Ricavi Hotel", "47": "RICAVI DELLE VENDITE E DELLE PRESTAZIONI"}
+    payload = build_payload(bilancino, gruppi)
+    assert payload["gruppi"] == gruppi
+    # label fallback: un codice gruppo assente in DATA.gruppi resta il codice stesso
+    # (comportamento lato JS: DATA.gruppi[codice] || codice) — qui verifichiamo solo
+    # che il payload trasporti il dict così com'è, senza mutazioni.
+    assert payload["gruppi"].get("99.99") is None

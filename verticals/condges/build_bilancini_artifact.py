@@ -32,6 +32,11 @@ def fetch_bilancino(client) -> list[dict]:
     return [dict(r) for r in client.query(sql).result()]
 
 
+def fetch_gruppi(client) -> dict[str, str]:
+    sql = f"SELECT codice_conto, descrizione FROM `{PROJECT}.hotelops.d_conti_gruppi`"
+    return {r["codice_conto"]: r["descrizione"] for r in client.query(sql).result()}
+
+
 def compute_delta(ytd: dict[str, float]) -> dict[str, float]:
     """delta[m] = ytd[m] − ytd[mese precedente presente]; primo mese = ytd."""
     delta = {}
@@ -42,7 +47,7 @@ def compute_delta(ytd: dict[str, float]) -> dict[str, float]:
     return delta
 
 
-def build_payload(bilancino_rows: list[dict]) -> dict:
+def build_payload(bilancino_rows: list[dict], gruppi: dict[str, str] | None = None) -> dict:
     mesi = sorted({r["mese"] for r in bilancino_rows})
     societa: dict[str, dict] = {}
     per_conto: dict[tuple, dict] = {}
@@ -62,6 +67,7 @@ def build_payload(bilancino_rows: list[dict]) -> dict:
         "generated_at": date.today().isoformat(),
         "mesi": mesi,
         "societa": societa,
+        "gruppi": gruppi or {},
     }
 
 
@@ -215,6 +221,12 @@ HTML_TEMPLATE = """<!doctype html>
   <header class="top">
     <h1>Bilancini · Gruppo Panorama</h1>
     <div class="freshness" id="freshness"></div>
+    <div class="navigator-controls" style="margin-top:12px;margin-bottom:0;">
+      <div class="soc-pills" id="soc-pills-global">
+        <button data-soc="ORTI" aria-pressed="true">ORTI</button>
+        <button data-soc="INTUR" aria-pressed="false">INTUR</button>
+      </div>
+    </div>
     <nav class="tabnav" id="tabnav">
       <button data-tab="oggi" aria-selected="true">A oggi</button>
       <button data-tab="progressione" aria-selected="false">Progressione</button>
@@ -223,13 +235,13 @@ HTML_TEMPLATE = """<!doctype html>
   </header>
 
   <section class="panel active" id="panel-oggi">
-    <h2 class="section-title">A oggi — ORTI</h2>
-    <p class="section-sub">Il conto economico ORTI dall'inizio dell'anno al mese chiuso più recente. Solo numeri veri dal bilancino, nessuna stima.</p>
+    <h2 class="section-title" id="title-oggi">A oggi — ORTI</h2>
+    <p class="section-sub">Il conto economico dall'inizio dell'anno al mese chiuso più recente. Solo numeri veri dal bilancino, nessuna stima.</p>
     <div class="kpi-grid" id="kpi-grid"></div>
   </section>
 
   <section class="panel" id="panel-progressione">
-    <h2 class="section-title">Progressione — ORTI, mese per mese</h2>
+    <h2 class="section-title" id="title-progressione">Progressione — ORTI, mese per mese</h2>
     <p class="section-sub">Come ci siamo arrivati: il delta di ogni mese, per macro-gruppo del conto economico reale.</p>
     <div class="card">
       <div class="chart-row">
@@ -255,12 +267,8 @@ HTML_TEMPLATE = """<!doctype html>
 
   <section class="panel" id="panel-navigatore">
     <h2 class="section-title">Navigatore — piano dei conti</h2>
-    <p class="section-sub">ORTI e INTUR, albero dai prefissi di conto. Saldo YTD e delta del mese selezionato, i gruppi sommano le foglie.</p>
+    <p class="section-sub">Albero dai prefissi di conto per la società selezionata in testa. Saldo YTD e delta del mese selezionato, i gruppi sommano le foglie.</p>
     <div class="navigator-controls">
-      <div class="soc-pills" id="soc-pills">
-        <button data-soc="ORTI" aria-pressed="true">ORTI</button>
-        <button data-soc="INTUR" aria-pressed="false">INTUR</button>
-      </div>
       <label for="mese-select" style="font-size:12.5px;color:var(--ink-muted);">Mese</label>
       <select id="mese-select"></select>
     </div>
@@ -304,9 +312,12 @@ document.getElementById("tabnav").addEventListener("click", (e) => {
 // ---------- Freshness ----------
 document.getElementById("freshness").textContent = `dati al ${LAST_MESE} · generato il ${DATA.generated_at}`;
 
+// ---------- Società (selettore globale) ----------
+let currentSoc = "ORTI";
+
 // ---------- A oggi (KPI) ----------
 function kpiTotals() {
-  const conti = ceConti("ORTI");
+  const conti = ceConti(currentSoc);
   let ricaviYtd = 0, costiYtd = 0, ricaviMese = 0, costiMese = 0;
   for (const c of conti) {
     if (c.sezione === "Ricavi") {
@@ -352,7 +363,7 @@ function renderKpi() {
 
 // ---------- Progressione ----------
 function monthlyTotals() {
-  const conti = ceConti("ORTI");
+  const conti = ceConti(currentSoc);
   const out = MESI.map((m) => {
     let entrate = 0, uscite = 0;
     for (const c of conti) {
@@ -483,9 +494,9 @@ function renderCatLegend() {
 
 // ---------- Delta mensile per macro-gruppo (top-level CE) ----------
 function renderGruppiTable() {
-  // Gruppi dai prefissi top-level del codice conto (47, 55, 57, …). Il bilancino
-  // non porta righe di gruppo con un nome → etichetta dal codice (da amendment).
-  const conti = ceConti("ORTI");
+  // Gruppi dai prefissi top-level del codice conto (47, 55, 57, …). Etichetta
+  // da DATA.gruppi (d_conti_gruppi); fallback sul codice se mancante.
+  const conti = ceConti(currentSoc);
   const gruppi = {};
   for (const c of conti) {
     const pref = c.codice.split(".")[0];
@@ -500,7 +511,8 @@ function renderGruppiTable() {
     "<th>YTD</th></tr></thead><tbody>";
   for (const g of order) {
     const dir = g.sezione === "Ricavi" ? "Entrate" : "Uscite";
-    html += `<tr><td>${g.pref}</td><td>${dir}</td>` +
+    const label = DATA.gruppi[g.pref] || g.pref;
+    html += `<tr><td>${label}</td><td>${dir}</td>` +
       MESI.map(m => `<td>${fmt(g.delta[m] || 0)}</td>`).join("") +
       `<td>${fmt(g.ytd)}</td></tr>`;
   }
@@ -509,7 +521,6 @@ function renderGruppiTable() {
 }
 
 // ---------- Navigatore ----------
-let currentSoc = "ORTI";
 let currentMese = LAST_MESE;
 
 function buildTree(conti) {
@@ -554,7 +565,7 @@ function renderTreeNode(node) {
   const keys = Object.keys(node.children).sort();
   const depth = node.code ? node.code.split(".").length : 0;
   const childrenHtml = keys.map(k => renderTreeNode(node.children[k])).join("");
-  const label = keys.length === 1 ? "" : `${keys.length} voci`;
+  const label = DATA.gruppi[node.code] || node.code;
   return `<details class="tree-node" ${depth <= 1 ? "open" : ""}>
     <summary>
       <span class="node-code">${node.code}</span>
@@ -573,11 +584,21 @@ function renderNavigator() {
   document.getElementById("tree-root").innerHTML = keys.map(k => renderTreeNode(tree.children[k])).join("");
 }
 
-document.getElementById("soc-pills").addEventListener("click", (e) => {
+function updateSocTitles() {
+  document.getElementById("title-oggi").textContent = `A oggi — ${currentSoc}`;
+  document.getElementById("title-progressione").textContent = `Progressione — ${currentSoc}, mese per mese`;
+}
+
+document.getElementById("soc-pills-global").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-soc]");
   if (!btn) return;
   currentSoc = btn.dataset.soc;
-  document.querySelectorAll("#soc-pills button").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+  document.querySelectorAll("#soc-pills-global button").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+  updateSocTitles();
+  renderKpi();
+  renderMonthlyChart();
+  renderCumulataChart();
+  renderGruppiTable();
   renderNavigator();
 });
 
@@ -606,8 +627,10 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     log = logging.getLogger("bilancini_artifact")
 
-    bilancino = fetch_bilancino(get_client())
-    payload = build_payload(bilancino)
+    client = get_client()
+    bilancino = fetch_bilancino(client)
+    gruppi = fetch_gruppi(client)
+    payload = build_payload(bilancino, gruppi)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(render_html(payload), encoding="utf-8")
