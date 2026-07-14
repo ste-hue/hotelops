@@ -368,23 +368,18 @@ document.getElementById("csv-btn").addEventListener("click", () => {
 // ---------- Schermo intero ----------
 // Dentro un iframe senza allowfullscreen (es. hub Streamlit) il fullscreen nativo è
 // negato: in quel caso il bottone apre la pagina in una NUOVA SCHEDA top-level.
+// Il bottone esiste SOLO dove il fullscreen nativo funziona (pagina standalone,
+// contesti con allowfullscreen). Niente fallback popup/blob: sotto sandbox
+// producono schede bianche. Nel hub l'equivalente è il download "Pagina HTML"
+// a livello Streamlit, fuori dall'iframe.
 const fsBtn = document.getElementById("fs-btn");
 const fsRoot = document.getElementById("bilancini-root");
-function openInNewTab() {
-  const src = "<!doctype html>" + document.documentElement.outerHTML;
-  const url = URL.createObjectURL(new Blob([src], { type: "text/html" }));
-  window.open(url, "_blank");
-}
 if (!document.fullscreenEnabled) {
-  fsBtn.textContent = "↗ Nuova scheda";
-  fsBtn.title = "Apri la pagina fuori dal riquadro (schermo pieno)";
-  fsBtn.addEventListener("click", openInNewTab);
+  fsBtn.style.display = "none";
 } else {
   fsBtn.addEventListener("click", () => {
     if (document.fullscreenElement) { document.exitFullscreen(); return; }
-    // fullscreen sul NOSTRO contenitore (mai sul documentElement: nell'artifact è
-    // la pagina host → schermo bianco), con fallback nuova scheda se fallisce
-    fsRoot.requestFullscreen().catch(openInNewTab);
+    fsRoot.requestFullscreen().catch(() => { fsBtn.style.display = "none"; });
   });
   document.addEventListener("fullscreenchange", () => {
     fsBtn.textContent = document.fullscreenElement ? "✕ Esci" : "⛶ Schermo intero";
