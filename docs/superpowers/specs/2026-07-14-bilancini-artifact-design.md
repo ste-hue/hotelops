@@ -1,7 +1,7 @@
 # Bilancini — artifact consultabile + terzo layout parser
 
 **Data:** 2026-07-14 · **Stato:** design approvato a voce, in review scritta
-**Decisioni prese con Stefano:** niente vertical nuovo (condges resta il dominio); deliverable = artifact Claude statico "tipo i mutui"; maggio ORTI → il re-export sostituisce (stesso trattamento per aprile, droppato dopo: 22 conti rettificati vs BQ); scope ORTI+INTUR (INTUR solo navigatore, senza budget).
+**Decisioni prese con Stefano:** niente vertical nuovo (condges resta il dominio); deliverable = artifact Claude statico "tipo i mutui"; i re-export sostituiscono il caricato (principio deciso su maggio ORTI, esteso a re-baseline completo 2026 quando Stefano ha ri-esportato l'intera serie); scope ORTI+INTUR (INTUR solo navigatore, senza budget).
 
 ## La domanda della pagina
 
@@ -12,9 +12,10 @@ Ogni elemento dell'artifact si giustifica contro questa domanda (regola "una pag
 ## Contesto
 
 - `f_bilancino` è il backbone COMPETENZA del CdG (decisione 2026-06-22); `v_ce_mensile_bilancino` ricava il mese per differenza YTD.
-- Copertura attuale: ORTI e INTUR fino a 2026-05. Stefano ha droppato tre export nuovi ORTI (aprile e maggio re-export + giugno) in un **terzo layout** che il parser non supporta. Il layout ha due varianti: 5 colonne (maggio/giugno) e 11 colonne con Progressivi annui/periodici (aprile) → risoluzione colonne per nome header, obbligatoria.
-- I re-export contengono rettifiche (maggio: es. `47.91.07.02` Ricavi bar 52.747,38 vs 52.780,11 in BQ, 160 foglie vs 165 righe caricate; aprile: 22 conti diversi, tra cui banca `19.01.01` −6,7k e fornitori `33.03.01` −6,9k). Il dedup per hash li salterebbe in silenzio → serve sostituzione esplicita.
-- ⚠️ I file di maggio e giugno sono spariti dal Desktop prima dell'intake (lezione: intake al primo drop, sempre). Aprile è già in GCS (`raw_object_id 0fe78f07-9b49-4369-8fc5-f9685af02477`, stato CLASSIFIED); maggio e giugno vanno ridroppati da Stefano.
+- Copertura attuale in BQ: ORTI e INTUR fino a 2026-05, da export in formati misti (griglia/legacy). Il 2026-07-14 Stefano ha ri-esportato **l'intera serie 2026**: cartella `bilancinimensili/{ORTI,INTUR}/01..06`, 12 file, tutti nel **terzo layout** (varianti 5 e 11 colonne — le 11 aggiungono Progressivi annui/periodici → risoluzione colonne per nome header, obbligatoria).
+- I re-export contengono rettifiche sui mesi già caricati (maggio ORTI: es. `47.91.07.02` Ricavi bar 52.747,38 vs 52.780,11 in BQ; aprile ORTI: 22 conti diversi, tra cui banca `19.01.01` −6,7k e fornitori `33.03.01` −6,9k). Il dedup per hash le salterebbe in silenzio → **re-baseline completo 2026**, non merge.
+- Quadratura verificata su tutti e 12: sbilancio dare−avere costante = −241.772,91 (ORTI, perdita a nuovo) / +625.546,25 (INTUR, utile a nuovo); foglie crescenti mese su mese (semantica YTD corretta).
+- Tutti e 12 già in GCS (intake 2026-07-14, stato CLASSIFIED, nomi canonici `esolver_bilancino_<SOC>_2026-<MM>.xlsx`). Un raw object precedente di aprile ORTI (`0fe78f07…`, dal primo drop Desktop) resta CLASSIFIED non promosso: superseded da questa serie. Lezione pagata: maggio/giugno del primo drop sono spariti dal Desktop prima dell'intake → **intake al primo drop, sempre**.
 - Budget a livello conto disponibile in `Budget_ORTI_2026.xlsx` (fogli Ricavi/Fissi/Variabili/Personale/Finanziari, `codice_conto × mese`) + `Incidenza_costi_personale.xlsx` (personale per reparto/mese). Stessa chiave del bilancino → join pulito.
 
 ## Parte 1 — Pipeline (prerequisito)
@@ -31,22 +32,25 @@ Nuovo branch in `_parse_xlsx` per il terzo layout, riconosciuto da header
 - **sezione:** CE → `Ricavi` se prefisso `47`, altrimenti `Costi` (ciò che serve a `v_ce_mensile_bilancino`); SP → stringa vuota (categoria fallback `PATRIMONIALE` — accettato, la vista consumer filtra solo CE).
 - Righe a importo zero: escluse (come gli altri layout).
 
-**Attesi dry-run:** giugno 168 righe, maggio 160, aprile ~154; per tutti sbilancio dare−avere = −241.772,91 (= risultato a nuovo già in BQ).
+**Attesi dry-run per file (foglie a saldo ≠ 0):**
+ORTI 01→112, 02→123, 03→136, 04→154, 05→160, 06→168 · INTUR 01→112, 02→116, 03→122, 04→127, 05→133, 06→138. Sbilancio costante per società (−241.772,91 / +625.546,25).
 
-### 1b. Ingest
+### 1b. Ingest — re-baseline 2026
 
-Entrambi i file via lineage (source `ESOLVER_BILANCINO_ORTI_SNAPSHOT`, promotion AUTO), con copia rinominata per l'inferenza mese nel path di promotion (che passa solo `--file --societa --raw-object-id`):
+Intake già fatto (2026-07-14). Raw object id:
+- INTUR 01 `906c3c28` · 02 `549064ef` · 03 `6a27a0aa` · 04 `f7eecf71` · 05 `5cc62144` · 06 `d5fffe55`
+- ORTI 01 `2ebeb2e4` · 02 `b4b8e8d3` · 03 `5f13fa74` · 04 `a7e27a36` · 05 `d1952f6a` · 06 `4c2d15bf`
 
-1. Copia `bilancioOrtial30giugno.XLSX` → `esolver_bilancino_ORTI_2026-06.xlsx`; `BilancioORTIal30maggio.XLSX` → `esolver_bilancino_ORTI_2026-05_reexport.xlsx` (il pattern numerico basta all'inferenza mese). Aprile già intaken come `esolver_bilancino_ORTI_2026-04_reexport.xlsx`.
-2. `hotelops intake` dei file mancanti appena ridroppati (maggio, giugno).
-3. **Aprile e maggio (sostituzione decisa):** per ciascun mese `DELETE FROM f_bilancino WHERE societa_id='ORTI' AND mese='<M>'` (attese: 157 righe per 2026-04, 165 per 2026-05 — contarle prima) → promote del re-export (attese ~154 e 160 righe nuove). Il vecchio dato resta ricostruibile dal raw GCS.
-4. **Giugno:** promote diretto (0 righe esistenti, nessuna DELETE).
+Con parser esteso:
+1. **DELETE scoped**: `DELETE FROM f_bilancino WHERE mese LIKE '2026-%'` per entrambe le società (attese cancellate, contarle prima: ORTI 112+124+136+157+165 = 694; INTUR 72+101+115+116+123 = 527). I mesi 2025 NON si toccano. Il vecchio dato resta ricostruibile dai raw GCS.
+2. **Promote dei 12** in ordine mese (gennaio→giugno) per società.
+3. Vantaggio collaterale: provenienza uniforme (stesso layout, stesso giorno di export, FK fresca) su tutto il 2026.
 
 ### 1c. Verifica (output-based)
 
-- FK coverage 100% sulle righe nuove (`raw_object_id IS NOT NULL`).
-- Row count: ORTI 2026-04 ≈ 154, 2026-05 = 160, 2026-06 = 168; saldo cumulato = −241.772,91 per tutti.
-- Stato lineage: tutti e tre i raw object PROMOTED.
+- FK coverage 100% sulle righe 2026 (`raw_object_id IS NOT NULL`).
+- Row count per (società, mese) = attesi di §1a; saldo cumulato costante per società su ogni mese.
+- Stato lineage: tutti e 12 i raw object PROMOTED.
 - Sanity consumer: `v_ce_mensile_bilancino` giugno ORTI produce delta mensili plausibili (ricavi giugno > maggio, stagione).
 
 ## Parte 2 — Artifact "Bilancini · Gruppo Panorama"
@@ -71,7 +75,7 @@ I path dei due xlsx budget sono parametri CLI con default agli attuali percorsi 
 1. **A oggi (KPI YTD ORTI):** ricavi, costi, margine YTD vs budget YTD; scostamenti con segni in presentazione leggibili (ricavi sopra budget = verde "+", costi sopra budget = rosso "+") — mai numeri a segno-bilancio grezzi.
 2. **Progressione (il peso di ogni mese):** delta mensile actual vs budget per categoria (Ricavi / Costi fissi / Variabili / Personale / Finanziari, le categorie del budget) — barre mensili + cumulata.
 3. **Scostamenti (drill categoria → conto):** tabella budget vs consuntivo, mese × YTD, ordinata per |scostamento|; conti a consuntivo senza budget esposti in riga esplicita "Fuori budget" (mai nascosti); personale con drill per reparto dall'Incidenza.
-4. **Navigatore bilancino (ORTI + INTUR):** selettore società+mese → albero SP+CE gerarchico (ricostruito dai prefissi conto), saldo YTD e delta mese per conto. Per INTUR nessun confronto budget; dati fermi all'ultimo mese caricato, dichiarato in pagina.
+4. **Navigatore bilancino (ORTI + INTUR):** selettore società+mese → albero SP+CE gerarchico (ricostruito dai prefissi conto), saldo YTD e delta mese per conto. Per INTUR nessun confronto budget; entrambe le società coperte gen–giu 2026, freshness dichiarata in pagina.
 
 Freshness dichiarata in testa: "dati al <max mese per società>, generato il <data>".
 
