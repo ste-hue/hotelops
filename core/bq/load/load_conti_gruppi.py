@@ -39,8 +39,6 @@ DEFAULT_FILE = (
     Path(__file__).resolve().parents[2] / "bq" / "dimensioni" / "d_conti_gruppi.csv"
 )
 
-FIELDS = ["codice_conto", "descrizione"]
-
 BQ_SCHEMA = (
     [
         bigquery.SchemaField("codice_conto", "STRING", mode="REQUIRED"),

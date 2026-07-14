@@ -73,6 +73,9 @@ def build_payload(bilancino_rows: list[dict], gruppi: dict[str, str] | None = No
 
 def render_html(payload: dict) -> str:
     data_json = json.dumps(payload, ensure_ascii=False)
+    # Hardening: un `</script>` dentro una descrizione/stringa embedded
+    # chiuderebbe il tag prematuramente — evaso qui, prima dell'inject.
+    data_json = data_json.replace("</", "<\\/")
     return HTML_TEMPLATE.replace("__DATA__", data_json)
 
 
@@ -289,17 +292,32 @@ function fmt(n) { return new Intl.NumberFormat("it-IT", { maximumFractionDigits:
 function fmtEuro(n) { return "€ " + fmt(n); }
 function monthNum(mese) { return parseInt(mese.slice(5, 7), 10); }
 function monthLabel(mese) { return MONTH_LABELS[monthNum(mese) - 1] + " " + mese.slice(0, 4); }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
 
 // -- sign convention: ricavi CE mostrati positivi (saldo bilancino è negativo per i ricavi) --
+// Entrata se sezione="Ricavi" (dato già corretto) OPPURE prefisso top-level 53
+// ("Altri ricavi e proventi" — nei dati storici in BQ arriva ancora con
+// sezione="Costi" fino al prossimo promote, quindi il prefisso è il fallback).
+function isEntrata(c) { return c.sezione === "Ricavi" || c.codice.split(".")[0] === "53"; }
 function ceConti(soc) {
   const list = (DATA.societa[soc] && DATA.societa[soc].conti) || [];
   return list.filter(c => c.tipo === "CE");
 }
-function dispYtd(c, mese) { const v = c.ytd[mese] || 0; return c.sezione === "Ricavi" ? -v : v; }
-function dispDelta(c, mese) { const v = c.delta[mese] || 0; return c.sezione === "Ricavi" ? -v : v; }
+function dispYtd(c, mese) { const v = c.ytd[mese] || 0; return isEntrata(c) ? -v : v; }
+function dispDelta(c, mese) { const v = c.delta[mese] || 0; return isEntrata(c) ? -v : v; }
 
 const MESI = DATA.mesi;
-const LAST_MESE = MESI[MESI.length - 1];
+function lastMeseFor(soc) {
+  let max = null;
+  for (const c of (DATA.societa[soc] && DATA.societa[soc].conti) || []) {
+    for (const m of Object.keys(c.ytd)) {
+      if (max === null || m > max) max = m;
+    }
+  }
+  return max || MESI[MESI.length - 1];
+}
 
 // ---------- Tabs ----------
 document.getElementById("tabnav").addEventListener("click", (e) => {
@@ -310,33 +328,44 @@ document.getElementById("tabnav").addEventListener("click", (e) => {
 });
 
 // ---------- Freshness ----------
-document.getElementById("freshness").textContent = `dati al ${LAST_MESE} · generato il ${DATA.generated_at}`;
+function updateFreshness() {
+  const lastOrti = lastMeseFor("ORTI");
+  const lastIntur = lastMeseFor("INTUR");
+  const el = document.getElementById("freshness");
+  if (lastOrti === lastIntur) {
+    el.textContent = `dati al ${lastOrti} · generato il ${DATA.generated_at}`;
+  } else {
+    el.textContent = `dati al ${lastMeseFor(currentSoc)} (${currentSoc}) — ORTI ${lastOrti} · INTUR ${lastIntur} · generato il ${DATA.generated_at}`;
+  }
+}
 
 // ---------- Società (selettore globale) ----------
 let currentSoc = "ORTI";
 
 // ---------- A oggi (KPI) ----------
 function kpiTotals() {
+  const lastMese = lastMeseFor(currentSoc);
   const conti = ceConti(currentSoc);
   let ricaviYtd = 0, costiYtd = 0, ricaviMese = 0, costiMese = 0;
   for (const c of conti) {
-    if (c.sezione === "Ricavi") {
-      ricaviYtd += dispYtd(c, LAST_MESE);
-      ricaviMese += dispDelta(c, LAST_MESE);
+    if (isEntrata(c)) {
+      ricaviYtd += dispYtd(c, lastMese);
+      ricaviMese += dispDelta(c, lastMese);
     } else {
-      costiYtd += dispYtd(c, LAST_MESE);
-      costiMese += dispDelta(c, LAST_MESE);
+      costiYtd += dispYtd(c, lastMese);
+      costiMese += dispDelta(c, lastMese);
     }
   }
   return {
     ricavi: { ytd: ricaviYtd, mese: ricaviMese },
     costi: { ytd: costiYtd, mese: costiMese },
     margine: { ytd: ricaviYtd - costiYtd, mese: ricaviMese - costiMese },
+    lastMese,
   };
 }
 
-function kpiTile(label, ytd, mese, kind) {
-  const meseLabel = MONTH_LABELS[monthNum(LAST_MESE) - 1];
+function kpiTile(label, ytd, mese, kind, lastMese) {
+  const meseLabel = MONTH_LABELS[monthNum(lastMese) - 1];
   // Margine può essere negativo (perdita reale, non un artefatto di segno
   // bilancino): lo si etichetta esplicitamente invece di lasciare solo il "-".
   const tag = kind === "margine" && ytd < 0 ? ' <span class="badge-fb">perdita</span>' : "";
@@ -356,9 +385,9 @@ function kpiTile(label, ytd, mese, kind) {
 function renderKpi() {
   const t = kpiTotals();
   document.getElementById("kpi-grid").innerHTML =
-    kpiTile("Ricavi YTD", t.ricavi.ytd, t.ricavi.mese, "ricavi") +
-    kpiTile("Costi YTD", t.costi.ytd, t.costi.mese, "costi") +
-    kpiTile("Margine YTD", t.margine.ytd, t.margine.mese, "margine");
+    kpiTile("Ricavi YTD", t.ricavi.ytd, t.ricavi.mese, "ricavi", t.lastMese) +
+    kpiTile("Costi YTD", t.costi.ytd, t.costi.mese, "costi", t.lastMese) +
+    kpiTile("Margine YTD", t.margine.ytd, t.margine.mese, "margine", t.lastMese);
 }
 
 // ---------- Progressione ----------
@@ -367,7 +396,7 @@ function monthlyTotals() {
   const out = MESI.map((m) => {
     let entrate = 0, uscite = 0;
     for (const c of conti) {
-      if (c.sezione === "Ricavi") entrate += dispDelta(c, m);
+      if (isEntrata(c)) entrate += dispDelta(c, m);
       else uscite += dispDelta(c, m);
     }
     return { mese: m, entrate, uscite };
@@ -496,22 +525,23 @@ function renderCatLegend() {
 function renderGruppiTable() {
   // Gruppi dai prefissi top-level del codice conto (47, 55, 57, …). Etichetta
   // da DATA.gruppi (d_conti_gruppi); fallback sul codice se mancante.
+  const lastMese = lastMeseFor(currentSoc);
   const conti = ceConti(currentSoc);
   const gruppi = {};
   for (const c of conti) {
     const pref = c.codice.split(".")[0];
-    const g = gruppi[pref] || (gruppi[pref] = { pref, sezione: c.sezione, delta: {}, ytd: 0 });
+    const g = gruppi[pref] || (gruppi[pref] = { pref, entrata: isEntrata(c), delta: {}, ytd: 0 });
     for (const m of MESI) g.delta[m] = (g.delta[m] || 0) + dispDelta(c, m);
-    g.ytd += dispYtd(c, LAST_MESE);
+    g.ytd += dispYtd(c, lastMese);
   }
   const order = Object.values(gruppi).sort((a, b) =>
-    a.sezione === b.sezione ? a.pref.localeCompare(b.pref) : (a.sezione === "Ricavi" ? -1 : 1));
+    a.entrata === b.entrata ? a.pref.localeCompare(b.pref) : (a.entrata ? -1 : 1));
   let html = '<table class="data"><thead><tr><th>Gruppo</th><th>Direzione</th>' +
     MESI.map(m => `<th>${MONTH_LABELS[monthNum(m) - 1]}</th>`).join("") +
     "<th>YTD</th></tr></thead><tbody>";
   for (const g of order) {
-    const dir = g.sezione === "Ricavi" ? "Entrate" : "Uscite";
-    const label = DATA.gruppi[g.pref] || g.pref;
+    const dir = g.entrata ? "Entrate" : "Uscite";
+    const label = escapeHtml(DATA.gruppi[g.pref] || g.pref);
     html += `<tr><td>${label}</td><td>${dir}</td>` +
       MESI.map(m => `<td>${fmt(g.delta[m] || 0)}</td>`).join("") +
       `<td>${fmt(g.ytd)}</td></tr>`;
@@ -521,7 +551,7 @@ function renderGruppiTable() {
 }
 
 // ---------- Navigatore ----------
-let currentMese = LAST_MESE;
+let currentMese = lastMeseFor(currentSoc);
 
 function buildTree(conti) {
   const root = { children: {}, code: "" };
@@ -558,14 +588,14 @@ function renderTreeNode(node) {
   if (node.leaf) {
     return `<div class="leaf-row">
       <span class="node-code">${node.code}</span>
-      <span class="node-desc">${node.leaf.descrizione}</span>
+      <span class="node-desc">${escapeHtml(node.leaf.descrizione)}</span>
       <span class="node-vals"><span><span class="lbl">YTD</span>${fmtEuro(ytd)}</span><span><span class="lbl">Delta</span>${fmtEuro(delta)}</span></span>
     </div>`;
   }
   const keys = Object.keys(node.children).sort();
   const depth = node.code ? node.code.split(".").length : 0;
   const childrenHtml = keys.map(k => renderTreeNode(node.children[k])).join("");
-  const label = DATA.gruppi[node.code] || node.code;
+  const label = escapeHtml(DATA.gruppi[node.code] || node.code);
   return `<details class="tree-node" ${depth <= 1 ? "open" : ""}>
     <summary>
       <span class="node-code">${node.code}</span>
@@ -595,6 +625,7 @@ document.getElementById("soc-pills-global").addEventListener("click", (e) => {
   currentSoc = btn.dataset.soc;
   document.querySelectorAll("#soc-pills-global button").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
   updateSocTitles();
+  updateFreshness();
   renderKpi();
   renderMonthlyChart();
   renderCumulataChart();
@@ -607,6 +638,7 @@ meseSelect.innerHTML = MESI.map(m => `<option value="${m}" ${m === currentMese ?
 meseSelect.addEventListener("change", () => { currentMese = meseSelect.value; renderNavigator(); });
 
 // ---------- Init ----------
+updateFreshness();
 renderKpi();
 renderCatLegend();
 renderMonthlyChart();

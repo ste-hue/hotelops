@@ -69,6 +69,19 @@ def test_saldi_zero_rows_skipped_and_89_is_sp(tmp_path):
     assert rows[0]["codice_conto"] == "89.01" and rows[0]["tipo_conto"] == "SP"
 
 
+def test_saldi_53_is_ricavi(tmp_path):
+    p = _make_xlsx(tmp_path, HDR_5COL, [
+        ["53", None, "ALTRI RICAVI E PROVENTI", None, 500.0],
+        ["    53.01.51", None, "Altri ricavi e proventi", None, 500.0],
+    ])
+    rows = parse_bilancino(p, "INTUR", "2026-06", logger)
+    assert len(rows) == 1
+    r = rows[0]
+    assert r["codice_conto"] == "53.01.51"
+    assert r["tipo_conto"] == "CE" and r["sezione"] == "Ricavi"
+    assert r["saldo"] == -500.0  # saldo negativo, mostrabile positivo lato renderer
+
+
 def test_grid_layout_still_dispatched(tmp_path):
     # guardia di regressione: il branch griglia resta attivo
     p = _make_xlsx(tmp_path, ["Codice conto", "Descrizione conto", "Livello di imputazione bilancio", "Importo colonna 1"], [

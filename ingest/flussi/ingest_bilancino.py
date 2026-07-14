@@ -278,6 +278,8 @@ def _parse_xlsx_saldi(rows_iter, header: tuple, logger: logging.Logger) -> list[
     Colonne risolte per nome header. Leaf = nessun altro codice inizia con codice+'.'
     (i marker Partitari S/C/F/B coprono solo i partitari SP, il CE è senza marker).
     tipo_conto: CE se 47 ≤ prefisso top-level ≤ 88, SP altrimenti (89 = SP come storico).
+    sezione (CE): Ricavi per prefisso top-level 47 (vendite) o 53 (altri ricavi e
+    proventi), Costi altrimenti.
     saldo = dare − avere (ricavi < 0, coerente con gli altri layout).
     """
     hdr = [str(h or "").replace("\n", " ").strip().lower() for h in header]
@@ -326,7 +328,7 @@ def _parse_xlsx_saldi(rows_iter, header: tuple, logger: logging.Logger) -> list[
                 "codice_conto": code,
                 "descrizione": e["descrizione"],
                 "tipo_conto": "CE" if is_ce else "SP",
-                "sezione": ("Ricavi" if top == "47" else "Costi") if is_ce else "",
+                "sezione": ("Ricavi" if top in ("47", "53") else "Costi") if is_ce else "",
                 "dare": e["dare"],
                 "avere": e["avere"],
                 "saldo": e["dare"] - e["avere"],
