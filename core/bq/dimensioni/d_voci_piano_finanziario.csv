@@ -18,7 +18,7 @@ USCITE_MUTUI,Mutui e Finanziamenti (rate mensili),USCITE,Finanziario,,BANCHE,,,,
 USCITE_MUTUI_SEMESTRALE,Rimborso Finanziamenti (semestrale),USCITE,Finanziario,ORTI,BANCHE,,,,RIMBORSO FINANZIAMENTI,275,,Oneri Finanziari,X
 USCITE_SPESE_BANCARIE,Commissioni e Spese Bancarie,USCITE,Finanziario,,ESOLVER,7501,,,,278,,Oneri Finanziari,X
 USCITE_CONSULENZE,Consulenze e Marketing,USCITE,Consulenze,,ESOLVER,6101,650604,,,280,,Costi Amministrativi,F
-USCITE_GODIMENTO_BENI,Godimento Beni di Terzi (Fitti Passivi),USCITE,Godimento Beni,,ESOLVER,650105,,,,290,,Costi Produttivi,F
+USCITE_GODIMENTO_BENI,Godimento Beni di Terzi (Fitti Passivi),USCITE,Godimento Beni,,ESOLVER,650105,650107,,,290,,Costi Produttivi,F
 USCITE_COMMISSIONI,Commissioni OTA e Portali,USCITE,Commissioni,ORTI,ESOLVER,570101,,6302,,300,,Costi Commerciali,V
 USCITE_CANONI,Canoni e Servizi,USCITE,Canoni,,ESOLVER,6503,6505,6590,,310,,Costi Produttivi,F
 USCITE_CANONE_PASSIVO,Canone Affitto Ramo Azienda (INTUR→ORTI),USCITE,Affitti,ORTI,ESOLVER,6511,,,,315,,Costi Produttivi,F
