@@ -64,12 +64,12 @@ _assert_s1("OPERATIONS", OPERATIONS)
 _GRANTS: dict[str, frozenset[str]] = {
     "stefano@panoramagroup.it": ALL,  # Stefano (Workspace/IAP) — admin
     "ste.dellapietra@gmail.com": ALL,  # Stefano (gmail) — ridondanza
-    "amministrazione@panoramagroup.it": FINANZA | {"cashflow", "accodamenti", "spiaggia"},  # Rosa
+    "amministrazione@panoramagroup.it": FINANZA | {"cashflow", "accodamenti", "spiaggia", "bilancini"},  # Rosa
     "fom@panoramagroup.it": OPERATIONS,  # Anna (room division)
     "fb@panoramagroup.it": OPERATIONS,  # Stefano Amato (F&B)
     "gm@panoramagroup.it": FINANZA
     | OPERATIONS
-    | {"cashflow", "cdg"},  # Antonio Russo (direttore)
+    | {"cashflow", "cdg", "bilancini"},  # Antonio Russo (direttore)
     "stedepi@gmail.com": frozenset({"reviews", "mutui"}),  # padre
     "magazzino@panoramagroup.it": frozenset({"fb", "spiaggia"}),  # Mario (economato)
 }

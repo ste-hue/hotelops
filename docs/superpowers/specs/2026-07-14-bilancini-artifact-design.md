@@ -70,7 +70,14 @@ Output: un file HTML in `docs/reports/artifacts/bilancini.html` (dati embedded, 
 
 I path dei due xlsx budget sono parametri CLI con default agli attuali percorsi Desktop; quando i budget entreranno in lineage si punterà a BQ.
 
-### Sezioni
+### ⚠️ Amendment 2026-07-14 (decisione Stefano, post-implementazione Task 4)
+
+**V1 = solo numeri veri.** I bilancini sono FATTI; il budget/PF sono STIME (cashflow: tutto stimato tranne i saldi banca iniziali). Mischiarli in pagina confonde la lettura — evidenza concreta: il budget Personale è un rollup a 1 conto mentre il bilancino ha i conti Esolver granulari → 849k € di actuals finivano in "Fuori budget". Quindi:
+- L'artifact v1 NON contiene budget/scostamenti: sezioni ridotte a **A oggi / Progressione / Navigatore** (la progressione usa i macro-gruppi top-level del CE reale: 47 Ricavi, 55 Acquisti, 57 Servizi, …).
+- Il builder perde gli input xlsx budget (`--budget-xlsx`/`--incidenza-xlsx` rimossi): legge SOLO `f_bilancino`.
+- Confronto vs stime = iterazione futura, in sezione separata etichettata "STIME", con Personale confrontato a livello categoria. Le sezioni sotto restano come riferimento per quella iterazione.
+
+### Sezioni (v1 ridotta: 1, 2 senza budget, 4 — la 3 è deferita)
 
 1. **A oggi (KPI YTD ORTI):** ricavi, costi, margine YTD vs budget YTD; scostamenti con segni in presentazione leggibili (ricavi sopra budget = verde "+", costi sopra budget = rosso "+") — mai numeri a segno-bilancio grezzi.
 2. **Progressione (il peso di ogni mese):** delta mensile actual vs budget per categoria (Ricavi / Costi fissi / Variabili / Personale / Finanziari, le categorie del budget) — barre mensili + cumulata.

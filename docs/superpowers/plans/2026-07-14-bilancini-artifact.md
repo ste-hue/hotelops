@@ -647,3 +647,42 @@ git commit -m "docs: housekeeping — puntatori sessions/weeks semantic json + c
 (Include la modifica CLAUDE.md sull'indice `sessions_semantic.json` che Stefano ha chiesto di far entrare nel prossimo housekeeping.)
 
 - [ ] **Step 4: Rituale a regime** — verificare che STATUS.md contenga il rituale mensile: export bilancini (terzo layout ok) → intake+promote → `python -m verticals.condges.build_bilancini_artifact` → republish stesso URL.
+
+---
+
+## Iterazione post-gate-lettura (feedback Stefano 2026-07-14): Task 6–7
+
+Feedback sul render v1: (a) dettagli solo ORTI in A oggi/Progressione → serve selettore società; (b) "vorrei che i codici dicano cosa sono" → i gruppi ricostruiti dai prefissi (55, 55.07, …) non hanno descrizione perché f_bilancino ha solo foglie e d_piano_conti non ha i gruppi; (c) "lo mettiamo in hub?" → pagina hub tipo Mutui (HTML autocontenuto embeddato), sensitive.
+
+### Task 6: Dimensione `d_conti_gruppi` + descrizioni e selettore società nell'artifact
+
+**Files:**
+- Create: `core/bq/dimensioni/d_conti_gruppi.csv` (estratto dai 12 xlsx in `scratchpad/bilancini_staging/`)
+- Create: `core/bq/load/load_conti_gruppi.py` (pattern: copia `load_piano_conti.py`)
+- Modify: `verticals/condges/build_bilancini_artifact.py` (fetch gruppi + payload `gruppi` + template: label gruppi, selettore società in A oggi/Progressione)
+- Test: `tests/test_build_bilancini_artifact.py` (payload include `gruppi`; label fallback = codice)
+
+**Steps:**
+- [ ] Estrarre i codici GRUPPO (= non-foglia) con descrizione dai 12 file staged (union ORTI+INTUR, dedup per codice, prima descrizione vista) con uno script usa-e-getta in scratchpad; scrivere il CSV `codice_conto,descrizione` ordinato per codice. Attesi ~100-130 gruppi.
+- [ ] Loader `load_conti_gruppi.py` sul pattern esatto di `load_piano_conti.py` (stesso stile: schema 2 colonne STRING REQUIRED, WRITE_TRUNCATE da CSV); eseguirlo; verifica `SELECT COUNT(*)` > 0 e spot-check `55`, `55.07`, `05.01`.
+- [ ] Builder: `fetch_gruppi(client) -> dict[str, str]` (SELECT da d_conti_gruppi); payload nuovo campo top-level `"gruppi": {codice: descrizione}`; JS: nodi gruppo del Navigatore e righe macro-gruppo della Progressione usano `DATA.gruppi[codice] || codice`.
+- [ ] Builder: selettore società (pills ORTI/INTUR come nel Navigatore) anche per A oggi e Progressione — un selettore GLOBALE unico in testa è accettabile e più semplice di tre locali; KPI e grafici si ricalcolano sul cambio.
+- [ ] Test aggiornati + `pytest tests/test_build_bilancini_artifact.py -v` + ruff.
+- [ ] Rigenerare HTML + quadratura (attesi soliti ORTI −241772.91 / INTUR 625546.25).
+- [ ] Commit: `feat(condges): bilancini — descrizioni gruppi (d_conti_gruppi) e selettore società` (stage per nome: csv, loader, builder, test).
+
+### Task 7: Pagina hub "Bilancini"
+
+**Files:**
+- Create: `verticals/hub/pages_/bilancini.py`
+- Modify: `verticals/hub/registry.py` (riga APPS, gruppo Finanza), `verticals/hub/roles.py` (grant per-email)
+
+**Pattern (da `pages_/mutui.py` ma inline, senza URL esterno):** `render()` = `brand_header("Bilancini", …)` + payload live da BQ con `@st.cache_data(ttl=3600)` + `render_html(payload)` riusato da `build_bilancini_artifact` + `components.html(html, height=1500, scrolling=True)`. Nessun file su disco, nessun iframe esterno.
+
+**Steps:**
+- [ ] Leggere `verticals/hub/README.md`, `registry.py`, `roles.py`, `pages_/mutui.py` e una pagina sensitive (es. `cassa_consuntivo.py`) per il pattern esatto di grant.
+- [ ] `pages_/bilancini.py` col pattern sopra; registry: `HubApp("bilancini", "Bilancini", "📗", "Finanza", "page", bilancini.render, "bilancio di verifica: YTD, progressione, navigatore", sensitive=True)`; grant in `_GRANTS` per le email di Stefano (stesse della pagina cassa-consuntivo).
+- [ ] Smoke: `streamlit run` head-less o AppTest se esiste pattern nei test hub; almeno import + render senza eccezioni con HUB_DEV_ALLOW_ALL=1.
+- [ ] Commit: `feat(hub): pagina Bilancini (embed HTML autocontenuto da BQ, sensitive)`.
+
+**Gate finale invariato:** render hub visto da Stefano prima del merge (CLAUDE.md regola pagine hub).

@@ -22,6 +22,10 @@ logs/
 .worktrees/
 .env
 
+# Bilancini artifact: dati finanziari, rigenerabile via build_bilancini_artifact.py
+# (già coperto da *.html sopra, esplicitato per chiarezza)
+docs/reports/artifacts/
+
 # Runtime state (pending alert flags, etc.)
 .hotelops_state/
 
