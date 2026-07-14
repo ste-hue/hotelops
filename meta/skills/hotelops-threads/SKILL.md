@@ -8,7 +8,9 @@ description: Use when Stefano wants to evaluate, open, resume, or close work thr
 ## Perché esiste
 
 I thread vivono in tre posti: `STATUS.md` (orizzontale), hub `workstreams/*.md` nel vault
-(verticale per fronte), worktree git (forma fisica). Senza disciplina succedono due cose,
+(verticale per fronte), worktree git (forma fisica). Quarto supporto, sola lettura: `~/dev/Projects/obsidian/Obsidian Vault/.cowork/sessions_semantic.json` —
+indice machine-readable di tutte le sessioni (sintesi, decisioni, open_threads) rigenerato
+da Cowork: utile per il triage cross-sessione, mai da editare a mano, può essere stale. Senza disciplina succedono due cose,
 entrambe successe davvero:
 
 1. **Fronti sovrapposti**: due sessioni hanno quasi aperto due app F&B parallele, perché

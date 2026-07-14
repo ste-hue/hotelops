@@ -18,7 +18,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > 3. `docs/architecture/LE_3_DIMENSIONI.md` — il concetto temporale più importante del sistema.
 > 4. `CLAUDE.md` (this file) — concetti, comandi, regole di dominio.
 >
-> **Goal di lungo termine**: HotelOps è il **Company OS** — il sistema operativo decisionale delle vere operazioni del business. 3 layer: **Code** (`core/`, `ingest/`, `verticals/`) = come opera il twin; **BigQuery** = cosa osserva; **Vault** = meta-knowledge umano (non canonical per fatti tecnici, può essere stale — verifica sempre con repo + BQ + utente; asse **workstream** `workstreams/<NOME>.md` per rientrare su un fronte).
+> **Goal di lungo termine**: HotelOps è il **Company OS** — il sistema operativo decisionale delle vere operazioni del business. 3 layer: **Code** (`core/`, `ingest/`, `verticals/`) = come opera il twin; **BigQuery** = cosa osserva; **Vault** = meta-knowledge umano (non canonical per fatti tecnici, può essere stale — verifica sempre con repo + BQ + utente; asse **workstream** `workstreams/<NOME>.md` per rientrare su un fronte). Indice machine-readable delle sessioni: `~/dev/Projects/obsidian/Obsidian Vault/.cowork/sessions_semantic.json` (sintesi, decisioni, open threads per sessione — estratto da `HotelOps/sessions/`, rigenerato da Cowork: **read-only**, può essere stale di qualche giorno).
 
 ## Behavioral guidelines
 
