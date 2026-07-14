@@ -150,6 +150,7 @@ HTML_TEMPLATE = """<!doctype html>
   a { color: var(--cat-ricavi); }
   :focus-visible { outline: 2px solid var(--cat-ricavi); outline-offset: 2px; }
   .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 24px 64px; }
+  .wrap:fullscreen { background: var(--page); overflow-y: auto; max-width: none; padding: 24px 48px 64px; }
   header.top { padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
   header.top h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
   .freshness { color: var(--ink-muted); font-size: 12.5px; margin-top: 4px; }
@@ -220,7 +221,7 @@ HTML_TEMPLATE = """<!doctype html>
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="wrap" id="bilancini-root">
   <header class="top">
     <h1>Bilancini · Gruppo Panorama
       <span style="float:right;display:flex;gap:8px;">
@@ -348,19 +349,22 @@ document.getElementById("csv-btn").addEventListener("click", () => {
 // Dentro un iframe senza allowfullscreen (es. hub Streamlit) il fullscreen nativo è
 // negato: in quel caso il bottone apre la pagina in una NUOVA SCHEDA top-level.
 const fsBtn = document.getElementById("fs-btn");
+const fsRoot = document.getElementById("bilancini-root");
+function openInNewTab() {
+  const src = "<!doctype html>" + document.documentElement.outerHTML;
+  const url = URL.createObjectURL(new Blob([src], { type: "text/html" }));
+  window.open(url, "_blank");
+}
 if (!document.fullscreenEnabled) {
   fsBtn.textContent = "↗ Nuova scheda";
   fsBtn.title = "Apri la pagina fuori dal riquadro (schermo pieno)";
-  fsBtn.addEventListener("click", () => {
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write("<!doctype html>" + document.documentElement.outerHTML);
-    w.document.close();
-  });
+  fsBtn.addEventListener("click", openInNewTab);
 } else {
   fsBtn.addEventListener("click", () => {
-    if (document.fullscreenElement) document.exitFullscreen();
-    else document.documentElement.requestFullscreen();
+    if (document.fullscreenElement) { document.exitFullscreen(); return; }
+    // fullscreen sul NOSTRO contenitore (mai sul documentElement: nell'artifact è
+    // la pagina host → schermo bianco), con fallback nuova scheda se fallisce
+    fsRoot.requestFullscreen().catch(openInNewTab);
   });
   document.addEventListener("fullscreenchange", () => {
     fsBtn.textContent = document.fullscreenElement ? "✕ Esci" : "⛶ Schermo intero";
