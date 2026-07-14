@@ -132,6 +132,7 @@ Discovery-first → RAW_ONLY. Intervista breve, poi scaffold:
 
 | Trappola | Regola |
 |---|---|
+| File droppato su Desktop/Downloads sparito PRIMA dell'intake (iCloud evict? — pagato 2026-07-14: bilancini giugno+maggio persi, servito il re-export completo) | Intake raw-only IMMEDIATO al primo drop, anche a piano non ancora confermato: non promuove, non è distruttivo, mette il file al sicuro in GCS |
 | Export duplicato internamente (Hotel ×2.4, num_doc ripetuti) | Conta i doppioni PRIMA di ingerire. Copie non byte-identiche non si dedup-ano a valle: chiedi un **re-export pulito** |
 | DELETE troppo larga su SNAPSHOT/ricostruzioni (over-delete vendite_fb) | Scope DELETE esplicito nel piano, conta le righe che cancellerai PRIMA di farlo |
 | Società sbagliata (accodamenti INTUR→ORTI) | H_/R_/C_ = strutture ORTI. Se classify non rileva la società, chiedi — mai default silenzioso |
