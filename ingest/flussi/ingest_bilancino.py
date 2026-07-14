@@ -271,10 +271,75 @@ def _parse_xlsx_grid(rows_iter, header: tuple, logger: logging.Logger) -> list[d
     return rows
 
 
+def _parse_xlsx_saldi(rows_iter, header: tuple, logger: logging.Logger) -> list[dict]:
+    """Parse Esolver 'saldi' XLSX — Conto/Partitari/Descrizione/Saldo finale Dare/Avere.
+
+    Varianti: 5 colonne, o 11 con Progressivi annui/periodici (ignorati).
+    Colonne risolte per nome header. Leaf = nessun altro codice inizia con codice+'.'
+    (i marker Partitari S/C/F/B coprono solo i partitari SP, il CE è senza marker).
+    tipo_conto: CE se 47 ≤ prefisso top-level ≤ 88, SP altrimenti (89 = SP come storico).
+    saldo = dare − avere (ricavi < 0, coerente con gli altri layout).
+    """
+    hdr = [str(h or "").replace("\n", " ").strip().lower() for h in header]
+
+    def col(name: str) -> int | None:
+        return hdr.index(name) if name in hdr else None
+
+    i_conto = col("conto")
+    i_descr = col("descrizione")
+    i_dare = col("saldo finale dare")
+    i_avere = col("saldo finale avere")
+    if i_conto is None or i_dare is None or i_avere is None:
+        logger.error(f"Header saldi non riconosciuto: {hdr[:5]}")
+        return []
+
+    def num(row, i) -> float:
+        v = row[i] if i < len(row) else None
+        return float(v) if v not in (None, "") else 0.0
+
+    entries = []
+    for row in rows_iter:
+        codice = str(row[i_conto] or "").strip()
+        if not codice:
+            continue
+        entries.append(
+            {
+                "codice_conto": codice,
+                "descrizione": str(row[i_descr] or "").strip() if i_descr is not None else "",
+                "dare": num(row, i_dare),
+                "avere": num(row, i_avere),
+            }
+        )
+
+    all_codes = {e["codice_conto"] for e in entries}
+    rows = []
+    for e in entries:
+        code = e["codice_conto"]
+        if any(c.startswith(code + ".") for c in all_codes if c != code):
+            continue  # gruppo, non foglia
+        if e["dare"] == 0.0 and e["avere"] == 0.0:
+            continue
+        top = code.split(".")[0]
+        is_ce = top.isdigit() and 47 <= int(top) <= 88
+        rows.append(
+            {
+                "codice_conto": code,
+                "descrizione": e["descrizione"],
+                "tipo_conto": "CE" if is_ce else "SP",
+                "sezione": ("Ricavi" if top == "47" else "Costi") if is_ce else "",
+                "dare": e["dare"],
+                "avere": e["avere"],
+                "saldo": e["dare"] - e["avere"],
+            }
+        )
+    return rows
+
+
 def _parse_xlsx(filepath: Path, logger: logging.Logger) -> list[dict]:
-    """Parse XLSX. Two layouts:
+    """Parse XLSX. Three layouts:
 
     - Esolver 'griglia' (header col 0 = 'Codice conto…'): delegated to _parse_xlsx_grid.
+    - Esolver 'saldi' (header col 0 = 'Conto'): delegated to _parse_xlsx_saldi.
     - Legacy 5 columns (Tipo conto/Sezione, Conto, Partitari, Descrizione, Importo).
 
     Leaf detection (legacy):
@@ -294,6 +359,12 @@ def _parse_xlsx(filepath: Path, logger: logging.Logger) -> list[dict]:
         result = _parse_xlsx_grid(rows_iter, header, logger)
         wb.close()
         logger.info(f"Layout griglia Esolver: {len(result)} righe leaf")
+        return result
+
+    if header and str(header[0] or "").strip().lower() == "conto":
+        result = _parse_xlsx_saldi(rows_iter, header, logger)
+        wb.close()
+        logger.info(f"Layout saldi Dare/Avere: {len(result)} righe leaf")
         return result
 
     # First pass: collect all entries (legacy 5-col layout; header already consumed)
