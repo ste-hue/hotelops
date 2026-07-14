@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Builder dell'artifact "Bilancini · Gruppo Panorama".
 
-Legge f_bilancino da BQ (2026, ORTI+INTUR) + Budget_ORTI_2026.xlsx (via
-parse_budget_orti_workbook) + Incidenza_costi_personale.xlsx e scrive un HTML
-self-contained (dati embedded, nessuna richiesta esterna).
+V1 = solo numeri veri (amendment 2026-07-14): legge SOLO f_bilancino da BQ
+(2026, ORTI+INTUR) e scrive un HTML self-contained (dati embedded, nessuna
+richiesta esterna). Nessun confronto budget/stime.
 
 Uso:
-    python -m verticals.condges.build_bilancini_artifact \
-        [--budget-xlsx PATH] [--incidenza-xlsx PATH] [--out PATH]
+    python -m verticals.condges.build_bilancini_artifact [--out PATH]
 """
 
 import argparse
@@ -16,13 +15,9 @@ import logging
 from datetime import date
 from pathlib import Path
 
-import openpyxl
-
 from core.bq.client import get_client
 from core.config import PROJECT
 
-DEFAULT_BUDGET = Path("~/Desktop/WORK/artifacts/budget/Budget_ORTI_2026.xlsx").expanduser()
-DEFAULT_INCIDENZA = Path("~/Desktop/WORK/artifacts/budget/Incidenza_costi_personale.xlsx").expanduser()
 DEFAULT_OUT = Path("docs/reports/artifacts/bilancini.html")
 
 ANNO = 2026
@@ -47,46 +42,7 @@ def compute_delta(ytd: dict[str, float]) -> dict[str, float]:
     return delta
 
 
-def budget_per_conto(rows: list[dict]) -> dict[str, dict[int, float]]:
-    out: dict[str, dict[int, float]] = {}
-    for r in rows:
-        conto = out.setdefault(r["codice_conto"], {})
-        conto[r["mese"]] = round(conto.get(r["mese"], 0.0) + r["importo"], 2)
-    return out
-
-
-def budget_per_categoria(rows: list[dict]) -> dict[str, dict[int, float]]:
-    out: dict[str, dict[int, float]] = {}
-    for r in rows:
-        cat = out.setdefault(r["categoria_ce"], {})
-        cat[r["mese"]] = round(cat.get(r["mese"], 0.0) + r["importo"], 2)
-    return out
-
-
-def categoria_per_conto(rows: list[dict]) -> dict[str, str]:
-    """Codice conto → categoria_ce (dal budget), per raggruppare gli Scostamenti."""
-    out: dict[str, str] = {}
-    for r in rows:
-        out.setdefault(r["codice_conto"], r["categoria_ce"])
-    return out
-
-
-def read_incidenza(path: Path) -> dict[str, list[float]]:
-    """Foglio 'Costi Mensili': header riga 4, Division fino a '  TOTALE' (esclusa), '—'→0."""
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    ws = wb["Costi Mensili"]
-    out: dict[str, list[float]] = {}
-    for row in ws.iter_rows(min_row=5, values_only=True):
-        div = str(row[0] or "").strip()
-        if not div or div.upper() == "TOTALE":
-            break
-        vals = [float(v) if isinstance(v, (int, float)) else 0.0 for v in row[1:13]]
-        out[div] = vals
-    wb.close()
-    return out
-
-
-def build_payload(bilancino_rows: list[dict], budget_rows: list[dict], incidenza: dict) -> dict:
+def build_payload(bilancino_rows: list[dict]) -> dict:
     mesi = sorted({r["mese"] for r in bilancino_rows})
     societa: dict[str, dict] = {}
     per_conto: dict[tuple, dict] = {}
@@ -106,12 +62,6 @@ def build_payload(bilancino_rows: list[dict], budget_rows: list[dict], incidenza
         "generated_at": date.today().isoformat(),
         "mesi": mesi,
         "societa": societa,
-        "budget": {
-            "per_conto": budget_per_conto(budget_rows),
-            "per_categoria": budget_per_categoria(budget_rows),
-            "categoria_per_conto": categoria_per_conto(budget_rows),
-            "personale_reparti": incidenza,
-        },
     }
 
 
@@ -138,13 +88,9 @@ HTML_TEMPLATE = """<!doctype html>
     --border: rgba(11,11,11,0.10);
     --overlay: rgba(11,11,11,0.04);
     --good: #0ca30c;
-    --warning: #fab219;
     --critical: #d03b3b;
     --cat-ricavi: #2a78d6;
     --cat-fissi: #1baf7a;
-    --cat-personale: #eda100;
-    --cat-finanziari: #4a3aa7;
-    --cat-fuori: #898781;
     --soc-orti: #2a78d6;
     --soc-intur: #1baf7a;
   }
@@ -160,13 +106,9 @@ HTML_TEMPLATE = """<!doctype html>
       --border: rgba(255,255,255,0.10);
       --overlay: rgba(255,255,255,0.06);
       --good: #0ca30c;
-      --warning: #fab219;
       --critical: #e66767;
       --cat-ricavi: #3987e5;
       --cat-fissi: #199e70;
-      --cat-personale: #c98500;
-      --cat-finanziari: #9085e9;
-      --cat-fuori: #898781;
       --soc-orti: #3987e5;
       --soc-intur: #199e70;
     }
@@ -174,15 +116,15 @@ HTML_TEMPLATE = """<!doctype html>
   :root[data-theme="dark"] {
     --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #898781;
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --overlay: rgba(255,255,255,0.06);
-    --good: #0ca30c; --warning: #fab219; --critical: #e66767;
-    --cat-ricavi: #3987e5; --cat-fissi: #199e70; --cat-personale: #c98500; --cat-finanziari: #9085e9; --cat-fuori: #898781;
+    --good: #0ca30c; --critical: #e66767;
+    --cat-ricavi: #3987e5; --cat-fissi: #199e70;
     --soc-orti: #3987e5; --soc-intur: #199e70;
   }
   :root[data-theme="light"] {
     --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --ink-muted: #898781;
     --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10); --overlay: rgba(11,11,11,0.04);
-    --good: #0ca30c; --warning: #fab219; --critical: #d03b3b;
-    --cat-ricavi: #2a78d6; --cat-fissi: #1baf7a; --cat-personale: #eda100; --cat-finanziari: #4a3aa7; --cat-fuori: #898781;
+    --good: #0ca30c; --critical: #d03b3b;
+    --cat-ricavi: #2a78d6; --cat-fissi: #1baf7a;
     --soc-orti: #2a78d6; --soc-intur: #1baf7a;
   }
   * { box-sizing: border-box; }
@@ -220,18 +162,13 @@ HTML_TEMPLATE = """<!doctype html>
   .kpi-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
   .kpi-label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); }
   .kpi-value { font-size: 28px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
-  .kpi-budget { font-size: 12px; color: var(--ink-muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
-  .kpi-bar { position: relative; height: 8px; background: var(--grid); border-radius: 4px; margin-top: 12px; overflow: visible; }
-  .kpi-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
-  .kpi-bar-tick { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: 0.55; }
-  .kpi-bar-zero { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--axis); }
+  .kpi-sub { font-size: 12px; color: var(--ink-muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
   .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 100px; margin-top: 10px; }
   .pill.good { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
   .pill.critical { color: var(--critical); background: color-mix(in srgb, var(--critical) 14%, transparent); }
   .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 4px; font-size: 12px; color: var(--ink-2); }
   .legend-item { display: flex; align-items: center; gap: 6px; }
   .legend-swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
-  .legend-swatch.fuori { background-image: repeating-linear-gradient(45deg, var(--cat-fuori) 0 2px, transparent 2px 5px); }
   .chart-row { display: grid; grid-template-columns: 1fr; gap: 18px; }
   @media (min-width: 900px) { .chart-row { grid-template-columns: 1fr 1fr; } }
   svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
@@ -247,17 +184,7 @@ HTML_TEMPLATE = """<!doctype html>
   table.data th { color: var(--ink-muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.03em; position: sticky; top: 0; background: var(--surface); }
   table.data td { font-variant-numeric: tabular-nums; }
   table.data tbody tr:hover { background: var(--overlay); }
-  .num.good { color: var(--good); }
-  .num.critical { color: var(--critical); }
   .badge-fb { display: inline-block; font-size: 10.5px; font-weight: 700; color: var(--ink-muted); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; margin-left: 6px; vertical-align: middle; }
-  details.group { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
-  details.group summary { list-style: none; cursor: pointer; padding: 10px 14px; display: flex; align-items: center; gap: 10px; background: var(--surface); font-weight: 700; font-size: 13px; }
-  details.group summary::-webkit-details-marker { display: none; }
-  details.group summary::before { content: "▸"; color: var(--ink-muted); transition: none; }
-  details.group[open] summary::before { content: "▾"; }
-  details.group summary .cat-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
-  details.group summary .sum-line { margin-left: auto; display: flex; gap: 16px; font-weight: 400; color: var(--ink-2); font-size: 12px; font-variant-numeric: tabular-nums; }
-  .reparto-table td.heat { text-align: right; font-variant-numeric: tabular-nums; }
   .navigator-controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 14px; }
   .soc-pills { display: flex; gap: 6px; }
   .soc-pills button { appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); font: inherit; font-weight: 700; font-size: 12.5px; padding: 6px 14px; border-radius: 100px; cursor: pointer; }
@@ -284,14 +211,6 @@ HTML_TEMPLATE = """<!doctype html>
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <defs>
-    <pattern id="hatch-fb" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
-      <rect width="6" height="6" fill="transparent"></rect>
-      <line x1="0" y1="0" x2="0" y2="6" stroke="var(--cat-fuori)" stroke-width="2.4"></line>
-    </pattern>
-  </defs>
-</svg>
 <div class="wrap">
   <header class="top">
     <h1>Bilancini · Gruppo Panorama</h1>
@@ -299,45 +218,38 @@ HTML_TEMPLATE = """<!doctype html>
     <nav class="tabnav" id="tabnav">
       <button data-tab="oggi" aria-selected="true">A oggi</button>
       <button data-tab="progressione" aria-selected="false">Progressione</button>
-      <button data-tab="scostamenti" aria-selected="false">Scostamenti</button>
       <button data-tab="navigatore" aria-selected="false">Navigatore</button>
     </nav>
   </header>
 
   <section class="panel active" id="panel-oggi">
-    <h2 class="section-title">A oggi — ORTI vs budget</h2>
-    <p class="section-sub">Come sta andando il bilancio ORTI rispetto al budget, dall'inizio dell'anno al mese chiuso più recente.</p>
+    <h2 class="section-title">A oggi — ORTI</h2>
+    <p class="section-sub">Il conto economico ORTI dall'inizio dell'anno al mese chiuso più recente. Solo numeri veri dal bilancino, nessuna stima.</p>
     <div class="kpi-grid" id="kpi-grid"></div>
   </section>
 
   <section class="panel" id="panel-progressione">
     <h2 class="section-title">Progressione — ORTI, mese per mese</h2>
-    <p class="section-sub">Come ci siamo arrivati: il peso di ogni mese sul consuntivo YTD, per categoria, confrontato col budget.</p>
+    <p class="section-sub">Come ci siamo arrivati: il delta di ogni mese, per macro-gruppo del conto economico reale.</p>
     <div class="card">
-      <div class="legend" id="cat-legend"></div>
       <div class="chart-row">
         <div>
-          <h3 style="font-size:12.5px;color:var(--ink-muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;">Delta mensile per categoria</h3>
+          <h3 style="font-size:12.5px;color:var(--ink-muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;">Entrate vs uscite del mese</h3>
+          <div class="legend" id="cat-legend"></div>
           <svg class="chart" id="chart-monthly" viewBox="0 0 640 260" preserveAspectRatio="xMinYMin meet"></svg>
           <details class="data-fallback"><summary>Vedi tabella dati</summary><div class="table-scroll" id="table-monthly"></div></details>
         </div>
         <div>
-          <h3 style="font-size:12.5px;color:var(--ink-muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;">Margine cumulato YTD — actual vs budget</h3>
+          <h3 style="font-size:12.5px;color:var(--ink-muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;">Margine cumulato YTD</h3>
           <svg class="chart" id="chart-cumulata" viewBox="0 0 640 260" preserveAspectRatio="xMinYMin meet"></svg>
           <details class="data-fallback"><summary>Vedi tabella dati</summary><div class="table-scroll" id="table-cumulata"></div></details>
         </div>
       </div>
     </div>
-  </section>
-
-  <section class="panel" id="panel-scostamenti">
-    <h2 class="section-title">Scostamenti — ORTI, categoria → conto</h2>
-    <p class="section-sub">Dove il consuntivo si discosta dal budget, ordinato per scostamento assoluto. I conti senza budget non sono mai nascosti.</p>
-    <div id="scostamenti-groups"></div>
     <div class="card" style="margin-top:16px;">
-      <h3 style="font-size:13px;font-weight:700;margin-bottom:4px;">Personale per reparto (budget mensile)</h3>
-      <p class="section-sub" style="margin-bottom:12px;">Distribuzione del costo del personale a budget, per reparto e mese (Incidenza costi personale).</p>
-      <div class="table-scroll" id="reparto-table"></div>
+      <h3 style="font-size:13px;font-weight:700;margin-bottom:4px;">Delta mensile per macro-gruppo</h3>
+      <p class="section-sub" style="margin-bottom:12px;">Gruppi top-level del piano dei conti (CE). Entrate e uscite mostrate positive, direzione dichiarata per riga.</p>
+      <div class="table-scroll" id="gruppi-table"></div>
     </div>
   </section>
 
@@ -358,24 +270,15 @@ HTML_TEMPLATE = """<!doctype html>
     </div>
   </section>
 
-  <footer class="note">Bilancini · Gruppo Panorama — dati BigQuery (f_bilancino) + budget ORTI. Artifact rigenerabile, non è una fonte.</footer>
+  <footer class="note">Bilancini · Gruppo Panorama — dati BigQuery (f_bilancino), solo numeri veri. Artifact rigenerabile, non è una fonte.</footer>
 </div>
 
 <script>
 const DATA = __DATA__;
 const MONTH_LABELS = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
-const CATS = ["Ricavi","Costi Produttivi","Costo del Personale","Oneri Finanziari"];
-const CAT_COLOR_VAR = {
-  "Ricavi": "--cat-ricavi",
-  "Costi Produttivi": "--cat-fissi",
-  "Costo del Personale": "--cat-personale",
-  "Oneri Finanziari": "--cat-finanziari",
-  "Fuori budget": "--cat-fuori",
-};
 
-function fmt(n) { return new Intl.NumberFormat("it-IT", { maximumFractionDigits: 0 }).format(Math.round(n || 0)); }
+function fmt(n) { return new Intl.NumberFormat("it-IT", { maximumFractionDigits: 0 }).format(Math.round(n || 0) || 0); }
 function fmtEuro(n) { return "€ " + fmt(n); }
-function fmtPct(n) { return (n >= 0 ? "+" : "") + n.toFixed(1) + "%"; }
 function monthNum(mese) { return parseInt(mese.slice(5, 7), 10); }
 function monthLabel(mese) { return MONTH_LABELS[monthNum(mese) - 1] + " " + mese.slice(0, 4); }
 
@@ -387,33 +290,8 @@ function ceConti(soc) {
 function dispYtd(c, mese) { const v = c.ytd[mese] || 0; return c.sezione === "Ricavi" ? -v : v; }
 function dispDelta(c, mese) { const v = c.delta[mese] || 0; return c.sezione === "Ricavi" ? -v : v; }
 
-function budgetPerContoAt(codice, m) {
-  const b = DATA.budget.per_conto[codice];
-  return (b && b[String(m)]) || 0;
-}
-function budgetPerContoYtd(codice, uptoM) {
-  let tot = 0;
-  for (let m = 1; m <= uptoM; m++) tot += budgetPerContoAt(codice, m);
-  return tot;
-}
-function budgetPerCategoriaAt(cat, m) {
-  const b = DATA.budget.per_categoria[cat];
-  return (b && b[String(m)]) || 0;
-}
-function budgetPerCategoriaYtd(cat, uptoM) {
-  let tot = 0;
-  for (let m = 1; m <= uptoM; m++) tot += budgetPerCategoriaAt(cat, m);
-  return tot;
-}
-function categoriaOf(codice, sezione) {
-  const cat = DATA.budget.categoria_per_conto[codice];
-  if (cat) return cat;
-  return sezione === "Ricavi" ? "Ricavi" : "Fuori budget";
-}
-
 const MESI = DATA.mesi;
 const LAST_MESE = MESI[MESI.length - 1];
-const LAST_M = monthNum(LAST_MESE);
 
 // ---------- Tabs ----------
 document.getElementById("tabnav").addEventListener("click", (e) => {
@@ -429,90 +307,61 @@ document.getElementById("freshness").textContent = `dati al ${LAST_MESE} · gene
 // ---------- A oggi (KPI) ----------
 function kpiTotals() {
   const conti = ceConti("ORTI");
-  let ricaviActual = 0, costiActual = 0;
+  let ricaviYtd = 0, costiYtd = 0, ricaviMese = 0, costiMese = 0;
   for (const c of conti) {
-    if (c.sezione === "Ricavi") ricaviActual += dispYtd(c, LAST_MESE);
-    else costiActual += dispYtd(c, LAST_MESE);
+    if (c.sezione === "Ricavi") {
+      ricaviYtd += dispYtd(c, LAST_MESE);
+      ricaviMese += dispDelta(c, LAST_MESE);
+    } else {
+      costiYtd += dispYtd(c, LAST_MESE);
+      costiMese += dispDelta(c, LAST_MESE);
+    }
   }
-  const ricaviBudget = budgetPerCategoriaYtd("Ricavi", LAST_M);
-  const costiBudget = ["Costi Produttivi", "Costo del Personale", "Oneri Finanziari"]
-    .reduce((s, cat) => s + budgetPerCategoriaYtd(cat, LAST_M), 0);
   return {
-    ricavi: { actual: ricaviActual, budget: ricaviBudget },
-    costi: { actual: costiActual, budget: costiBudget },
-    margine: { actual: ricaviActual - costiActual, budget: ricaviBudget - costiBudget },
+    ricavi: { ytd: ricaviYtd, mese: ricaviMese },
+    costi: { ytd: costiYtd, mese: costiMese },
+    margine: { ytd: ricaviYtd - costiYtd, mese: ricaviMese - costiMese },
   };
 }
 
-function kpiBarHtml(actual, budget) {
-  // Ricavi/Costi sono per costruzione >=0 (segno già raddrizzato): barra semplice
-  // ancorata a sinistra. Margine può essere negativo (perdita): barra divergente
-  // centrata sullo zero, altrimenti max(actual,budget,1) esploderebbe con valori
-  // entrambi negativi (percentuali di larghezza a 6 cifre).
-  const maxAbs = Math.max(Math.abs(actual), Math.abs(budget), 1);
-  if (actual >= 0 && budget >= 0) {
-    const fillPct = Math.min(100, (actual / maxAbs) * 100);
-    const tickPct = Math.min(100, (budget / maxAbs) * 100);
-    return `<div class="kpi-bar">
-        <div class="kpi-bar-fill" style="left:0;width:${fillPct}%;background:var(--cat-ricavi);"></div>
-        <div class="kpi-bar-tick" style="left:${tickPct}%;" title="budget"></div>
-      </div>`;
-  }
-  const half = 50;
-  const actualPct = (Math.abs(actual) / maxAbs) * half;
-  const budgetPct = (Math.abs(budget) / maxAbs) * half;
-  const actualLeft = actual >= 0 ? half : half - actualPct;
-  const budgetLeft = budget >= 0 ? half + budgetPct : half - budgetPct;
-  return `<div class="kpi-bar">
-      <div class="kpi-bar-zero" style="left:${half}%;"></div>
-      <div class="kpi-bar-fill" style="left:${actualLeft}%;width:${actualPct}%;background:var(--cat-ricavi);"></div>
-      <div class="kpi-bar-tick" style="left:${budgetLeft}%;" title="budget"></div>
-    </div>`;
-}
-
-function kpiTile(label, actual, budget, kind) {
-  const scost = actual - budget;
-  const pct = budget !== 0 ? (scost / Math.abs(budget)) * 100 : (actual !== 0 ? 100 : 0);
-  let favorable;
-  if (kind === "ricavi") favorable = scost >= 0;
-  else if (kind === "costi") favorable = scost <= 0;
-  else favorable = scost >= 0;
-  const dir = scost >= 0 ? "sopra" : "sotto";
-  const cls = favorable ? "good" : "critical";
-  const check = favorable ? " ✓" : "";
-  // Margine può essere negativo (perdita reale, non un artefatto di segno bilancino):
-  // lo si etichetta esplicitamente invece di lasciare solo il "-" a parlare.
-  const tag = kind === "margine" && actual < 0 ? '<span class="badge-fb">perdita</span>' : "";
+function kpiTile(label, ytd, mese, kind) {
+  const meseLabel = MONTH_LABELS[monthNum(LAST_MESE) - 1];
+  // Margine può essere negativo (perdita reale, non un artefatto di segno
+  // bilancino): lo si etichetta esplicitamente invece di lasciare solo il "-".
+  const tag = kind === "margine" && ytd < 0 ? ' <span class="badge-fb">perdita</span>' : "";
+  const pill = kind === "margine"
+    ? `<div class="pill ${ytd >= 0 ? "good" : "critical"}">${ytd >= 0 ? "utile" : "perdita"} YTD</div>`
+    : "";
+  const meseVal = kind === "margine" && mese < 0 ? `−${fmtEuro(-mese)}` : fmtEuro(mese);
   return `
     <div class="kpi-tile">
       <div class="kpi-label">${label}</div>
-      <div class="kpi-value">${fmtEuro(actual)} ${tag}</div>
-      <div class="kpi-budget">budget YTD: ${fmtEuro(budget)}</div>
-      ${kpiBarHtml(actual, budget)}
-      <div class="pill ${cls}">${fmtPct(pct)} ${dir} budget${check}</div>
+      <div class="kpi-value">${fmtEuro(ytd)}${tag}</div>
+      <div class="kpi-sub">di cui ${meseLabel}: ${meseVal}</div>
+      ${pill}
     </div>`;
 }
 
 function renderKpi() {
   const t = kpiTotals();
   document.getElementById("kpi-grid").innerHTML =
-    kpiTile("Ricavi YTD", t.ricavi.actual, t.ricavi.budget, "ricavi") +
-    kpiTile("Costi YTD", t.costi.actual, t.costi.budget, "costi") +
-    kpiTile("Margine YTD", t.margine.actual, t.margine.budget, "margine");
+    kpiTile("Ricavi YTD", t.ricavi.ytd, t.ricavi.mese, "ricavi") +
+    kpiTile("Costi YTD", t.costi.ytd, t.costi.mese, "costi") +
+    kpiTile("Margine YTD", t.margine.ytd, t.margine.mese, "margine");
 }
 
 // ---------- Progressione ----------
-function monthlyByCategoria() {
+function monthlyTotals() {
   const conti = ceConti("ORTI");
-  const byCat = {};
-  for (const m of MESI) byCat[m] = {};
-  for (const c of conti) {
-    const cat = categoriaOf(c.codice, c.sezione);
-    for (const m of MESI) {
-      byCat[m][cat] = (byCat[m][cat] || 0) + dispDelta(c, m);
+  const out = MESI.map((m) => {
+    let entrate = 0, uscite = 0;
+    for (const c of conti) {
+      if (c.sezione === "Ricavi") entrate += dispDelta(c, m);
+      else uscite += dispDelta(c, m);
     }
-  }
-  return byCat;
+    return { mese: m, entrate, uscite };
+  });
+  return out;
 }
 
 function svgEl(tag, attrs) {
@@ -522,29 +371,18 @@ function svgEl(tag, attrs) {
 }
 
 function renderMonthlyChart() {
-  const byCat = monthlyByCategoria();
-  const allCats = CATS.concat(["Fuori budget"]);
+  const tot = monthlyTotals();
   const svg = document.getElementById("chart-monthly");
   svg.innerHTML = "";
   const W = 640, H = 260, padL = 54, padR = 10, padT = 10, padB = 26;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const n = MESI.length;
   const slot = plotW / n;
-  const barW = slot * 0.56;
+  const barW = slot * 0.30;
 
-  let maxVal = 1;
-  const budgetTotals = [];
-  MESI.forEach((m, i) => {
-    let tot = 0;
-    for (const cat of allCats) tot += Math.max(0, byCat[m][cat] || 0);
-    const bt = ["Ricavi", "Costi Produttivi", "Costo del Personale", "Oneri Finanziari"]
-      .reduce((s, cat) => s + budgetPerCategoriaAt(cat, monthNum(m)), 0);
-    budgetTotals.push(bt);
-    maxVal = Math.max(maxVal, tot, bt);
-  });
-  const scale = (v) => (v / maxVal) * plotH;
+  const maxVal = Math.max(1, ...tot.flatMap(t => [t.entrate, t.uscite]));
+  const scale = (v) => (Math.max(0, v) / maxVal) * plotH;
 
-  // gridlines
   for (let g = 0; g <= 4; g++) {
     const y = padT + plotH - (g / 4) * plotH;
     svg.appendChild(svgEl("line", { class: "gridline", x1: padL, x2: W - padR, y1: y, y2: y }));
@@ -554,67 +392,46 @@ function renderMonthlyChart() {
   }
   svg.appendChild(svgEl("line", { class: "axis-line", x1: padL, x2: padL, y1: padT, y2: padT + plotH }));
 
-  const rows = [["Mese"].concat(allCats, ["Budget tot."])];
-  MESI.forEach((m, i) => {
-    const x0 = padL + i * slot + (slot - barW) / 2;
-    let yCursor = padT + plotH;
-    const rowVals = [monthLabel(m)];
-    for (const cat of allCats) {
-      const v = Math.max(0, byCat[m][cat] || 0);
-      rowVals.push(fmt(byCat[m][cat] || 0));
-      const h = scale(v);
-      if (h > 0.2) {
-        const fill = cat === "Fuori budget" ? "url(#hatch-fb)" : `var(${CAT_COLOR_VAR[cat]})`;
-        svg.appendChild(svgEl("rect", {
-          x: x0, y: yCursor - h, width: barW, height: Math.max(0, h - 1.5),
-          fill: fill, rx: 1.5,
-        }));
-      }
-      yCursor -= h;
-    }
-    rowVals.push(fmt(budgetTotals[i]));
-    rows.push(rowVals);
-    // budget tick
-    const by = padT + plotH - scale(budgetTotals[i]);
-    svg.appendChild(svgEl("line", {
-      x1: x0 - 3, x2: x0 + barW + 3, y1: by, y2: by,
-      stroke: "var(--ink)", "stroke-width": 2, opacity: 0.55,
+  const rows = [["Mese", "Entrate (ricavi)", "Uscite (costi)"]];
+  tot.forEach((t, i) => {
+    const xc = padL + i * slot + slot / 2;
+    const he = scale(t.entrate), hu = scale(t.uscite);
+    svg.appendChild(svgEl("rect", {
+      x: xc - barW - 1, y: padT + plotH - he, width: barW, height: he,
+      fill: "var(--cat-ricavi)", rx: 1.5,
     }));
-    const lab = svgEl("text", { x: x0 + barW / 2, y: H - 6, "text-anchor": "middle" });
-    lab.textContent = MONTH_LABELS[monthNum(m) - 1];
+    svg.appendChild(svgEl("rect", {
+      x: xc + 1, y: padT + plotH - hu, width: barW, height: hu,
+      fill: "var(--cat-fissi)", rx: 1.5,
+    }));
+    const lab = svgEl("text", { x: xc, y: H - 6, "text-anchor": "middle" });
+    lab.textContent = MONTH_LABELS[monthNum(t.mese) - 1];
     svg.appendChild(lab);
+    rows.push([monthLabel(t.mese), fmt(t.entrate), fmt(t.uscite)]);
   });
 
   document.getElementById("table-monthly").innerHTML = tableFromRows(rows);
 }
 
 function renderCumulataChart() {
-  const conti = ceConti("ORTI");
   const svg = document.getElementById("chart-cumulata");
   svg.innerHTML = "";
   const W = 640, H = 260, padL = 54, padR = 14, padT = 10, padB = 26;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const n = MESI.length;
 
-  const actualCum = [];
-  const budgetCum = [];
-  let rA = 0, cA = 0, rB = 0, cB = 0;
-  const rows = [["Mese", "Margine actual", "Margine budget"]];
-  MESI.forEach((m) => {
-    for (const c of conti) {
-      if (c.sezione === "Ricavi") rA += dispDelta(c, m); else cA += dispDelta(c, m);
-    }
-    const mnum = monthNum(m);
-    rB += budgetPerCategoriaAt("Ricavi", mnum);
-    cB += ["Costi Produttivi", "Costo del Personale", "Oneri Finanziari"].reduce((s, cat) => s + budgetPerCategoriaAt(cat, mnum), 0);
-    actualCum.push(rA - cA);
-    budgetCum.push(rB - cB);
-    rows.push([monthLabel(m), fmt(rA - cA), fmt(rB - cB)]);
+  const tot = monthlyTotals();
+  const cum = [];
+  let acc = 0;
+  const rows = [["Mese", "Margine cumulato"]];
+  tot.forEach((t) => {
+    acc += t.entrate - t.uscite;
+    cum.push(acc);
+    rows.push([monthLabel(t.mese), fmt(acc)]);
   });
 
-  const allVals = actualCum.concat(budgetCum);
-  const minV = Math.min(0, ...allVals);
-  const maxV = Math.max(1, ...allVals);
+  const minV = Math.min(0, ...cum);
+  const maxV = Math.max(1, ...cum);
   const range = maxV - minV || 1;
   const x = (i) => padL + (i / Math.max(1, n - 1)) * plotW;
   const y = (v) => padT + plotH - ((v - minV) / range) * plotH;
@@ -628,18 +445,18 @@ function renderCumulataChart() {
     svg.appendChild(label);
   }
   svg.appendChild(svgEl("line", { class: "axis-line", x1: padL, x2: padL, y1: padT, y2: padT + plotH }));
-
-  function polyline(vals, stroke, dash) {
-    const pts = vals.map((v, i) => `${x(i)},${y(v)}`).join(" ");
-    const attrs = { points: pts, fill: "none", stroke: stroke, "stroke-width": 2.4, "stroke-linejoin": "round", "stroke-linecap": "round" };
-    if (dash) attrs["stroke-dasharray"] = "5,4";
-    svg.appendChild(svgEl("polyline", attrs));
-    vals.forEach((v, i) => {
-      svg.appendChild(svgEl("circle", { cx: x(i), cy: y(v), r: 3, fill: stroke }));
-    });
+  if (minV < 0) {
+    svg.appendChild(svgEl("line", { class: "axis-line", x1: padL, x2: W - padR, y1: y(0), y2: y(0) }));
   }
-  polyline(budgetCum, "var(--ink-muted)", true);
-  polyline(actualCum, "var(--cat-ricavi)", false);
+
+  const pts = cum.map((v, i) => `${x(i)},${y(v)}`).join(" ");
+  svg.appendChild(svgEl("polyline", {
+    points: pts, fill: "none", stroke: "var(--cat-ricavi)",
+    "stroke-width": 2.4, "stroke-linejoin": "round", "stroke-linecap": "round",
+  }));
+  cum.forEach((v, i) => {
+    svg.appendChild(svgEl("circle", { cx: x(i), cy: y(v), r: 3, fill: "var(--cat-ricavi)" }));
+  });
 
   MESI.forEach((m, i) => {
     const lab = svgEl("text", { x: x(i), y: H - 6, "text-anchor": "middle" });
@@ -659,77 +476,36 @@ function tableFromRows(rows) {
 }
 
 function renderCatLegend() {
-  const allCats = CATS.concat(["Fuori budget"]);
-  document.getElementById("cat-legend").innerHTML = allCats.map(cat => {
-    const swatchCls = cat === "Fuori budget" ? "legend-swatch fuori" : "legend-swatch";
-    const style = cat === "Fuori budget" ? "" : `style="background:var(${CAT_COLOR_VAR[cat]})"`;
-    return `<span class="legend-item"><span class="${swatchCls}" ${style}></span>${cat}</span>`;
-  }).join("");
+  document.getElementById("cat-legend").innerHTML =
+    '<span class="legend-item"><span class="legend-swatch" style="background:var(--cat-ricavi)"></span>Entrate (ricavi)</span>' +
+    '<span class="legend-item"><span class="legend-swatch" style="background:var(--cat-fissi)"></span>Uscite (costi)</span>';
 }
 
-// ---------- Scostamenti ----------
-function scostamentiRows() {
+// ---------- Delta mensile per macro-gruppo (top-level CE) ----------
+function renderGruppiTable() {
+  // Gruppi dai prefissi top-level del codice conto (47, 55, 57, …). Il bilancino
+  // non porta righe di gruppo con un nome → etichetta dal codice (da amendment).
   const conti = ceConti("ORTI");
-  const rows = conti.map(c => {
-    const cat = categoriaOf(c.codice, c.sezione);
-    const ytd = dispYtd(c, LAST_MESE);
-    const delta = dispDelta(c, LAST_MESE);
-    const hasBudget = !!DATA.budget.per_conto[c.codice];
-    const budgetYtd = budgetPerContoYtd(c.codice, LAST_M);
-    const scost = ytd - budgetYtd;
-    const favorable = c.sezione === "Ricavi" ? scost >= 0 : scost <= 0;
-    return { c, cat, ytd, delta, hasBudget, budgetYtd, scost, favorable };
-  });
-  const byCat = {};
-  for (const r of rows) (byCat[r.cat] = byCat[r.cat] || []).push(r);
-  for (const cat in byCat) byCat[cat].sort((a, b) => Math.abs(b.scost) - Math.abs(a.scost));
-  return byCat;
-}
-
-function renderScostamenti() {
-  const byCat = scostamentiRows();
-  const order = CATS.concat(["Fuori budget"]).filter(cat => byCat[cat] && byCat[cat].length);
-  let html = "";
-  for (const cat of order) {
-    const rows = byCat[cat];
-    const sumYtd = rows.reduce((s, r) => s + r.ytd, 0);
-    const sumBudget = rows.reduce((s, r) => s + r.budgetYtd, 0);
-    const sumScost = sumYtd - sumBudget;
-    const colorVar = CAT_COLOR_VAR[cat];
-    const dotStyle = cat === "Fuori budget" ? "background-image:repeating-linear-gradient(45deg, var(--cat-fuori) 0 2px, transparent 2px 5px);" : `background:var(${colorVar});`;
-    const pctHtml = sumBudget !== 0
-      ? `<span class="${sumScost === 0 ? '' : (sumScost > 0 === (cat === 'Ricavi') ? 'num good' : 'num critical')}">${fmtPct((sumScost / Math.abs(sumBudget)) * 100)}</span>`
-      : `<span class="badge-fb">nessun budget</span>`;
-    html += `<details class="group" ${cat === order[0] ? "open" : ""}>
-      <summary><span class="cat-dot" style="${dotStyle}"></span>${cat}
-        <span class="sum-line"><span>consuntivo ${fmtEuro(sumYtd)}</span><span>budget ${fmtEuro(sumBudget)}</span>${pctHtml}</span>
-      </summary>
-      <div class="table-scroll"><table class="data">
-        <thead><tr><th>Conto</th><th>Delta mese</th><th>YTD</th><th>Budget YTD</th><th>Scostamento</th></tr></thead>
-        <tbody>`;
-    for (const r of rows) {
-      const cls = r.hasBudget ? (r.favorable ? "num good" : "num critical") : "num";
-      const badge = r.hasBudget ? "" : '<span class="badge-fb">Fuori budget</span>';
-      html += `<tr><td>${r.c.codice} — ${r.c.descrizione}${badge}</td><td>${fmtEuro(r.delta)}</td><td>${fmtEuro(r.ytd)}</td><td>${fmtEuro(r.budgetYtd)}</td><td class="${cls}">${fmtEuro(r.scost)}</td></tr>`;
-    }
-    html += "</tbody></table></div></details>";
+  const gruppi = {};
+  for (const c of conti) {
+    const pref = c.codice.split(".")[0];
+    const g = gruppi[pref] || (gruppi[pref] = { pref, sezione: c.sezione, delta: {}, ytd: 0 });
+    for (const m of MESI) g.delta[m] = (g.delta[m] || 0) + dispDelta(c, m);
+    g.ytd += dispYtd(c, LAST_MESE);
   }
-  document.getElementById("scostamenti-groups").innerHTML = html;
-
-  // Personale per reparto
-  const reparti = DATA.budget.personale_reparti || {};
-  const maxV = Math.max(1, ...Object.values(reparti).flat());
-  let rhtml = '<table class="data"><thead><tr><th>Reparto</th>' + MONTH_LABELS.map(m => `<th>${m}</th>`).join("") + "<th>Totale</th></tr></thead><tbody>";
-  for (const rep in reparti) {
-    const vals = reparti[rep];
-    const tot = vals.reduce((s, v) => s + v, 0);
-    rhtml += `<tr><td>${rep}</td>` + vals.map(v => {
-      const alpha = Math.min(0.9, (v / maxV) * 0.55);
-      return `<td class="heat" style="background:rgba(42,120,214,${alpha})">${fmt(v)}</td>`;
-    }).join("") + `<td>${fmt(tot)}</td></tr>`;
+  const order = Object.values(gruppi).sort((a, b) =>
+    a.sezione === b.sezione ? a.pref.localeCompare(b.pref) : (a.sezione === "Ricavi" ? -1 : 1));
+  let html = '<table class="data"><thead><tr><th>Gruppo</th><th>Direzione</th>' +
+    MESI.map(m => `<th>${MONTH_LABELS[monthNum(m) - 1]}</th>`).join("") +
+    "<th>YTD</th></tr></thead><tbody>";
+  for (const g of order) {
+    const dir = g.sezione === "Ricavi" ? "Entrate" : "Uscite";
+    html += `<tr><td>${g.pref}</td><td>${dir}</td>` +
+      MESI.map(m => `<td>${fmt(g.delta[m] || 0)}</td>`).join("") +
+      `<td>${fmt(g.ytd)}</td></tr>`;
   }
-  rhtml += "</tbody></table>";
-  document.getElementById("reparto-table").innerHTML = rhtml;
+  html += "</tbody></table>";
+  document.getElementById("gruppi-table").innerHTML = html;
 }
 
 // ---------- Navigatore ----------
@@ -814,7 +590,7 @@ renderKpi();
 renderCatLegend();
 renderMonthlyChart();
 renderCumulataChart();
-renderScostamenti();
+renderGruppiTable();
 renderNavigator();
 </script>
 </body>
@@ -824,24 +600,18 @@ renderNavigator();
 
 def main():
     ap = argparse.ArgumentParser(description="Build artifact Bilancini")
-    ap.add_argument("--budget-xlsx", type=Path, default=DEFAULT_BUDGET)
-    ap.add_argument("--incidenza-xlsx", type=Path, default=DEFAULT_INCIDENZA)
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     log = logging.getLogger("bilancini_artifact")
 
-    from ingest.flussi.budget_orti_xlsx import parse_budget_orti_workbook
-
     bilancino = fetch_bilancino(get_client())
-    budget = parse_budget_orti_workbook(args.budget_xlsx, "ORTI", ANNO, log)
-    incidenza = read_incidenza(args.incidenza_xlsx)
-    payload = build_payload(bilancino, budget, incidenza)
+    payload = build_payload(bilancino)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(render_html(payload), encoding="utf-8")
-    log.info(f"OK → {args.out} ({len(bilancino)} righe bilancino, {len(budget)} righe budget)")
+    log.info(f"OK → {args.out} ({len(bilancino)} righe bilancino)")
 
 
 if __name__ == "__main__":
