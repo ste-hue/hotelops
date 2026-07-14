@@ -9,7 +9,13 @@
 -- Sign convention:
 --   IP (ricavi):      avere - dare  → positive = revenue
 --   F/V/P/X (costi):  dare - avere  → positive = cost
---   Budget: always positive (importo from f_budget_mensile is pre-signed)
+--   Budget: always positive (importo from v_budget_canonical is pre-signed)
+--
+-- Budget side reads from v_budget_canonical — the single resolved budget truth
+-- (fonte precedence + GASPAROTTO suppression already applied; exactly one row
+-- per societa×anno×mese×cod_conto). Do NOT read f_budget_mensile directly:
+-- summing across fonti double-counts overlapping sources (issue #84).
+-- Spec: docs/superpowers/specs/2026-04-17-budget-fonte-priority-design.md
 
 CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_condges_budget_consuntivo` AS
 
@@ -35,17 +41,16 @@ tipo_labels AS (
   ])
 ),
 
--- ── Budget per codice conto per mese ────────────────────────────────────────
+-- ── Budget per codice conto per mese (canonical: fonti già risolte) ─────────
 budget AS (
   SELECT
     societa_id,
     anno,
     mese,
-    codice_conto,
+    codice_conto_display AS codice_conto,
     descrizione AS descrizione_conto,
-    SUM(importo) AS importo_budget
-  FROM `hotelops-suite.hotelops.f_budget_mensile`
-  GROUP BY 1, 2, 3, 4, 5
+    importo AS importo_budget
+  FROM `hotelops-suite.hotelops.v_budget_canonical`
 ),
 
 -- ── Consuntivo per codice conto per mese ────────────────────────────────────
