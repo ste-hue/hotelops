@@ -34,10 +34,28 @@ def _payload() -> dict:
 def render() -> None:
     brand_header("Bilancini", "bilancio di verifica: YTD, progressione, navigatore")
 
-    from verticals.condges.build_bilancini_artifact import render_html
+    from verticals.condges.build_bilancini_artifact import payload_to_csv, render_html
 
     payload = _payload()
     if not payload.get("mesi"):
         st.info("Nessun dato in f_bilancino per il periodo.")
         return
-    components.html(render_html(payload), height=1500, scrolling=True)
+
+    html = render_html(payload)
+    # Download a livello Streamlit: il sandbox dell'iframe blocca download/popup
+    # generati dal JS interno — i bottoni della pagina embedded lì non funzionano.
+    c1, c2, _ = st.columns([1, 1, 3])
+    c1.download_button(
+        "⬇ CSV (tutti i mesi)",
+        data="﻿" + payload_to_csv(payload),
+        file_name=f"bilancini_2026_al_{payload['generated_at']}.csv",
+        mime="text/csv",
+    )
+    c2.download_button(
+        "⬇ Pagina HTML",
+        data=html,
+        file_name="bilancini_standalone.html",
+        mime="text/html",
+        help="Scaricala e aprila nel browser per la vista a schermo intero",
+    )
+    components.html(html, height=1500, scrolling=True)

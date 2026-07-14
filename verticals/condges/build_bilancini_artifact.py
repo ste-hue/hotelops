@@ -71,6 +71,26 @@ def build_payload(bilancino_rows: list[dict], gruppi: dict[str, str] | None = No
     }
 
 
+def payload_to_csv(payload: dict) -> str:
+    """CSV tidy (una riga per società × conto × mese) — stesso tracciato del bottone JS."""
+    import csv
+    import io
+
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\n")
+    w.writerow(
+        ["societa", "mese", "codice_conto", "descrizione", "tipo_conto", "sezione", "saldo_ytd", "delta_mese"]
+    )
+    for soc, blk in payload["societa"].items():
+        for c in blk["conti"]:
+            for mese in sorted(c["ytd"]):
+                w.writerow(
+                    [soc, mese, c["codice"], c["descrizione"], c["tipo"], c["sezione"],
+                     c["ytd"][mese], c["delta"].get(mese, "")]
+                )
+    return buf.getvalue()
+
+
 def render_html(payload: dict) -> str:
     data_json = json.dumps(payload, ensure_ascii=False)
     # Hardening: un `</script>` dentro una descrizione/stringa embedded
