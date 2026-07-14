@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from verticals.hub.pages_ import (
     accodamenti,
+    bilancini,
     cashflow,
     cassa_consuntivo,
     fb,
@@ -55,6 +56,7 @@ APPS: list[HubApp] = [
     # ── Finanza ──────────────────────────────────────────────────────────────
     HubApp("cashflow", "Cashflow", "💸", "Finanza", "page", cashflow.render, "PF & proiezione cassa", sensitive=True),
     HubApp("cassa-consuntivo", "Cassa consuntivo", "💰", "Finanza", "page", cassa_consuntivo.render, "Il vero cashflow: banca vs certificati", sensitive=True),
+    HubApp("bilancini", "Bilancini", "📗", "Finanza", "page", bilancini.render, "bilancio di verifica: YTD, progressione, navigatore", sensitive=True),
     HubApp("accodamenti", "Accodamenti", "📒", "Finanza", "page", accodamenti.render, "raccolta cassa → Gaia", sensitive=True),
     HubApp("banche", "Banche", "🏛", "Finanza", "bind", _BANCHE_LOOKER, "movimenti & saldi (Looker)"),
     HubApp("mutui", "Mutui", "🏦", "Finanza", "page", mutui.render, "ammortamenti & simulatore"),
