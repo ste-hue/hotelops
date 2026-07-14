@@ -223,7 +223,10 @@ HTML_TEMPLATE = """<!doctype html>
 <div class="wrap">
   <header class="top">
     <h1>Bilancini · Gruppo Panorama
-      <button id="fs-btn" title="Schermo intero" style="float:right;appearance:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 12px;cursor:pointer;">⛶ Schermo intero</button>
+      <span style="float:right;display:flex;gap:8px;">
+        <button id="csv-btn" title="Scarica i dati in CSV (una riga per società × conto × mese)" style="appearance:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 12px;cursor:pointer;">⬇ CSV</button>
+        <button id="fs-btn" title="Schermo intero" style="appearance:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 12px;cursor:pointer;">⛶ Schermo intero</button>
+      </span>
     </h1>
     <div class="freshness" id="freshness"></div>
     <div class="navigator-controls" style="margin-top:12px;margin-bottom:0;">
@@ -320,6 +323,26 @@ function lastMeseFor(soc) {
   }
   return max || MESI[MESI.length - 1];
 }
+
+// ---------- Export CSV (client-side, formato tidy: una riga per società × conto × mese) ----------
+document.getElementById("csv-btn").addEventListener("click", () => {
+  const q = (s) => '"' + String(s).replace(/"/g, '""') + '"';
+  const lines = ["societa,mese,codice_conto,descrizione,tipo_conto,sezione,saldo_ytd,delta_mese"];
+  for (const soc of Object.keys(DATA.societa)) {
+    for (const c of DATA.societa[soc].conti) {
+      for (const mese of Object.keys(c.ytd).sort()) {
+        lines.push([soc, mese, c.codice, q(c.descrizione), c.tipo, c.sezione,
+          c.ytd[mese], c.delta[mese] ?? ""].join(","));
+      }
+    }
+  }
+  const blob = new Blob(["\\ufeff" + lines.join("\\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `bilancini_2026_al_${DATA.generated_at}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
 
 // ---------- Schermo intero (si nasconde se il contesto non lo permette, es. iframe senza allowfullscreen) ----------
 const fsBtn = document.getElementById("fs-btn");
