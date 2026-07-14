@@ -9,6 +9,12 @@
 > - **PURSUE (sceglie Stefano)**: viste cashflow/tesoreria — escludere partite di giro (aggancia `PARTITE_DI_GIRO.md`). **HANDOFF**: export Esolver (movimenti/fatture/scheda/bilancino) + buco Moolty 19/06.
 > - Superficie sanata vs triage 06-20: `.worktrees/gardener-22` **sparito** (potato).
 
+## 2026-07-14 — Re-baseline `f_bilancino` 2026 (12 export terzo layout)
+
+- ✅ **`f_bilancino` 2026 ri-basato da 12 export nuovo layout** (branch `feat/bilancini`, Task 3 SDD): DELETE scoped 1221 righe (2025 intatto, 243 righe) + promote di 12 raw object (ORTI/INTUR × 6 mesi, gen-giu) — provenienza uniforme, rettifiche Rosa recepite, INTUR arriva a giugno. fk=100%, sbilanci costanti su ogni mese (ORTI −241.772,91 / INTUR 625.546,25).
+- Vecchio raw ORTI aprile `0fe78f07…` (`_reexport`) **superseded**: resta `CLASSIFIED`, non ripromosso — sostituito dal nuovo export `a7e27a36…`.
+- Sanity check: ricavi ORTI 2026 crescenti nella stagione (apr 310k < mag 544k < giu 777k), YTD a fine giugno 1.730.545 € (atteso 1.730.541).
+
 ## 2026-07-13 — Hub: sbloccati gli utenti esterni (gmail) su IAP
 
 - 🐛→✅ **Padre (`stedepi@gmail.com`) e `ste.dellapietra@gmail.com` bloccati all'edge IAP** nonostante allowlist IAP + grant `roles.py` a posto (Policy Troubleshooter: GRANTED, IAP: deny). Causa: l'integrazione IAP nativa di Cloud Run usa un **client OAuth Google-managed che ammette SOLO account interni all'org** (limitazione documentata, invisibile dall'IAM). Fix: client OAuth custom `hotelops-hub-iap` creato in Console (redirect URI `.../oauth/clientIds/<ID>:handleRedirect`) e agganciato con `gcloud iap settings set` (`accessSettings.oauthSettings`). Verificato live: gmail entra, padre vede reviews+mutui. Dettagli nel README hub (§Modello accessi).
