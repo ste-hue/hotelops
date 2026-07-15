@@ -336,6 +336,10 @@ HTML_TEMPLATE = """<!doctype html>
     <div class="navigator-controls">
       <label for="mese-select" style="font-size:12.5px;color:var(--ink-muted);">Mese</label>
       <select id="mese-select"></select>
+      <span style="display:flex;gap:6px;">
+        <button id="expand-all" style="appearance:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 12px;cursor:pointer;">▾ Espandi tutto</button>
+        <button id="collapse-all" style="appearance:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 12px;cursor:pointer;">▸ Comprimi tutto</button>
+      </span>
     </div>
     <p class="sign-note">Segni: ricavi CE mostrati positivi (saldo invertito); costi CE e voci patrimoniali mostrati come da saldo contabile.</p>
     <div class="table-scroll">
@@ -735,6 +739,14 @@ document.getElementById("soc-pills-global").addEventListener("click", (e) => {
 const meseSelect = document.getElementById("mese-select");
 meseSelect.innerHTML = MESI.map(m => `<option value="${m}" ${m === currentMese ? "selected" : ""}>${monthLabel(m)}</option>`).join("");
 meseSelect.addEventListener("change", () => { currentMese = meseSelect.value; renderNavigator(); });
+
+// ---------- Espandi/comprimi il navigatore ----------
+document.getElementById("expand-all").addEventListener("click", () => {
+  document.querySelectorAll("#tree-root details.tree-node").forEach((d) => { d.open = true; });
+});
+document.getElementById("collapse-all").addEventListener("click", () => {
+  document.querySelectorAll("#tree-root details.tree-node").forEach((d) => { d.open = false; });
+});
 
 // ---------- Init ----------
 updateFreshness();

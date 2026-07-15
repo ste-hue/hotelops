@@ -150,3 +150,10 @@ def test_render_html_chart_tooltips():
     assert "— entrate:" in html
     assert "— uscite:" in html
     assert "margine cumulato:" in html
+
+
+def test_render_html_tree_expand_collapse():
+    # Espandi/Comprimi tutto nel Navigatore, richiesti 2026-07-15.
+    html = render_html(_payload())
+    assert 'id="expand-all"' in html
+    assert 'id="collapse-all"' in html
