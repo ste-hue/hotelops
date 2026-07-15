@@ -99,6 +99,44 @@ def render_html(payload: dict) -> str:
     return HTML_TEMPLATE.replace("__DATA__", data_json)
 
 
+# ---------- push KV (Cloudflare Worker "bilancini", repo panorama_apps) ----------
+
+PUSH_ENV_VARS = ("CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "BILANCINI_KV_NAMESPACE_ID")
+
+
+def load_push_env() -> dict[str, str]:
+    """Credenziali push da os.environ (il chiamante carica il .env). Mancanti → RuntimeError."""
+    import os
+
+    env = {k: os.environ.get(k, "") for k in PUSH_ENV_VARS}
+    missing = [k for k, v in env.items() if not v]
+    if missing:
+        raise RuntimeError(f"--push richiede variabili d'ambiente mancanti: {', '.join(missing)}")
+    return env
+
+
+def push_to_kv(html: str, payload: dict, env: dict[str, str]) -> None:
+    """Carica html, data.json, data.csv nel KV del Worker bilancini (una PUT bulk)."""
+    import requests
+
+    url = (
+        f"https://api.cloudflare.com/client/v4/accounts/{env['CLOUDFLARE_ACCOUNT_ID']}"
+        f"/storage/kv/namespaces/{env['BILANCINI_KV_NAMESPACE_ID']}/bulk"
+    )
+    body = [
+        {"key": "html", "value": html},
+        {"key": "data.json", "value": json.dumps(payload, ensure_ascii=False)},
+        {"key": "data.csv", "value": payload_to_csv(payload)},
+    ]
+    r = requests.put(
+        url, json=body,
+        headers={"Authorization": f"Bearer {env['CLOUDFLARE_API_TOKEN']}"},
+        timeout=60,
+    )
+    if not (r.ok and r.json().get("success")):
+        raise RuntimeError(f"Push KV fallito: HTTP {r.status_code} — {r.text[:500]}")
+
+
 HTML_TEMPLATE = """<!doctype html>
 <html lang="it">
 <head>
@@ -721,19 +759,33 @@ renderNavigator();
 def main():
     ap = argparse.ArgumentParser(description="Build artifact Bilancini")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    ap.add_argument("--push", action="store_true",
+                    help="dopo il build, carica html/data.json/data.csv nel KV del Worker bilancini")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     log = logging.getLogger("bilancini_artifact")
+
+    push_env = None
+    if args.push:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+        push_env = load_push_env()  # fail-fast: env incompleta → errore PRIMA di toccare BQ
 
     client = get_client()
     bilancino = fetch_bilancino(client)
     gruppi = fetch_gruppi(client)
     payload = build_payload(bilancino, gruppi)
 
+    html = render_html(payload)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(render_html(payload), encoding="utf-8")
+    args.out.write_text(html, encoding="utf-8")
     log.info(f"OK → {args.out} ({len(bilancino)} righe bilancino)")
+
+    if push_env is not None:
+        push_to_kv(html, payload, push_env)
+        log.info("Push KV OK → chiavi html, data.json, data.csv (bilancini-content)")
 
 
 if __name__ == "__main__":
