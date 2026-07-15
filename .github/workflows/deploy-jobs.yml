@@ -1,0 +1,44 @@
+# Build dell'immagine batch (Dockerfile.jobs) + aggiornamento dei 4 Cloud Run Jobs
+# al tag mobile jobs:prod (STD-03). Trigger manuale: i job sono pinnati deliberatamente,
+# l'aggiornamento è una decisione, non un side-effect di ogni push.
+# Rollback: gcloud run jobs update <job> --image=...europe-west1-docker.pkg.dev/hotelops-suite/hotelops/jobs:<tag-precedente>
+name: deploy-jobs
+
+on:
+  workflow_dispatch:
+
+concurrency: deploy-jobs
+
+jobs:
+  build-and-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/942784312622/locations/global/workloadIdentityPools/github/providers/github-oidc
+          service_account: github-deployer@hotelops-suite.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build jobs image (Cloud Build)
+        run: |
+          IMAGE=europe-west1-docker.pkg.dev/hotelops-suite/hotelops/jobs:prod
+          cat > /tmp/cloudbuild-jobs.yaml <<EOF
+          steps:
+            - name: gcr.io/cloud-builders/docker
+              args: ['build','-f','Dockerfile.jobs','-t','${IMAGE}','.']
+          images: ['${IMAGE}']
+          EOF
+          gcloud builds submit --project=hotelops-suite --config=/tmp/cloudbuild-jobs.yaml .
+
+      - name: Point jobs at jobs:prod
+        run: |
+          IMAGE=europe-west1-docker.pkg.dev/hotelops-suite/hotelops/jobs:prod
+          for J in reviews-scrape reviews-report spiaggia-corrispettivi coperti; do
+            gcloud run jobs update "$J" --project=hotelops-suite --region=europe-west1 --image="$IMAGE"
+          done
