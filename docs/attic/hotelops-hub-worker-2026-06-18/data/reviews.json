@@ -1,0 +1,220 @@
+{
+  "schema": 1,
+  "serie": [
+    {
+      "periodo": "2024-09-01",
+      "n": 90,
+      "media": 8.1
+    },
+    {
+      "periodo": "2024-10-01",
+      "n": 68,
+      "media": 8.5
+    },
+    {
+      "periodo": "2024-11-01",
+      "n": 3,
+      "media": 9.3
+    },
+    {
+      "periodo": "2025-01-01",
+      "n": 1,
+      "media": 10.0
+    },
+    {
+      "periodo": "2025-04-01",
+      "n": 22,
+      "media": 8.5
+    },
+    {
+      "periodo": "2025-05-01",
+      "n": 50,
+      "media": 8.5
+    },
+    {
+      "periodo": "2025-06-01",
+      "n": 47,
+      "media": 8.6
+    },
+    {
+      "periodo": "2025-07-01",
+      "n": 72,
+      "media": 8.3
+    },
+    {
+      "periodo": "2025-08-01",
+      "n": 96,
+      "media": 7.8
+    },
+    {
+      "periodo": "2025-09-01",
+      "n": 77,
+      "media": 8.3
+    },
+    {
+      "periodo": "2025-10-01",
+      "n": 63,
+      "media": 8.4
+    },
+    {
+      "periodo": "2025-11-01",
+      "n": 14,
+      "media": 8.0
+    },
+    {
+      "periodo": "2025-12-01",
+      "n": 4,
+      "media": 9.3
+    },
+    {
+      "periodo": "2026-01-01",
+      "n": 1,
+      "media": 8.0
+    },
+    {
+      "periodo": "2026-03-01",
+      "n": 2,
+      "media": 9.0
+    },
+    {
+      "periodo": "2026-04-01",
+      "n": 34,
+      "media": 8.6
+    },
+    {
+      "periodo": "2026-05-01",
+      "n": 89,
+      "media": 8.8
+    },
+    {
+      "periodo": "2026-06-01",
+      "n": 62,
+      "media": 8.1
+    }
+  ],
+  "piattaforme": [
+    {
+      "piattaforma": "BOOKING",
+      "n": 345,
+      "media": 8.1
+    },
+    {
+      "piattaforma": "EXPEDIA",
+      "n": 94,
+      "media": 8.6
+    },
+    {
+      "piattaforma": "GOOGLE",
+      "n": 61,
+      "media": 8.9
+    },
+    {
+      "piattaforma": "TRIPADVISOR",
+      "n": 23,
+      "media": 8.5
+    },
+    {
+      "piattaforma": "TRIP",
+      "n": 18,
+      "media": 8.2
+    }
+  ],
+  "recenti": [
+    {
+      "data_review": "2026-06-18",
+      "piattaforma": "BOOKING",
+      "punteggio_norm": 10.0,
+      "titolo": "Znakomity .",
+      "riassunto_nlp": "Posizione ideale, camera spaziosa, vista mare, fiori belli, colazioni deliziose, personale amichevole",
+      "sentiment_nlp": "POSITIVO"
+    },
+    {
+      "data_review": "2026-06-17",
+      "piattaforma": "GOOGLE",
+      "punteggio_norm": 8.0,
+      "titolo": null,
+      "riassunto_nlp": "Personale eccellente e cordiale, struttura ben gestita, ma problema con le tazze di carta per il tè che hanno causato ustione",
+      "sentiment_nlp": "MISTO"
+    },
+    {
+      "data_review": "2026-06-16",
+      "piattaforma": "BOOKING",
+      "punteggio_norm": 2.0,
+      "titolo": "Nigdy więcej. Coś okropnego",
+      "riassunto_nlp": "Critiche severe sulla struttura: porte difettose, letto scomodo con molle rumorose, igiene insufficiente con capelli sulla biancheria. Unico aspetto positivo è la posizione in promenade.",
+      "sentiment_nlp": "NEGATIVO"
+    },
+    {
+      "data_review": "2026-06-16",
+      "piattaforma": "EXPEDIA",
+      "punteggio_norm": 10.0,
+      "titolo": null,
+      "riassunto_nlp": "Interno bello e ben curato, esterno poco attraente. Costo aggiuntivo per accesso alla spiaggia.",
+      "sentiment_nlp": "MISTO"
+    },
+    {
+      "data_review": "2026-06-15",
+      "piattaforma": "BOOKING",
+      "punteggio_norm": 8.0,
+      "titolo": "Very good",
+      "riassunto_nlp": "Valutazione positiva generica senza dettagli specifici",
+      "sentiment_nlp": "POSITIVO"
+    },
+    {
+      "data_review": "2026-06-15",
+      "piattaforma": "BOOKING",
+      "punteggio_norm": 10.0,
+      "titolo": "A wonderful experience at Hotel Panorama in Maori, Italy",
+      "riassunto_nlp": "Ospiti molto soddisfatti di tutti gli aspetti: staff accogliente, posizione perfetta, pulizia, cibo delizioso, strutture invitanti",
+      "sentiment_nlp": "POSITIVO"
+    },
+    {
+      "data_review": "2026-06-14",
+      "piattaforma": "BOOKING",
+      "punteggio_norm": 5.0,
+      "titolo": "Hotel a medio renovar, asegúrese de reservar en el lado renovado.",
+      "riassunto_nlp": "Buona posizione e strutture comuni, ma camere antiquate, bagno danneggiato e cibo di qualità scadente",
+      "sentiment_nlp": "MISTO"
+    },
+    {
+      "data_review": "2026-06-14",
+      "piattaforma": "BOOKING",
+      "punteggio_norm": 10.0,
+      "titolo": "Tutto perfetto",
+      "riassunto_nlp": "Posizione ottima",
+      "sentiment_nlp": "POSITIVO"
+    },
+    {
+      "data_review": "2026-06-14",
+      "piattaforma": "BOOKING",
+      "punteggio_norm": 7.0,
+      "titolo": "Nel complesso non male, grazie alla presenza della piscina, ma check in troppo tardi (alle 16.00)",
+      "riassunto_nlp": "Luci notturne fastidiose che disturbano il sonno",
+      "sentiment_nlp": "NEGATIVO"
+    },
+    {
+      "data_review": "2026-06-14",
+      "piattaforma": "BOOKING",
+      "punteggio_norm": 8.0,
+      "titolo": "Very good",
+      "riassunto_nlp": "Valutazione molto positiva generica",
+      "sentiment_nlp": "POSITIVO"
+    },
+    {
+      "data_review": "2026-06-14",
+      "piattaforma": "GOOGLE",
+      "punteggio_norm": 10.0,
+      "titolo": null,
+      "riassunto_nlp": "Staff cordiale, stanze pulite, prezzo conveniente, location affascinante, colazione gradevole con vista mozzafiato",
+      "sentiment_nlp": "POSITIVO"
+    },
+    {
+      "data_review": "2026-06-14",
+      "piattaforma": "BOOKING",
+      "punteggio_norm": 10.0,
+      "titolo": "Exceptional",
+      "riassunto_nlp": "Valutazione eccezionale generica",
+      "sentiment_nlp": "POSITIVO"
+    }
+  ]
+}

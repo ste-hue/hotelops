@@ -1,0 +1,85 @@
+%% HotelOps TARGET architecture — 2026-07-15.
+%% Completion of the existing design, not a redesign. Excludes technologies
+%% marked "not currently justified" (K8s, Terraform, Nginx, R2, staging infra).
+%% Solid = runtime traffic · thick = human traffic · dotted = deploy/machine traffic.
+flowchart LR
+
+  subgraph IDS["Users & identity (single source: Google identities)"]
+    STAFF["Staff (panoramagroup.it)<br/>+ named externals (gmail)"]
+    PUB["Public (by recorded decision only)"]
+  end
+
+  subgraph CFEDGE["Cloudflare edge — satellite plane (panorama-host.com)"]
+    DNS["DNS: one record per app,<br/>one inventory row per record"]
+    ACCESS["Cloudflare Access<br/>team panoramagroup.cloudflareaccess.com<br/>policy: org domain + named externals<br/>session ≤ 168h — HUMAN GATE (edge plane)"]
+    subgraph WRK["Workers (small, JS-native, self-contained)"]
+      WMUT["mutui.panorama-host.com<br/>mutui-tracker (moved off public workers.dev*)<br/>in-Worker Access JWT check · workers_dev=false"]
+      WREC["reception.panorama-host.com<br/>reception-control-tower (unchanged —<br/>reference implementation)"]
+    end
+    KV["KV SCENARIO_KV<br/>(shared doc; nightly export → GCS)"]
+    D1["D1 reception-control-tower<br/>(Worker-local relational state)"]
+    PAGES["Pages: finanza / finanzaorti.com<br/>(public IF confirmed — else retired)"]
+  end
+
+  subgraph GCP["Google Cloud — product plane (hotelops-suite, europe-west1)"]
+    IAP["Google IAP<br/>custom OAuth client — HUMAN GATE (GCP plane)<br/>allowlist: org domain + named externals"]
+    HUB["Cloud Run hotelops-hub (PRIVATE origin:<br/>invoker = IAP agent only)<br/>SA = hotelops-hub@ (scoped, NOT roles/editor)<br/>app authz: roles.py grants (fail-closed)"]
+    subgraph JOBS["Cloud Run Jobs (image tag jobs:prod)"]
+      JB["reviews-scrape · reviews-report<br/>spiaggia-corrispettivi · coperti"]
+    end
+    SCHED["Cloud Scheduler<br/>(OAuth as hotelops-jobs@ — M2M)"]
+    SM["Secret Manager<br/>(only secret store for GCP workloads)"]
+    AR["Artifact Registry"]
+    OBS["Cloud Logging + Monitoring<br/>job-fail alert · uptime checks asserting 302<br/>on hub URL and reception"]
+  end
+
+  subgraph DATA["Data plane"]
+    BQ["BigQuery hotelops<br/>(canonical facts — sole write gate:<br/>bq_write_validated)"]
+    GCS["GCS hotelops-raw*<br/>(immutable raw evidence + KV backups)"]
+    DRV["Google Drive/Sheets<br/>(keyless ADC as drive-audit@)"]
+  end
+
+  subgraph SRC["Repositories (EVERY source has a GitHub remote)"]
+    RHUB["ste-hue/hotelops<br/>(hub + jobs + registry + inventory)"]
+    RMUT["ste-hue/mutui-tracker"]
+    RREC["ste-hue/reception-control-tower (pushed)"]
+  end
+
+  subgraph CICD["CI/CD — GitHub Actions (works from macOS, Linux, or nothing)"]
+    GHA["deploy-hub.yml · deploy-jobs.yml · deploy-worker.yml<br/>GCP: keyless via Workload Identity Federation (github-deployer@)<br/>CF: scoped API token in Actions secrets<br/>manual gcloud/wrangler = documented break-glass only"]
+  end
+
+  %% human traffic
+  STAFF ==>|"https"| IAP ==>|"302 verified at origin (IAM)"| HUB
+  STAFF ==>|"*.panorama-host.com"| DNS --> ACCESS
+  ACCESS ==>|"Access JWT re-verified in Worker"| WMUT
+  ACCESS ==>|"Access JWT re-verified in Worker"| WREC
+  PUB ==>|"only if decision recorded"| PAGES
+
+  %% runtime data flows
+  HUB -->|"read/write via hotelops-hub@"| BQ
+  HUB --> GCS
+  HUB -.->|"iframe embed (registry bind)"| WMUT
+  WMUT --> KV
+  WREC --> D1
+  SCHED -->|"OIDC/OAuth M2M"| JB
+  SM --> JB
+  JB --> BQ
+  JB --> DRV
+  JB --> GCS
+  KV -.->|"scheduled export (backup)"| GCS
+
+  %% deploy traffic (dotted)
+  RHUB -.->|"push to main"| GHA
+  RMUT -.-> GHA
+  RREC -.-> GHA
+  GHA -.->|"WIF → gcloud run deploy --source"| HUB
+  GHA -.->|"WIF → Cloud Build → jobs:prod"| AR -.-> JB
+  GHA -.->|"wrangler-action (API token)"| WMUT
+  GHA -.->|"wrangler-action (API token)"| WREC
+
+  %% observability
+  HUB -.-> OBS
+  JB -.-> OBS
+  WMUT -.->|"Workers observability"| OBS
+  WREC -.->|"Workers observability"| OBS

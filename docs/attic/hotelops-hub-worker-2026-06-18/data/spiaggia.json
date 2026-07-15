@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "serie": [
+    {
+      "periodo": "2025-05-01",
+      "banco": 1060.0,
+      "moolty": 1109.0,
+      "alloggiati": 482.0,
+      "stabilimento": 1541.0,
+      "scost_cassa": -50.0
+    },
+    {
+      "periodo": "2025-06-01",
+      "banco": 68898.0,
+      "moolty": 69229.0,
+      "alloggiati": 11496.0,
+      "stabilimento": 80394.0,
+      "scost_cassa": -331.0
+    },
+    {
+      "periodo": "2025-07-01",
+      "banco": 72075.0,
+      "moolty": 74373.0,
+      "alloggiati": 20000.0,
+      "stabilimento": 92074.0,
+      "scost_cassa": -2299.0
+    },
+    {
+      "periodo": "2025-08-01",
+      "banco": 74649.0,
+      "moolty": 76105.0,
+      "alloggiati": 35573.0,
+      "stabilimento": 110221.0,
+      "scost_cassa": -1456.0
+    },
+    {
+      "periodo": "2025-09-01",
+      "banco": 35731.0,
+      "moolty": 36818.0,
+      "alloggiati": 6045.0,
+      "stabilimento": 41776.0,
+      "scost_cassa": -1088.0
+    },
+    {
+      "periodo": "2025-10-01",
+      "banco": 1058.0,
+      "moolty": 1110.0,
+      "alloggiati": 18.0,
+      "stabilimento": 1076.0,
+      "scost_cassa": -52.0
+    },
+    {
+      "periodo": "2025-11-01",
+      "banco": 3614.0,
+      "moolty": 4214.0,
+      "alloggiati": 0.0,
+      "stabilimento": 3614.0,
+      "scost_cassa": -600.0
+    },
+    {
+      "periodo": "2026-06-01",
+      "banco": 12854.0,
+      "moolty": 0.0,
+      "alloggiati": 0.0,
+      "stabilimento": 12854.0,
+      "scost_cassa": 12854.0
+    }
+  ]
+}

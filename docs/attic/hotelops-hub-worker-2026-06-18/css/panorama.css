@@ -1,0 +1,92 @@
+/* Panorama Group — token brand (mirror di verticals/hub/theme.py).
+   Sito static-edge per il viewer-direttore. */
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300&family=Jost:wght@300;400;500;600&display=swap');
+
+:root {
+  --pg-navy: #003764; --pg-sky: #57c1e8; --pg-azure: #00a8e1; --pg-teal: #00bfd6;
+  --pg-gold: #ffd13f; --pg-coral: #ff7f2f;
+  --pg-ivory: #fbf9f5; --pg-sand: #f3eee6; --pg-slate: #3a4750;
+  --pg-font-display: 'Cinzel', serif;
+  --pg-font-serif: 'Cormorant Garamond', serif;
+  --pg-font-sans: 'Jost', sans-serif;
+  --pg-radius-lg: 16px; --pg-radius-xl: 24px;
+  --pg-shadow-sm: 0 2px 8px rgba(0,55,100,.08);
+  --pg-shadow-navy: 0 12px 32px rgba(0,55,100,.16);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--pg-ivory); color: var(--pg-slate);
+  font-family: var(--pg-font-sans); font-weight: 300;
+  line-height: 1.5; -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+h1, h2, h3 {
+  font-family: var(--pg-font-display); color: var(--pg-navy);
+  letter-spacing: 0.03em; font-weight: 600; margin: 0;
+}
+
+.eyebrow {
+  font-family: var(--pg-font-sans); text-transform: uppercase;
+  letter-spacing: 0.22em; font-size: 0.72rem; font-weight: 500; color: var(--pg-azure);
+}
+
+/* Header */
+.pg-header { border-bottom: 1px solid var(--pg-sand); padding-bottom: 1.2rem; margin-bottom: 1.5rem; }
+.pg-wordmark {
+  font-family: var(--pg-font-display); font-size: 1.6rem; font-weight: 600;
+  letter-spacing: 0.18em; color: var(--pg-navy);
+}
+.pg-descriptor {
+  font-family: var(--pg-font-serif); font-size: 1.7rem; font-weight: 300;
+  font-style: italic; color: var(--pg-slate); margin-left: .6rem;
+}
+.stato { font-size: .9rem; color: var(--pg-slate); margin-top: .6rem; }
+
+/* Card grid */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem; margin: 1.5rem 0 2.5rem; }
+.card {
+  display: block; background: #fff; border: 1px solid var(--pg-sand);
+  border-radius: var(--pg-radius-lg); box-shadow: var(--pg-shadow-sm);
+  padding: 1.2rem 1.3rem; text-decoration: none; color: inherit; transition: .15s;
+}
+a.card:hover { box-shadow: var(--pg-shadow-navy); transform: translateY(-2px); }
+.card h3 { font-size: 1.1rem; }
+.card .metric { font-family: var(--pg-font-display); color: var(--pg-navy);
+  font-size: 1.9rem; margin-top: .4rem; }
+.card .sub { text-transform: uppercase; letter-spacing: .12em; font-size: .68rem;
+  color: var(--pg-slate); opacity: .8; }
+.card .arrow { color: var(--pg-azure); font-size: .85rem; margin-top: .6rem; }
+
+/* Sezioni grafici */
+section { margin: 2.5rem 0; }
+section > h2 { margin-bottom: 1rem; }
+.chart-box { background: #fff; border: 1px solid var(--pg-sand);
+  border-radius: var(--pg-radius-lg); box-shadow: var(--pg-shadow-sm);
+  padding: 1.2rem 1.3rem; margin-bottom: 1.2rem; }
+.chart-box h3 { font-size: 1rem; margin-bottom: .8rem; }
+
+table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+th, td { text-align: right; padding: .5rem .6rem; border-bottom: 1px solid var(--pg-sand); }
+th:first-child, td:first-child { text-align: left; }
+thead th { text-transform: uppercase; letter-spacing: .1em; font-size: .68rem; color: var(--pg-slate); }
+
+.err { background: #fff; border: 1px solid var(--pg-coral); border-radius: var(--pg-radius-lg);
+  padding: 1rem 1.2rem; color: var(--pg-coral); }
+footer { margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--pg-sand);
+  font-size: .78rem; color: var(--pg-slate); opacity: .7; }
+
+/* Mobile — il direttore apre dal telefono. Card a colonna singola, header compatto. */
+@media (max-width: 600px) {
+  .wrap { padding: 1.2rem 1rem 3rem; }
+  .pg-wordmark { font-size: 1.3rem; }
+  .pg-descriptor { font-size: 1.3rem; display: block; margin-left: 0; margin-top: .2rem; }
+  .cards { grid-template-columns: 1fr; gap: .8rem; }
+  .card .metric { font-size: 1.6rem; }
+  .chart-box { padding: 1rem; overflow-x: auto; }
+  section > h2 { font-size: 1.3rem; }
+  table { font-size: .85rem; }
+  th, td { padding: .4rem .4rem; }
+}

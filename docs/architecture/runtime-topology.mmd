@@ -1,0 +1,117 @@
+%% HotelOps as-built runtime topology — 2026-07-15 read-only audit.
+%% Solid lines = observed. Dotted lines = inferred. Labels mark unknowns.
+flowchart LR
+
+  subgraph USERS["Users"]
+    U1["Org users (panoramagroup.it)"]
+    U2["External gmail (stefano, padre)"]
+    U3["Anyone on the internet"]
+  end
+
+  subgraph CF["Cloudflare account 8a6fdb9f… (ste.dellapietra@gmail.com)"]
+    subgraph CFDNS["DNS zones"]
+      Z1["panorama-host.com<br/>reception AAAA 100:: (proxied)"]
+      Z2["finanzaorti.com<br/>CNAME apex+www → finanza-63f.pages.dev"]
+      Z3["ste-dellapietra.workers.dev"]
+    end
+    ACC["Cloudflare Access app<br/>'Reception Control Tower'<br/>allow: panoramagroup.it + ste.dellapietra@<br/>session 730h"]
+    subgraph CFW["Workers"]
+      W1["mutui-tracker<br/>(public; PUT gated by ADMIN_TOKEN)"]
+      W2["reception-control-tower<br/>(in-Worker Access JWT check;<br/>workers.dev disabled)"]
+      W3["hotelops-hub Worker<br/>STALE: public launcher frozen 2026-06-18<br/>source UNKNOWN"]
+    end
+    subgraph CFSTORE["Storage"]
+      KV["KV SCENARIO_KV"]
+      D1["D1 reception-control-tower"]
+    end
+    PG["Pages: finanza<br/>(+ investimenti2026, excelllm,<br/>finanza-react-app — adjacent)"]
+  end
+
+  subgraph GCP["Google Cloud project hotelops-suite (europe-west1)"]
+    IAP["Google IAP<br/>custom OAuth client hotelops-hub-iap<br/>allowlist: domain:panoramagroup.it + 3 users"]
+    CR["Cloud Run service hotelops-hub<br/>invoker = IAP agent only<br/>SA = default compute (roles/editor)"]
+    subgraph JOBS["Cloud Run Jobs"]
+      J1["reviews-scrape (07:00)"]
+      J2["reviews-report (Mon 08:00)"]
+      J3["spiaggia-corrispettivi (09:00)"]
+      J4["coperti (12:00)"]
+    end
+    SCHED["Cloud Scheduler ×4<br/>(OAuth as hotelops-jobs@)"]
+    SM["Secret Manager<br/>anthropic-api-key, apify-api-token,<br/>gmail-user, gmail-app-password"]
+    AR["Artifact Registry<br/>hotelops/jobs:v1–v3,<br/>cloud-run-source-deploy"]
+  end
+
+  subgraph DATA["Data systems"]
+    BQ["BigQuery hotelops-suite.hotelops"]
+    GCS["GCS hotelops-raw / hotelops-raw-prod"]
+    DRV["Google Drive / Sheets<br/>(drive-audit@ ADC)"]
+    LOOKER["Looker Studio 'Banche'<br/>ACL UNKNOWN"]
+    ANTH["Anthropic API"]
+    APIFY["Apify"]
+  end
+
+  subgraph REPOS["Repositories"]
+    R1["ste-hue/hotelops (local: dev/Projects/hotelops)"]
+    R2["ste-hue/mutui-tracker (local: app-mutui)"]
+    R3["panorama_apps/reception-control-tower<br/>LOCAL-ONLY GIT, NO REMOTE"]
+    R4["panorama_apps/bilancini<br/>LOCAL-ONLY, NOT DEPLOYED"]
+    R5["ste-hue/finanza (no local checkout found)"]
+  end
+
+  subgraph DEPLOY["Deployment (all manual from laptop)"]
+    D_GC["gcloud run deploy --source ."]
+    D_CB["gcloud builds submit (scripts/cloud/10)"]
+    D_WR["npx wrangler deploy"]
+    D_PG["Cloudflare Pages GitHub CI"]
+  end
+
+  %% user → edge → origin (observed)
+  U1 -->|"https"| IAP
+  U2 -->|"https (custom OAuth client)"| IAP
+  IAP -->|"302 verified; run.invoker = IAP agent"| CR
+  U1 -->|"reception.panorama-host.com"| Z1
+  Z1 --> ACC
+  ACC -->|"302 to Access login verified"| W2
+  U3 -->|"public 200 verified"| W1
+  U3 -->|"public 200 verified — STALE"| W3
+  U3 -->|"finanzaorti.com public 200"| Z2
+  Z2 --> PG
+  Z3 --> W1
+  Z3 --> W3
+
+  %% workers → storage (observed via bindings)
+  W1 --> KV
+  W2 --> D1
+  W2 --> ANTH
+
+  %% hub → data (observed config + code)
+  CR --> BQ
+  CR --> GCS
+  CR -.->|"iframe embed (pages_/mutui.py)"| W1
+  CR -.->|"bind tile"| LOOKER
+
+  %% jobs (observed)
+  SCHED --> J1
+  SCHED --> J2
+  SCHED --> J3
+  SCHED --> J4
+  SM --> J1
+  SM --> J2
+  J1 --> BQ
+  J1 --> APIFY
+  J1 --> ANTH
+  J2 --> BQ
+  J3 --> DRV
+  J3 --> GCS
+  J3 --> BQ
+  J4 --> DRV
+  J4 --> BQ
+
+  %% source → deploy → runtime
+  R1 --> D_GC --> CR
+  R1 --> D_CB --> AR --> JOBS
+  R2 --> D_WR --> W1
+  R3 --> D_WR --> W2
+  R5 --> D_PG --> PG
+  R1 -.->|"inferred: publish/site snapshot 2026-06-18,<br/>deploy path UNKNOWN"| W3
+  R4 -.->|"planned: bilancini.panorama-host.com<br/>(no DNS, no worker yet)"| CF

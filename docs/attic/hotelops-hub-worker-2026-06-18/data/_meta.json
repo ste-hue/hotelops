@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "generated_at": "2026-06-18T00:00:00Z",
+  "surfaces": {
+    "fb": {
+      "giorni": 18,
+      "semaforo": "🟢"
+    },
+    "reviews": {
+      "giorni": 0,
+      "semaforo": "🟢",
+      "media_mese": 8.1
+    }
+  }
+}
