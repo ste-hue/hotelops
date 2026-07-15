@@ -768,9 +768,9 @@ def main():
 
     push_env = None
     if args.push:
-        from dotenv import load_dotenv
+        from core.env import load_dotenv_file
 
-        load_dotenv()
+        load_dotenv_file()
         push_env = load_push_env()  # fail-fast: env incompleta → errore PRIMA di toccare BQ
 
     client = get_client()
