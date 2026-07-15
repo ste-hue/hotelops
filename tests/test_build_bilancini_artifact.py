@@ -141,3 +141,12 @@ def test_render_html_no_fullscreen_button():
     assert "fs-btn" not in html
     assert "Schermo intero" not in html
     assert "csv-btn" in html  # il CSV resta
+
+
+def test_render_html_chart_tooltips():
+    # Tooltip nativi SVG sui grafici (hover = mese + importo), richiesti 2026-07-15.
+    html = render_html(_payload())
+    assert "svgTitle" in html
+    assert "— entrate:" in html
+    assert "— uscite:" in html
+    assert "margine cumulato:" in html

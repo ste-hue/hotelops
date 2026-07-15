@@ -496,6 +496,12 @@ function svgEl(tag, attrs) {
   return el;
 }
 
+function svgTitle(text) {
+  const t = document.createElementNS("http://www.w3.org/2000/svg", "title");
+  t.textContent = text;
+  return t;
+}
+
 function renderMonthlyChart() {
   const tot = monthlyTotals();
   const svg = document.getElementById("chart-monthly");
@@ -522,14 +528,18 @@ function renderMonthlyChart() {
   tot.forEach((t, i) => {
     const xc = padL + i * slot + slot / 2;
     const he = scale(t.entrate), hu = scale(t.uscite);
-    svg.appendChild(svgEl("rect", {
+    const rectE = svgEl("rect", {
       x: xc - barW - 1, y: padT + plotH - he, width: barW, height: he,
       fill: "var(--cat-ricavi)", rx: 1.5,
-    }));
-    svg.appendChild(svgEl("rect", {
+    });
+    rectE.appendChild(svgTitle(`${monthLabel(t.mese)} — entrate: ${fmtEuro(t.entrate)}`));
+    svg.appendChild(rectE);
+    const rectU = svgEl("rect", {
       x: xc + 1, y: padT + plotH - hu, width: barW, height: hu,
       fill: "var(--cat-fissi)", rx: 1.5,
-    }));
+    });
+    rectU.appendChild(svgTitle(`${monthLabel(t.mese)} — uscite: ${fmtEuro(t.uscite)}`));
+    svg.appendChild(rectU);
     const lab = svgEl("text", { x: xc, y: H - 6, "text-anchor": "middle" });
     lab.textContent = MONTH_LABELS[monthNum(t.mese) - 1];
     svg.appendChild(lab);
@@ -582,6 +592,9 @@ function renderCumulataChart() {
   }));
   cum.forEach((v, i) => {
     svg.appendChild(svgEl("circle", { cx: x(i), cy: y(v), r: 3, fill: "var(--cat-ricavi)" }));
+    const hit = svgEl("circle", { cx: x(i), cy: y(v), r: 12, fill: "transparent" });
+    hit.appendChild(svgTitle(`${monthLabel(MESI[i])} — margine cumulato: ${fmtEuro(v)}`));
+    svg.appendChild(hit);
   });
 
   MESI.forEach((m, i) => {
