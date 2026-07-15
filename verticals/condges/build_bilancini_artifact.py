@@ -208,7 +208,6 @@ HTML_TEMPLATE = """<!doctype html>
   a { color: var(--cat-ricavi); }
   :focus-visible { outline: 2px solid var(--cat-ricavi); outline-offset: 2px; }
   .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 24px 64px; }
-  .wrap:fullscreen { background: var(--page); overflow-y: auto; max-width: none; padding: 24px 48px 64px; }
   header.top { padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
   header.top h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
   .freshness { color: var(--ink-muted); font-size: 12.5px; margin-top: 4px; }
@@ -284,7 +283,6 @@ HTML_TEMPLATE = """<!doctype html>
     <h1>Bilancini · Gruppo Panorama
       <span style="float:right;display:flex;gap:8px;">
         <button id="csv-btn" title="Scarica i dati in CSV (una riga per società × conto × mese)" style="appearance:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 12px;cursor:pointer;">⬇ CSV</button>
-        <button id="fs-btn" title="Schermo intero" style="appearance:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 12px;cursor:pointer;">⛶ Schermo intero</button>
       </span>
     </h1>
     <div class="freshness" id="freshness"></div>
@@ -403,26 +401,9 @@ document.getElementById("csv-btn").addEventListener("click", () => {
   URL.revokeObjectURL(a.href);
 });
 
-// ---------- Schermo intero ----------
-// Dentro un iframe senza allowfullscreen (es. hub Streamlit) il fullscreen nativo è
-// negato: in quel caso il bottone apre la pagina in una NUOVA SCHEDA top-level.
-// Il bottone esiste SOLO dove il fullscreen nativo funziona (pagina standalone,
-// contesti con allowfullscreen). Niente fallback popup/blob: sotto sandbox
-// producono schede bianche. Nel hub l'equivalente è il download "Pagina HTML"
-// a livello Streamlit, fuori dall'iframe.
-const fsBtn = document.getElementById("fs-btn");
-const fsRoot = document.getElementById("bilancini-root");
-if (!document.fullscreenEnabled) {
-  fsBtn.style.display = "none";
-} else {
-  fsBtn.addEventListener("click", () => {
-    if (document.fullscreenElement) { document.exitFullscreen(); return; }
-    fsRoot.requestFullscreen().catch(() => { fsBtn.style.display = "none"; });
-  });
-  document.addEventListener("fullscreenchange", () => {
-    fsBtn.textContent = document.fullscreenElement ? "✕ Esci" : "⛶ Schermo intero";
-  });
-}
+// Niente bottone "schermo intero": l'API Fullscreen JS renderizza schermo vuoto
+// su Arc (bug piattaforma, non rilevabile da JS: l'API riporta successo).
+// Il fullscreen vero è quello nativo del browser (⌃⌘F).
 
 // ---------- Tabs ----------
 document.getElementById("tabnav").addEventListener("click", (e) => {

@@ -132,3 +132,12 @@ def test_push_to_kv_api_error_raises(monkeypatch):
     )
     with pytest.raises(RuntimeError, match="403"):
         push_to_kv("<html>", _payload(), PUSH_ENV)
+
+
+def test_render_html_no_fullscreen_button():
+    # Bottone rimosso 2026-07-15: l'API Fullscreen JS è rotta su Arc (schermo
+    # vuoto, non rilevabile). Il fullscreen è quello nativo del browser.
+    html = render_html(_payload())
+    assert "fs-btn" not in html
+    assert "Schermo intero" not in html
+    assert "csv-btn" in html  # il CSV resta
