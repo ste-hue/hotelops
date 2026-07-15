@@ -1,61 +1,25 @@
-"""Pagina hub — Bilancini (bilancio di verifica: YTD, progressione, navigatore).
+"""Pagina hub — Bilancini: porta verso l'app edge indipendente.
 
-Read-only, dati riservati (S1: sensitive). Il payload si costruisce live da
-BigQuery riusando il builder condges (fetch_bilancino/fetch_gruppi/build_payload
-di verticals/condges/build_bilancini_artifact) e si monta l'HTML self-contained
-(render_html) in un embed — nessun file su disco, nessun iframe esterno.
+Dal 2026-07-15 i bilancini vivono su bilancini.panorama-host.com (Cloudflare
+Worker + Access, policy nominativa OTP — stessi grant S1 di questa pagina).
+Qui niente embed: l'iframe sandbox di Streamlit uccide download/fullscreen
+(pomeriggio di workaround 2026-07-14, concept HUB_EMBED_VS_EDGE). La pagina
+edge serve da sé ⬇CSV e /data.{csv,json}; si aggiorna via push KV dal builder
+condges (--push), senza redeploy.
 """
 
-from __future__ import annotations
-
 import streamlit as st
-import streamlit.components.v1 as components
 
 from verticals.hub.theme import brand_header
 
-
-@st.cache_data(ttl=3600)
-def _payload() -> dict:
-    """Payload live da BQ (f_bilancino + d_conti_gruppi). Cache-a la funzione,
-    non il client BQ (non hashable)."""
-    from core.bq.client import get_client
-    from verticals.condges.build_bilancini_artifact import (
-        build_payload,
-        fetch_bilancino,
-        fetch_gruppi,
-    )
-
-    client = get_client()
-    bilancino = fetch_bilancino(client)
-    gruppi = fetch_gruppi(client)
-    return build_payload(bilancino, gruppi)
+BILANCINI_URL = "https://bilancini.panorama-host.com/"
 
 
 def render() -> None:
     brand_header("Bilancini", "bilancio di verifica: YTD, progressione, navigatore")
-
-    from verticals.condges.build_bilancini_artifact import payload_to_csv, render_html
-
-    payload = _payload()
-    if not payload.get("mesi"):
-        st.info("Nessun dato in f_bilancino per il periodo.")
-        return
-
-    html = render_html(payload)
-    # Download a livello Streamlit: il sandbox dell'iframe blocca download/popup
-    # generati dal JS interno — i bottoni della pagina embedded lì non funzionano.
-    c1, c2, _ = st.columns([1, 1, 3])
-    c1.download_button(
-        "⬇ CSV (tutti i mesi)",
-        data="﻿" + payload_to_csv(payload),
-        file_name=f"bilancini_2026_al_{payload['generated_at']}.csv",
-        mime="text/csv",
+    st.link_button("↗ Apri Bilancini", BILANCINI_URL)
+    st.caption(
+        "App indipendente dietro Cloudflare Access: al primo accesso arriva un "
+        "codice OTP via email (accessi nominativi). Dentro trovi le tre viste, "
+        "il download CSV e i dati grezzi su /data.csv e /data.json."
     )
-    c2.download_button(
-        "⬇ Pagina HTML",
-        data=html,
-        file_name="bilancini_standalone.html",
-        mime="text/html",
-        help="Scaricala e aprila nel browser per la vista a schermo intero",
-    )
-    components.html(html, height=1500, scrolling=True)

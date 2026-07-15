@@ -1,4 +1,4 @@
-"""Hub — contratto di montaggio della pagina Bilancini (embed HTML da BQ)."""
+"""Hub — contratto di montaggio della pagina Bilancini (porta verso l'edge app)."""
 
 import inspect
 
@@ -16,15 +16,19 @@ def test_render_non_chiama_set_page_config():
     assert "set_page_config" not in src
 
 
-def test_payload_riusa_il_builder_condges():
-    # niente reimplementazione: fetch_bilancino/fetch_gruppi/build_payload/render_html
-    # vengono dal builder condges (verticals/condges/build_bilancini_artifact).
+def test_bilancini_url_punta_all_edge_app():
+    from verticals.hub.pages_ import bilancini
+
+    assert bilancini.BILANCINI_URL == "https://bilancini.panorama-host.com/"
+
+
+def test_pagina_non_dipende_dal_builder_condges():
+    # porta pura verso l'edge app: niente reimplementazione né embed, quindi
+    # niente riferimento al builder condges (e niente BQ a render-time).
     from verticals.hub.pages_ import bilancini
 
     src = inspect.getsource(bilancini)
-    assert "build_bilancini_artifact" in src
-    assert "fetch_bilancino" in src and "fetch_gruppi" in src and "build_payload" in src
-    assert "render_html" in src
+    assert "build_bilancini_artifact" not in src
 
 
 def test_registry_ha_bilancini():
