@@ -21,6 +21,7 @@ VOCE_LABELS = {
     "USCITE_CANONE_PASSIVO": "Godimento Beni di Terzi",
     "USCITE_VARIE_EXT": "Varie ed Eventuali",
     "USCITE_SERVIZI_PRODUZIONE": "Canoni e servizi",
+    "USCITE_CANONI": "Canoni diversi",
 }
 
 

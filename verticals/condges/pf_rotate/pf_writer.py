@@ -42,6 +42,7 @@ VOCE_TO_SHEET_CANDIDATES = {
     "USCITE_CANONE_PASSIVO": ["Godimento Beni di Terzi"],
     "USCITE_VARIE_EXT": [" Varie ed Eventuali"],
     "USCITE_SERVIZI_PRODUZIONE": ["Canoni e servizi"],
+    "USCITE_CANONI": ["Canoni e servizi"],  # condivide il foglio con SERVIZI_PRODUZIONE
 }
 
 MONTH_NAMES_IT = {
