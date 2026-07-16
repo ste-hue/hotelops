@@ -575,6 +575,121 @@ class TestWritePfRotation:
         giugno = [ws_mp.cell(row=r, column=13).value for r in range(4, 15)]
         assert 5907.99 in giugno
 
+    def test_row_label_compatible(self):
+        """Etichette PF informali ma riconducibili al fornitore = compatibili
+        (il codice-match resta valido); nomi estranei = incompatibili."""
+        from verticals.condges.pf_rotate.pf_writer import _row_label_compatible
+
+        # casi reali dal master ORTI: label PF vs (nome_pf, nome_esolver)
+        compatible = [
+            ("Paravia Srl", "", "PARAVIA ELEVATORS SRL"),
+            ("Lovali d'autore", "Locali d'autore", "Locali d Autore SRL"),
+            ("Centro Distribuzione Maglio",
+             "Centro Distribuzioni Maglio Di Maglio Cosimo",
+             "CENTRO DISTRIBUZIONI MAGLIO DI MAGLIO COSIMO"),
+            ("Ingrosso frutta di Michele e Vincenzo",
+             "Ingrosso Frutta Avagliano",
+             '"INGROSSO FRUTTA" DI AVAGLIANO MICHELE & VINCENZO - S.N.C.'),
+            ("Fioraio Santelia", "Santelia Luigi", "SANTELIA LUIGI"),
+            ("Tur.Com", "Tur.Com. S.R.L.", "TUR.COM. S.R.L."),
+            (None, "Vicart", "VICART S.R.L."),  # riga senza etichetta
+        ]
+        for label, nome_pf, nome in compatible:
+            assert _row_label_compatible(label, nome_pf, nome), label
+
+        incompatible = [
+            ("Valgarda Srl", "Vicart", "VICART S.R.L."),
+            ("Vicart", "VITAGLIANO MAURIZIO", "VITAGLIANO MAURIZIO"),
+            ("Musica totale", "Romano Ciro", "ROMANO CIRO S.R.L."),
+        ]
+        for label, nome_pf, nome in incompatible:
+            assert not _row_label_compatible(label, nome_pf, nome), label
+
+    def test_codice_su_riga_col_nome_sbagliato_usa_match_per_nome(self, tmp_path):
+        """Col A disallineata (edit manuale nel master: codici shiftati di una
+        riga rispetto ai nomi). Il match per codice da solo scriverebbe
+        l'importo sul fornitore SBAGLIATO — caso reale Vicart→Valgarda del
+        2026-07-15. Il guardrail deve rifiutare il codice-match se il nome
+        sulla riga non è compatibile, e ripiegare sul match per nome."""
+        from verticals.condges.pf_rotate.pf_writer import write_pf
+
+        wb = openpyxl.Workbook()
+        wb.active.title = "Piano Finanziario"
+        ws = wb.create_sheet("Materie Prime-Consumo ")
+        months = ["GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
+                  "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
+                  "NOVEMBRE", "DICEMBRE"]
+        for i, m in enumerate(months):
+            ws.cell(row=2, column=8 + i, value=m)
+        # codici shiftati di una riga in alto rispetto ai nomi
+        ws.cell(row=5, column=1, value=71)      # codice di Vicart...
+        ws.cell(row=5, column=2, value="Valgarda Srl")  # ...sul nome Valgarda
+        ws.cell(row=6, column=1, value=1306)
+        ws.cell(row=6, column=2, value="Vicart")
+        pf = tmp_path / "pf_shiftato.xlsx"
+        wb.save(pf)
+
+        import pandas as pd
+        scad_df = pd.DataFrame({
+            "codice_fornitore": [71], "nome": ["VICART S.R.L."],
+            "totale": [-500.0], "scaduto": [0.0], "mese_6": [-500.0],
+        })
+        fornitori_map = {
+            71: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Vicart"}
+        }
+        out, _ = write_pf(
+            pf.read_bytes(), scad_df, [6], fornitori_map, scaduto_month=6
+        )
+        ws2 = openpyxl.load_workbook(BytesIO(out))["Materie Prime-Consumo "]
+        # NON sulla riga di Valgarda (dove punta il codice shiftato)
+        assert ws2.cell(row=5, column=13).value in (None, 0)
+        # SÌ sulla riga col nome Vicart
+        assert ws2.cell(row=6, column=13).value == 500.0
+
+    def test_codice_su_riga_sbagliata_senza_match_nome_va_su_riga_nuova(
+        self, tmp_path
+    ):
+        """Se il codice punta a una riga col nome incompatibile e il nome non
+        esiste altrove nel foglio, MAI scrivere sotto il nome sbagliato:
+        il fornitore va su una riga vuota con codice+nome corretti."""
+        from verticals.condges.pf_rotate.pf_writer import write_pf
+
+        wb = openpyxl.Workbook()
+        wb.active.title = "Piano Finanziario"
+        ws = wb.create_sheet("Materie Prime-Consumo ")
+        months = ["GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
+                  "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
+                  "NOVEMBRE", "DICEMBRE"]
+        for i, m in enumerate(months):
+            ws.cell(row=2, column=8 + i, value=m)
+        ws.cell(row=5, column=1, value=1438)    # codice di Romano Ciro...
+        ws.cell(row=5, column=2, value="Musica totale")  # ...sul nome sbagliato
+        ws.cell(row=10, column=1, value="---")  # ancora: righe 6..9 vuote
+        pf = tmp_path / "pf_shiftato_no_nome.xlsx"
+        wb.save(pf)
+
+        import pandas as pd
+        scad_df = pd.DataFrame({
+            "codice_fornitore": [1438], "nome": ["ROMANO CIRO S.R.L."],
+            "totale": [-122.0], "scaduto": [0.0], "mese_6": [-122.0],
+        })
+        fornitori_map = {
+            1438: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Romano Ciro"}
+        }
+        out, _ = write_pf(
+            pf.read_bytes(), scad_df, [6], fornitori_map, scaduto_month=6
+        )
+        ws2 = openpyxl.load_workbook(BytesIO(out))["Materie Prime-Consumo "]
+        # la riga "Musica totale" resta intatta
+        assert ws2.cell(row=5, column=13).value in (None, 0)
+        # scritto su riga nuova con l'etichetta giusta
+        written = {
+            str(ws2.cell(row=r, column=2).value): ws2.cell(row=r, column=13).value
+            for r in range(3, 10)
+            if ws2.cell(row=r, column=13).value
+        }
+        assert written == {"Romano Ciro": 122.0}
+
     def test_nota_credito_scalata_in_cascata(self, tmp_path):
         """NC (importo positivo) si compensa sul primo mese con fatture in
         avanti: il mese azzerato non viene scritto, il residuo scala sul

@@ -184,6 +184,38 @@ def _find_supplier_row_by_codice(ws, codice: int, max_row: int = 200) -> int | N
     return None
 
 
+def _norm_label(s) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(s).lower())
+
+
+def _row_label_compatible(row_label, nome_pf: str, nome: str) -> bool:
+    """True se l'etichetta in col B della riga è riconducibile al fornitore.
+
+    Guardrail contro col A disallineata (codici shiftati da edit manuali nel
+    master, caso Vicart→Valgarda 2026-07-15): un match per codice vale solo
+    se il nome sulla riga è compatibile con nome_pf o nome Esolver —
+    containment, oppure una parola significativa (>=4 char) in comune
+    (le etichette PF sono informali: "Paravia Srl" per PARAVIA ELEVATORS SRL).
+    """
+    if row_label is None or not str(row_label).strip():
+        return True  # riga senza etichetta: nessun nome sbagliato da colpire
+    rl = _norm_label(row_label)
+    rl_tokens = {
+        t for t in re.findall(r"[a-z0-9]+", str(row_label).lower()) if len(t) >= 4
+    }
+    for cand in (nome_pf, nome):
+        if not cand:
+            continue
+        c = _norm_label(cand)
+        if len(c) >= 3 and len(rl) >= 3 and (rl in c or c in rl):
+            return True
+        if rl_tokens & {
+            t for t in re.findall(r"[a-z0-9]+", cand.lower()) if len(t) >= 4
+        }:
+            return True
+    return False
+
+
 def read_pf_sheet(
     wb_values,
     wb_formulas,
@@ -359,6 +391,20 @@ def write_pf(
         for s in suppliers:
             # Find the supplier row: try codice first, then name
             pf_row = _find_supplier_row_by_codice(ws_vals, s["codice_fornitore"])
+            if pf_row is not None and not _row_label_compatible(
+                ws_vals.cell(row=pf_row, column=2).value, s["nome_pf"], s["nome"]
+            ):
+                log.warning(
+                    "codice %s trovato a riga %d di '%s' ma il nome sulla riga "
+                    "è %r (atteso ~ %r): col A sospetta, ignoro il match per "
+                    "codice e uso quello per nome.",
+                    s["codice_fornitore"],
+                    pf_row,
+                    sheet_name,
+                    ws_vals.cell(row=pf_row, column=2).value,
+                    s["nome_pf"] or s["nome"],
+                )
+                pf_row = None
             if pf_row is None and s["nome_pf"]:
                 pf_row = _find_supplier_row_by_name(ws_vals, s["nome_pf"])
             if pf_row is None:
