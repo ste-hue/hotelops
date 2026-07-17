@@ -8,12 +8,17 @@ Due forme, distinte dal CONTENUTO (mai dal filename):
   - messaggio inviato (From=casella): raw, niente daticert; il timestamp
     certificato arriva dal link con la ricevuta di ACCETTAZIONE (ref_msgid).
 
-Parser_module della source PEC_MAILBOX_INTUR_APPEND, invocato da
-`hotelops promote` come: python -m ingest.flussi.ingest_pec_mbox --file X --raw-object-id Y
+Parser_module di TUTTE le sorgenti PEC del registry (system: PEC —
+PEC_MAILBOX_INTUR_APPEND, PEC_MAILBOX_ORTI_APPEND, PEC_MAILBOX_VIGNA_APPEND,
+PEC_MAILBOX_PERSONALE_APPEND, ...): la casella/entity/bucket si risolvono
+SEMPRE da `--source` via il registry (I-PEC-2), mai hardcoded.
+
+Invocato da `hotelops promote` come:
+    python -m ingest.flussi.ingest_pec_mbox --file X --source SOURCE_NAME --raw-object-id Y
 
 Usage:
-    python -m ingest.flussi.ingest_pec_mbox --file <mbox> --raw-object-id <id>
-    python -m ingest.flussi.ingest_pec_mbox --file <mbox> --dry-run
+    python -m ingest.flussi.ingest_pec_mbox --file <mbox|eml> --source <SOURCE_NAME> --raw-object-id <id>
+    python -m ingest.flussi.ingest_pec_mbox --file <mbox|eml> --source <SOURCE_NAME> --dry-run
 """
 
 from __future__ import annotations
@@ -28,6 +33,7 @@ import mailbox
 import re
 import xml.etree.ElementTree as ET
 from collections import Counter
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -42,8 +48,39 @@ from core.schemas import (
 
 log = logging.getLogger("ingest.pec_mbox")
 
-CASELLA = "in.tur@pec.it"
-SOCIETA = "INTUR"
+
+@dataclass(frozen=True)
+class PecSource:
+    """Contesto della casella, risolto dal registry — mai hardcoded (I-PEC-2)."""
+
+    source_name: str
+    casella: str
+    entity_id: str
+    bucket: str
+    input_formats: tuple[str, ...]
+
+    @property
+    def societa_id(self) -> str | None:
+        return self.entity_id if self.entity_id in ("ORTI", "INTUR") else None
+
+
+def resolve_pec_source(source_name: str) -> PecSource:
+    from core.lineage.source_resolver import load_registry
+
+    sd = load_registry().get(source_name)
+    if sd is None:
+        raise KeyError(f"sorgente non nel registry: {source_name}")
+    if sd.system != "PEC":
+        raise ValueError(f"{source_name} non è una sorgente PEC (system={sd.system})")
+    return PecSource(
+        source_name=source_name,
+        casella=sd.casella.lower(),
+        entity_id=sd.entity_id,
+        bucket=sd.raw_storage.bucket,
+        input_formats=tuple(sd.input_formats),
+    )
+
+
 # Wall time canonico delle DATETIME in BQ: Roma, non il fuso della macchina.
 # I datetime naive del daticert sono già ora italiana e restano intatti.
 TZ_ROMA = ZoneInfo("Europe/Rome")
@@ -210,9 +247,6 @@ def iter_allegati_reali(
     return out
 
 
-SOURCE_NAME = "PEC_MAILBOX_INTUR_APPEND"
-
-
 def _safe_object_name(nome: str, max_len: int = 180) -> str:
     """Componente path GCS sicuro: via i control char, cap sulla lunghezza.
 
@@ -233,15 +267,15 @@ def _safe_object_name(nome: str, max_len: int = 180) -> str:
 class AllegatiStore:
     """Binari allegati su GCS, indirizzati per contenuto.
 
-    Path: <SOURCE_NAME>/allegati/<sha256[:2]>/<sha256>/<nome> — lo stesso
+    Path: <prefix>/allegati/<sha256[:2]>/<sha256>/<nome> — lo stesso
     contenuto trasmesso N volte è un solo oggetto per nome; il fan-out sulle
-    trasmissioni vive nelle righe f_pec_allegati.
+    trasmissioni vive nelle righe f_pec_allegati. bucket/prefix sono
+    obbligatori: nessun default che nasconda la casella (I-PEC-2).
     """
 
-    def __init__(
-        self, bucket_name: str = "hotelops-raw", dry_run: bool = False, client=None
-    ):
+    def __init__(self, bucket_name: str, prefix: str, dry_run: bool = False, client=None):
         self.bucket_name = bucket_name
+        self.prefix = prefix
         self.dry_run = dry_run
         self._client = client
         self.n_uploaded = 0
@@ -256,7 +290,7 @@ class AllegatiStore:
 
     def store(self, nome: str, content: bytes) -> tuple[str, str]:
         sha = hashlib.sha256(content).hexdigest()
-        path = f"{SOURCE_NAME}/allegati/{sha[:2]}/{sha}/{_safe_object_name(nome)}"
+        path = f"{self.prefix}/allegati/{sha[:2]}/{sha}/{_safe_object_name(nome)}"
         uri = f"gs://{self.bucket_name}/{path}"
         if self.dry_run:
             return sha, uri
@@ -275,6 +309,7 @@ def _msgid_sintetico(msg: email.message.Message) -> str:
 
 def extract_message(
     msg: email.message.Message,
+    src: PecSource,
     raw_object_id: str,
     store: AllegatiStore,
     now: datetime,
@@ -308,15 +343,15 @@ def extract_message(
     # la casella non ci sia — nessun warning).
     if not busta:
         fr = email.utils.parseaddr(str(msg.get("From", "")))[1].lower()
-        if CASELLA not in fr:
+        if src.casella not in fr:
             tipo = "ALTRO"
             warning = (warning or "") + f" from!=casella ({fr or 'assente'})"
     elif tipo == "POSTA_CERTIFICATA" and daticert and daticert.get("destinatari"):
-        in_daticert = any(CASELLA in d.lower() for d in daticert["destinatari"])
+        in_daticert = any(src.casella in d.lower() for d in daticert["destinatari"])
         to_busta = [
             a.lower() for _, a in email.utils.getaddresses([str(msg.get("To", ""))])
         ]
-        if not in_daticert and not any(CASELLA in a for a in to_busta):
+        if not in_daticert and not any(src.casella in a for a in to_busta):
             warning = (warning or "") + " casella non tra i destinatari"
 
     # msgid: il daticert `identificativo` è l'id della CATENA di ricevute (lo
@@ -402,8 +437,9 @@ def extract_message(
         "subject": subject_inner or None,
         "body_text": estrai_body_text(inner),
         "provider": provider,
-        "casella": CASELLA,
-        "societa_id": SOCIETA,
+        "casella": src.casella,
+        "entity_id": src.entity_id,
+        "societa_id": src.societa_id,
         "n_allegati": len(allegati_rows),
         "ha_postacert": ha_postacert,
         "parse_warning": warning.strip() if warning else None,
@@ -416,6 +452,7 @@ def extract_message(
 
 def _riga_fallback(
     msg: email.message.Message,
+    src: PecSource,
     raw_object_id: str,
     now: datetime,
     exc: Exception,
@@ -448,8 +485,9 @@ def _riga_fallback(
         "subject": None,
         "body_text": None,
         "provider": None,
-        "casella": CASELLA,
-        "societa_id": SOCIETA,
+        "casella": src.casella,
+        "entity_id": src.entity_id,
+        "societa_id": src.societa_id,
         "n_allegati": 0,
         "ha_postacert": False,
         "parse_warning": warning,
@@ -457,6 +495,16 @@ def _riga_fallback(
         "raw_object_id": raw_object_id,
         "data_caricamento": now,
     }
+
+
+def _iter_messages(path: Path):
+    """mbox → N messaggi; .eml → 1 messaggio. Stesso modello canonico a valle."""
+    if path.suffix.lower() == ".eml":
+        import email as email_pkg
+
+        yield email_pkg.message_from_bytes(path.read_bytes())
+    else:
+        yield from mailbox.mbox(str(path))
 
 
 def coverage_gaps(dates: list, min_gap_days: int = 14) -> list[tuple]:
@@ -471,14 +519,23 @@ def coverage_gaps(dates: list, min_gap_days: int = 14) -> list[tuple]:
 
 
 def ingest_file(
-    path: Path, raw_object_id: str | None = None, dry_run: bool = False
+    path: Path,
+    src: PecSource,
+    raw_object_id: str | None = None,
+    dry_run: bool = False,
 ) -> dict:
-    """Un mbox → righe nuove in f_pec_messages/f_pec_allegati + report."""
+    """Un mbox/.eml → righe nuove in f_pec_messages/f_pec_allegati + report."""
     if not dry_run and not raw_object_id:
         raise ValueError(
             "raw_object_id obbligatorio in write mode (I9): usa --raw-object-id o --dry-run"
         )
-    store = AllegatiStore(dry_run=dry_run)
+    fmt = "eml" if path.suffix.lower() == ".eml" else "mbox"
+    if fmt not in src.input_formats:
+        raise ValueError(
+            f"formato {fmt} non ammesso per {src.source_name} "
+            f"(input_formats={list(src.input_formats)})"
+        )
+    store = AllegatiStore(bucket_name=src.bucket, prefix=src.source_name, dry_run=dry_run)
     now = datetime.now()
     ro_id = raw_object_id or "dry-run"
 
@@ -486,13 +543,13 @@ def ingest_file(
     allegati: dict[str, list[dict]] = {}  # msgid → righe allegato
     letti = dedup_in_file = estrazioni_fallite = 0
 
-    for msg in mailbox.mbox(str(path)):
+    for msg in _iter_messages(path):
         letti += 1
         try:
-            riga, alls = extract_message(msg, ro_id, store, now)
+            riga, alls = extract_message(msg, src, ro_id, store, now)
         except Exception as e:  # no-silent-skips: riga fallback, mai abort
             estrazioni_fallite += 1
-            riga, alls = _riga_fallback(msg, ro_id, now, e), []
+            riga, alls = _riga_fallback(msg, src, ro_id, now, e), []
         if riga["msgid"] in righe:
             dedup_in_file += 1
             continue
@@ -554,12 +611,15 @@ def ingest_file(
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    ap = argparse.ArgumentParser(description="Ingest mbox PEC → f_pec_messages")
-    ap.add_argument("--file", required=True, type=Path, help="export mbox PEC")
+    ap = argparse.ArgumentParser(
+        description="Ingest PEC (mbox/.eml) → f_pec_messages, per qualunque casella del registry"
+    )
+    ap.add_argument("--file", required=True, type=Path, help="export mbox o .eml PEC")
     ap.add_argument(
-        "--societa",
-        default=None,
-        help="passata dal promotion path; deve combaciare con la casella (INTUR)",
+        "--source",
+        required=True,
+        help="source_name del registry (es. PEC_MAILBOX_ORTI_APPEND) — "
+        "risolve casella/entity/bucket; nessun default (I-PEC-2)",
     )
     ap.add_argument(
         "--raw-object-id",
@@ -569,13 +629,9 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true", help="parse senza scrivere")
     args = ap.parse_args()
 
-    if args.societa and args.societa != SOCIETA:
-        ap.error(
-            f"--societa {args.societa} non combacia con la casella {CASELLA} ({SOCIETA})"
-        )
-
+    src = resolve_pec_source(args.source)
     report = ingest_file(
-        args.file, raw_object_id=args.raw_object_id, dry_run=args.dry_run
+        args.file, src, raw_object_id=args.raw_object_id, dry_run=args.dry_run
     )
     log.info(
         "DONE %s: %d nuove righe messaggi, %d allegati",

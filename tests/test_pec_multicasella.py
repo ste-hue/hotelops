@@ -130,3 +130,102 @@ def test_source_pec_senza_casella_rifiutata():
     )
     with pytest.raises(ValidationError):
         SourceDefinition(**base)  # PEC senza casella/entity_id
+
+
+# ── Parser generalizzato ─────────────────────────────────────────────────────
+
+from email.message import EmailMessage
+from pathlib import Path
+
+
+def _make_eml(path: Path, from_addr: str, to_addr: str, subject: str,
+              attach: tuple[str, bytes] | None = None) -> Path:
+    m = EmailMessage()
+    m["From"] = from_addr
+    m["To"] = to_addr
+    m["Subject"] = subject
+    m["Message-ID"] = f"<{abs(hash((from_addr, subject)))}@test.pec.it>"
+    m["Date"] = "Wed, 15 Jul 2026 16:38:59 +0200"
+    m.set_content("corpo del messaggio")
+    if attach:
+        nome, contenuto = attach
+        m.add_attachment(
+            contenuto, maintype="application", subtype="pdf", filename=nome
+        )
+    path.write_bytes(bytes(m))
+    return path
+
+
+def _src_personale():
+    from ingest.flussi.ingest_pec_mbox import resolve_pec_source
+
+    return resolve_pec_source("PEC_MAILBOX_PERSONALE_APPEND")
+
+
+def test_resolve_pec_source_orti():
+    from ingest.flussi.ingest_pec_mbox import resolve_pec_source
+
+    src = resolve_pec_source("PEC_MAILBOX_ORTI_APPEND")
+    assert src.casella == "orti@pec.it"
+    assert src.entity_id == "ORTI"
+    assert src.bucket == "orti-raw"
+
+
+def test_resolve_pec_source_rifiuta_non_pec():
+    from ingest.flussi.ingest_pec_mbox import resolve_pec_source
+
+    with pytest.raises((KeyError, ValueError)):
+        resolve_pec_source("ESOLVER_MOVIMENTI_ORTI_APPEND")
+
+
+def test_ingest_eml_personale(tmp_path):
+    from ingest.flussi.ingest_pec_mbox import ingest_file
+
+    src = _src_personale()
+    eml = _make_eml(
+        tmp_path / "msg.eml",
+        "stefanojunior.dellapietra@mpspec.it",
+        "controparte@pec.it",
+        "Test invio",
+    )
+    report = ingest_file(eml, src, dry_run=True)
+    assert report["messaggi_letti"] == 1
+    assert report["righe_messaggi"] == 1
+
+
+def test_entity_dal_registry_mai_dal_contenuto(tmp_path):
+    """I-PEC-2: un .eml 'della casella sbagliata' resta attribuito alla
+    sorgente dichiarata, con warning — mai riattribuito a un'altra entity."""
+    import mailbox as mb
+
+    from ingest.flussi.ingest_pec_mbox import extract_message, AllegatiStore
+
+    eml = _make_eml(
+        tmp_path / "alien.eml", "orti@pec.it", "x@pec.it", "Da altra casella"
+    )
+    import email as email_pkg
+
+    msg = email_pkg.message_from_bytes(eml.read_bytes())
+    src = _src_personale()
+    store = AllegatiStore(bucket_name=src.bucket, prefix=src.source_name, dry_run=True)
+    riga, _ = extract_message(msg, src, "raw-x", store, datetime(2026, 7, 17))
+    assert riga["entity_id"] == "STEFANO_PERSONALE"
+    assert riga["casella"] == "stefanojunior.dellapietra@mpspec.it"
+    assert "from!=casella" in (riga["parse_warning"] or "")
+
+
+def test_formato_non_ammesso_rifiutato(tmp_path):
+    from ingest.flussi.ingest_pec_mbox import ingest_file, resolve_pec_source
+
+    src = resolve_pec_source("PEC_MAILBOX_ORTI_APPEND")  # solo mbox
+    eml = _make_eml(tmp_path / "x.eml", "orti@pec.it", "y@pec.it", "s")
+    with pytest.raises(ValueError, match="formato"):
+        ingest_file(eml, src, dry_run=True)
+
+
+def test_allegati_store_prefix_per_source():
+    from ingest.flussi.ingest_pec_mbox import AllegatiStore
+
+    store = AllegatiStore(bucket_name="orti-raw", prefix="PEC_MAILBOX_ORTI_APPEND", dry_run=True)
+    sha, uri = store.store("doc.pdf", b"contenuto")
+    assert uri.startswith("gs://orti-raw/PEC_MAILBOX_ORTI_APPEND/allegati/")
