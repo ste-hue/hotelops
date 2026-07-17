@@ -1,0 +1,1717 @@
+{
+ "generated": "2026-07-17",
+ "status": "FROZEN 2026-07-17 — review 11/11 PASS (totali, tier, riconciliazione fs, esclusioni, legacy, ID pattern, unicità, esistenza path); scope autoritativo per la migrazione",
+ "summary": {
+  "in_scope": 243,
+  "tier1": 69,
+  "tier2": 174,
+  "expected": "T1≈68 T2≈171 (±5)",
+  "collisions": 0,
+  "flags": 0
+ },
+ "flags": [],
+ "collisions": {},
+ "files": [
+  {
+   "path": "GRUPPO_PANORAMA.md",
+   "type": "constitutional",
+   "tier": 1,
+   "proposed_id": "constitutional:gruppo-panorama",
+   "action": "generate"
+  },
+  {
+   "path": "IDENTITY.md",
+   "type": "constitutional",
+   "tier": 1,
+   "proposed_id": "constitutional:identity",
+   "action": "generate"
+  },
+  {
+   "path": "KERNEL.md",
+   "type": "constitutional",
+   "tier": 1,
+   "proposed_id": "constitutional:kernel",
+   "action": "generate"
+  },
+  {
+   "path": "KICKOFF_PROMPT.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:kickoff-prompt",
+   "action": "generate"
+  },
+  {
+   "path": "PLATFORM.md",
+   "type": "constitutional",
+   "tier": 1,
+   "proposed_id": "constitutional:platform",
+   "action": "generate"
+  },
+  {
+   "path": "SUPPLIERS_STRATEGY.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:suppliers-strategy",
+   "action": "generate"
+  },
+  {
+   "path": "log.md",
+   "type": "log",
+   "tier": 2,
+   "proposed_id": "log:log",
+   "action": "generate"
+  },
+  {
+   "path": "architecture/Agent_Epistemology_Problem.md",
+   "type": "architecture",
+   "tier": 1,
+   "proposed_id": "architecture:agent-epistemology-problem",
+   "action": "generate"
+  },
+  {
+   "path": "architecture/Architecture_Gaps_Audit_2026-05-10.md",
+   "type": "architecture",
+   "tier": 1,
+   "proposed_id": "architecture:architecture-gaps-audit-2026-05-10",
+   "action": "generate"
+  },
+  {
+   "path": "architecture/Condges_Excel_Architecture.md",
+   "type": "architecture",
+   "tier": 1,
+   "proposed_id": "architecture:condges-excel-architecture",
+   "action": "generate"
+  },
+  {
+   "path": "architecture/Condges_Simplification_Guide.md",
+   "type": "architecture",
+   "tier": 1,
+   "proposed_id": "architecture:condges-simplification-guide",
+   "action": "generate"
+  },
+  {
+   "path": "architecture/GCS_INTEGRATION.md",
+   "type": "architecture",
+   "tier": 1,
+   "proposed_id": "architecture:gcs-integration",
+   "action": "generate"
+  },
+  {
+   "path": "architecture/INGESTION_TREE.md",
+   "type": "architecture",
+   "tier": 1,
+   "proposed_id": "architecture:ingestion-tree",
+   "action": "generate"
+  },
+  {
+   "path": "architecture/INVARIANTS.md",
+   "type": "architecture",
+   "tier": 1,
+   "proposed_id": "architecture:invariants",
+   "action": "generate"
+  },
+  {
+   "path": "architecture/LINEAGE_ARCHITECTURE.md",
+   "type": "architecture",
+   "tier": 1,
+   "proposed_id": "architecture:lineage-architecture",
+   "action": "generate"
+  },
+  {
+   "path": "architecture/Vault_Audit_2026-05-06.md",
+   "type": "architecture",
+   "tier": 1,
+   "proposed_id": "architecture:vault-audit-2026-05-06",
+   "action": "generate"
+  },
+  {
+   "path": "architecture/Vault_Update_Summary_2026-05-06.md",
+   "type": "architecture",
+   "tier": 1,
+   "proposed_id": "architecture:vault-update-summary-2026-05-06",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/ACCODAMENTI.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:accodamenti",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/AUTH_DUE_PIANI.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:auth-due-piani",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/BILANCINO_SEMANTICS.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:bilancino-semantics",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/BOOKING_PACE_E_BASI.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:booking-pace-e-basi",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/BUDGET_BASELINE_LOTTERY.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:budget-baseline-lottery",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/CAMERE_FISICHE_VS_VENDITA.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:camere-fisiche-vs-vendita",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/CAPEX_NEL_CASHFLOW.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:capex-nel-cashflow",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/CASH_ROTATION_TIMING.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:cash-rotation-timing",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/CASSA_VS_COMPETENZA_SOURCES.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:cassa-vs-competenza-sources",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/CDG_VS_REVMAN.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:cdg-vs-revman",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/CODICI_ESOLVER.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:codici-esolver",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/DATA_SOURCES.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:data-sources",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/DSCR_E_COPERTURA.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:dscr-e-copertura",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/ESCLUSO_VS_NON_MAPPATO.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:escluso-vs-non-mappato",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/ESOLVER_PARTITE_EXPORT.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:esolver-partite-export",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/EVENT_GROUPING_IN_FACTS.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:event-grouping-in-facts",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/EXCEL_GOOGLE_SHEETS_INTEROP.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:excel-google-sheets-interop",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/FILE_CLASSIFICATION.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:file-classification",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/FINANCIAL_RULES.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:financial-rules",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/FIXTURE_COINCIDENCE_BIAS.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:fixture-coincidence-bias",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/FOOD_COST.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:food-cost",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/GAIA_EXCEL_FORMAT.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:gaia-excel-format",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/GASPAROTTO_MODEL.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:gasparotto-model",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/GATE_BEFORE_CLEAR.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:gate-before-clear",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/HASH_RIGA_DEDUP_KEY.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:hash-riga-dedup-key",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/HUB_EMBED_VS_EDGE.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:hub-embed-vs-edge",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/IBAN_PREAMBLE_SIGNATURE.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:iban-preamble-signature",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/INFRASTRUCTURE_VS_LOOPS.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:infrastructure-vs-loops",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/KEPLERO_OPTIMIZATION_LEVERS.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:keplero-optimization-levers",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/LIFECYCLE.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:lifecycle",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/LINEAGE_CANONICAL_OVERLAP.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:lineage-canonical-overlap",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/LINEAGE_REPLACEMENT_VS_REROUTE.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:lineage-replacement-vs-reroute",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/MECHANICAL_INVARIANTS.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:mechanical-invariants",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/MULTISESSION_GIT_HYGIENE.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:multisession-git-hygiene",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/ONTOLOGY_KERNEL.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:ontology-kernel",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/OPERATIONAL_MEMORY_SYSTEM.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:operational-memory-system",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/PARTITE_DI_GIRO.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:partite-di-giro",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/PEC_ANATOMIA.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:pec-anatomia",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/PF_FORNITORI_TRIAGE.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:pf-fornitori-triage",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/PF_ROTATION_WORKFLOW.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:pf-rotation-workflow",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/PF_VOCE_FONTE.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:pf-voce-fonte",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/POWERBI_EXPORTS_SEMANTICS.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:powerbi-exports-semantics",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/PROGETTO.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:progetto",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/RECONCILE_DELTA_SALDI.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:reconcile-delta-saldi",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/REFACTOR_CONFIG_DRIFT.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:refactor-config-drift",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/RICONCILIAZIONE_DOCUMENTO_BANCA.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:riconciliazione-documento-banca",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/SALDI_SOURCING.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:saldi-sourcing",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/SEGMENTO_CLIENTE.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:segmento-cliente",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/SPEC_AUDIT_ADVERSARIALE.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:spec-audit-adversariale",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/SPIAGGIA_DATA_SEMANTICS.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:spiaggia-data-semantics",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/STAGIONALITA.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:stagionalita",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/STREAMLIT_CLOUD_DEPLOY.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:streamlit-cloud-deploy",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/VERTICAL_VIEW_PATTERN.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:vertical-view-pattern",
+   "action": "generate"
+  },
+  {
+   "path": "concepts/VOCE_LEDGER_AUTHORITY.md",
+   "type": "concept",
+   "tier": 1,
+   "proposed_id": "concept:voce-ledger-authority",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-04-11_Economato_Vertical_Activation.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-04-11-economato-vertical-activation",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-04-11_Obsidian_Refactor_Structure.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-04-11-obsidian-refactor-structure",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-04-17_Budget_Canonical_View.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-04-17-budget-canonical-view",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-04-21_Progetto_First_Class_Dimension.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-04-21-progetto-first-class-dimension",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-04-24_Google_Cloud_Execution_Layer.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-04-24-google-cloud-execution-layer",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-02_GCS_as_Raw_Layer.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-02-gcs-as-raw-layer",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-10_Admin_Sdk_Parking_Lot.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-10-admin-sdk-parking-lot",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-10_Branch_Strategy_Main_vs_VerticalV2.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-10-branch-strategy-main-vs-verticalv2",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-10_Kernel_Closure_Sequence.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-10-kernel-closure-sequence",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-10_Workspace_As_Scoop_Layer.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-10-workspace-as-scoop-layer",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-11_BQ_Auth_Streamlit_Cloud.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-11-bq-auth-streamlit-cloud",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-11_Hotelops_Capture_Unified_Entry.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-11-hotelops-capture-unified-entry",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-12_Accodamenti_INTUR_Retag.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-12-accodamenti-intur-retag",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-12_Delete_Pre_Apr27_Stale_Hash.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-12-delete-pre-apr27-stale-hash",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-12_HPAN25PIANO1_Retrospective_Mining.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-12-hpan25piano1-retrospective-mining",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-12_parser_exit_code_contract.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-12-parser-exit-code-contract",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-12_progetto_vertical_direction.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-12-progetto-vertical-direction",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-12_source_granularity_one_per_system_societa_dataset.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-12-source-granularity-one-per-system-societa-dataset",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-16_capex_cockpit_model.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-16-capex-cockpit-model",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-18_Cashflow_Modulo_Autonomo.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-18-cashflow-modulo-autonomo",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-18_PF_Rotate_Design.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-18-pf-rotate-design",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-20_BB_Only_No_Mezza_Pensione.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-20-bb-only-no-mezza-pensione",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-21_Canonical_Transformation_Matrix_FB.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-21-canonical-transformation-matrix-fb",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-21_Cantina_100pct_Bar.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-21-cantina-100pct-bar",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-21_D_Prefix_Dotazioni.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-21-d-prefix-dotazioni",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-21_PF_Rotate_Layout_Aware_Engine.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-21-pf-rotate-layout-aware-engine",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-28_Robust_Fornitori_Mapping.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-28-robust-fornitori-mapping",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-05-31_Vault_Architecture_vs_claude_obsidian.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-31-vault-architecture-vs-claude-obsidian",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-08_Source_Contract_Ingest_Model.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-08-source-contract-ingest-model",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-08_f_movimenti_scope_pnc_vs_bankledger.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-08-f-movimenti-scope-pnc-vs-bankledger",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-08_kernel_finalize_and_I10_proposal.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-08-kernel-finalize-and-i10-proposal",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-09_capex_camere_consolidamento_campagna_unica.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-09-capex-camere-consolidamento-campagna-unica",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-10_Rich_Report_From_Source_Not_Ledger.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-10-rich-report-from-source-not-ledger",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-11_CLI_Unico_Strumento_Rotation.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-11-cli-unico-strumento-rotation",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-11_FB_Dashboard_Streamlit_Non_Looker.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-11-fb-dashboard-streamlit-non-looker",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-12_Ancorare_Al_Dominio_Non_All_Orologio.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-12-ancorare-al-dominio-non-all-orologio",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-12_Generare_Non_Patchare.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-12-generare-non-patchare",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-12_Giardiniere_Notturno.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-12-giardiniere-notturno",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-12_Hub_Presentation_Layer.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-12-hub-presentation-layer",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-12_PF_Generazionale.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-12-pf-generazionale",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-13_Hub_Live_vs_StaticEdge.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-13-hub-live-vs-staticedge",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-13_Spiaggia_Vertical_3.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-13-spiaggia-vertical-3",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-15_Presentazione_Bespoke_Interazione_Live.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-15-presentazione-bespoke-interazione-live",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-15_Una_Data_API_Non_Una_Per_App.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-15-una-data-api-non-una-per-app",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-16_Packaging_Modalita_A.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-16-packaging-modalita-a",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-19_Modello_Proiezione_Cassa.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-19-modello-proiezione-cassa",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-22_CdG_CE_Backbone_Bilancino.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-22-cdg-ce-backbone-bilancino",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-06-22_Ingest_Funzione_Del_Vertical.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-06-22-ingest-funzione-del-vertical",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-07-04_CE_Backbone_Bilancino.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-07-04-ce-backbone-bilancino",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-07-04_CdG_Redesign_Per_Foglio_Gasparotto.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-07-04-cdg-redesign-per-foglio-gasparotto",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-07-07_Famiglia_Prenotazioni_Source_E_Dimensioni.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-07-07-famiglia-prenotazioni-source-e-dimensioni",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-07-11_Promotion_Prenotazioni_Snapshot_Pace.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-07-11-promotion-prenotazioni-snapshot-pace",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-07-12_StampaCassa_Source_Export_Cap.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-07-12-stampacassa-source-export-cap",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-07-14_Bilancini_Solo_Numeri_Veri.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-07-14-bilancini-solo-numeri-veri",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-07-14_Fatti_vs_Proiezioni_Debito.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-07-14-fatti-vs-proiezioni-debito",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-07-14_Skill_Method_Only.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-07-14-skill-method-only",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-07-14_Worktree_Per_Esecuzione.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-07-14-worktree-per-esecuzione",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-07-15_Bilancini_Edge_App.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-07-15-bilancini-edge-app",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-07-15_Deploy_Keyless_CI.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-07-15-deploy-keyless-ci",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-07-15_Mutui_Access_Namespace.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-07-15-mutui-access-namespace",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-07-17_OKF_Lite_Spec_Hardening.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-07-17-okf-lite-spec-hardening",
+   "action": "generate"
+  },
+  {
+   "path": "decisions/2026-07-17_Vendite_POS_Export_Segmentato.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-07-17-vendite-pos-export-segmentato",
+   "action": "generate"
+  },
+  {
+   "path": "loops/bank_ledger_reconciliation.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:bank-ledger-reconciliation",
+   "action": "generate"
+  },
+  {
+   "path": "loops/cash_control.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:cash-control",
+   "action": "generate"
+  },
+  {
+   "path": "loops/compliance_deadlines.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:compliance-deadlines",
+   "action": "generate"
+  },
+  {
+   "path": "loops/daily_reconciliation.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:daily-reconciliation",
+   "action": "generate"
+  },
+  {
+   "path": "loops/document_ingestion.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:document-ingestion",
+   "action": "generate"
+  },
+  {
+   "path": "loops/economato.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:economato",
+   "action": "generate"
+  },
+  {
+   "path": "loops/intercompany_governance.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:intercompany-governance",
+   "action": "generate"
+  },
+  {
+   "path": "loops/monthly_close.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:monthly-close",
+   "action": "generate"
+  },
+  {
+   "path": "loops/projects_execution.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:projects-execution",
+   "action": "generate"
+  },
+  {
+   "path": "loops/reputation.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:reputation",
+   "action": "generate"
+  },
+  {
+   "path": "loops/revenue_management.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:revenue-management",
+   "action": "generate"
+  },
+  {
+   "path": "loops/supplier_obligations.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:supplier-obligations",
+   "action": "generate"
+  },
+  {
+   "path": "plans/2026-04-29-produzione-pms-ingest.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-04-29-produzione-pms-ingest",
+   "action": "generate"
+  },
+  {
+   "path": "plans/2026-05-06-data-intake-ui.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-06-data-intake-ui",
+   "action": "generate"
+  },
+  {
+   "path": "plans/2026-05-06-lineage-documentation-plan.md",
+   "type": "decision",
+   "tier": 2,
+   "proposed_id": "decision:2026-05-06-lineage-documentation-plan",
+   "action": "generate"
+  },
+  {
+   "path": "procedures/ECONOMATO_INTEGRATION.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:economato-integration",
+   "action": "generate"
+  },
+  {
+   "path": "procedures/VAULT_RECONCILIATION.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:vault-reconciliation",
+   "action": "generate"
+  },
+  {
+   "path": "procedures/classifica_file.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:classifica-file",
+   "action": "generate"
+  },
+  {
+   "path": "procedures/reconcile_banca.md",
+   "type": "loop",
+   "tier": 2,
+   "proposed_id": "loop:reconcile-banca",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-10_consolidation_workspace_v1.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-10-consolidation-workspace-v1",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-10_forward_only_gcs_pivot_and_intur_intake.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-10-forward-only-gcs-pivot-and-intur-intake",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-10_vault_karpathy_kernel_assessment.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-10-vault-karpathy-kernel-assessment",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-11_hotelops_capture_command.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-11-hotelops-capture-command",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-11_streamlit_cloud_pf_rotate.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-11-streamlit-cloud-pf-rotate",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-11_verticals_refactor_and_intur_resume.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-11-verticals-refactor-and-intur-resume",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-12_accodamenti_gaia_pipeline_overhaul.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-12-accodamenti-gaia-pipeline-overhaul",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-12_banche_lineage_full_coverage.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-12-banche-lineage-full-coverage",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-12_hpan25piano1_retrospective_mining.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-12-hpan25piano1-retrospective-mining",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-13_pf_aprile_saldi_update.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-13-pf-aprile-saldi-update",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-16_hpan25piano1_cockpit_e_capex_framework.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-16-hpan25piano1-cockpit-e-capex-framework",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-17_ontology_kernel_design.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-17-ontology-kernel-design",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-18_pf_rotate_design_e_saldi_banca.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-18-pf-rotate-design-e-saldi-banca",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-19_looker_fb_implementation.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-19-looker-fb-implementation",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-19_rotation_maggio_witness_e_mappa_voci.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-19-rotation-maggio-witness-e-mappa-voci",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-21_fb_canonical_model_and_audit_tool.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-21-fb-canonical-model-and-audit-tool",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-21_pf_rotate_v1_engine_layout_aware.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-21-pf-rotate-v1-engine-layout-aware",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-23_cashflow_audit_and_intur_fix.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-23-cashflow-audit-and-intur-fix",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-28_intur_fornitori_triage_bq_authority.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-28-intur-fornitori-triage-bq-authority",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-28_zapier_example_app_tour.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-28-zapier-example-app-tour",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-05-31_saldi_authority_design_and_kernel.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-05-31-saldi-authority-design-and-kernel",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-01_esolver_movimenti_ingest_double_count.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-01-esolver-movimenti-ingest-double-count",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-01_pf_rotate_saldi_foundation_build.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-01-pf-rotate-saldi-foundation-build",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-03_cash_control_v1_kernel_loop_grill.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-03-cash-control-v1-kernel-loop-grill",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-04_esolver_p0_and_cashflow_evaluation.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-04-esolver-p0-and-cashflow-evaluation",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-08_control_layer_and_movimenti_rebaseline.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-08-control-layer-and-movimenti-rebaseline",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-08_produzione_pms_backfill_and_worktree_fix.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-08-produzione-pms-backfill-and-worktree-fix",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-09_capex_kickoff_camere_terrazza.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-09-capex-kickoff-camere-terrazza",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-09_ingestion_tree_and_source_contract_grounding.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-09-ingestion-tree-and-source-contract-grounding",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-10_accodamenti_categoria_cassa_and_fb_loads.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-10-accodamenti-categoria-cassa-and-fb-loads",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-11_bilancini_oracle_and_movimenti_rebaseline.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-11-bilancini-oracle-and-movimenti-rebaseline",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-11_fatture_pipeline_pf_test_rosa.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-11-fatture-pipeline-pf-test-rosa",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-12_fb_dashboard_streamlit_ship.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-12-fb-dashboard-streamlit-ship",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-12_gardener_setup_doc_refresh.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-12-gardener-setup-doc-refresh",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-12_hub_app_store_and_pf_generazionale.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-12-hub-app-store-and-pf-generazionale",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-12_scadenzario_fix_e_pf_generatore.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-12-scadenzario-fix-e-pf-generatore",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-12_threads_skill_first_triage.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-12-threads-skill-first-triage",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-13_hub_static_edge_slice1.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-13-hub-static-edge-slice1",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-13_keplero_conversation_analysis.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-13-keplero-conversation-analysis",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-13_pf_gate_chiuso_esclusi_wip.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-13-pf-gate-chiuso-esclusi-wip",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-13_spiaggia_vertical_ship.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-13-spiaggia-vertical-ship",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-15_hub_vetrina_bespoke_and_data_api_architecture.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-15-hub-vetrina-bespoke-and-data-api-architecture",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-16_packaging_scout_and_thread_triage.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-16-packaging-scout-and-thread-triage",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-18_cashflow_vertical_and_cash_pf_metaA.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-18-cashflow-vertical-and-cash-pf-metaa",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-19_cashflow_shipped_and_engine_unified.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-19-cashflow-shipped-and-engine-unified",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-19_projections_vs_facts_and_supplier_mapping.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-19-projections-vs-facts-and-supplier-mapping",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-21_hub_roles_and_agent_context_layer.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-21-hub-roles-and-agent-context-layer",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-22_accodamenti_ingestor_and_cdg_bilancino_backbone.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-22-accodamenti-ingestor-and-cdg-bilancino-backbone",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-30_chiusura_giugno_ingest.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-30-chiusura-giugno-ingest",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-06-30_cloud_jobs_cutover.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-06-30-cloud-jobs-cutover",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-04_cdg_bilancino_backbone_and_redesign_kickoff.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-04-cdg-bilancino-backbone-and-redesign-kickoff",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-04_saldi_rotation_e_leak_40k.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-04-saldi-rotation-e-leak-40k",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-05_giugno_ingest_fb_yoy_cdg_off.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-05-giugno-ingest-fb-yoy-cdg-off",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-07_famiglia_prenotazioni_e_dimensioni.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-07-famiglia-prenotazioni-e-dimensioni",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-08_pec_mbox_layer_e_sprint.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-08-pec-mbox-layer-e-sprint",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-09_pec_chiusura_e_vicende_legali.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-09-pec-chiusura-e-vicende-legali",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-11_gc_threads_readme_e_spec_cashflow.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-11-gc-threads-readme-e-spec-cashflow",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-11_rotation_giugno_orti_guard_e_controlli.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-11-rotation-giugno-orti-guard-e-controlli",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-11_season_forecast_e_triage_skill.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-11-season-forecast-e-triage-skill",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-12_cashflow_consuntivo_build_e_merge.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-12-cashflow-consuntivo-build-e-merge",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-12_revenue_feedback_e_prima_foto.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-12-revenue-feedback-e-prima-foto",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-12_revman_booking_curve_shipped.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-12-revman-booking-curve-shipped",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-12_stampa_cassa_ytd_ingest.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-12-stampa-cassa-ytd-ingest",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-13_revenue_v2_e_upload_self_service.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-13-revenue-v2-e-upload-self-service",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-14_audit_prep_banca_debito.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-14-audit-prep-banca-debito",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-14_bilancini_rebaseline_artifact_hub.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-14-bilancini-rebaseline-artifact-hub",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-14_piano_industriale_build_e_decks.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-14-piano-industriale-build-e-decks",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-15_bilancini_edge_provisioning.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-15-bilancini-edge-provisioning",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-15_runtime_audit_target_migrazione.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-15-runtime-audit-target-migrazione",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-17_fb_freshness_vendite_pos_lineage.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-17-fb-freshness-vendite-pos-lineage",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-17_okf_lite_spec_hardening.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-17-okf-lite-spec-hardening",
+   "action": "generate"
+  },
+  {
+   "path": "sessions/2026-07-17_pec_multicasella_pannello_ceo.md",
+   "type": "session",
+   "tier": 2,
+   "proposed_id": "session:2026-07-17-pec-multicasella-pannello-ceo",
+   "action": "generate"
+  },
+  {
+   "path": "verticals/CONDGES.md",
+   "type": "vertical",
+   "tier": 2,
+   "proposed_id": "vertical:condges",
+   "action": "generate"
+  },
+  {
+   "path": "verticals/ECONOMATO.md",
+   "type": "vertical",
+   "tier": 2,
+   "proposed_id": "vertical:economato",
+   "action": "generate"
+  },
+  {
+   "path": "verticals/FB.md",
+   "type": "vertical",
+   "tier": 2,
+   "proposed_id": "vertical:fb",
+   "action": "generate"
+  },
+  {
+   "path": "verticals/PRENOTAZIONI.md",
+   "type": "vertical",
+   "tier": 2,
+   "proposed_id": "vertical:prenotazioni",
+   "action": "generate"
+  },
+  {
+   "path": "verticals/REVIEWS.md",
+   "type": "vertical",
+   "tier": 2,
+   "proposed_id": "vertical:reviews",
+   "action": "generate"
+  },
+  {
+   "path": "verticals/SPIAGGIA.md",
+   "type": "vertical",
+   "tier": 2,
+   "proposed_id": "vertical:spiaggia",
+   "action": "generate"
+  },
+  {
+   "path": "workstreams/CAPEX.md",
+   "type": "workstream_hub",
+   "tier": 2,
+   "proposed_id": "workstream_hub:capex",
+   "action": "generate"
+  },
+  {
+   "path": "workstreams/CASH_PF.md",
+   "type": "workstream_hub",
+   "tier": 2,
+   "proposed_id": "workstream_hub:cash-pf",
+   "action": "generate"
+  },
+  {
+   "path": "workstreams/CDG.md",
+   "type": "workstream_hub",
+   "tier": 2,
+   "proposed_id": "workstream_hub:cdg",
+   "action": "generate"
+  },
+  {
+   "path": "workstreams/DOSSIER_SOCIETARIO.md",
+   "type": "workstream_hub",
+   "tier": 2,
+   "proposed_id": "workstream_hub:dossier-societario",
+   "action": "generate"
+  },
+  {
+   "path": "workstreams/FB.md",
+   "type": "workstream_hub",
+   "tier": 2,
+   "proposed_id": "workstream_hub:fb",
+   "action": "generate"
+  },
+  {
+   "path": "workstreams/HUB.md",
+   "type": "workstream_hub",
+   "tier": 2,
+   "proposed_id": "workstream_hub:hub",
+   "action": "generate"
+  },
+  {
+   "path": "workstreams/INFRA.md",
+   "type": "workstream_hub",
+   "tier": 2,
+   "proposed_id": "workstream_hub:infra",
+   "action": "generate"
+  },
+  {
+   "path": "workstreams/INGEST_CHIUSURE.md",
+   "type": "workstream_hub",
+   "tier": 2,
+   "proposed_id": "workstream_hub:ingest-chiusure",
+   "action": "generate"
+  },
+  {
+   "path": "workstreams/KEPLERO.md",
+   "type": "workstream_hub",
+   "tier": 2,
+   "proposed_id": "workstream_hub:keplero",
+   "action": "generate"
+  },
+  {
+   "path": "workstreams/KERNEL_TOOLING.md",
+   "type": "workstream_hub",
+   "tier": 2,
+   "proposed_id": "workstream_hub:kernel-tooling",
+   "action": "generate"
+  },
+  {
+   "path": "workstreams/PRENOTAZIONI.md",
+   "type": "workstream_hub",
+   "tier": 2,
+   "proposed_id": "workstream_hub:prenotazioni",
+   "action": "generate"
+  },
+  {
+   "path": "workstreams/REVMAN.md",
+   "type": "workstream_hub",
+   "tier": 2,
+   "proposed_id": "workstream_hub:revman",
+   "action": "generate"
+  },
+  {
+   "path": "workstreams/SPIAGGIA.md",
+   "type": "workstream_hub",
+   "tier": 2,
+   "proposed_id": "workstream_hub:spiaggia",
+   "action": "generate"
+  }
+ ]
+}
