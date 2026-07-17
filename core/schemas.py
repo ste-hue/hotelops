@@ -707,6 +707,43 @@ class PecAllegatoRow(BaseModel):
         return v
 
 
+class PecClassificazioneRow(BaseModel):
+    """Schema for f_pec_classificazioni — una classificazione per messaggio+versione.
+
+    APPEND-only: riclassificare = riga nuova con ruleset_version più recente;
+    l'override umano è una riga con override_source=HUMAN. La "corrente" è
+    responsabilità della vista v_pec_classificazione_corrente (I-PEC-8).
+    Dedup su hash_riga = md5(msgid|ruleset_version|override_source).
+    """
+
+    msgid: str
+    entity_id: EntityId
+    stato: Literal["CLASSIFICATO", "NON_CLASSIFICATO", "AMBIGUO", "ERRORE_CLASSIFICAZIONE"]
+    primary_category: Optional[
+        Literal["BANCA", "LEGALE", "FISCO", "REGISTRO_IMPRESE",
+                "ASSICURAZIONE", "PA", "FORNITORE", "ALTRO"]
+    ] = None
+    importance: Literal["ALTA", "NORMALE", "DA_RIVEDERE"]
+    document_type: Optional[
+        Literal["CONTRATTO", "VERBALE", "BILANCIO", "DIFFIDA", "FATTURA",
+                "ATTO_GIUDIZIARIO", "RICEVUTA_PEC", "ALTRO"]
+    ] = None
+    matches: str  # JSON array di id regola
+    ruleset_version: str
+    classified_at: datetime
+    override_source: Optional[Literal["HUMAN"]] = None
+    override_note: Optional[str] = None
+    hash_riga: str
+    data_caricamento: datetime
+
+    @field_validator("msgid", "ruleset_version", "hash_riga")
+    @classmethod
+    def pec_class_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("campo vuoto")
+        return v
+
+
 # ── Validation helper ────────────────────────────────────────────────────────
 
 

@@ -1,0 +1,47 @@
+# Ruleset di classificazione PEC — configurazione versionata (I-PEC-8).
+# Ogni modifica alle regole DEVE incrementare version (semver): la
+# riclassificazione scrive righe nuove, mai sovrascritture.
+version: "1.0.0"
+
+rules:
+  - id: legale-mittente
+    priority: 100
+    match: {mittente_domain: [legalmail.it, pec.giustizia.it]}
+    assign: {category: LEGALE, importance: ALTA, document_type: ALTRO}
+  - id: legale-oggetto
+    priority: 100
+    match: {subject_regex: '(?i)\b(diffid|atto giudiziari|decreto ingiuntiv|precett|pignorament|citazion|ricors)'}
+    assign: {category: LEGALE, importance: ALTA, document_type: ATTO_GIUDIZIARIO}
+  - id: fisco
+    priority: 90
+    match: {mittente_domain: [pec.agenziaentrate.gov.it, pec.agenziaentrateriscossione.gov.it]}
+    assign: {category: FISCO, importance: ALTA, document_type: ALTRO}
+  - id: registro-imprese
+    priority: 80
+    match: {mittente_domain: [certpec.camcom.it, cert.infocamere.it]}
+    assign: {category: REGISTRO_IMPRESE, importance: ALTA, document_type: ALTRO}
+  - id: banca
+    priority: 70
+    match: {mittente_domain: [pec.gruppobper.it, pec.intesasanpaolo.com, postacert.gruppo.mps.it, pec.bancaditalia.it]}
+    assign: {category: BANCA, importance: NORMALE, document_type: ALTRO}
+  - id: assicurazione
+    priority: 60
+    match: {mittente_domain: [pec.agenzie.generali.com, pec.intesasanpaoloassicura.com]}
+    assign: {category: ASSICURAZIONE, importance: NORMALE, document_type: ALTRO}
+  # ── document_type da nome allegato/oggetto (non decidono la category) ──
+  - id: doc-bilancio
+    priority: 10
+    match: {allegato_regex: '(?i)bilanci'}
+    assign: {document_type: BILANCIO, importance: ALTA}
+  - id: doc-verbale
+    priority: 10
+    match: {allegato_regex: '(?i)verbale'}
+    assign: {document_type: VERBALE, importance: ALTA}
+  - id: doc-contratto
+    priority: 10
+    match: {allegato_regex: '(?i)contratt'}
+    assign: {document_type: CONTRATTO, importance: ALTA}
+  - id: doc-fattura
+    priority: 10
+    match: {allegato_regex: '(?i)fattur|\bft\s?\d'}
+    assign: {document_type: FATTURA, importance: NORMALE}
