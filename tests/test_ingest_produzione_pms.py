@@ -79,8 +79,7 @@ def test_negative_importo_allowed():
 
 FILTER_HOTEL = (
     "Applied filters:\nMis_PB_ShowRow is greater than 0\nCodiceHotel is PANORAMAHT\n"
-    "Descrizione is Imponibile\nParamDimAddebiti is Classe\nMese is aprile, maggio, "
-    "giugno, gennaio, febbraio, marzo\nAnno is 2026"
+    "Descrizione is Imponibile\nParamDimAddebiti is Classe\nAnno is 2026"
 )
 
 
@@ -107,6 +106,35 @@ def test_parse_applied_filters_rejects_lordo():
 def test_parse_applied_filters_rejects_unknown_hotel():
     txt = FILTER_HOTEL.replace("PANORAMAHT", "MYSTERYHT")
     with pytest.raises(ValueError, match="CodiceHotel"):
+        parse_applied_filters(txt)
+
+
+def test_parse_applied_filters_rejects_multi_hotel():
+    # Export aggregato 3 strutture: la regex prenderebbe solo il primo nome
+    # e l'aggregato finirebbe su una BU sola (caso 2026-07-15)
+    txt = FILTER_HOTEL.replace(
+        "CodiceHotel is PANORAMAHT",
+        "CodiceHotel is ANGELINARES, HOMEHOLIDAY, or PANORAMAHT",
+    )
+    with pytest.raises(ValueError, match="multiplo"):
+        parse_applied_filters(txt)
+
+
+def test_parse_applied_filters_rejects_two_hotel_or():
+    txt = FILTER_HOTEL.replace(
+        "CodiceHotel is PANORAMAHT", "CodiceHotel is ANGELINARES or PANORAMAHT"
+    )
+    with pytest.raises(ValueError, match="multiplo"):
+        parse_applied_filters(txt)
+
+
+def test_parse_applied_filters_rejects_mese_filter():
+    # Export parziale (Mese filtrato): la DELETE SNAPSHOT copre (BU, anno) intero
+    # e cancellerebbe i mesi fuori filtro (caso 2026-07-15)
+    txt = FILTER_HOTEL.replace(
+        "Anno is 2026", "Mese is giugno or luglio\nAnno is 2026"
+    )
+    with pytest.raises(ValueError, match="Mese"):
         parse_applied_filters(txt)
 
 

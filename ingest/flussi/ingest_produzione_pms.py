@@ -57,6 +57,18 @@ def parse_applied_filters(text: str) -> tuple[str, set[int]]:
         raise ValueError(
             f"file non Imponibile (atteso 'Descrizione is Imponibile'): {text[:120]!r}"
         )
+    # Export multi-struttura ("CodiceHotel is A, B, or C"): la regex prenderebbe
+    # solo il primo nome e l'aggregato finirebbe etichettato su UNA BU — rifiuta.
+    if re.search(r"CodiceHotel is \w+\s*(,| or )", text):
+        raise ValueError(
+            f"CodiceHotel multiplo: serve un export per singola struttura: {text[:160]!r}"
+        )
+    # Filtro Mese = export parziale: la DELETE dello SNAPSHOT copre (BU, anno)
+    # intero e cancellerebbe i mesi fuori filtro — rifiuta.
+    if re.search(r"Mese is ", text):
+        raise ValueError(
+            f"filtro Mese presente: export parziale non ammesso (SNAPSHOT su anno intero): {text[:160]!r}"
+        )
     hotel_m = re.search(r"CodiceHotel is (\w+)", text)
     anno_m = re.search(r"Anno is (\d{4}(?: or \d{4})*)", text)
     if not (hotel_m and anno_m):
