@@ -25,6 +25,7 @@ def _msg_row(**over) -> dict:
         "body_text": "testo",
         "provider": "pec.aruba.it",
         "casella": "in.tur@pec.it",
+        "entity_id": "INTUR",
         "societa_id": "INTUR",
         "n_allegati": 1,
         "ha_postacert": True,

@@ -21,6 +21,9 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # ── Shared types ─────────────────────────────────────────────────────────────
 
 SocietaId = Literal["ORTI", "INTUR"]
+# Soggetti giuridici monitorati (PEC/pannello CEO). NON è SocietaId: la PEC
+# personale è un perimetro documentale, non una società (spec 2026-07-17).
+EntityId = Literal["INTUR", "ORTI", "VIGNA", "STEFANO_PERSONALE"]
 BusinessUnitId = Literal["HOTEL", "RESIDENCE", "CVM", "LIDO", "HQ"]
 TipoCosto = Literal["F", "V", "P", "X", "IP"]
 Sezione = Literal["ENTRATE", "USCITE"]
@@ -641,6 +644,9 @@ class PecMessageRow(BaseModel):
     osservato (derivato dall'anatomia: busta ⇒ RECEIVED, raw ⇒ SENT); ogni
     semantica derivata vive in v_pec_conversazioni. Fatti documentali, non
     finanziari: I4 non applicabile. Lifecycle: APPEND, dedup su hash_riga=md5(msgid).
+
+    entity_id dal registry della sorgente (I-PEC-2); societa_id deprecata nelle
+    query nuove, popolata solo per ORTI/INTUR.
     """
 
     msgid: str
@@ -656,7 +662,8 @@ class PecMessageRow(BaseModel):
     body_text: Optional[str] = None
     provider: Optional[str] = None  # dominio busta — solo RECEIVED
     casella: str
-    societa_id: SocietaId
+    entity_id: EntityId
+    societa_id: Optional[SocietaId] = None
     n_allegati: int = 0
     ha_postacert: bool = False
     parse_warning: Optional[str] = None
