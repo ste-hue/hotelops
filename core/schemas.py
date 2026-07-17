@@ -744,6 +744,33 @@ class PecClassificazioneRow(BaseModel):
         return v
 
 
+class PecPanelProjectionRow(BaseModel):
+    """Schema for f_pec_panel_projections — stato CANONICO della projection.
+
+    Il pannello Drive è solo una copia consultabile (spec 2026-07-17): la
+    verità su cosa è stato proiettato sta in questa tabella. projection_key =
+    md5(msgid|sha256|destination_path): lo stesso PDF in due PEC diverse è due
+    proiezioni legittime. APPEND; mai delete (I-PEC-4, I-PEC-5).
+    """
+
+    projection_key: str
+    msgid: str
+    sha256: str
+    entity_id: EntityId
+    gcs_uri: str
+    destination_path: str  # relativo a PANEL_ROOT
+    run_id: str
+    projected_at: datetime
+    status: Literal["COPIED", "SKIPPED_EXISTS", "FAILED"]
+
+    @field_validator("projection_key", "msgid", "sha256", "destination_path")
+    @classmethod
+    def pec_proj_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("campo vuoto")
+        return v
+
+
 # ── Validation helper ────────────────────────────────────────────────────────
 
 

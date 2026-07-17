@@ -81,3 +81,29 @@ V_FB_CONSUMI                 = _t("v_fb_consumi")
 V_FB_RICAVI                  = _t("v_fb_ricavi")
 V_FB_PASTI                   = _t("v_fb_pasti")
 V_CE_MENSILE_BILANCINO       = _t("v_ce_mensile_bilancino")
+
+# ── Pannello CEO (projection PEC su Drive) — spec 2026-07-17 ─────────────────
+F_PEC_PANEL_PROJECTIONS     = _t("f_pec_panel_projections")
+F_PEC_DIGEST_RUNS           = _t("f_pec_digest_runs")
+
+# Whitelist POSITIVA delle entity ammesse nel pannello (I-PEC-3): una entity
+# nuova NON entra finché non viene aggiunta qui deliberatamente.
+PANEL_ENTITIES = ["INTUR", "ORTI", "VIGNA"]
+
+# Root della projection: mirror locale Drive di 01_societario/AMM_CEO.
+# Override nei test/ambienti: env HOTELOPS_PANEL_ROOT.
+import os
+
+PANEL_ROOT = os.environ.get(
+    "HOTELOPS_PANEL_ROOT",
+    "/Users/stefanodellapietra/My Drive (stefano@panoramagroup.it)/01_societario/AMM_CEO",
+)
+
+# Cartelle leggibili per categoria (decisione spec: nomi umani, enum nel dato)
+PANEL_CATEGORY_FOLDERS = {
+    "BANCA": "Banca", "LEGALE": "Legale", "FISCO": "Fisco",
+    "REGISTRO_IMPRESE": "Registro Imprese", "ASSICURAZIONE": "Assicurazione",
+    "PA": "PA", "FORNITORE": "Fornitori", "ALTRO": "Altro",
+}
+
+PANEL_MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024
