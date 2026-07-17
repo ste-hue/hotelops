@@ -264,3 +264,14 @@ def test_promotion_passa_source_alle_pec(monkeypatch, tmp_path):
     _invoke_parser("ingest.flussi.qualcosa", f"file://{f}", sd_altro)
     assert "--societa" in catturato["cmd"]
     assert "--source" not in catturato["cmd"]
+
+
+def test_bonifica_richiede_tutte_le_verifiche():
+    from scripts.bonifica_pec_manuali import puo_rimuovere
+
+    ok = dict(promoted=True, canonico_esiste=True, hash_combacia=True,
+              lineage_persistita=True)
+    assert puo_rimuovere(**ok)
+    for k in ok:
+        kw = {**ok, k: False}
+        assert not puo_rimuovere(**kw), f"doveva bloccare con {k}=False"
