@@ -174,7 +174,7 @@ In aggiunta a `~/.claude/CLAUDE.md`:
 - **Mai `pip install -e` da dentro un worktree** (rompe l'editable install: `ModuleNotFoundError: verticals`).
 
 ## Governance Rules
-- Ogni fact row porta tutte le 5 dimensioni.
+- Ogni fact row porta le 5 dimensioni **dove applicabile**: `societa_id` + `business_unit_id` obbligatorie sempre; `funzione_id`/`location_id`/`oggetto_id` dove la fonte le esprime (di fatto le f_* operative viaggiano a 2-3/5 — verificato 2026-07-17, code review).
 - No speculative modules — le pipeline nascono da flussi dati reali.
 - Mai modificare `fatti/` a mano — solo pipeline.
 - Tutti i budget hanno tag `fonte` — mai mischiare senza filtro esplicito.
