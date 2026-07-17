@@ -771,6 +771,23 @@ class PecPanelProjectionRow(BaseModel):
         return v
 
 
+class PecDigestRunRow(BaseModel):
+    """Schema for f_pec_digest_runs — checkpoint tecnico del digest.
+
+    Il markdown su Drive è output umano; lo stato applicativo è QUI (spec
+    2026-07-17). Il default --da del run successivo è il to_ts dell'ultimo
+    run SUCCESS. Un solo run RUNNING alla volta.
+    """
+
+    run_id: str
+    started_at: datetime
+    finished_at: Optional[datetime] = None
+    status: Literal["RUNNING", "SUCCESS", "FAILED"]
+    from_ts: datetime
+    to_ts: datetime
+    params: Optional[str] = None  # JSON dei filtri richiesti
+
+
 # ── Validation helper ────────────────────────────────────────────────────────
 
 
