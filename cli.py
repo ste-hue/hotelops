@@ -947,6 +947,39 @@ def cmd_publish_export(args):
                        cwd=publish_dir, check=True)
 
 
+def cmd_pec(args):
+    """Layer CEO sulla PEC: classify / sync-panel / digest."""
+    from datetime import datetime
+
+    if args.pec_cmd == "classify":
+        from ingest.pec.classify import run_classify
+
+        r = run_classify(dry_run=args.dry_run)
+        print(f"ruleset {r['ruleset_version']}: {r['classificati']} righe {r['per_stato']}")
+    elif args.pec_cmd == "sync-panel":
+        from ingest.pec.panel import sync_panel
+
+        r = sync_panel(dry_run=args.dry_run, verify=args.verify)
+        print(
+            f"copiati={r['copiati']} skippati={r['skippati']} "
+            f"falliti={r['falliti']} oversize={r['oversize']}"
+        )
+        for a in r["anomalie_verify"]:
+            print(f"  VERIFY: {a}")
+    elif args.pec_cmd == "digest":
+        from ingest.pec.digest import run_digest
+
+        parse = lambda s: datetime.strptime(s, "%Y-%m-%d") if s else None
+        print(run_digest(
+            da=parse(args.da), a=parse(args.a), casella=args.casella,
+            entity=args.entity, solo_anomalie=args.solo_anomalie,
+            fmt=args.format, dry_run=args.dry_run,
+        ))
+    else:
+        print("uso: hotelops pec {classify|sync-panel|digest}")
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="hotelops",
@@ -1139,6 +1172,24 @@ def main():
     p_reviews.add_argument(
         "--dry-run", action="store_true", help="Preview senza azioni"
     )
+
+    # pec
+    p_pec = sub.add_parser("pec", help="PEC multi-casella: classify, pannello CEO, digest")
+    pec_sub = p_pec.add_subparsers(dest="pec_cmd")
+    pp_cl = pec_sub.add_parser("classify", help="Classifica i messaggi non classificati")
+    pp_cl.add_argument("--dry-run", action="store_true")
+    pp_sp = pec_sub.add_parser("sync-panel", help="Proietta i documenti ALTA su AMM_CEO")
+    pp_sp.add_argument("--dry-run", action="store_true")
+    pp_sp.add_argument("--verify", action="store_true", help="Riconcilia pannello vs BQ")
+    pp_dg = pec_sub.add_parser("digest", help="Digest monitoraggio caselle")
+    pp_dg.add_argument("--da", type=str, default=None)
+    pp_dg.add_argument("--a", type=str, default=None)
+    pp_dg.add_argument("--casella", type=str, default=None)
+    pp_dg.add_argument("--entity", type=str, default=None,
+                       choices=["INTUR", "ORTI", "VIGNA", "STEFANO_PERSONALE"])
+    pp_dg.add_argument("--solo-anomalie", action="store_true")
+    pp_dg.add_argument("--format", choices=["markdown", "json"], default="markdown")
+    pp_dg.add_argument("--dry-run", action="store_true")
 
     # docs
     p_docs = sub.add_parser("docs", help="Gestione doc tecniche del repo")
@@ -1383,6 +1434,7 @@ def main():
         "lineage": cmd_lineage_dispatch,
         "sources": cmd_sources,
         "workspace": cmd_workspace,
+        "pec": cmd_pec,
     }
 
     # Support both old-style handlers dict and new-style set_defaults(func=...)
