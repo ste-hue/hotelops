@@ -17,6 +17,7 @@ from core.config import (
     F_PEC_DIGEST_RUNS,
     F_PEC_MESSAGES,
     F_PEC_PANEL_PROJECTIONS,
+    PANEL_ENTITIES,
     PANEL_ROOT,
     PROJECT,
 )
@@ -102,6 +103,7 @@ def _raccogli(client, da: datetime, a: datetime,
     errori = _q(client, f"""
         SELECT m.entity_id, m.subject, m.parse_warning FROM `{F_PEC_MESSAGES}` m
         WHERE m.parse_warning IS NOT NULL {filtro}""", **base)
+    _panel_entities = ", ".join(f"'{e}'" for e in PANEL_ENTITIES)
     non_sync = _q(client, f"""
         SELECT m.entity_id, a.nome_file, a.gcs_uri, a.size_bytes
         FROM `{F_PEC_ALLEGATI}` a JOIN `{F_PEC_MESSAGES}` m USING (msgid)
@@ -109,7 +111,7 @@ def _raccogli(client, da: datetime, a: datetime,
         LEFT JOIN `{F_PEC_PANEL_PROJECTIONS}` p
           ON p.msgid = a.msgid AND p.sha256 = a.sha256 AND p.status = 'COPIED'
         WHERE c.importance = 'ALTA' AND p.projection_key IS NULL
-          AND m.entity_id IN ('INTUR','ORTI','VIGNA') {filtro}""", **base)
+          AND m.entity_id IN ({_panel_entities}) {filtro}""", **base)
     ambigui = _q(client, f"""
         SELECT m.entity_id, m.subject, m.mittente
         FROM `{F_PEC_MESSAGES}` m JOIN `{_V_CORRENTE}` c USING (msgid)

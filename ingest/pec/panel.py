@@ -87,7 +87,16 @@ def _candidati(client) -> list:
 
 
 def _gia_proiettate(client) -> set[str]:
-    sql = f"SELECT projection_key FROM `{F_PEC_PANEL_PROJECTIONS}`"
+    """projection_key già proiettate con successo.
+
+    Solo COPIED/SKIPPED_EXISTS contano come "fatto": una riga FAILED (es.
+    download GCS fallito per errore transitorio) deve restare candidata al
+    retry nei run successivi, quindi non va filtrata fuori qui.
+    """
+    sql = (
+        f"SELECT projection_key FROM `{F_PEC_PANEL_PROJECTIONS}` "
+        f"WHERE status IN ('COPIED', 'SKIPPED_EXISTS')"
+    )
     try:
         return {r.projection_key for r in client.query(sql).result()}
     except Exception:  # tabella non ancora creata: primo run
@@ -138,6 +147,10 @@ def sync_panel(dry_run: bool = False, verify: bool = False) -> dict:
                 report["copiati"] += 1
             except Exception as e:
                 log.warning("copia fallita %s: %s", cand.gcs_uri, e)
+                # un download fallito a metà può lasciare un file parziale:
+                # va rimosso, altrimenti un re-run lo scambierebbe per valido
+                # (SKIPPED_EXISTS) invece di ritentare il download.
+                dest_abs.unlink(missing_ok=True)
                 status = "FAILED"
                 report["falliti"] += 1
         rows.append({

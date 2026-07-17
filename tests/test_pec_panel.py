@@ -77,3 +77,157 @@ def test_riga_projection_personale_rifiutata():
 
     assert PANEL_ENTITIES == ["INTUR", "ORTI", "VIGNA"]
     assert "STEFANO_PERSONALE" not in PANEL_ENTITIES
+
+
+# --- Fix post-review: retry delle proiezioni FAILED (idempotenza) ---------
+
+
+def test_gia_proiettate_filtra_su_status_copied_o_skipped():
+    """La query di _gia_proiettate deve escludere le FAILED dal set 'già
+    fatto', altrimenti una proiezione fallita non verrebbe mai ritentata."""
+    from ingest.pec.panel import _gia_proiettate
+
+    class _FakeResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def result(self):
+            return self._rows
+
+    class _FakeClient:
+        def __init__(self):
+            self.ultima_sql = None
+
+        def query(self, sql):
+            self.ultima_sql = sql
+            return _FakeResult([])
+
+    client = _FakeClient()
+    _gia_proiettate(client)
+    assert "WHERE status IN" in client.ultima_sql
+    assert "COPIED" in client.ultima_sql and "SKIPPED_EXISTS" in client.ultima_sql
+    assert "FAILED" not in client.ultima_sql
+
+
+def test_sync_panel_download_fallito_rimuove_file_parziale_e_segna_failed(
+    tmp_path, monkeypatch
+):
+    """Un download GCS che scrive parte del file e poi solleva non deve
+    lasciare un file parziale sul disco (verrebbe scambiato per
+    SKIPPED_EXISTS al prossimo run): va ripulito e la riga marcata FAILED."""
+    import ingest.pec.panel as panel
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(panel, "PANEL_ROOT", str(tmp_path))
+
+    cand = SimpleNamespace(
+        msgid="m1", sha256="s1", nome_file="doc.pdf",
+        gcs_uri="gs://bucket/doc.pdf", size_bytes=10,
+        entity_id="ORTI", data_evento=datetime(2026, 7, 1),
+        primary_category="LEGALE",
+    )
+    monkeypatch.setattr(panel, "_candidati", lambda client: [cand])
+    monkeypatch.setattr(panel, "_gia_proiettate", lambda client: set())
+
+    def _download_scrive_e_fallisce(gcs_uri, dest):
+        dest.write_bytes(b"parziale")
+        raise RuntimeError("connessione GCS interrotta")
+
+    monkeypatch.setattr(panel, "_download_gcs", _download_scrive_e_fallisce)
+
+    written_rows = []
+    monkeypatch.setattr(
+        "core.bq.write.bq_write_validated",
+        lambda table, rows, mode="append": written_rows.extend(rows),
+    )
+    fake_client = SimpleNamespace(query=lambda sql: SimpleNamespace(result=lambda: []))
+    monkeypatch.setattr("core.bq.client.get_client", lambda: fake_client)
+
+    report = panel.sync_panel(dry_run=False, verify=False)
+
+    dest_rel = panel._destination_path(
+        cand.entity_id, cand.primary_category, cand.data_evento, cand.nome_file
+    )
+    dest_abs = tmp_path / dest_rel
+    assert not dest_abs.exists(), "il file parziale deve essere rimosso"
+    assert report["falliti"] == 1
+    assert report["copiati"] == 0
+    assert len(written_rows) == 1
+    assert written_rows[0].status == "FAILED"
+
+
+def test_sync_panel_ritenta_dopo_failed_precedente(tmp_path, monkeypatch):
+    """Integrazione dei due fix: una proiezione FAILED in un run precedente
+    viene ritentata (e questa volta riesce) in un run successivo, perché
+    _gia_proiettate non la conta come 'già fatta'."""
+    import ingest.pec.panel as panel
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(panel, "PANEL_ROOT", str(tmp_path))
+
+    cand = SimpleNamespace(
+        msgid="m1", sha256="s1", nome_file="doc.pdf",
+        gcs_uri="gs://bucket/doc.pdf", size_bytes=10,
+        entity_id="ORTI", data_evento=datetime(2026, 7, 1),
+        primary_category="LEGALE",
+    )
+    monkeypatch.setattr(panel, "_candidati", lambda client: [cand])
+
+    tabella: list[dict] = []
+
+    class _FakeResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def result(self):
+            return self._rows
+
+    class _FakeClient:
+        def query(self, sql):
+            if "projection_key FROM" in sql:
+                allowed = {"COPIED", "SKIPPED_EXISTS"}
+                rows = [
+                    SimpleNamespace(projection_key=r["projection_key"])
+                    for r in tabella if r["status"] in allowed
+                ]
+                return _FakeResult(rows)
+            return _FakeResult([])  # _scrivi_indice: non rilevante qui
+
+    fake_client = _FakeClient()
+    monkeypatch.setattr("core.bq.client.get_client", lambda: fake_client)
+    monkeypatch.setattr(
+        "core.bq.write.bq_write_validated",
+        lambda table, rows, mode="append": tabella.extend(
+            {"projection_key": r.projection_key, "status": r.status} for r in rows
+        ),
+    )
+
+    # Run 1: il download fallisce e lascia (per un istante) un file parziale.
+    def _download_fallisce(gcs_uri, dest):
+        dest.write_bytes(b"parziale")
+        raise RuntimeError("errore transitorio")
+
+    monkeypatch.setattr(panel, "_download_gcs", _download_fallisce)
+    report1 = panel.sync_panel(dry_run=False, verify=False)
+    assert report1["falliti"] == 1
+    assert tabella[-1]["status"] == "FAILED"
+
+    dest_rel = panel._destination_path(
+        cand.entity_id, cand.primary_category, cand.data_evento, cand.nome_file
+    )
+    dest_abs = tmp_path / dest_rel
+    assert not dest_abs.exists()
+
+    # Run 2: stesso candidato, ma stavolta il download riesce.
+    def _download_riesce(gcs_uri, dest):
+        dest.write_bytes(b"contenuto completo")
+
+    monkeypatch.setattr(panel, "_download_gcs", _download_riesce)
+    report2 = panel.sync_panel(dry_run=False, verify=False)
+
+    assert report2["copiati"] == 1
+    assert report2["falliti"] == 0
+    assert dest_abs.exists()
+    assert tabella[-1]["status"] == "COPIED"
