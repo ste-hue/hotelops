@@ -7,12 +7,14 @@
 --   CUCINA  → food per RISTO_LUNCH + RISTO_DINNER
 --   CANTINA → beverage per BAR + RISTO_LUNCH bev + RISTO_DINNER bev
 --
--- Esclusi (per design): BRK (food cost pensione completa), BAR_BEACH (LIDO/INTUR
--- altra entità), DIPENDENTI (mensa staff), EVENTO/BANCHETTI/OMAGGI (vendite
--- separate). HSK_*, MANUTENZIONE, DIREZIONE non sono mai F&B.
+-- Esclusi (per design): BRK (colazione BB: esclusa da entrambi i lati, il ratio
+-- resta coerente), BAR_BEACH (LIDO/INTUR altra entità), DIPENDENTI (mensa staff),
+-- EVENTO/BANCHETTI/OMAGGI (vendite separate). HSK_*, MANUTENZIONE, DIREZIONE non
+-- sono mai F&B.
 --
--- Limitazione: non include ricavi pasti pensione completa (mezza pensione, BB).
--- Per food cost completo serve d_prezzi_pensione (TODO Sprint 3).
+-- L'hotel non vende mezza/pensione completa (confermato 2026-07-17): il POS vede
+-- TUTTI i ricavi pasto à la carte — il food cost qui è completo, nessun ricavo
+-- pasto da recuperare da d_prezzi_pensione.
 --
 -- Fonti:
 --   f_consumi_economato     reparto_id IN ('CUCINA','CANTINA'), esclusi 9 articoli UoM-rotti (coerente con v_fb_kpi)

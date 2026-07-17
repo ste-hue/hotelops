@@ -98,7 +98,7 @@ def _to_date(anno: int, mese_str: str, giorno: int) -> date | None:
 # ── Parsing ────────────────────────────────────────────────────────────────────
 
 
-def parse_xlsx(filepath: Path) -> list[dict]:
+def parse_xlsx(filepath: Path, raw_object_id: str | None = None) -> list[dict]:
     """Parse il file POS export. Restituisce dict pronti per VenditaFbRow."""
     wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
     ws = wb.active
@@ -204,6 +204,7 @@ def parse_xlsx(filepath: Path) -> list[dict]:
                 "segmento_cliente": segmento,
                 "file_sorgente": filepath.name,
                 "data_caricamento": now,
+                "raw_object_id": raw_object_id,
             }
         )
 
@@ -253,6 +254,7 @@ def ensure_table(client) -> None:
         bigquery.SchemaField("segmento_cliente", "STRING"),
         bigquery.SchemaField("file_sorgente", "STRING"),
         bigquery.SchemaField("data_caricamento", "TIMESTAMP"),
+        bigquery.SchemaField("raw_object_id", "STRING"),
     ]
     table = bigquery.Table(BQ_TABLE, schema=schema)
     table.time_partitioning = bigquery.TimePartitioning(
@@ -323,8 +325,22 @@ def main() -> None:
         description="Ingest vendite F&B (POS) → f_vendite_fb"
     )
     parser.add_argument("--file", required=True, help="Path al file XLSX export POS")
+    parser.add_argument(
+        "--raw-object-id",
+        default=None,
+        help="FK a f_raw_objects — passato da `hotelops promote`",
+    )
+    parser.add_argument(
+        "--societa",
+        default=None,
+        help="Accettato da `hotelops promote` — deve essere ORTI (unica società POS)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Parse only, no BQ write")
     args = parser.parse_args()
+
+    if args.societa and args.societa != SOCIETA_ID:
+        log.error(f"--societa {args.societa} incoerente: vendite POS è sempre {SOCIETA_ID}")
+        sys.exit(2)
 
     from ingest._logging import setup_logging
 
@@ -340,7 +356,7 @@ def main() -> None:
         societa_id=SOCIETA_ID,
         file_sorgente=filepath.name,
     ):
-        records = parse_xlsx(filepath)
+        records = parse_xlsx(filepath, raw_object_id=args.raw_object_id)
         if not records:
             log.warning("Nessuna riga estratta")
             return  # not sys.exit(0): SystemExit propagates as exc_val to PipelineRun.__exit__ → status=FAIL

@@ -503,6 +503,25 @@ sources:
       bucket: hotelops-raw
       path_template: "powerbi/ricavi_fb/ORTI"
 
+  # ── Vendite F&B POS giornaliere (giorno × sala × articolo) — APPEND ───────
+  POWERBI_VENDITEFB_ORTI_APPEND:
+    system: POWERBI
+    dataset: VENDITEFB
+    dataset_label: "Vendite F&B POS giornaliere per sala/articolo (Imponibile, export Power BI RistoCube)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_vendite_fb
+    parser_module: ingest.flussi.ingest_vendite_fb
+    hash_basis: hash_riga
+    loop_targets: [food_cost]
+    promotion_policy: AUTO
+    detector_category: vendite_fb
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/vendite_fb/ORTI"
+
   # ── Produzione PMS giornaliera per classe — SNAPSHOT ──────────────────────
   POWERBI_PRODUZIONE_ORTI_SNAPSHOT:
     system: POWERBI

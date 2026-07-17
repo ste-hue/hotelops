@@ -309,6 +309,8 @@ class VenditaFbRow(BaseModel):
     segmento_cliente: Optional[str] = None  # da Ristocube: ZRISTINT/ZRISTEST/INLE/...
     file_sorgente: str
     data_caricamento: datetime
+    # FK to f_raw_objects.raw_object_id (Phase 4 FK).
+    raw_object_id: Optional[str] = None
 
     @field_validator("mese")
     @classmethod
