@@ -90,7 +90,10 @@ def _invoke_parser(
         )
 
     cmd = [sys.executable, "-m", parser_module, "--file", local_path]
-    if source_def.societa in ("ORTI", "INTUR"):
+    if getattr(source_def, "system", None) == "PEC":
+        # Parser PEC multi-casella: contesto dal registry, mai default (I-PEC-2)
+        cmd += ["--source", source_def.source_name]
+    elif source_def.societa in ("ORTI", "INTUR"):
         cmd += ["--societa", source_def.societa]
     if raw_object_id:
         cmd += ["--raw-object-id", raw_object_id]

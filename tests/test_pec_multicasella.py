@@ -229,3 +229,38 @@ def test_allegati_store_prefix_per_source():
     store = AllegatiStore(bucket_name="orti-raw", prefix="PEC_MAILBOX_ORTI_APPEND", dry_run=True)
     sha, uri = store.store("doc.pdf", b"contenuto")
     assert uri.startswith("gs://orti-raw/PEC_MAILBOX_ORTI_APPEND/allegati/")
+
+
+def test_promotion_passa_source_alle_pec(monkeypatch, tmp_path):
+    import subprocess
+    from types import SimpleNamespace
+
+    from ingest.promotion import _invoke_parser
+
+    catturato = {}
+
+    def fake_run(cmd, **kw):
+        catturato["cmd"] = cmd
+        return SimpleNamespace(returncode=0, stderr="", stdout="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    f = tmp_path / "x.mbox"
+    f.write_bytes(b"")
+
+    sd_pec = SimpleNamespace(
+        system="PEC", societa="ORTI", source_name="PEC_MAILBOX_ORTI_APPEND",
+        parser_module="ingest.flussi.ingest_pec_mbox",
+    )
+    _invoke_parser("ingest.flussi.ingest_pec_mbox", f"file://{f}", sd_pec,
+                   raw_object_id="raw-1")
+    assert "--source" in catturato["cmd"]
+    assert "PEC_MAILBOX_ORTI_APPEND" in catturato["cmd"]
+    assert "--societa" not in catturato["cmd"]
+
+    sd_altro = SimpleNamespace(
+        system="ESOLVER", societa="ORTI", source_name="ESOLVER_X_ORTI_APPEND",
+        parser_module="ingest.flussi.qualcosa",
+    )
+    _invoke_parser("ingest.flussi.qualcosa", f"file://{f}", sd_altro)
+    assert "--societa" in catturato["cmd"]
+    assert "--source" not in catturato["cmd"]
