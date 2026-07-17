@@ -76,3 +76,57 @@ def test_entity_id_obbligatorio():
     del row["entity_id"]
     with pytest.raises(SchemaViolationError):
         validate_batch([row], PecMessageRow, context="test")
+
+
+# ── Step 1: Tests registry (falliscono finché non implemento Task 2) ──────────
+
+
+def test_registry_quattro_sorgenti_pec():
+    from core.lineage.source_resolver import load_registry
+
+    reg = load_registry()
+    attese = {
+        "PEC_MAILBOX_INTUR_APPEND": ("in.tur@pec.it", "INTUR", "hotelops-raw"),
+        "PEC_MAILBOX_ORTI_APPEND": ("orti@pec.it", "ORTI", "orti-raw"),
+        "PEC_MAILBOX_VIGNA_APPEND": ("vineyardamalficoast@pec.it", "VIGNA", "vigna-raw"),
+        "PEC_MAILBOX_PERSONALE_APPEND": (
+            "stefanojunior.dellapietra@mpspec.it",
+            "STEFANO_PERSONALE",
+            "stefano-raw",
+        ),
+    }
+    for name, (casella, entity, bucket) in attese.items():
+        s = reg.get(name)
+        assert s is not None, name
+        assert s.casella == casella
+        assert s.entity_id == entity
+        assert s.raw_storage.bucket == bucket
+        assert s.parser_module == "ingest.flussi.ingest_pec_mbox"
+        assert s.system == "PEC"
+
+
+def test_registry_personale_accetta_eml():
+    from core.lineage.source_resolver import load_registry
+
+    s = load_registry().get("PEC_MAILBOX_PERSONALE_APPEND")
+    assert "eml" in s.input_formats
+
+
+def test_source_pec_senza_casella_rifiutata():
+    from core.lineage.schemas import SourceDefinition
+    from pydantic import ValidationError
+
+    base = dict(
+        source_name="PEC_MAILBOX_TEST_APPEND",
+        system="PEC",
+        dataset="MAILBOX",
+        societa="INTUR",
+        lifecycle="APPEND",
+        canonical_table="f_pec_messages",
+        parser_module="ingest.flussi.ingest_pec_mbox",
+        promotion_policy="AUTO",
+        detector_category="pec_mbox",
+        raw_storage={"backend": "gcs", "bucket": "b", "path_template": "p"},
+    )
+    with pytest.raises(ValidationError):
+        SourceDefinition(**base)  # PEC senza casella/entity_id

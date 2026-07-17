@@ -704,6 +704,9 @@ sources:
     dataset: MAILBOX
     dataset_label: "PEC in.tur@pec.it — buste ricevute + messaggi inviati (export webmail mbox)"
     societa: INTUR
+    casella: in.tur@pec.it
+    entity_id: INTUR
+    input_formats: [mbox]
     business_unit: null
     lifecycle: APPEND
     canonical_table: f_pec_messages
@@ -725,6 +728,80 @@ sources:
       Dedup a 3 livelli: file (MD5 intake), messaggio (msgid certificato),
       allegato (sha256). Spec: docs/superpowers/specs/2026-07-08-pec-mbox-*.md.
       Nuove caselle (es. ORTI) = nuove entry con la stessa grammar.
+
+  # ── PEC orti@pec.it — export webmail mbox ─────────────────────────────────
+  PEC_MAILBOX_ORTI_APPEND:
+    system: PEC
+    dataset: MAILBOX
+    dataset_label: "PEC orti@pec.it — buste ricevute + messaggi inviati (export webmail mbox)"
+    societa: ORTI
+    casella: orti@pec.it
+    entity_id: ORTI
+    input_formats: [mbox]
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_pec_messages
+    parser_module: ingest.flussi.ingest_pec_mbox
+    hash_basis: msgid
+    loop_targets: [pec_archive]
+    promotion_policy: AUTO
+    detector_category: pec_mbox
+    raw_storage:
+      backend: gcs
+      bucket: orti-raw
+      path_template: "pec/mailbox/ORTI"
+    notes: |
+      Stessa grammar di PEC_MAILBOX_INTUR_APPEND; entity dal registry (I-PEC-2).
+      Spec: docs/superpowers/specs/2026-07-17-pec-multicasella-pannello-ceo-design.md
+
+  # ── PEC vineyardamalficoast@pec.it — export webmail mbox ──────────────────
+  PEC_MAILBOX_VIGNA_APPEND:
+    system: PEC
+    dataset: MAILBOX
+    dataset_label: "PEC vineyardamalficoast@pec.it — export webmail mbox"
+    societa: VIGNA
+    casella: vineyardamalficoast@pec.it
+    entity_id: VIGNA
+    input_formats: [mbox]
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_pec_messages
+    parser_module: ingest.flussi.ingest_pec_mbox
+    hash_basis: msgid
+    loop_targets: [pec_archive]
+    promotion_policy: AUTO
+    detector_category: pec_mbox
+    raw_storage:
+      backend: gcs
+      bucket: vigna-raw
+      path_template: "pec/mailbox/VIGNA"
+    notes: |
+      VIGNA è soggetto monitorato (EntityId), non SocietaId contabile.
+
+  # ── PEC stefanojunior.dellapietra@mpspec.it — export .eml/.mbox ───────────
+  PEC_MAILBOX_PERSONALE_APPEND:
+    system: PEC
+    dataset: MAILBOX
+    dataset_label: "PEC personale Stefano — export webmail (.eml singoli o mbox)"
+    societa: STEFANO_PERSONALE
+    casella: stefanojunior.dellapietra@mpspec.it
+    entity_id: STEFANO_PERSONALE
+    input_formats: [eml, mbox]
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_pec_messages
+    parser_module: ingest.flussi.ingest_pec_mbox
+    hash_basis: msgid
+    loop_targets: [pec_archive]
+    promotion_policy: AUTO
+    detector_category: pec_mbox
+    raw_storage:
+      backend: gcs
+      bucket: stefano-raw
+      path_template: "pec/mailbox/PERSONALE"
+    notes: |
+      Perimetro personale: MAI nel pannello AMM_CEO (I-PEC-3, whitelist
+      PANEL_ENTITIES). Compare solo nel digest.
 
   # ── RistoCube Orders Report — APPEND ─────────────────────────────────────
   RISTOCUBE_ORDERS_ORTI_APPEND:
