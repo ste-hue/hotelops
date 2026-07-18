@@ -114,7 +114,11 @@ class GCSBackend(RawStorageBackend):
         key = self._compute_key(source_name, intake_at, local_path.name)
         client = _storage_client()
         blob = client.bucket(self.bucket).blob(key)
-        blob.upload_from_filename(str(local_path))
+        # Resumable a chunk: su uplink lento/saturo un file grande in un colpo
+        # solo sfora il timeout per-request (default 60s). Ogni chunk è una
+        # richiesta autonoma, quindi il timeout vale sul chunk, non sul file.
+        blob.chunk_size = 8 * 1024 * 1024
+        blob.upload_from_filename(str(local_path), timeout=300)
         # blob.generation is populated after upload_from_filename completes
         log.info(
             "GCS upload ok: gs://%s/%s (generation=%s)",
