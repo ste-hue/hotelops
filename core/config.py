@@ -1,3 +1,5 @@
+import os
+
 PROJECT = "hotelops-suite"
 DATASET = "hotelops"
 
@@ -55,6 +57,7 @@ D_COEFFICIENTI_STAGIONALITA = _t("d_coefficienti_stagionalita")
 D_PROGETTI                  = _t("d_progetti")
 D_CAMERE                    = _t("d_camere")
 D_PMS_CODICI                = _t("d_pms_codici")
+D_PEC_PERSONE               = _t("d_pec_persone")
 
 # Views
 V_PIANO_FINANZIARIO_MENSILE = _t("v_piano_finanziario_mensile")
@@ -92,8 +95,6 @@ PANEL_ENTITIES = ["INTUR", "ORTI", "VIGNA"]
 
 # Root della projection: mirror locale Drive di 01_societario/AMM_CEO.
 # Override nei test/ambienti: env HOTELOPS_PANEL_ROOT.
-import os
-
 PANEL_ROOT = os.environ.get(
     "HOTELOPS_PANEL_ROOT",
     "/Users/stefanodellapietra/My Drive (stefano@panoramagroup.it)/01_societario/AMM_CEO",

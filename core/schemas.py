@@ -718,15 +718,33 @@ class PecClassificazioneRow(BaseModel):
 
     msgid: str
     entity_id: EntityId
-    stato: Literal["CLASSIFICATO", "NON_CLASSIFICATO", "AMBIGUO", "ERRORE_CLASSIFICAZIONE"]
+    stato: Literal[
+        "CLASSIFICATO", "NON_CLASSIFICATO", "AMBIGUO", "ERRORE_CLASSIFICAZIONE"
+    ]
     primary_category: Optional[
-        Literal["BANCA", "LEGALE", "FISCO", "REGISTRO_IMPRESE",
-                "ASSICURAZIONE", "PA", "FORNITORE", "ALTRO"]
+        Literal[
+            "BANCA",
+            "LEGALE",
+            "FISCO",
+            "REGISTRO_IMPRESE",
+            "ASSICURAZIONE",
+            "PA",
+            "FORNITORE",
+            "ALTRO",
+        ]
     ] = None
     importance: Literal["ALTA", "NORMALE", "DA_RIVEDERE"]
     document_type: Optional[
-        Literal["CONTRATTO", "VERBALE", "BILANCIO", "DIFFIDA", "FATTURA",
-                "ATTO_GIUDIZIARIO", "RICEVUTA_PEC", "ALTRO"]
+        Literal[
+            "CONTRATTO",
+            "VERBALE",
+            "BILANCIO",
+            "DIFFIDA",
+            "FATTURA",
+            "ATTO_GIUDIZIARIO",
+            "RICEVUTA_PEC",
+            "ALTRO",
+        ]
     ] = None
     matches: str  # JSON array di id regola
     ruleset_version: str
@@ -786,6 +804,39 @@ class PecDigestRunRow(BaseModel):
     from_ts: datetime
     to_ts: datetime
     params: Optional[str] = None  # JSON dei filtri richiesti
+
+
+class PecPersonaRow(BaseModel):
+    """Schema for d_pec_persone — rubrica indirizzi → persona nel corpus PEC.
+
+    Una riga = un indirizzo (PEC o email ordinaria) attribuito a una persona
+    della famiglia/compagine. Serve a disambiguare le ricerche (due omonimi
+    "Stefano Della Pietra": sr = generazione 2, jr = generazione 3) e a fare
+    join su mittente/destinatari. Solo dati fattuali: indirizzi, ruolo
+    societario documentato, generazione. Static hand-curated dimension.
+    Pattern: WRITE_TRUNCATE (full reload from CSV). Natural key: indirizzo.
+    """
+
+    indirizzo: str
+    tipo_indirizzo: Literal["PEC", "EMAIL"]
+    persona: str
+    generazione: int = Field(ge=1, le=5)
+    ruolo: Optional[str] = None
+
+    @field_validator("indirizzo")
+    @classmethod
+    def pec_pers_indirizzo(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not v or "@" not in v:
+            raise ValueError("indirizzo email non valido")
+        return v
+
+    @field_validator("persona")
+    @classmethod
+    def pec_pers_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("campo vuoto")
+        return v
 
 
 # ── Validation helper ────────────────────────────────────────────────────────
