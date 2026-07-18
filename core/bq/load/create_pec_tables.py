@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""DDL idempotente per le 2 tabelle canonical del flusso PEC.
+"""DDL idempotente per le 3 tabelle canonical del flusso PEC.
 
-f_pec_messages / f_pec_allegati.
-Lifecycle APPEND (dedup su hash_riga per messaggio, hash_riga per allegato)
-— gestito dal parser ingest.flussi.ingest_pec_mbox.
+f_pec_messages / f_pec_allegati (parser ingest.flussi.ingest_pec_mbox) e
+f_pec_classificazioni (ingest.pec.classify, I-PEC-8).
+Lifecycle APPEND, dedup su hash_riga.
 
 Usage:
     python -m core.bq.load.create_pec_tables
@@ -17,7 +17,7 @@ import logging
 import sys
 
 from core.bq.client import get_client
-from core.config import F_PEC_MESSAGES, F_PEC_ALLEGATI
+from core.config import F_PEC_MESSAGES, F_PEC_ALLEGATI, F_PEC_CLASSIFICAZIONI
 
 DDL_MESSAGES = f"""
 CREATE TABLE IF NOT EXISTS `{F_PEC_MESSAGES}` (
@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS `{F_PEC_MESSAGES}` (
     body_text            STRING,
     provider             STRING,
     casella              STRING NOT NULL,
-    societa_id           STRING NOT NULL,
+    entity_id            STRING,
+    societa_id           STRING,
     n_allegati           INT64 NOT NULL,
     ha_postacert         BOOL NOT NULL,
     parse_warning        STRING,
@@ -59,9 +60,28 @@ CREATE TABLE IF NOT EXISTS `{F_PEC_ALLEGATI}` (
 )
 """
 
+DDL_CLASSIFICAZIONI = f"""
+CREATE TABLE IF NOT EXISTS `{F_PEC_CLASSIFICAZIONI}` (
+    msgid                STRING NOT NULL,
+    entity_id            STRING NOT NULL,
+    stato                STRING NOT NULL,
+    primary_category     STRING,
+    importance           STRING NOT NULL,
+    document_type        STRING,
+    matches              STRING NOT NULL,
+    ruleset_version      STRING NOT NULL,
+    classified_at        DATETIME NOT NULL,
+    override_source      STRING,
+    override_note        STRING,
+    hash_riga            STRING NOT NULL,
+    data_caricamento     DATETIME NOT NULL
+)
+"""
+
 ALL_DDL = {
     "f_pec_messages": DDL_MESSAGES,
     "f_pec_allegati": DDL_ALLEGATI,
+    "f_pec_classificazioni": DDL_CLASSIFICAZIONI,
 }
 
 
