@@ -23,7 +23,10 @@ from verticals.hub.registry import pages_for  # noqa: E402
 from verticals.hub.roles import current_apps  # noqa: E402
 from verticals.hub.theme import inject_brand  # noqa: E402
 
-st.set_page_config(page_title="HotelOps Hub", page_icon="🏨", layout="wide")
+# Favicon = icona app (monogramma P, design 1B) — stessa identità della home-screen.
+_ICON = str(Path(__file__).parent / "assets" / "icon-192.png")
+
+st.set_page_config(page_title="HotelOps Hub", page_icon=_ICON, layout="wide")
 inject_brand()  # admin: chrome Streamlit visibile
 
 allowed = current_apps()

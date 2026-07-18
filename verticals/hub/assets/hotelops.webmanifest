@@ -1,0 +1,13 @@
+{
+  "name": "HotelOps Hub",
+  "short_name": "HotelOps",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#003764",
+  "theme_color": "#003764",
+  "icons": [
+    { "src": "https://storage.googleapis.com/hotelops-public-assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "https://storage.googleapis.com/hotelops-public-assets/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "https://storage.googleapis.com/hotelops-public-assets/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
