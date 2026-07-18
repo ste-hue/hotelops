@@ -231,3 +231,125 @@ def test_sync_panel_ritenta_dopo_failed_precedente(tmp_path, monkeypatch):
     assert report2["falliti"] == 0
     assert dest_abs.exists()
     assert tabella[-1]["status"] == "COPIED"
+
+
+def test_sync_panel_collisione_contenuti_diversi_disambigua(tmp_path, monkeypatch):
+    """Due allegati con stesso nome nello stesso mese ma contenuto diverso
+    (es. tre RicevutaCu.pdf di pratiche camerali distinte) devono finire
+    ENTRAMBI nel pannello: il secondo con suffisso disambiguante, mai
+    silenziosamente perso come SKIPPED_EXISTS."""
+    import ingest.pec.panel as panel
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(panel, "PANEL_ROOT", str(tmp_path))
+
+    contenuti = {"gs://b/uno.pdf": b"pratica uno", "gs://b/due.pdf": b"pratica due"}
+    import hashlib as _hl
+    cands = [
+        SimpleNamespace(
+            msgid=f"m{i}", sha256=_hl.sha256(body).hexdigest(),
+            nome_file="RicevutaCu.pdf", gcs_uri=uri, size_bytes=len(body),
+            entity_id="INTUR", data_evento=datetime(2025, 3, 10 + i),
+            primary_category="REGISTRO_IMPRESE",
+        )
+        for i, (uri, body) in enumerate(contenuti.items())
+    ]
+    monkeypatch.setattr(panel, "_candidati", lambda client: cands)
+    monkeypatch.setattr(panel, "_gia_proiettate", lambda client: set())
+    monkeypatch.setattr(
+        panel, "_download_gcs",
+        lambda gcs_uri, dest: dest.write_bytes(contenuti[gcs_uri]),
+    )
+    written_rows = []
+    monkeypatch.setattr(
+        "core.bq.write.bq_write_validated",
+        lambda table, rows, mode="append": written_rows.extend(rows),
+    )
+    fake_client = SimpleNamespace(query=lambda sql: SimpleNamespace(result=lambda: []))
+    monkeypatch.setattr("core.bq.client.get_client", lambda: fake_client)
+
+    report = panel.sync_panel(dry_run=False, verify=False)
+
+    assert report["copiati"] == 2
+    assert report["skippati"] == 0
+    cartella = tmp_path / "INTUR" / "PEC" / "Registro Imprese"
+    files = sorted(p.name for p in cartella.iterdir())
+    assert len(files) == 2, f"attesi 2 file distinti, trovati: {files}"
+    assert "2025-03 - RicevutaCu.pdf" in files
+    sha8 = cands[1].sha256[:8]
+    assert f"2025-03 - RicevutaCu ({sha8}).pdf" in files
+    # la riga BQ del secondo deve registrare il path davvero usato
+    paths = {r.destination_path for r in written_rows}
+    assert f"INTUR/PEC/Registro Imprese/2025-03 - RicevutaCu ({sha8}).pdf" in paths
+
+
+def _due_candidati_stesso_contenuto():
+    from datetime import datetime
+    from types import SimpleNamespace
+    import hashlib as _hl
+
+    body = b"stessa fattura allegata a inviata e ricevuta di consegna"
+    sha = _hl.sha256(body).hexdigest()
+    return body, [
+        SimpleNamespace(
+            msgid=f"m{i}", sha256=sha, nome_file="FT 31.pdf",
+            gcs_uri="gs://b/ft31.pdf", size_bytes=len(body),
+            entity_id="ORTI", data_evento=datetime(2026, 6, 5 + i),
+            primary_category="LEGALE",
+        )
+        for i in range(2)
+    ]
+
+
+def test_sync_panel_collisione_stesso_contenuto_dedup(tmp_path, monkeypatch):
+    """Stesso allegato presente in due messaggi (inviata + ricevuta): un solo
+    file nel pannello, il secondo candidato SKIPPED_EXISTS."""
+    import ingest.pec.panel as panel
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(panel, "PANEL_ROOT", str(tmp_path))
+    body, cands = _due_candidati_stesso_contenuto()
+    monkeypatch.setattr(panel, "_candidati", lambda client: cands)
+    monkeypatch.setattr(panel, "_gia_proiettate", lambda client: set())
+    monkeypatch.setattr(
+        panel, "_download_gcs", lambda gcs_uri, dest: dest.write_bytes(body)
+    )
+    written_rows = []
+    monkeypatch.setattr(
+        "core.bq.write.bq_write_validated",
+        lambda table, rows, mode="append": written_rows.extend(rows),
+    )
+    fake_client = SimpleNamespace(query=lambda sql: SimpleNamespace(result=lambda: []))
+    monkeypatch.setattr("core.bq.client.get_client", lambda: fake_client)
+
+    report = panel.sync_panel(dry_run=False, verify=False)
+
+    assert report["copiati"] == 1
+    assert report["skippati"] == 1
+    cartella = tmp_path / "ORTI" / "PEC" / "Legale"
+    assert [p.name for p in cartella.iterdir()] == ["2026-06 - FT 31.pdf"]
+
+
+def test_sync_panel_dry_run_conta_come_il_run_reale(tmp_path, monkeypatch):
+    """Il dry-run deve simulare le collisioni coi claim in-run: stessi
+    contatori del run reale, così il numero mostrato al gate è quello vero."""
+    import ingest.pec.panel as panel
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(panel, "PANEL_ROOT", str(tmp_path))
+    body, cands = _due_candidati_stesso_contenuto()
+    monkeypatch.setattr(panel, "_candidati", lambda client: cands)
+    monkeypatch.setattr(panel, "_gia_proiettate", lambda client: set())
+    monkeypatch.setattr(
+        "core.bq.write.bq_write_validated",
+        lambda table, rows, mode="append": None,
+    )
+    fake_client = SimpleNamespace(query=lambda sql: SimpleNamespace(result=lambda: []))
+    monkeypatch.setattr("core.bq.client.get_client", lambda: fake_client)
+
+    report = panel.sync_panel(dry_run=True, verify=False)
+
+    assert report["copiati"] == 1
+    assert report["skippati"] == 1
+    assert not any(tmp_path.rglob("*.pdf")), "dry-run non deve scrivere file"

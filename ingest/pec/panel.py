@@ -68,6 +68,55 @@ def _assert_under_root(dest_abs: Path, root: Path) -> None:
         raise ValueError(f"path fuori dal root pannello: {dest_abs}")
 
 
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for blocco in iter(lambda: f.read(1 << 20), b""):
+            h.update(blocco)
+    return h.hexdigest()
+
+
+def _con_suffisso(dest_rel: Path, suffisso: str) -> Path:
+    """"<AAAA-MM> - nome.pdf" -> "<AAAA-MM> - nome (<suffisso>).pdf"."""
+    stem, dot, ext = dest_rel.name.rpartition(".")
+    nome = f"{stem} ({suffisso}).{ext}" if dot else f"{dest_rel.name} ({suffisso})"
+    return dest_rel.parent / nome
+
+
+def _resolve_dest(
+    root: Path, dest_rel: Path, sha256: str, claims: dict[str, str]
+) -> tuple[Path, bool]:
+    """Path definitivo per un contenuto + flag "identico già presente lì".
+
+    Un nome può essere legittimamente conteso da contenuti DIVERSI (es. tre
+    RicevutaCu.pdf di pratiche camerali distinte nello stesso mese): il primo
+    contenuto tiene il nome piano, gli altri prendono un suffisso derivato dal
+    proprio sha256 — deterministico, quindi stabile tra run. Arbitro è il
+    disco (più i claim del run corrente, che in dry-run lo simulano): mai
+    overwrite, mai perdita silenziosa.
+    """
+    candidati = (
+        dest_rel,
+        _con_suffisso(dest_rel, sha256[:8]),
+        _con_suffisso(dest_rel, sha256),
+    )
+    for rel in candidati:
+        occupante = claims.get(str(rel))
+        if occupante == sha256:
+            return rel, True
+        if occupante is not None:
+            continue
+        abs_ = root / rel
+        if abs_.exists():
+            if _sha256_file(abs_) == sha256:
+                return rel, True
+            continue
+        return rel, False
+    raise RuntimeError(
+        f"collisione irrisolvibile su {dest_rel} (sha256 {sha256[:12]}…)"
+    )
+
+
 def _candidati(client) -> list:
     """Allegati con importance=ALTA di entity in whitelist, non ancora proiettati."""
     from google.cloud import bigquery
@@ -120,31 +169,35 @@ def sync_panel(dry_run: bool = False, verify: bool = False) -> dict:
 
     esistenti = _gia_proiettate(client)
     rows: list[dict] = []
+    claims: dict[str, str] = {}  # dest_rel -> sha256 assegnato in questo run
 
     for cand in _candidati(client):
-        dest_rel = _destination_path(
-            cand.entity_id, cand.primary_category, cand.data_evento, cand.nome_file
-        )
-        key = projection_key(cand.msgid, cand.sha256, str(dest_rel))
-        if key in esistenti:
-            continue
         if cand.size_bytes and cand.size_bytes > PANEL_MAX_ATTACHMENT_BYTES:
             report["oversize"] += 1
             continue  # segnalato dal digest (allegati non sincronizzati)
+        dest_rel = _destination_path(
+            cand.entity_id, cand.primary_category, cand.data_evento, cand.nome_file
+        )
+        dest_rel, gia_presente = _resolve_dest(root, dest_rel, cand.sha256, claims)
+        key = projection_key(cand.msgid, cand.sha256, str(dest_rel))
+        if key in esistenti:
+            continue
         dest_abs = root / dest_rel
         _assert_under_root(dest_abs, root)
-        if dest_abs.exists():
+        if gia_presente:
             status = "SKIPPED_EXISTS"
             report["skippati"] += 1
         elif dry_run:
             status = "COPIED"
             report["copiati"] += 1
+            claims[str(dest_rel)] = cand.sha256
         else:
             try:
                 dest_abs.parent.mkdir(parents=True, exist_ok=True)
                 _download_gcs(cand.gcs_uri, dest_abs)
                 status = "COPIED"
                 report["copiati"] += 1
+                claims[str(dest_rel)] = cand.sha256
             except Exception as e:
                 log.warning("copia fallita %s: %s", cand.gcs_uri, e)
                 # un download fallito a metà può lasciare un file parziale:
