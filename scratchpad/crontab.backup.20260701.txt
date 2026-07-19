@@ -1,0 +1,12 @@
+# Reviews: scrape giornaliero (5 tentativi, lock file)
+0 7 * * * /Users/stefanodellapietra/dev/Projects/hotelops/scripts/reviews-daily.sh
+0 11 * * * /Users/stefanodellapietra/dev/Projects/hotelops/scripts/reviews-daily.sh
+0 15 * * * /Users/stefanodellapietra/dev/Projects/hotelops/scripts/reviews-daily.sh
+0 19 * * * /Users/stefanodellapietra/dev/Projects/hotelops/scripts/reviews-daily.sh
+0 22 * * * /Users/stefanodellapietra/dev/Projects/hotelops/scripts/reviews-daily.sh
+
+# Reviews: report settimanale (lunedi ore 8)
+0 8 * * 1 /Users/stefanodellapietra/dev/Projects/hotelops/scripts/reviews-weekly-report.sh
+0 9 * * * /Users/stefanodellapietra/dev/Projects/hotelops/scripts/spiaggia-corrispettivi-daily.sh
+0 14 * * * /Users/stefanodellapietra/dev/Projects/hotelops/scripts/spiaggia-corrispettivi-daily.sh
+0 20 * * * /Users/stefanodellapietra/dev/Projects/hotelops/scripts/spiaggia-corrispettivi-daily.sh

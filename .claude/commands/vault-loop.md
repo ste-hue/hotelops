@@ -46,9 +46,9 @@ after work is done. If in doubt, ask.
 
 Read in order. Stop at the first layer that answers the task. Descend only if needed.
 
-1. `vault/INVARIANTS.md` — I1–I8 non-negotiables.
-2. `vault/AI_INSTRUCTIONS.md` — Layer Model, Canonical Truth Registry, loop operativo,
-   anti-goals, vocabolario canonico.
+1. `repo/docs/architecture/INVARIANTS.md` — I1–I10 non-negotiables. **Canonical è il repo** (deciso 2026-04-30, dichiarato nel frontmatter); `vault/architecture/INVARIANTS.md` è un mirror (syncato 2026-07-17).
+2. `repo/docs/architecture/AI_INSTRUCTIONS.md` — Layer Model, Canonical Truth Registry, loop operativo,
+   anti-goals, vocabolario canonico. (Migrata dal vault; nel vault non esiste più a root.)
 3. `repo/CLAUDE.md` — repo mechanics (schemas, CLI, pipelines). Only if HOW matters.
 4. `repo/STATUS.md` — in-progress, recent, next. Session memory, not decision memory.
 5. `vault/PLATFORM.md` — platform overview, verticals, fact/dim/view census.
@@ -70,10 +70,9 @@ Read in order. Stop at the first layer that answers the task. Descend only if ne
   debt service interconnection).
 
 **Entity protocol** (before touching canonical data):
-- `vault/entity_protocol_v1.md` → entity types (10 closed), state machine
-  (candidate → approved → active → inactive), promotion triggers.
-- `vault/ENTITY_REVIEW.md` → triage CORE / TACTICAL / TRANSIENT for suppliers/advisors/
-  companies.
+- ⚠️ `entity_protocol_v1.md` e `ENTITY_REVIEW.md` sono **archiviati** in
+  `vault/_archive/dead_2026-04-30/` (dichiarati dead 2026-04-30). Consultali solo come
+  storia; il triage entità vivo passa da `vault/SUPPLIERS_STRATEGY.md` + BQ d_* tables.
 - `vault/SUPPLIERS_STRATEGY.md` → supplier routing (Layer 1 ontology vs Layer 2 registry).
 
 **Ontology** (canonical entities):
@@ -111,8 +110,7 @@ verità: segui il link al repo.
 
 ### Parking lot — aware but don't auto-touch
 
-- `vault/ontology/assets/` → vuoto (identificato in ENTITY_REVIEW, mai popolato).
-- `vault/events/` → vuoto (placeholder per event log, non implementato).
+- `vault/ontology/assets/` e `vault/events/` → **non esistono più** (rimossi; erano vuoti).
 - `vault/ontology/advisors/{Dino,Serini,Masotti}.md` → orfani (no incoming links).
 - `vault/ontology/companies/{Atelier_Hospitality,Dierre,Studio_Ninni}.md` →
   flagged TACTICAL ma non ancora migrati a registry.
