@@ -19,6 +19,22 @@ The architecture is built around:
 
 ---
 
+## Visione
+
+**HotelOps è il sistema attraverso cui una proprietà alberghiera indipendente acquisisce memoria, visibilità e capacità di governo, senza dipendere integralmente dalle persone che gestiscono ogni singola funzione.**
+
+In termini operativi, HotelOps trasforma attività, decisioni e processi in un patrimonio condiviso, misurabile e migliorabile nel tempo.
+
+## Tagline
+
+**Dati, memoria operativa e governo: l'infrastruttura decisionale per l'hotel indipendente.**
+
+## Versione tecnica (data pipelines)
+
+HotelOps implementa pipeline dati per rendere osservabili i processi critici della gestione alberghiera, consolidare la memoria operativa e supportare decisioni ripetibili, tracciabili e progressivamente ottimizzabili.
+
+---
+
 ## Repository Structure
 
 ```text
