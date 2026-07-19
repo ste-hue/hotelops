@@ -56,6 +56,7 @@ except ImportError:
 
 from core.bq.client import get_client
 from core.config import PROJECT
+from core.local_paths import resolve_artifacts_root
 
 from ingest.flussi.budget_orti_xlsx import (
     parse_budget_orti_workbook,
@@ -64,10 +65,10 @@ from ingest.flussi.budget_orti_xlsx import (
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
-DEFAULT_FILE = Path(
-    "/Users/stefanodellapietra/Desktop/WORK/artifacts/"
-    "gasparotto_materialiereport/"
-    "Master Completo Indici 2025 ORTI SRL_Budget26_AGG 17.03.xlsx"
+DEFAULT_FILE = (
+    resolve_artifacts_root()
+    / "gasparotto_materialiereport"
+    / "Master Completo Indici 2025 ORTI SRL_Budget26_AGG 17.03.xlsx"
 )
 
 BQ_TABLE = f"{PROJECT}.hotelops.f_budget_mensile"

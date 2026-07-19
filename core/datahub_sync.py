@@ -7,15 +7,15 @@ sync helpers from here — do NOT hardcode the path or reimplement rclone.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from pathlib import Path
 
-DATAHUB_ROOT = Path(
-    "~/Library/CloudStorage/GoogleDrive-stefano@panoramagroup.it"
-    "/My Drive/00_hotelops_datahub"
-).expanduser()
+from core.local_paths import resolve_datahub_root
 
-RCLONE_REMOTE = "mywork"
+DATAHUB_ROOT = resolve_datahub_root()
+
+RCLONE_REMOTE = os.environ.get("HOTELOPS_RCLONE_REMOTE", "mywork")
 DATAHUB_REMOTE_ROOT = f"{RCLONE_REMOTE}:00_hotelops_datahub"
 
 log = logging.getLogger(__name__)
