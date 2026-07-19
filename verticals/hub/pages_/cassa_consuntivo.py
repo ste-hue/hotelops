@@ -9,66 +9,47 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from verticals.condges.cashflow_consuntivo_data import (
-    classificato_mensile,
-    consolidato_societa,
-    detect_trasferimenti_interni,
-    fetch_movimenti_mese,
+from verticals.condges.services.cassa_consuntivo_service import (
+    load_cash_position,
+    load_classificato,
+    load_consolidato,
 )
+from verticals.hub.surface_context import SurfaceContext, current_context
 
 
 @st.cache_data(ttl=600)
 def _cash_position(societa: str) -> pd.DataFrame:
-    from google.cloud import bigquery
-
-    from core.bq.client import get_client
-    from core.config import V_CASH_POSITION
-
-    client = get_client()
-    sql = f"""
-    SELECT mese, banca_id, saldo_iniziale_cert, accrediti, addebiti, netto,
-           saldo_calcolato, saldo_finale_cert, scarto
-    FROM `{V_CASH_POSITION}`
-    WHERE societa_id = @societa
-    ORDER BY mese DESC, banca_id
-    """
-    job = client.query(
-        sql,
-        job_config=bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("societa", "STRING", societa)
-            ]
-        ),
-    )
-    return job.to_dataframe()
+    return load_cash_position(societa)
 
 
 @st.cache_data(ttl=600)
 def _consolidato(societa: str, anno: int, mese: int) -> dict:
-    movs = fetch_movimenti_mese(societa, anno, mese)
-    return consolidato_societa(detect_trasferimenti_interni(movs))
+    return load_consolidato(societa, anno, mese)
 
 
 @st.cache_data(ttl=600)
 def _classificato(societa: str, anno: int, mese: int) -> dict:
-    return classificato_mensile(societa, anno, mese)
+    return load_classificato(societa, anno, mese)
 
 
-def render() -> None:
+def render(ctx: SurfaceContext | None = None) -> None:
+    ctx = ctx or current_context()
     st.title("💰 Cassa consuntivo")
     st.caption(
         "Il vero cashflow: totali dalla banca, quadratura sui saldi certificati. "
         "Livello A = lordi per conto · Livello B = consolidato società, "
         "trasferimenti interni neutralizzati."
     )
-
-    societa = st.radio("Società", ["ORTI", "INTUR"], horizontal=True)
+    societa = ctx.societa
 
     st.subheader("Livello A — Cash position per conto")
     df = _cash_position(societa)
     if df.empty:
         st.info("Nessun dato in v_cash_position per questa società.")
         return
+    st.caption(
+        f"Contesto globale: {societa} · {ctx.anno}-{ctx.mese:02d} · {ctx.scenario}"
+    )
     st.dataframe(
         df.style.map(
             lambda v: (
@@ -87,7 +68,7 @@ def render() -> None:
 
     st.subheader("Livello B — Consolidato società (mese)")
     mesi = sorted({(m.year, m.month) for m in df["mese"]}, reverse=True)
-    scelta = st.selectbox("Mese", mesi, format_func=lambda am: f"{am[0]}-{am[1]:02d}")
+    scelta = next(((ctx.anno, ctx.mese) for am in mesi if am == (ctx.anno, ctx.mese)), mesi[0])
     anno, mese = scelta
     cons = _consolidato(societa, anno, mese)
     c1, c2, c3, c4 = st.columns(4)

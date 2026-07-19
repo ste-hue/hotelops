@@ -19,20 +19,19 @@ if _ROOT not in sys.path:
 import streamlit as st  # noqa: E402
 
 from verticals.hub import home  # noqa: E402
-from verticals.hub.registry import pages_for  # noqa: E402
-from verticals.hub.roles import current_apps  # noqa: E402
+from verticals.hub.resolver import mounted_pages  # noqa: E402
+from verticals.hub.roles import current_apps, current_email  # noqa: E402
+from verticals.hub.surface_context import render_sidebar_context  # noqa: E402
 from verticals.hub.theme import inject_brand  # noqa: E402
 
 st.set_page_config(page_title="HotelOps Hub", page_icon="🏨", layout="wide")
 inject_brand()  # admin: chrome Streamlit visibile
 
 allowed = current_apps()
+ctx = render_sidebar_context(user_email=current_email(), allowed_apps=allowed)
 
 # Una st.Page per ogni pagina CONCESSA; mappa id→Page per i link dalla Home.
-_page_objs = {
-    a.id: st.Page(a.target, title=a.title, icon=a.icon, url_path=a.id)
-    for a in pages_for(allowed)
-}
+_page_objs = mounted_pages(allowed, ctx)
 
 home_page = st.Page(
     lambda: home.render(_page_objs, allowed),

@@ -16,8 +16,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from core.bq.client import get_client
-from core.config import V_BOOKING_CURVE
+from verticals.condges.services.revenue_service import load_booking_curve
+from verticals.hub.surface_context import SurfaceContext, current_context
 
 # ── palette (dataviz reference instance — ruoli, non hex sparsi) ─────────────
 BLUE = "#2a78d6"  # slot-1: emphasis + riempimento meter
@@ -80,14 +80,7 @@ def calendario_confrontabile(
 
 @st.cache_data(ttl=300)
 def load_curve() -> pd.DataFrame:
-    sql = (
-        f"SELECT * FROM `{V_BOOKING_CURVE}` "
-        "ORDER BY business_unit_id, mese_soggiorno, snapshot_date"
-    )
-    df = get_client().query(sql).to_dataframe()
-    for c in ("snapshot_date", "mese_soggiorno"):
-        df[c] = pd.to_datetime(df[c]).dt.date
-    return df
+    return load_booking_curve()
 
 
 _MESI = [
@@ -117,7 +110,8 @@ def _eur(v) -> str:
         return "—"
 
 
-def render() -> None:
+def render(ctx: SurfaceContext | None = None) -> None:
+    ctx = ctx or current_context()
     st.title("📈 Revenue")
     st.caption(
         "A che ritmo riempiamo, e com'è andata — fotografie OTB settimanali, "
@@ -238,10 +232,14 @@ def render() -> None:
     mesi = list(aperti["mese_soggiorno"])
     if mesi:
         ott = [m for m in mesi if m.month == 10]
+        default_sel = next(
+            (m for m in mesi if (m.year, m.month) == (ctx.anno, ctx.mese)),
+            ott[0] if ott else mesi[0],
+        )
         sel = st.selectbox(
             "Mese in evidenza",
             mesi,
-            index=mesi.index(ott[0]) if ott else 0,
+            index=mesi.index(default_sel),
             format_func=_mese_label,
         )
         fig = go.Figure()

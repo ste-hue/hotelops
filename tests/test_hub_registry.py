@@ -14,14 +14,14 @@ def test_ids_unici():
     assert len(ids) == len(set(ids))
 
 
-def test_target_coerente_col_kind():
+def test_route_coerente_col_kind():
     for a in APPS:
         if a.kind == "page":
-            assert callable(a.target), a.id
+            assert isinstance(a.route, str), a.id
         elif a.kind == "bind":
-            assert isinstance(a.target, str) and a.target.startswith("https://"), a.id
+            assert isinstance(a.route, str) and a.route.startswith("https://"), a.id
         elif a.kind == "soon":
-            assert a.target is None, a.id
+            assert a.route is None, a.id
         else:
             raise AssertionError(f"kind sconosciuto: {a.kind}")
 
@@ -51,20 +51,28 @@ def test_by_group_ordine_e_contenuto():
     assert g["Sistema"] == []  # ingest non è una sezione: è funzione del vertical
 
 
-def test_validate_rifiuta_page_senza_callable():
+def test_validate_rifiuta_page_senza_route():
     with pytest.raises(ValueError):
-        validate([HubApp("x", "X", "❌", "Finanza", "page", "not-callable", None)])
+        validate([HubApp("x", "X", "❌", "Finanza", "page", None, "")])
 
 
 def test_validate_rifiuta_group_sconosciuto():
     with pytest.raises(ValueError):
-        validate([HubApp("x", "X", "❌", "Nope", "soon", None, None)])
+        validate([HubApp("x", "X", "❌", "Nope", "soon", None, "")])
 
 
 def test_validate_rifiuta_id_duplicato():
-    a = HubApp("dup", "A", "🅰", "Finanza", "soon", None, None)
+    a = HubApp("dup", "A", "🅰", "Finanza", "soon", None, "")
     with pytest.raises(ValueError):
         validate([a, a])
+
+
+def test_surface_contract_arricchito():
+    bil = {a.id: a for a in APPS}["bilancini"]
+    assert bil.delivery_mode == "edge"
+    assert "drilldown" in bil.capabilities
+    assert bil.owner == "Rosa"
+    assert "mese" in bil.context_requirements
 
 
 def test_cashflow_accodamenti_sono_sensibili():

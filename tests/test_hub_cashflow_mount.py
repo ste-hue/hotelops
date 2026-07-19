@@ -18,7 +18,7 @@ def test_hub_app_registers_cashflow():
     # app.py resta parsabile e costruisce la nav dal registry.
     src = Path("verticals/hub/app.py").read_text()
     ast.parse(src)
-    assert "registry" in src
+    assert "resolver" in src
 
 
 def test_app_filtra_la_nav_su_current_apps():
@@ -27,7 +27,7 @@ def test_app_filtra_la_nav_su_current_apps():
     src = Path("verticals/hub/app.py").read_text(encoding="utf-8")
     code = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("#"))
     assert "current_apps" in code
-    assert "pages_for" in code
+    assert "mounted_pages" in code
     # la Home riceve anche le app concesse, non solo page_objs
     assert "home.render(_page_objs, allowed)" in code
 

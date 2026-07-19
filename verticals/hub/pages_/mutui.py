@@ -11,12 +11,13 @@ il dato è uno snapshot del Worker, non BigQuery live.
 
 import streamlit as st
 
+from verticals.hub.surface_context import SurfaceContext
 from verticals.hub.theme import brand_header
 
 MUTUI_URL = "https://mutui.panorama-host.com/"
 
 
-def render() -> None:
+def render(ctx: SurfaceContext | None = None) -> None:
     brand_header("Mutui", "Gruppo Panorama · piani di ammortamento")
     st.link_button("↗ Apri Mutui", MUTUI_URL)
     st.caption(

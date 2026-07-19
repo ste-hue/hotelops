@@ -1,9 +1,13 @@
 """Pagina F&B — monta verticals.condges.fb_dashboard.render() (worktree fb-looker)."""
 
+from __future__ import annotations
+
 import streamlit as st
 
+from verticals.hub.surface_context import SurfaceContext
 
-def render():
+
+def render(ctx: SurfaceContext | None = None):
     try:
         from verticals.condges.fb_dashboard import render as fb_render
     except ImportError:

@@ -1,9 +1,13 @@
 """Pagina Cashflow — monta verticals.condges.app_cashflow.render()."""
 
+from __future__ import annotations
+
 import streamlit as st
 
+from verticals.hub.surface_context import SurfaceContext
 
-def render():
+
+def render(ctx: SurfaceContext | None = None):
     from verticals.hub.roles import current_apps
 
     if "cashflow" not in current_apps():

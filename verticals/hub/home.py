@@ -47,7 +47,9 @@ def _tile(app: HubApp, page_obj) -> None:
 
         if app.kind == "page" and page_obj is not None:
             st.page_link(page_obj, label="Apri →")
-        elif app.kind == "bind" and isinstance(app.target, str):
-            st.link_button("Apri ↗", app.target)
+        elif app.kind == "bind" and isinstance(app.route, str):
+            st.link_button("Apri ↗", app.route)
         elif app.kind == "soon":
             st.caption("🔜 coming soon")
+        if app.owner:
+            st.caption(f"Owner: {app.owner}")

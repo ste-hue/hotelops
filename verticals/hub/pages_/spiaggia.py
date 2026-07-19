@@ -4,7 +4,11 @@ L'uploader Moolty (write-path) è per-utente: la pagina resta in sola lettura
 per il gruppo Operations, il drop compare solo agli uploader autorizzati.
 """
 
+from __future__ import annotations
+
 import streamlit as st
+
+from verticals.hub.surface_context import SurfaceContext
 
 # Chi può caricare l'export Moolty dalla pagina (write-path via lineage).
 _MOOLTY_UPLOADERS = frozenset(
@@ -15,7 +19,7 @@ _MOOLTY_UPLOADERS = frozenset(
 )
 
 
-def render():
+def render(ctx: SurfaceContext | None = None):
     try:
         from verticals.spiaggia.app import render as _render
     except ImportError:
@@ -28,4 +32,5 @@ def render():
 
     from verticals.hub.roles import current_email
 
-    _render(can_upload=current_email() in _MOOLTY_UPLOADERS)
+    email = ctx.user_email if ctx is not None else current_email()
+    _render(can_upload=email in _MOOLTY_UPLOADERS)

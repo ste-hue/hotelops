@@ -10,12 +10,13 @@ condges (--push), senza redeploy.
 
 import streamlit as st
 
+from verticals.hub.surface_context import SurfaceContext
 from verticals.hub.theme import brand_header
 
 BILANCINI_URL = "https://bilancini.panorama-host.com/"
 
 
-def render() -> None:
+def render(ctx: SurfaceContext | None = None) -> None:
     brand_header("Bilancini", "bilancio di verifica: YTD, progressione, navigatore")
     st.link_button("↗ Apri Bilancini", BILANCINI_URL)
     st.caption(
