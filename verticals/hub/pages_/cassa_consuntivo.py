@@ -40,7 +40,13 @@ def render(ctx: SurfaceContext | None = None) -> None:
         "Livello A = lordi per conto · Livello B = consolidato società, "
         "trasferimenti interni neutralizzati."
     )
-    societa = ctx.societa
+    societa_options = ["ORTI", "INTUR"]
+    societa = st.radio(
+        "Società",
+        societa_options,
+        index=societa_options.index(ctx.societa),
+        horizontal=True,
+    )
 
     st.subheader("Livello A — Cash position per conto")
     df = _cash_position(societa)
@@ -68,7 +74,13 @@ def render(ctx: SurfaceContext | None = None) -> None:
 
     st.subheader("Livello B — Consolidato società (mese)")
     mesi = sorted({(m.year, m.month) for m in df["mese"]}, reverse=True)
-    scelta = next(((ctx.anno, ctx.mese) for am in mesi if am == (ctx.anno, ctx.mese)), mesi[0])
+    scelta_default = next((am for am in mesi if am == (ctx.anno, ctx.mese)), mesi[0])
+    scelta = st.selectbox(
+        "Mese",
+        mesi,
+        index=mesi.index(scelta_default),
+        format_func=lambda am: f"{am[0]}-{am[1]:02d}",
+    )
     anno, mese = scelta
     cons = _consolidato(societa, anno, mese)
     c1, c2, c3, c4 = st.columns(4)

@@ -14,6 +14,6 @@ def load_booking_curve() -> pd.DataFrame:
         "ORDER BY business_unit_id, mese_soggiorno, snapshot_date"
     )
     df = get_client().query(sql).to_dataframe()
-    for col in ("snapshot_date", "mese_soggiorno"):
-        df[col] = pd.to_datetime(df[col]).dt.date
+    for column in ("snapshot_date", "mese_soggiorno"):
+        df[column] = pd.to_datetime(df[column]).dt.date
     return df
