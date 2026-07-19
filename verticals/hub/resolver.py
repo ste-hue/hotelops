@@ -36,6 +36,12 @@ _PAGE_RENDERERS: dict[str, Callable[[SurfaceContext | None], None]] = {
 }
 
 
+def _make_renderer(
+    render: Callable[[SurfaceContext | None], None], ctx: SurfaceContext
+) -> Callable[[], None]:
+    return lambda: render(ctx)
+
+
 def validate_resolution(apps: list[HubApp] = APPS) -> None:
     """Ogni page del registry deve avere un renderer risolvibile."""
     for app in apps:
@@ -51,7 +57,7 @@ def mounted_pages(
     for app in pages_for(allowed):
         render = _PAGE_RENDERERS[app.id]
         out[app.id] = st.Page(
-            lambda render=render, ctx=ctx: render(ctx),
+            _make_renderer(render, ctx),
             title=app.title,
             icon=app.icon,
             url_path=app.route,

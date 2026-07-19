@@ -236,6 +236,11 @@ def render(ctx: SurfaceContext | None = None) -> None:
             (m for m in mesi if (m.year, m.month) == (ctx.anno, ctx.mese)),
             ott[0] if ott else mesi[0],
         )
+        if (default_sel.year, default_sel.month) != (ctx.anno, ctx.mese):
+            st.caption(
+                f"Contesto {ctx.anno}-{ctx.mese:02d} non presente nei mesi aperti: "
+                f"evidenzio {_mese_label(default_sel)}."
+            )
         sel = st.selectbox(
             "Mese in evidenza",
             mesi,

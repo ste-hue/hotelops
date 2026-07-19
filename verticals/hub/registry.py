@@ -14,6 +14,10 @@ _BANCHE_LOOKER = (
 )
 
 
+def _is_https_route(route: str | None) -> bool:
+    return isinstance(route, str) and route.startswith("https://")
+
+
 @dataclass(frozen=True)
 class HubApp:
     """Contratto di una superficie.
@@ -209,7 +213,7 @@ def validate(apps: list[HubApp] = APPS) -> None:
             raise ValueError(f"registry: group sconosciuto {a.group!r} per {a.id!r}")
         if a.kind == "page" and not isinstance(a.route, str):
             raise ValueError(f"registry: {a.id!r} kind=page richiede route str")
-        if a.kind == "bind" and not (isinstance(a.route, str) and a.route.startswith("https://")):
+        if a.kind == "bind" and not _is_https_route(a.route):
             raise ValueError(f"registry: {a.id!r} kind=bind richiede URL https")
         if a.kind == "soon" and a.route is not None:
             raise ValueError(f"registry: {a.id!r} kind=soon non ha route")

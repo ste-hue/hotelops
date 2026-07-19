@@ -75,6 +75,11 @@ def render(ctx: SurfaceContext | None = None) -> None:
     st.subheader("Livello B — Consolidato società (mese)")
     mesi = sorted({(m.year, m.month) for m in df["mese"]}, reverse=True)
     scelta_default = next((am for am in mesi if am == (ctx.anno, ctx.mese)), mesi[0])
+    if scelta_default != (ctx.anno, ctx.mese):
+        st.caption(
+            f"Contesto {ctx.anno}-{ctx.mese:02d} non disponibile qui: uso "
+            f"{scelta_default[0]}-{scelta_default[1]:02d}."
+        )
     scelta = st.selectbox(
         "Mese",
         mesi,
