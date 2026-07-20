@@ -5,6 +5,7 @@ from __future__ import annotations
 from urllib.parse import urlencode
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -15,6 +16,16 @@ PIATTAFORME = ["BOOKING", "TRIPADVISOR", "GOOGLE", "EXPEDIA", "TRIP"]
 ANNI = [2025, 2026, 2027]
 ANNO_DEFAULT = 2026
 BUSINESS_UNITS = ["HOTEL", "RESIDENCE", "CVM", "LIDO"]
+
+# Colore fisso per BU (palette categorica validata CVD, mai riassegnata dai filtri).
+BU_TREND_COLORS = {
+    "HOTEL": "#2a78d6",
+    "RESIDENCE": "#008300",
+    "CVM": "#e87ba4",
+    "LIDO": "#eda100",
+}
+# Sotto questa soglia la media mensile è poco affidabile → marker vuoto.
+LOW_SAMPLE_N = 3
 
 # Modalità ?scan=full: solo lo scan, senza chrome hub/Streamlit.
 # Sfondo allineato a --paper dello scan (light/dark come in scan.py).
@@ -76,6 +87,58 @@ def load_reviews(
     return df
 
 
+def monthly_trend(df: pd.DataFrame) -> pd.DataFrame:
+    """Media mensile di punteggio_norm per BU: (mese, business_unit_id, media, n).
+
+    Mesi senza review non producono righe (nessuna interpolazione).
+    """
+    if df.empty:
+        return pd.DataFrame(columns=["mese", "business_unit_id", "media", "n"])
+    return (
+        df.assign(mese=df["data_review"].dt.strftime("%Y-%m"))
+        .groupby(["mese", "business_unit_id"], as_index=False)
+        .agg(media=("punteggio_norm", "mean"), n=("punteggio_norm", "size"))
+        .sort_values("mese", ignore_index=True)
+    )
+
+
+def trend_figure(trend: pd.DataFrame) -> go.Figure:
+    fig = go.Figure()
+    for bu, color in BU_TREND_COLORS.items():
+        sub = trend[trend["business_unit_id"] == bu]
+        if sub.empty:
+            continue
+        symbols = ["circle" if n >= LOW_SAMPLE_N else "circle-open" for n in sub["n"]]
+        fig.add_trace(
+            go.Scatter(
+                x=sub["mese"],
+                y=sub["media"],
+                name=bu,
+                mode="lines+markers",
+                line={"color": color, "width": 2},
+                marker={
+                    "symbol": symbols,
+                    "size": 9,
+                    "color": color,
+                    "line": {"color": color, "width": 2},
+                },
+                customdata=sub["n"],
+                hovertemplate=(
+                    "%{x} · media %{y:.2f}/10 · %{customdata} review"
+                    f"<extra>{bu}</extra>"
+                ),
+            )
+        )
+    fig.update_layout(
+        height=340,
+        margin={"l": 60, "r": 20, "t": 10, "b": 40},
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02},
+        yaxis={"title": "media /10"},
+        xaxis={"type": "category"},
+    )
+    return fig
+
+
 def _render_scan_fullscreen():
     """Solo lo scan, a tutta finestra — filtri dai query param (?scan=full)."""
     anno, piattaforme, bu = parse_scan_params(st.query_params)
@@ -130,6 +193,16 @@ def render():
     st.link_button("↗ Apri a schermo intero", "?" + urlencode(fs_params))
     scan = build_scan(df.to_dict("records"))
     components.html(render_scan_html(scan, anno), height=4300, scrolling=True)
+
+    st.divider()
+
+    # ── Trend punteggio (pre-filtro sentiment, come lo scan) ─────────────────
+    st.subheader("Trend punteggio")
+    trend = monthly_trend(df)
+    if trend["mese"].nunique() < 2:
+        st.caption("Serve più di un mese di review per leggere il trend.")
+    st.plotly_chart(trend_figure(trend), use_container_width=True)
+    st.caption(f"Marker vuoto = meno di {LOW_SAMPLE_N} review nel mese.")
 
     st.divider()
 
