@@ -2,10 +2,19 @@
 
 import importlib
 import sys
+import types
 
 import pytest
 
-from verticals.hub.registry import APPS, GROUPS, HubApp, by_group, pages, validate
+from verticals.hub.registry import (
+    APPS,
+    GROUPS,
+    HubApp,
+    _lazy_page_target,
+    by_group,
+    pages,
+    validate,
+)
 
 
 def test_validate_ok():
@@ -114,3 +123,16 @@ def test_registry_non_importa_pages_a_boot():
     assert "verticals.hub.pages_.cashflow" not in sys.modules
     assert "verticals.hub.pages_.revenue" not in sys.modules
     assert "verticals.hub.pages_.accodamenti" not in sys.modules
+
+
+def test_lazy_target_importa_solo_on_demand():
+    called = {"ok": False}
+
+    def _fake_render():
+        called["ok"] = True
+
+    sys.modules["test.lazy.module"] = types.SimpleNamespace(render=_fake_render)
+    target = _lazy_page_target("test.lazy.module")
+    target()
+    assert called["ok"] is True
+    sys.modules.pop("test.lazy.module", None)

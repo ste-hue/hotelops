@@ -43,7 +43,10 @@ class HubApp:
 
 
 def _lazy_page_target(module_path: str, attr: str = "render") -> Callable[[], None]:
-    """Proxy callable che importa la pagina solo quando viene aperta."""
+    """Proxy callable che importa la pagina solo quando viene aperta.
+
+    Solleva AttributeError se il modulo non espone ``attr``.
+    """
 
     def _run() -> None:
         module = import_module(module_path)
@@ -54,7 +57,7 @@ def _lazy_page_target(module_path: str, attr: str = "render") -> Callable[[], No
         fn = getattr(module, attr)
         fn()
 
-    _run.__name__ = f"lazy_{module_path.rsplit('.', 1)[-1]}_{attr}"
+    _run.__name__ = f"lazy_{module_path.split('.')[-1]}_{attr}"
     return _run
 
 
