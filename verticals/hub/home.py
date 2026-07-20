@@ -11,6 +11,12 @@ import streamlit as st
 from verticals.hub.registry import HubApp, by_group_for
 from verticals.hub.theme import brand_header
 
+_GROUP_DESCRIPTIONS = {
+    "Finanza": "cassa, bilanci, mutui e performance",
+    "Operations": "operatività giornaliera dei vertical",
+    "Sistema": "strumenti tecnici e superfici di supporto",
+}
+
 
 def render(
     page_objs: dict | None = None, allowed: frozenset[str] | None = None
@@ -28,14 +34,15 @@ def render(
         )
         return
 
-    st.caption("Punto d'ingresso · apri un'app per i dati col loro contesto")
+    st.caption("Seleziona una sezione dal launcher.")
     for group, apps in groups.items():
         if not apps:
             continue
         st.subheader(group)
-        cols = st.columns(3)
+        st.caption(_GROUP_DESCRIPTIONS.get(group, ""))
+        cols = st.columns(2)
         for i, app in enumerate(apps):
-            with cols[i % 3]:
+            with cols[i % 2]:
                 _tile(app, page_objs.get(app.id))
 
 
@@ -46,8 +53,8 @@ def _tile(app: HubApp, page_obj) -> None:
             st.caption(app.subtitle)
 
         if app.kind == "page" and page_obj is not None:
-            st.page_link(page_obj, label="Apri →")
+            st.page_link(page_obj, label=f"{app.cta_label} →")
         elif app.kind == "bind" and isinstance(app.target, str):
-            st.link_button("Apri ↗", app.target)
+            st.link_button(f"{app.cta_label} ↗", app.target)
         elif app.kind == "soon":
-            st.caption("🔜 coming soon")
+            st.caption("🔜 In redesign")

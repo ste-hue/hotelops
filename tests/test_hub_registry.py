@@ -1,5 +1,8 @@
 """Hub registry — contratto del catalogo app-store."""
 
+import importlib
+import sys
+
 import pytest
 
 from verticals.hub.registry import APPS, GROUPS, HubApp, by_group, pages, validate
@@ -95,3 +98,18 @@ def test_by_group_for_filtra_e_mantiene_ordine():
     assert list(g.keys()) == GROUPS  # tutti i gruppi presenti (anche vuoti)
     assert {a.id for a in g["Operations"]} == {"reviews"}
     assert g["Finanza"] == []
+
+
+def test_registry_non_importa_pages_a_boot():
+    sys.modules.pop("verticals.hub.registry", None)
+    for m in (
+        "verticals.hub.pages_.cashflow",
+        "verticals.hub.pages_.revenue",
+        "verticals.hub.pages_.accodamenti",
+    ):
+        sys.modules.pop(m, None)
+
+    importlib.import_module("verticals.hub.registry")
+
+    assert "verticals.hub.pages_.cashflow" not in sys.modules
+    assert "verticals.hub.pages_.revenue" not in sys.modules
