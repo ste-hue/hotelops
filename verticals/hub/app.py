@@ -31,11 +31,10 @@ inject_brand()  # admin: chrome Streamlit visibile
 
 allowed = current_apps()
 
-# Una st.Page per ogni pagina CONCESSA; mappa id→Page per i link dalla Home.
-_page_objs = {
-    a.id: st.Page(a.target, title=a.title, icon=a.icon, url_path=a.id)
-    for a in pages_for(allowed)
-}
+# home_page è definita prima di _page_objs: i target delle pagine vi fanno
+# riferimento per il breadcrumb. La lambda cattura _page_objs per riferimento
+# (dict mutabile), quindi il dict può essere popolato subito dopo.
+_page_objs: dict = {}
 
 home_page = st.Page(
     lambda: home.render(_page_objs, allowed),
@@ -43,6 +42,28 @@ home_page = st.Page(
     icon="🏨",
     default=True,
     url_path="home",
+)
+
+
+def _with_home_nav(fn):
+    """Aggiunge breadcrumb ← Hub Home sopra il render della pagina."""
+
+    def _wrapped():
+        st.page_link(home_page, label="← Hub Home", icon="🏨")
+        st.divider()
+        fn()
+
+    return _wrapped
+
+
+# Una st.Page per ogni pagina CONCESSA; mappa id→Page per i link dalla Home.
+_page_objs.update(
+    {
+        a.id: st.Page(
+            _with_home_nav(a.target), title=a.title, icon=a.icon, url_path=a.id
+        )
+        for a in pages_for(allowed)
+    }
 )
 
 pg = st.navigation([home_page, *_page_objs.values()], position="hidden")
