@@ -7,6 +7,7 @@ Lancio: streamlit run verticals/hub/app.py
 Spec: docs/superpowers/specs/2026-06-20-hub-gateway-presentation-design.md
 """
 
+import functools
 import sys
 from pathlib import Path
 
@@ -34,7 +35,7 @@ allowed = current_apps()
 # home_page è definita prima di _page_objs: i target delle pagine vi fanno
 # riferimento per il breadcrumb. La lambda cattura _page_objs per riferimento
 # (dict mutabile), quindi il dict può essere popolato subito dopo.
-_page_objs: dict = {}
+_page_objs: dict[str, st.Page] = {}
 
 home_page = st.Page(
     lambda: home.render(_page_objs, allowed),
@@ -48,6 +49,7 @@ home_page = st.Page(
 def _with_home_nav(fn):
     """Aggiunge breadcrumb ← Hub Home sopra il render della pagina."""
 
+    @functools.wraps(fn)
     def _wrapped():
         st.page_link(home_page, label="← Hub Home", icon="🏨")
         st.divider()
