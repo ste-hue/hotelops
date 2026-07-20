@@ -28,7 +28,7 @@ def render(
         )
         return
 
-    st.caption("Punto d'ingresso · apri un'app per i dati col loro contesto")
+    st.caption("Seleziona una sezione dal launcher.")
     for group, apps in groups.items():
         if not apps:
             continue
@@ -46,8 +46,8 @@ def _tile(app: HubApp, page_obj) -> None:
             st.caption(app.subtitle)
 
         if app.kind == "page" and page_obj is not None:
-            st.page_link(page_obj, label="Apri →")
+            st.page_link(page_obj, label=f"{app.cta_label} →")
         elif app.kind == "bind" and isinstance(app.target, str):
-            st.link_button("Apri ↗", app.target)
+            st.link_button(f"{app.cta_label} ↗", app.target)
         elif app.kind == "soon":
-            st.caption("🔜 coming soon")
+            st.caption("🔜 in redesign")

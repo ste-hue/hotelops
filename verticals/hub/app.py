@@ -45,5 +45,5 @@ home_page = st.Page(
     url_path="home",
 )
 
-pg = st.navigation([home_page, *_page_objs.values()], position="top")
+pg = st.navigation([home_page, *_page_objs.values()], position="hidden")
 pg.run()

@@ -1,8 +1,21 @@
 """Hub registry — contratto del catalogo app-store."""
 
+import importlib
+import sys
+import types
+import unittest.mock
+
 import pytest
 
-from verticals.hub.registry import APPS, GROUPS, HubApp, by_group, pages, validate
+from verticals.hub.registry import (
+    APPS,
+    GROUPS,
+    HubApp,
+    _lazy_page_target,
+    by_group,
+    pages,
+    validate,
+)
 
 
 def test_validate_ok():
@@ -77,7 +90,13 @@ def test_cashflow_accodamenti_sono_sensibili():
     # nessun write-path, solo lettura BQ).
     # spiaggia NON è sensibile: l'uploader Moolty è gated per-utente nel wrapper
     # (pages_/spiaggia._MOOLTY_UPLOADERS) — la pagina resta lettura per Operations.
-    assert sens == {"cashflow", "cassa-consuntivo", "accodamenti", "revenue", "bilancini"}
+    assert sens == {
+        "cashflow",
+        "cassa-consuntivo",
+        "accodamenti",
+        "revenue",
+        "bilancini",
+    }
 
 
 def test_pages_for_filtra_su_allowed():
@@ -95,3 +114,63 @@ def test_by_group_for_filtra_e_mantiene_ordine():
     assert list(g.keys()) == GROUPS  # tutti i gruppi presenti (anche vuoti)
     assert {a.id for a in g["Operations"]} == {"reviews"}
     assert g["Finanza"] == []
+
+
+def test_registry_non_importa_pages_a_boot():
+    # Usa patch.dict per isolare la manipolazione di sys.modules senza lasciare
+    # stato globale sporco in caso di failure del test.
+    pages_keys = [
+        "verticals.hub.pages_.cashflow",
+        "verticals.hub.pages_.revenue",
+        "verticals.hub.pages_.accodamenti",
+    ]
+    clean = {
+        k: v
+        for k, v in sys.modules.items()
+        if k not in pages_keys + ["verticals.hub.registry"]
+    }
+    with unittest.mock.patch.dict(sys.modules, clean, clear=True):
+        importlib.import_module("verticals.hub.registry")
+        for m in pages_keys:
+            assert m not in sys.modules, f"{m} caricato a boot (eager import)"
+
+
+def test_lazy_target_importa_solo_on_demand():
+    called = {"ok": False}
+
+    def _fake_render():
+        called["ok"] = True
+
+    sys.modules["test.lazy.module"] = types.SimpleNamespace(render=_fake_render)
+    try:
+        target = _lazy_page_target("test.lazy.module")
+        target()
+        assert called["ok"] is True
+    finally:
+        sys.modules.pop("test.lazy.module", None)
+
+
+def test_lazy_target_modulo_mancante():
+    target = _lazy_page_target("test.lazy.nonexistent.module")
+    with pytest.raises(ImportError):
+        target()
+
+
+def test_lazy_target_attributo_mancante():
+    sys.modules["test.lazy.norender"] = types.SimpleNamespace()
+    try:
+        target = _lazy_page_target("test.lazy.norender")
+        with pytest.raises(AttributeError, match="non espone"):
+            target()
+    finally:
+        sys.modules.pop("test.lazy.norender", None)
+
+
+def test_lazy_target_attributo_non_callable():
+    sys.modules["test.lazy.badrender"] = types.SimpleNamespace(render="not-a-function")
+    try:
+        target = _lazy_page_target("test.lazy.badrender")
+        with pytest.raises(AttributeError, match="non è callable"):
+            target()
+    finally:
+        sys.modules.pop("test.lazy.badrender", None)
