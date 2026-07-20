@@ -42,7 +42,7 @@ class HubApp:
     cta_label: str = "Apri"
 
 
-def _lazy_page_target(module_path: str, attr: str = "render") -> Callable:
+def _lazy_page_target(module_path: str, attr: str = "render") -> Callable[[], None]:
     """Proxy callable che importa la pagina solo quando viene aperta."""
 
     def _run() -> None:
