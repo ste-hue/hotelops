@@ -113,3 +113,4 @@ def test_registry_non_importa_pages_a_boot():
 
     assert "verticals.hub.pages_.cashflow" not in sys.modules
     assert "verticals.hub.pages_.revenue" not in sys.modules
+    assert "verticals.hub.pages_.accodamenti" not in sys.modules

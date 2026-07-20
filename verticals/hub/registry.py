@@ -46,7 +46,12 @@ def _lazy_page_target(module_path: str, attr: str = "render") -> Callable[[], No
     """Proxy callable che importa la pagina solo quando viene aperta."""
 
     def _run() -> None:
-        fn = getattr(import_module(module_path), attr)
+        module = import_module(module_path)
+        if not hasattr(module, attr):
+            raise AttributeError(
+                f"{module_path} non espone {attr}() richiesto dal registry hub"
+            )
+        fn = getattr(module, attr)
         fn()
 
     _run.__name__ = f"lazy_{module_path.rsplit('.', 1)[-1]}_{attr}"

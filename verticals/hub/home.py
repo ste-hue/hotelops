@@ -57,4 +57,4 @@ def _tile(app: HubApp, page_obj) -> None:
         elif app.kind == "bind" and isinstance(app.target, str):
             st.link_button(f"{app.cta_label} ↗", app.target)
         elif app.kind == "soon":
-            st.caption("🔜 In Redesign")
+            st.caption("🔜 in redesign")
