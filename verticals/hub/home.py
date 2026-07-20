@@ -11,12 +11,6 @@ import streamlit as st
 from verticals.hub.registry import HubApp, by_group_for
 from verticals.hub.theme import brand_header
 
-_GROUP_DESCRIPTIONS = {
-    "Finanza": "cassa, bilanci, mutui e performance",
-    "Operations": "operatività giornaliera dei vertical",
-    "Sistema": "strumenti tecnici e superfici di supporto",
-}
-
 
 def render(
     page_objs: dict | None = None, allowed: frozenset[str] | None = None
@@ -39,10 +33,9 @@ def render(
         if not apps:
             continue
         st.subheader(group)
-        st.caption(_GROUP_DESCRIPTIONS.get(group, ""))
-        cols = st.columns(2)
+        cols = st.columns(3)
         for i, app in enumerate(apps):
-            with cols[i % 2]:
+            with cols[i % 3]:
                 _tile(app, page_objs.get(app.id))
 
 
