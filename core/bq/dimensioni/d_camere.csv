@@ -85,3 +85,32 @@ H420,4,DEXE,Executive,Doppia,2,Vista Mare Laterale,Lato Vietri Strada,Balcone,Do
 H421,4,DEXE,Executive,Doppia,2,Vista Mare Laterale,Lato Vietri Strada,Balcone,Doccia,Twin Queen 180x200,,F,,,HOTEL,ORTI
 H422,4,DCLA,Classic,Doppia,2,Vista Città,Lato Vietri Interna,Finestra,Doccia,Twin Queen 180x200,,F,,,HOTEL,ORTI
 H423,4,TCLA,Classic,Tripla,3,Vista Città,Lato Vietri Interna,Finestra,Vasca,Matrimoniale Reg,Sofa 60x180,F,,,HOTEL,ORTI
+R101,1,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R102,1,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R103,1,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R104,1,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R110,1,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R111,1,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R210,2,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R211,2,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R310,3,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R311,3,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R410,4,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R411,4,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R501,5,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R502,5,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R503,5,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R504,5,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R505,5,BILOSUP,Bilocale Superior,,,,,,,,,,,,RESIDENCE,ORTI
+R506,5,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R510,5,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R511,5,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+C011,0,SLV,Silver,,,,,,,,,,,,CVM,ORTI
+C012,0,GLD,Gold,,,,,,,,,,,,CVM,ORTI
+C013,0,GLD,Gold,,,,,,,,,,,,CVM,ORTI
+C014,0,SLV,Silver,,,,,,,,,,,,CVM,ORTI
+C101,1,STD,Standard,,,,,,,,,,,,CVM,ORTI
+C401,4,SUP,Superior,,,,,,,,,,,,CVM,ORTI
+C404,4,SUP,Superior,,,,,,,,,,,,CVM,ORTI
+C503,5,GLD,Gold,,,,,,,,,,,,CVM,ORTI
+C504,5,SLV,Silver,,,,,,,,,,,,CVM,ORTI

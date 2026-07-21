@@ -554,11 +554,13 @@ class MappingPianoFinanziarioRow(BaseModel):
 
 
 class CameraRow(BaseModel):
-    """Schema for d_camere — physical room inventory (Hotel Panorama).
+    """Schema for d_camere — physical room inventory del gruppo.
 
-    Static hand-curated dimension (source: sheet "Distribuzione camere",
-    86 rooms). Denominator for occupancy/booking pace once f_prenotazioni_otb
-    lands. Pattern: WRITE_TRUNCATE (full reload from CSV).
+    Static hand-curated dimension (115 unità: 86 HOTEL + 20 RESIDENCE + 9 CVM;
+    fonte: foglio "Distribuzione camere" + rooming list 2026-07-21). Denominator
+    for occupancy/booking pace once f_prenotazioni_otb lands. Gli attributi
+    fisici (occupazione, letti, vista...) sono compilati solo per HOTEL.
+    Pattern: WRITE_TRUNCATE (full reload from CSV).
     """
 
     room_id: str

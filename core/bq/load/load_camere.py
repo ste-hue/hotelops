@@ -3,8 +3,9 @@
 Camere dimension loader — idempotente (WRITE_TRUNCATE).
 
 Carica il CSV d_camere → BigQuery d_camere.
-Inventario fisico camere Hotel Panorama (86 camere, fonte: foglio
-"Distribuzione camere" — dato statico, seedato a mano).
+Inventario fisico unità del gruppo (115: 86 HOTEL + 20 RESIDENCE + 9 CVM;
+fonte: foglio "Distribuzione camere" + rooming list 2026-07-21 — dato
+statico, seedato a mano).
 
 Usage:
     python -m core.bq.load.load_camere
