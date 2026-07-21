@@ -28,6 +28,7 @@ import pandas as pd
 from google.cloud import bigquery
 
 from core.bq.client import get_client
+from core.bq.write import bq_write_validated
 from core.config import PROJECT
 from core.contracts import SchemaViolationError, validate_columns
 from ingest._logging import setup_logging as _setup_logging
@@ -229,9 +230,20 @@ def infer_meta(filepath: Path) -> dict:
     societa = next(
         (v for k, v in SOCIETA_KEYWORDS.items() if k in name_upper), None
     ) or next((v for k, v in SOCIETA_KEYWORDS.items() if k in path_upper), "UNKNOWN")
-    banca = next(
-        (v for k, v in BANCA_KEYWORDS.items() if k in name_upper), None
-    ) or next((v for k, v in BANCA_KEYWORDS.items() if k in path_upper), None)
+    # IBAN in the preamble is AUTHORITATIVE over filename keywords: files named
+    # "MPS" can carry the Kross conto and vice versa (issue #27 — the mislabel
+    # pollutes banca_id and the cash_control anchor). Filename keywords remain
+    # the fallback for files without a readable IBAN; the column-based content
+    # detection stays last because it cannot tell MPS from MPS_KROSS.
+    banca = None
+    if filepath.suffix.lower() in EXCEL_EXTENSIONS:
+        iban = _scan_xlsx_preamble_iban(filepath)
+        if iban:
+            banca = _banca_from_iban(iban)
+    if not banca:
+        banca = next(
+            (v for k, v in BANCA_KEYWORDS.items() if k in name_upper), None
+        ) or next((v for k, v in BANCA_KEYWORDS.items() if k in path_upper), None)
     # Fallback: detect banca from file content (headers/columns)
     if not banca:
         banca = _detect_banca_from_content(filepath) or "UNKNOWN"
@@ -921,18 +933,24 @@ def process_file(
         logger.info(f"DRY RUN: would write {len(new_rows)} rows")
         stats["written"] = 0
     elif new_rows:
+        # I9 fail-closed: f_banche_movimenti rows without raw_object_id are
+        # FK-void (62,5% of 2026 came from this path — issue #86). Lineage-less
+        # writes are refused: route the file through intake/promote.
+        if raw_object_id is None:
+            logger.error(
+                f"Write REFUSED for {filepath.name}: raw_object_id mancante — "
+                "usa `hotelops intake` + `hotelops promote` (I9)"
+            )
+            stats["errors"] = 1
+            return stats
         validate_batch(
             new_rows, BancaMovimentoRow, f"f_banche_movimenti ({meta['societa_banca']})"
         )
-        df = pd.DataFrame(new_rows, columns=FACT_HEADER)
-        df["data_operazione"] = pd.to_datetime(df["data_operazione"])
-        df["data_valuta"] = pd.to_datetime(df["data_valuta"])
-        df["data_ingresso"] = pd.to_datetime(df["data_ingresso"])
-        df["riga_sorgente"] = df["riga_sorgente"].astype(int)
-        job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
-        bq_client.load_table_from_dataframe(
-            df, BQ_TABLE, job_config=job_config
-        ).result()
+        bq_write_validated(
+            BQ_TABLE,
+            [BancaMovimentoRow(**r) for r in new_rows],
+            mode="append",
+        )
         stats["written"] = len(new_rows)
         logger.info(f"Wrote {len(new_rows)} rows → BigQuery")
 

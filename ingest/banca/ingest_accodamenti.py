@@ -478,6 +478,15 @@ def process_file(
             logger.info(f"  DRY RUN: scriverei {len(new_rows)} righe")
         return stats
 
+    # I9 fail-closed: righe senza raw_object_id sono FK-void (issue #86).
+    if raw_object_id is None:
+        logger.error(
+            f"  Write REFUSED per {path.name}: raw_object_id mancante — "
+            "usa `hotelops intake` + `hotelops promote` (I9)"
+        )
+        stats["errors"] = 1
+        return stats
+
     try:
         write_to_bq(new_rows, bq_client, logger)
     except Exception as e:
@@ -521,6 +530,8 @@ def main():
 
     # Single-file mode (used by promotion path)
     if args.file:
+        if not args.raw_object_id:
+            parser.error("--file richiede --raw-object-id (I9)")
         log_dir = Path(args.datahub) / "meta" / "pipeline" / "logs" if args.datahub else None
         logger = setup_logging(log_dir, args.verbose)
         filepath = Path(args.file)
