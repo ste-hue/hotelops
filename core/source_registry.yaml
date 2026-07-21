@@ -670,8 +670,9 @@ sources:
       ⚠️ BU dal footer per AFFERMAZIONE ("CodiceHotel is PANORAMAHT|
       ANGELINARES|HOMEHOLIDAY") — diverso dai fratelli CONSPREV/
       BOOKINGSTIPOLOGIA che la negano; anno dal footer ("Anno is YYYY").
-      Export Panorama contiene anche camere D2xx assenti da d_camere
-      (dependance? da chiarire con Stefano prima del parser).
+      Export Panorama contiene anche D201/D202 = DEPENDANCE (confermato
+      2026-07-21: quadrano con tipologia DEP, 6 notti/593€ nel 2025, ADR
+      ~60€): fuori inventario d_camere per scelta, non un buco.
       Fotografia rivedibile (l'anno in corso si aggiorna a ogni export)
       → SNAPSHOT. RAW_ONLY: nessun loop consumer dichiarato; flip quando
       un loop vorrà il ricavo per camera (es. ROI ristrutturazione).
