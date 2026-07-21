@@ -645,6 +645,37 @@ sources:
       Consuntivo (fotografia rivedibile) → SNAPSHOT replace per (bu, data).
       Flip a MANUAL 2026-07-11 (loop season_forecast, parser+tabella live).
 
+  # ── Numero Camera Clienti (rollup annuale per camera fisica) — RAW_ONLY ──
+  POWERBI_NUMEROCAMERACLIENTI_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: NUMEROCAMERACLIENTI
+    dataset_label: "Numero Camera Clienti — rollup annuale per singola camera fisica (volte/notti, pax, infant, ADR, ricavo camera/extra), per struttura"
+    societa: ORTI
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_ricavi_camera_anno            # nome TARGET — parser non scritto
+    parser_module: ingest.flussi.ingest_numero_camera_clienti   # nome TARGET
+    natural_key: [business_unit_id, anno, camera]
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: numero_camera_clienti
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/numero_camera_clienti/ORTI"
+    notes: |
+      Rollup ANNUALE per camera fisica: Camera (= room_id di d_camere,
+      join diretto), Volte (notti vendute), ARB/Infant, ADR, ricavo
+      Appartamento vs Extra, Imponibile. Un file per (struttura × anno).
+      ⚠️ BU dal footer per AFFERMAZIONE ("CodiceHotel is PANORAMAHT|
+      ANGELINARES|HOMEHOLIDAY") — diverso dai fratelli CONSPREV/
+      BOOKINGSTIPOLOGIA che la negano; anno dal footer ("Anno is YYYY").
+      Export Panorama contiene anche camere D2xx assenti da d_camere
+      (dependance? da chiarire con Stefano prima del parser).
+      Fotografia rivedibile (l'anno in corso si aggiorna a ogni export)
+      → SNAPSHOT. RAW_ONLY: nessun loop consumer dichiarato; flip quando
+      un loop vorrà il ricavo per camera (es. ROI ristrutturazione).
+
   # ── Consuntivo+Previsione mensile per classe (rollup forecast PMS) ────────
   POWERBI_CONSPREV_ORTI_SNAPSHOT:
     system: POWERBI
