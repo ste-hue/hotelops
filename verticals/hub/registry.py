@@ -7,20 +7,9 @@ aggiunge un campo ``roles`` + ``roles.py`` (spec 2026-06-14-hub-app-store-infras
 
 from __future__ import annotations
 
+from importlib import import_module
 from collections.abc import Callable
 from dataclasses import dataclass
-
-from verticals.hub.pages_ import (
-    accodamenti,
-    bilancini,
-    cashflow,
-    cassa_consuntivo,
-    fb,
-    mutui,
-    revenue,
-    reviews,
-    spiaggia,
-)
 
 # Ordine dei gruppi nella Home gateway.
 GROUPS = ["Finanza", "Operations", "Sistema"]
@@ -50,24 +39,44 @@ class HubApp:
     target: Callable | str | None = None
     subtitle: str = ""
     sensitive: bool = False  # scrive/muta stato/azioni irreversibili/dati riservati (S1)
+    cta_label: str = "Apri"
+
+
+def _lazy_page_target(module_path: str, attr: str = "render") -> Callable[[], None]:
+    """Proxy callable che importa la pagina solo quando viene aperta.
+
+    Solleva AttributeError se il modulo non espone ``attr``.
+    """
+
+    def _run() -> None:
+        module = import_module(module_path)
+        if not hasattr(module, attr):
+            raise AttributeError(
+                f"{module_path} non espone {attr}() richiesto dal registry hub"
+            )
+        fn = getattr(module, attr)
+        fn()
+
+    _run.__name__ = f"lazy_{module_path.split('.')[-1]}_{attr}"
+    return _run
 
 
 APPS: list[HubApp] = [
     # ── Finanza ──────────────────────────────────────────────────────────────
-    HubApp("cashflow", "Cashflow", "💸", "Finanza", "page", cashflow.render, "PF & proiezione cassa", sensitive=True),
-    HubApp("cassa-consuntivo", "Cassa consuntivo", "💰", "Finanza", "page", cassa_consuntivo.render, "Il vero cashflow: banca vs certificati", sensitive=True),
-    HubApp("bilancini", "Bilancini", "📗", "Finanza", "page", bilancini.render, "bilancio di verifica: YTD, progressione, navigatore", sensitive=True),
-    HubApp("accodamenti", "Accodamenti", "📒", "Finanza", "page", accodamenti.render, "raccolta cassa → Gaia", sensitive=True),
-    HubApp("banche", "Banche", "🏛", "Finanza", "bind", _BANCHE_LOOKER, "movimenti & saldi (Looker)"),
-    HubApp("mutui", "Mutui", "🏦", "Finanza", "page", mutui.render, "ammortamenti & simulatore"),
-    HubApp("revenue", "Revenue", "📈", "Finanza", "page", revenue.render, "booking curve & pace", sensitive=True),
+    HubApp("cashflow", "Cashflow", "💸", "Finanza", "page", _lazy_page_target("verticals.hub.pages_.cashflow"), "PF & proiezione cassa", sensitive=True),
+    HubApp("cassa-consuntivo", "Cassa consuntivo", "💰", "Finanza", "page", _lazy_page_target("verticals.hub.pages_.cassa_consuntivo"), "Il vero cashflow: banca vs certificati", sensitive=True),
+    HubApp("bilancini", "Bilancini", "📗", "Finanza", "page", _lazy_page_target("verticals.hub.pages_.bilancini"), "bilancio di verifica: YTD, progressione, navigatore", sensitive=True),
+    HubApp("accodamenti", "Accodamenti", "📒", "Finanza", "page", _lazy_page_target("verticals.hub.pages_.accodamenti"), "raccolta cassa → Gaia", sensitive=True),
+    HubApp("banche", "Banche", "🏛", "Finanza", "bind", _BANCHE_LOOKER, "movimenti & saldi (Looker)", cta_label="Apri report"),
+    HubApp("mutui", "Mutui", "🏦", "Finanza", "page", _lazy_page_target("verticals.hub.pages_.mutui"), "ammortamenti & simulatore"),
+    HubApp("revenue", "Revenue", "📈", "Finanza", "page", _lazy_page_target("verticals.hub.pages_.revenue"), "booking curve & pace", sensitive=True),
     # CdG spento 2026-07-05 (troppi dati, redesign "budget vs reale" in arrivo);
     # riaccendere = ripristinare kind=page + import (pages_/cdg.py resta nel codice).
     HubApp("cdg", "CdG", "📊", "Finanza", "soon", None, "controllo di gestione (in redesign)"),
     # ── Operations ───────────────────────────────────────────────────────────
-    HubApp("fb", "Food & Beverage", "🍽", "Operations", "page", fb.render, "food cost & coperti"),
-    HubApp("spiaggia", "Spiaggia", "🏖️", "Operations", "page", spiaggia.render, "ricavo stabilimento & quadratura"),
-    HubApp("reviews", "Reviews", "⭐", "Operations", "page", reviews.render, "reputation & sentiment"),
+    HubApp("fb", "Food & Beverage", "🍽", "Operations", "page", _lazy_page_target("verticals.hub.pages_.fb"), "food cost & coperti"),
+    HubApp("spiaggia", "Spiaggia", "🏖️", "Operations", "page", _lazy_page_target("verticals.hub.pages_.spiaggia"), "ricavo stabilimento & quadratura"),
+    HubApp("reviews", "Reviews", "⭐", "Operations", "page", _lazy_page_target("verticals.hub.pages_.reviews"), "reputation & sentiment"),
     # ── Sistema ──────────────────────────────────────────────────────────────
     # L'ingest NON è una sezione trasversale: è una funzione di ciascun vertical
     # (accodamenti → condges/Finanza, F&B → Operations, …). La vecchia pagina
