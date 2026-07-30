@@ -2,15 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last checkpoint:** 2026-07-11 | **Version:** 0.8.0
+**Last checkpoint:** 2026-07-30 | **Version:** 0.8.0
 
 > **CLAUDE.md = concetti + puntatori, NON catalogo.** Qui stanno solo le cose che NON si rigenerano: architettura, invarianti, dominio (INTUR/ORTI), regole operative. Lo **schema completo** è BigQuery stesso (`bq show <table>` / `INFORMATION_SCHEMA` — la source of truth). Dettagli curati: skill `hotelops-data-analyst` + `core/bq/SCHEMA_CONTEXT.md`; `hotelops manifest` → `core/bq/manifest.yaml` (snapshot parziale, subset di tabelle). Il **diario operativo vivo** è `STATUS.md` (leggilo prima di pianificare).
-
-> **2026-07-12 checkpoint:** **Cashflow consuntivo** (spec+amendment `docs/superpowers/specs/2026-07-11-cashflow-consuntivo-design.md`): il vero cashflow a 4 livelli — A `v_cash_position` (lordi per conto vs saldi certificati), B consolidato società (trasferimenti interni neutralizzati SOLO qui), C classificazione via prima nota (braccio 1901xx → sorelle → `d_fornitori` su conti 33xx / pattern `d_voci` altrove; "differenza banca–contabilità", mai "non registrato"), D previsto-vs-reale GATED dalla copertura. Pagina hub "Cassa consuntivo" (sensitive). **Exception queue** (`docs/reports/2026-07-12-cassa-exception-queue-giugno-orti.md`, issue #82): mai classificare in silenzio, 5 stati, regole solo con conferma esplicita + provenienza. C.2 (matching per movimento + review queue Rosa) = fase successiva.
->
-> **2026-07-11 checkpoint:** **Season forecast layer** (loop `season_forecast`): famiglia prenotazioni promossa — `f_prenotazioni_otb` (portafoglio OTB), `f_bookings_tipologia` (venduto per tipologia), `f_consprev_mensile` (rollup Cons/Prev+Cons/AP; **BU dal footer per negazione**, content-only). Semantica foto-che-si-accumulano → §Tabelle-ancora. Parser `ingest/flussi/ingest_{andamento_prenotazioni,bookings_tipologia,consprev_mensile}.py`. `DETTAGLIOPRENOTAZIONI`/`CONSPREVPAX` RAW_ONLY (no consumer). **Rituale**: export "Andamento Prenotazioni" settimanale → intake → promote → il forecast si aggiorna. Resto della sessione (cleanup tabelle morte, skill triage, allowlist): STATUS 07-10/11.
->
-> **2026-06-19 checkpoint:** **Cashflow vertical** nel hub (`verticals/condges/app_cashflow.py`, guscio su `pf-rotate` canonico, mappatura fornitori persistente su `d_fornitori`). Write-path cash/PF dietro `cash_pf_service`+gate I1. **Governance (decision `2026-06-19_Modello_Proiezione_Cassa`):** le proiezioni NON vanno nel pool `f_*` (= solo fatti/actuals); la memoria delle proiezioni = xlsx versionati. (NB: `f_prenotazioni_otb`/`f_consprev_mensile` non violano la regola — sono FATTI: fotografie osservate del portafoglio PMS, non proiezioni nostre.) Motore `write_pf` in `pf_rotate/pf_writer.py`; `app_scadenzario.py` cancellato.
 
 > **For AI agents**: ground truth = repo + BigQuery schema. Read in this order before non-trivial work:
 > 1. `docs/architecture/INVARIANTS.md` — la costituzione (I1–I8, canonical per concept).
@@ -136,6 +130,11 @@ Stabilimento balneare (Lido, INTUR). **Ricavo TOTALE/giorno = banco INTUR + allo
 
 **Relazione critica**: ORTI non genera cash → non paga fitto → INTUR non paga mutui → rischio default. Il fitto ORTI→INTUR è intercompany e si cancella nel consolidato.
 
+**Il gruppo è una SUCCESSIONE DI GESTORI, non un insieme di società parallele.** INTUR possiede; la gestione operativa è passata di mano: **PANORAMA COMPANY** → **ARAS** (cessata, ultimo F24 04/2025) → **ORTI** (affitto d'azienda da INTUR dal 01/04/2025). Nei documenti compaiono anche NOGIUMAS (socio di ORTI) e AMALFI COAST VINEYARD (terza società amministrata). **Anagrafiche, CF, quote e importi stanno nel vault** (`ontology/companies/*.md` + `GRUPPO_PANORAMA.md`) — qui solo le due conseguenze che cambiano i conti:
+
+1. **Prefissi diversi ≠ entità da sommare.** `PAN_`, `ARAS_`/`ARA_`, `ORT_` nei file paga e nei documenti sono **la stessa operazione in periodi diversi**. Trattarli come gambe parallele raddoppia.
+2. **La base del costo del personale cambia col gestore.** Nel periodo ARAS parte del personale era assunto lì e lavorava nelle strutture **in distacco** → non compare come costo diretto ORTI/INTUR in quegli anni. Serie storiche lunghe e ingest dei `PC_*.xlsx` devono tenerne conto: altrimenti i numeri tornano, ma sono più bassi del vero.
+
 ### Business Units
 | business_unit_id | Nome | Note |
 |---|---|---|
@@ -179,6 +178,7 @@ In aggiunta a `~/.claude/CLAUDE.md`:
 - Mai modificare `fatti/` a mano — solo pipeline.
 - Tutti i budget hanno tag `fonte` — mai mischiare senza filtro esplicito.
 - `d_voci_piano_finanziario` = unico mapping layer PF voci ↔ Esolver.
+- **Le proiezioni NON entrano nel pool `f_*`** (= solo fatti/actuals); la memoria delle proiezioni sono xlsx versionati — decision `2026-06-19_Modello_Proiezione_Cassa`. NB: `f_prenotazioni_otb`/`f_consprev_mensile` non violano la regola: sono fotografie osservate del PMS, quindi fatti.
 
 ## NanoClaw Agent Integration
 NanoClaw (WhatsApp agent) è un canale query + ingest: usa `ingest/classify.py` per classificare/instradare i file ricevuti. Config nel repo NanoClaw (`~/education/repos/AI_repos/nanoclaw/groups/hotelops/`).
