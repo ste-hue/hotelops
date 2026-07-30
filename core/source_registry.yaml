@@ -396,6 +396,36 @@ sources:
       RAW_ONLY (hard gate): canonical_table/parser sono nomi TARGET futuri
       (candidata unificazione in un flusso incassi cassa).
 
+  # ── RistoCube Stampa Cassa (documenti fiscali POS) — RAW_ONLY ─────────────
+  RISTOCUBE_STAMPACASSA_ORTI_APPEND:
+    system: RISTOCUBE
+    dataset: STAMPACASSA
+    dataset_label: "Stampa Cassa POS RistoCube — ricevute/fatture emesse per sala con incasso spaccato Pagato/Pos/Sospesi"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_stampa_cassa_pos            # nome TARGET — parser non scritto
+    parser_module: ingest.flussi.ingest_stampa_cassa_pos   # nome TARGET
+    hash_basis: hash_riga
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: stampa_cassa_pos
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "ristocube/stampa_cassa/ORTI"
+    notes: |
+      Variante POS della famiglia "stampa cassa" — NON è
+      HOTELCUBE_STAMPACASSA (PMS: camere H_, Caparra, Matricola RT).
+      Colonne: N. Documento Fiscale (es. "2026 R 1000 A"), Cod. Risorsa
+      (= sala POS: BAR/RISLUNCH/RISDINNE), Data, Ora, Pagante, Totale,
+      Sospesi, Pagato, Pos, Operatore.
+      ⚠️ Stesso cap export a 1000 righe del fratello HotelCube, taglio in
+      ordine ALFABETICO di N. Documento → serie bucata su tutto il periodo
+      (primo file 2026-07-30: serie 2026-R-A, doc 684–1942, 259 buchi).
+      Verificare gap numerici per serie a ogni intake; riesportare spezzando
+      per numero documento/mese, non "dall'ultima data".
+
   # ── Coperti — APPEND ──────────────────────────────────────────────────────
   ORTI_COPERTI_ORTI_APPEND:
     system: ORTI
@@ -521,6 +551,34 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "powerbi/vendite_fb/ORTI"
+
+  # ── Menu engineering F&B — RAW_ONLY (nessun consumer dichiarato) ──────────
+  POWERBI_MENUENGINEERING_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: MENUENGINEERING
+    dataset_label: "Menu engineering F&B per piatto (prezzo/costo unitario, qtà, incidenza — export Power BI RistoCube)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_menu_engineering            # nome TARGET — parser non scritto
+    parser_module: ingest.flussi.ingest_menu_engineering   # nome TARGET
+    natural_key: [sala, piatto]
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: menu_engineering
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/menu_engineering/ORTI"
+    notes: |
+      Export "Engineering F&B Data.xlsx": una riga per (Sala × Piatto) con
+      Prz./Costo unitario, Qtà, %Inc., Costo, Listino, Vendita — CUMULATO sul
+      periodo del filtro Power BI, SENZA dimensione data nel contenuto (il
+      footer "Applied filters" non dichiara il periodo). Se promosso in
+      futuro: snapshot_date da intake_at (pattern OTB), mai dal contenuto.
+      Unica fonte col COSTO UNITARIO per piatto (le altre F&B sono solo
+      ricavo) — candidato naturale per margine/menu-engineering nel report
+      Feliciani quando ci sarà il loop consumer.
 
   # ── Produzione PMS giornaliera per classe — SNAPSHOT ──────────────────────
   POWERBI_PRODUZIONE_ORTI_SNAPSHOT:

@@ -1,0 +1,155 @@
+"""Test verticals/fb/genera_report_feliciani — logica pura (no BQ)."""
+
+from datetime import date, timedelta
+
+import pandas as pd
+
+from verticals.fb.genera_report_feliciani import build_trend_settimanale, build_workbook
+
+
+def _riga(d: date, servizio: str, coperti: int, ricavi: float) -> dict:
+    return {
+        "data": d,
+        "servizio": servizio,
+        "n_comande": 10,
+        "coperti": coperti,
+        "ricavi": ricavi,
+        "coperto_medio": ricavi / coperti,
+        "articoli": coperti * 3,
+        "articoli_per_coperto": 3.0,
+        "bevande_per_coperto": 1.2,
+        "food_per_coperto": 1.8,
+        "antipasti_per_coperto": 0.5,
+        "primi_per_coperto": 0.7,
+        "secondi_per_coperto": 0.4,
+        "dessert_per_coperto": 0.2,
+        "bottiglie_vino_per_10_coperti": 4.0,
+    }
+
+
+def _df_due_settimane_complete() -> pd.DataFrame:
+    # Due settimane ISO complete: lun 06/07→dom 12/07 e lun 13/07→dom 19/07 (2026).
+    # Ogni giorno pranzo+cena; settimana 2 ricavi +10%.
+    rows = []
+    for i in range(7):
+        for start, base in [(date(2026, 7, 6), 100.0), (date(2026, 7, 13), 110.0)]:
+            d = start + timedelta(days=i)
+            rows.append(_riga(d, "pranzo", 4, base))
+            rows.append(_riga(d, "cena", 6, base * 2))
+    return pd.DataFrame(rows)
+
+
+def test_trend_settimanale_aggrega_e_calcola_delta():
+    wk = build_trend_settimanale(_df_due_settimane_complete())
+    assert len(wk) == 2
+    recente, precedente = wk.iloc[0], wk.iloc[1]  # più recente in alto
+    assert precedente["coperti"] == 70 and precedente["ricavi"] == 2100.0
+    assert recente["coperti"] == 70 and recente["ricavi"] == 2310.0
+    assert recente["delta_coperti_pct"] == 0.0
+    assert abs(recente["delta_ricavi_pct"] - 0.1) < 1e-9
+    assert pd.isna(precedente["delta_ricavi_pct"])  # prima settimana: nessun confronto
+    assert "(parziale)" not in recente["settimana"]
+
+
+def test_trend_settimana_parziale_marcata_e_senza_delta():
+    df = _df_due_settimane_complete()
+    # Terza settimana con solo 2 giorni (lun 20/07, mar 21/07) = parziale
+    df = pd.concat(
+        [
+            df,
+            pd.DataFrame(
+                [
+                    _riga(date(2026, 7, 20), "cena", 6, 200.0),
+                    _riga(date(2026, 7, 21), "cena", 6, 200.0),
+                ]
+            ),
+        ],
+        ignore_index=True,
+    )
+    wk = build_trend_settimanale(df)
+    assert len(wk) == 3
+    parziale = wk.iloc[0]
+    assert "(parziale)" in parziale["settimana"]
+    assert pd.isna(parziale["delta_ricavi_pct"]) and pd.isna(
+        parziale["delta_coperti_pct"]
+    )
+    # Le settimane complete mantengono il loro confronto
+    assert abs(wk.iloc[1]["delta_ricavi_pct"] - 0.1) < 1e-9
+
+
+def test_trend_prima_settimana_parziale_annulla_delta_successivo():
+    df = _df_due_settimane_complete()
+    # Settimana zero con 1 solo giorno (dom 05/07) = parziale in testa
+    df = pd.concat(
+        [pd.DataFrame([_riga(date(2026, 7, 5), "cena", 6, 300.0)]), df],
+        ignore_index=True,
+    )
+    wk = build_trend_settimanale(df)
+    assert len(wk) == 3
+    assert "(parziale)" in wk.iloc[2]["settimana"]
+    # La settimana dopo quella parziale non deve mostrare un Δ% fuorviante
+    assert pd.isna(wk.iloc[1]["delta_ricavi_pct"])
+    assert abs(wk.iloc[0]["delta_ricavi_pct"] - 0.1) < 1e-9
+
+
+def test_trend_settimanale_vuoto():
+    assert build_trend_settimanale(pd.DataFrame()).empty
+
+
+def test_build_workbook_4_sheet_e_valori():
+    df = _df_due_settimane_complete()
+    df_top = pd.DataFrame(
+        [
+            {
+                "articolo": "GNOCCHI ALLA SORRENTINA",
+                "categoria": "PRIMI PIATTI",
+                "qty": 30.0,
+                "ricavo": 540.0,
+            },
+            {
+                "articolo": "ACQUA ELECTA LT.1",
+                "categoria": "SOFT DRINK",
+                "qty": 70.0,
+                "ricavo": 210.0,
+            },
+        ]
+    )
+    wb = build_workbook(df, df_top, build_trend_settimanale(df))
+    assert wb.sheetnames == [
+        "Riepilogo Giornaliero",
+        "Breakdown Categorie",
+        "Top Articoli",
+        "Trend Settimanale",
+    ]
+    ws = wb["Riepilogo Giornaliero"]
+    assert ws.max_row == 29  # header + 14 giorni × 2 servizi
+    assert ws.cell(row=2, column=2).value == "Pranzo"
+    assert ws.cell(row=2, column=5).value == 100.0
+    # Top articoli: % su top = qty / somma qty del ranking
+    ws3 = wb["Top Articoli"]
+    assert abs(ws3.cell(row=2, column=4).value - 0.3) < 1e-9
+    ws4 = wb["Trend Settimanale"]
+    assert ws4.max_row == 3
+
+
+def test_trend_buco_stagionale_annulla_delta():
+    df = _df_due_settimane_complete()
+    # Settimana completa 6 settimane dopo (buco stagionale in mezzo)
+    df = pd.concat(
+        [
+            df,
+            pd.DataFrame(
+                [
+                    _riga(date(2026, 8, 31) + timedelta(days=i), "cena", 6, 200.0)
+                    for i in range(7)
+                ]
+            ),
+        ],
+        ignore_index=True,
+    )
+    wk = build_trend_settimanale(df)
+    assert len(wk) == 3
+    dopo_buco = wk.iloc[0]
+    assert "(parziale)" not in dopo_buco["settimana"]
+    assert pd.isna(dopo_buco["delta_ricavi_pct"])  # confronto oltre il buco: mai
+    assert abs(wk.iloc[1]["delta_ricavi_pct"] - 0.1) < 1e-9  # consecutive intatte
