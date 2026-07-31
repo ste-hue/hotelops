@@ -214,3 +214,19 @@ def test_cruscotto_gating_mese_senza_costi():
     # mese senza costi: margine vuoto, mese marcato
     assert ws.cell(3, 8).value is None
     assert "in corso" in str(ws.cell(3, 1).value)
+
+
+def test_classifica_quadranti_mediane():
+    from verticals.fb.genera_report_feliciani import classifica_quadranti
+
+    df = pd.DataFrame(
+        [
+            {"piatto": "A", "qty": 100.0, "margine_unitario": 10.0},
+            {"piatto": "B", "qty": 100.0, "margine_unitario": 2.0},
+            {"piatto": "C", "qty": 10.0, "margine_unitario": 10.0},
+            {"piatto": "D", "qty": 10.0, "margine_unitario": 2.0},
+        ]
+    )
+    out = classifica_quadranti(df)
+    q = dict(zip(out["piatto"], out["quadrante"]))
+    assert q == {"A": "Star", "B": "Cavallo", "C": "Enigma", "D": "Cane"}

@@ -326,6 +326,82 @@ def add_sheet_consumi(wb: Workbook, df_reparti: pd.DataFrame, df_modello: pd.Dat
     )
 
 
+def query_menu_engineering(client, days: int) -> pd.DataFrame:
+    from google.cloud import bigquery
+
+    q = f"""
+    WITH ultima_foto AS (
+      SELECT sala, piatto, costo_unitario, tipo, descrizione
+      FROM `{PROJECT}.{DATASET}.f_menu_engineering`
+      WHERE snapshot_date = (SELECT MAX(snapshot_date)
+                             FROM `{PROJECT}.{DATASET}.f_menu_engineering`)
+        AND costo_unitario IS NOT NULL AND costo_unitario > 0
+        AND NOT STARTS_WITH(piatto, 'COP')
+    ),
+    vendite AS (
+      SELECT codice_articolo AS piatto, SUM(quantita) AS qty,
+             SAFE_DIVIDE(SUM(importo_netto), SUM(quantita)) AS prezzo_medio_netto
+      FROM `{PROJECT}.{DATASET}.f_vendite_fb`
+      WHERE data_servizio >= DATE_SUB(
+        (SELECT MAX(data_servizio) FROM `{PROJECT}.{DATASET}.f_vendite_fb`),
+        INTERVAL @days - 1 DAY)
+      GROUP BY 1
+      HAVING qty > 0
+    )
+    SELECT
+      f.piatto, ANY_VALUE(f.descrizione) AS descrizione, ANY_VALUE(f.tipo) AS tipo,
+      ANY_VALUE(f.costo_unitario) AS costo_unitario,
+      v.qty, v.prezzo_medio_netto,
+      v.prezzo_medio_netto - ANY_VALUE(f.costo_unitario) AS margine_unitario,
+      (v.prezzo_medio_netto - ANY_VALUE(f.costo_unitario)) * v.qty AS margine_totale
+    FROM ultima_foto f
+    JOIN vendite v USING (piatto)
+    GROUP BY f.piatto, v.qty, v.prezzo_medio_netto
+    ORDER BY margine_totale DESC
+    """
+    job = client.query(
+        q,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ScalarQueryParameter("days", "INT64", days)]
+        ),
+    )
+    return pd.DataFrame([dict(r) for r in job.result()])
+
+
+def classifica_quadranti(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    med_qty = out["qty"].median()
+    med_margine = out["margine_unitario"].median()
+
+    def _q(r):
+        alta = r["qty"] >= med_qty
+        alto = r["margine_unitario"] >= med_margine
+        return {
+            (True, True): "Star", (True, False): "Cavallo",
+            (False, True): "Enigma", (False, False): "Cane",
+        }[(alta, alto)]
+
+    out["quadrante"] = out.apply(_q, axis=1)
+    return out
+
+
+def add_sheet_menu_engineering(wb: Workbook, df: pd.DataFrame) -> None:
+    ws = wb.create_sheet("Menu Engineering")
+    rows = [
+        [r["descrizione"] or r["piatto"], r["tipo"], r["qty"], r["prezzo_medio_netto"],
+         r["costo_unitario"], r["margine_unitario"], r["margine_totale"], r["quadrante"]]
+        for _, r in df.iterrows()
+    ]
+    _write_sheet(
+        ws,
+        ["Piatto", "Categoria", "Qty Periodo", "Prezzo Medio Netto", "Costo Unitario",
+         "Margine Unitario", "Margine Totale", "Quadrante"],
+        rows,
+        {2: FMT_INT, 3: FMT_EURO, 4: FMT_EURO, 5: FMT_EURO, 6: FMT_EURO},
+    )
+    ws.column_dimensions["A"].width = 38
+
+
 def _style_header(ws, ncols: int) -> None:
     fill = PatternFill("solid", fgColor="1F4E5F")
     for col in range(1, ncols + 1):
