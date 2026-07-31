@@ -42,9 +42,20 @@ def test_menu_engineering_row_valida():
 
 
 HEADER = [
-    "M", "Tipo", "Sala", "Piatto", "Descrizione Piatto", "Prz. Unit.",
-    "Costo Unit.", "Qtà", "%Inc.", "Costo", "Listino", "Vendita",
-    "Importo Add.", "Importo Fatt.",
+    "M",
+    "Tipo",
+    "Sala",
+    "Piatto",
+    "Descrizione Piatto",
+    "Prz. Unit.",
+    "Costo Unit.",
+    "Qtà",
+    "%Inc.",
+    "Costo",
+    "Listino",
+    "Vendita",
+    "Importo Add.",
+    "Importo Fatt.",
 ]
 
 
@@ -53,22 +64,73 @@ def _fixture_xlsx(tmp_path: Path) -> Path:
     ws = wb.active
     ws.title = "Export"
     ws.append(HEADER)
-    ws.append(["", "", "BAR", "COPBAR", "COPERTO BAR", 0, 0, 11285, 0.67, 0, 0, 0, 0, 0])
+    ws.append(
+        ["", "", "BAR", "COPBAR", "COPERTO BAR", 0, 0, 11285, 0.67, 0, 0, 0, 0, 0]
+    )
     ws.append(["", "", "Total", None, None, 0, 0, 16782, 1, 0, 0, 0, 0, 0])
-    ws.append(["", "SOFT DRINK", "BAR", "SO000006", "COCA COLA ZERO CL.33",
-               4.55, 0.8088, 561, 0.0827, 453.74, 2552.55, 2528.62, 1091.59, 954.98])
-    ws.append(["Total", None, None, None, None, 0, 0, 44879,
-               None, None, None, None, None, None])
-    ws.append(["Applied filters:\nSala is BAR,", None, None, None, None, None,
-               None, None, None, None, None, None, None, None])
+    ws.append(
+        [
+            "",
+            "SOFT DRINK",
+            "BAR",
+            "SO000006",
+            "COCA COLA ZERO CL.33",
+            4.55,
+            0.8088,
+            561,
+            0.0827,
+            453.74,
+            2552.55,
+            2528.62,
+            1091.59,
+            954.98,
+        ]
+    )
+    ws.append(
+        [
+            "Total",
+            None,
+            None,
+            None,
+            None,
+            0,
+            0,
+            44879,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ]
+    )
+    ws.append(
+        [
+            "Applied filters:\nSala is BAR,",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ]
+    )
     p = tmp_path / "Engineering F&B Data.xlsx"
     wb.save(p)
     return p
 
 
 def test_parse_scarta_totali_e_footer(tmp_path):
-    rows = parse_xlsx(_fixture_xlsx(tmp_path), snapshot_date=date(2026, 7, 30),
-                      raw_object_id="rid-1")
+    rows = parse_xlsx(
+        _fixture_xlsx(tmp_path), snapshot_date=date(2026, 7, 30), raw_object_id="rid-1"
+    )
     assert len(rows) == 2  # COPBAR + SO000006; Total/footer scartati
     so = next(r for r in rows if r["piatto"] == "SO000006")
     assert so["tipo"] == "SOFT DRINK"
@@ -79,8 +141,10 @@ def test_parse_scarta_totali_e_footer(tmp_path):
 
 
 def test_hash_include_snapshot_date(tmp_path):
-    r1 = parse_xlsx(_fixture_xlsx(tmp_path), snapshot_date=date(2026, 7, 30),
-                    raw_object_id=None)
-    r2 = parse_xlsx(_fixture_xlsx(tmp_path), snapshot_date=date(2026, 8, 15),
-                    raw_object_id=None)
+    r1 = parse_xlsx(
+        _fixture_xlsx(tmp_path), snapshot_date=date(2026, 7, 30), raw_object_id=None
+    )
+    r2 = parse_xlsx(
+        _fixture_xlsx(tmp_path), snapshot_date=date(2026, 8, 15), raw_object_id=None
+    )
     assert r1[0]["hash_riga"] != r2[0]["hash_riga"]  # foto diverse si accumulano
