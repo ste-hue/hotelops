@@ -138,6 +138,7 @@ Discovery-first → RAW_ONLY. Intervista breve, poi scaffold:
 | Società sbagliata (accodamenti INTUR→ORTI) | H_/R_/C_ = strutture ORTI. Se classify non rileva la società, chiedi — mai default silenzioso |
 | Re-label di righe esistenti | Mai UPDATE (hash stale): roundtrip DELETE+reinsert con hash ricalcolato |
 | File "simile" a source esistente | Caso AEGRI/occupazione: contenuto ≠ semantica → source separata |
+| Re-export Power BI con overlap: stessa cifra, float repr diversa (`38.16` vs `38.160000000000004`) → `hash_riga` diverso → doppioni logici passano il dedup (pagato 2026-07-30: f_vendite_fb 7.454 righe doppie ~€294k, DELETE scoped su raw_object_id+periodo dopo check 0 chiavi perse) | Dopo OGNI promote con overlap: conta le chiavi logiche duplicate cross-raw_object PRIMA di dichiarare successo. Fix sistemico pendente: hash su valori arrotondati + re-baseline (famiglia issue #89) |
 | RistoCube nativo = LORDO IVA, Power BI = imponibile | Per food cost serve imponibile. Verifica la base prima di caricare vendite |
 | Drive su account panoramagroup, MCP su account personale | Scarica via token gcloud (Drive API), non via MCP |
 | Primo promote su canonical NUOVA = chicken-egg (PEC 2026-07-08): `filter_new_rows_by_hash` fa SELECT su tabella inesistente → VALIDATE_FAIL | Pre-crea SEMPRE le canonical con uno script `core/bq/load/create_*_tables.py` PRIMA del primo promote |
