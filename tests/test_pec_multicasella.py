@@ -213,9 +213,20 @@ def test_entity_dal_registry_mai_dal_contenuto(tmp_path):
 
 
 def test_formato_non_ammesso_rifiutato(tmp_path):
+    import dataclasses
+
     from ingest.flussi.ingest_pec_mbox import ingest_file, resolve_pec_source
 
-    src = resolve_pec_source("PEC_MAILBOX_ORTI_APPEND")  # solo mbox
+    # Le quattro caselle ora accettano sia mbox che eml (fetcher IMAP, Task 1
+    # 2026-07-31): non esiste più una combinazione reale (source, estensione)
+    # che venga rifiutata. La classificazione del formato è binaria (eml se
+    # suffix==".eml", mbox altrimenti), quindi testiamo l'invariante generale
+    # — "un formato non elencato in input_formats viene rifiutato" —
+    # restringendo input_formats su una casella sintetica, indipendentemente
+    # da cosa accetta oggi il registry.
+    src = dataclasses.replace(
+        resolve_pec_source("PEC_MAILBOX_ORTI_APPEND"), input_formats=("mbox",)
+    )
     eml = _make_eml(tmp_path / "x.eml", "orti@pec.it", "y@pec.it", "s")
     with pytest.raises(ValueError, match="formato"):
         ingest_file(eml, src, dry_run=True)

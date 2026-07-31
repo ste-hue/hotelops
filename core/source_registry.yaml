@@ -799,7 +799,11 @@ sources:
     societa: INTUR
     casella: in.tur@pec.it
     entity_id: INTUR
-    input_formats: [mbox]
+    input_formats: [mbox, eml]
+    imap:
+      host: imaps.pec.aruba.it
+      port: 993
+      password_env: PEC_PASSWORD_INTUR
     business_unit: null
     lifecycle: APPEND
     canonical_table: f_pec_messages
@@ -830,7 +834,11 @@ sources:
     societa: ORTI
     casella: orti@pec.it
     entity_id: ORTI
-    input_formats: [mbox]
+    input_formats: [mbox, eml]
+    imap:
+      host: imaps.pec.aruba.it
+      port: 993
+      password_env: PEC_PASSWORD_ORTI
     business_unit: null
     lifecycle: APPEND
     canonical_table: f_pec_messages
@@ -855,7 +863,11 @@ sources:
     societa: VIGNA
     casella: vineyardamalficoast@pec.it
     entity_id: VIGNA
-    input_formats: [mbox]
+    input_formats: [mbox, eml]
+    imap:
+      host: imaps.pec.aruba.it
+      port: 993
+      password_env: PEC_PASSWORD_VIGNA
     business_unit: null
     lifecycle: APPEND
     canonical_table: f_pec_messages
