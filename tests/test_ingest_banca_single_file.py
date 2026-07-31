@@ -5,10 +5,8 @@ Required by promote_raw_object subprocess contract:
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pandas as pd
-import pytest
 
 
 def _fake_csv_sella(tmp_path: Path) -> Path:
@@ -31,17 +29,14 @@ def test_single_file_mode_stamps_raw_object_id(tmp_path, monkeypatch):
     """When invoked with --file + --raw-object-id, every written row carries the FK."""
     f = _fake_csv_sella(tmp_path)
 
-    captured_dfs: list[pd.DataFrame] = []
+    captured_batches: list[list] = []
 
     fake_bq = MagicMock()
-    fake_load_job = MagicMock()
-    fake_load_job.result.return_value = None
 
-    def capture_load(df, table, job_config=None):
-        captured_dfs.append(df.copy())
-        return fake_load_job
+    def capture_gate(table, rows, mode="append", **kwargs):
+        captured_batches.append(list(rows))
 
-    fake_bq.load_table_from_dataframe.side_effect = capture_load
+    monkeypatch.setattr("ingest.banca.ingest.bq_write_validated", capture_gate)
 
     # Patch the BQ client used by ingest_banca and disable hash dedup.
     monkeypatch.setattr("ingest.banca.ingest.get_client", lambda: fake_bq)
@@ -59,10 +54,8 @@ def test_single_file_mode_stamps_raw_object_id(tmp_path, monkeypatch):
     )
 
     assert stats["written"] >= 1, f"expected ≥1 row, got stats={stats}"
-    assert len(captured_dfs) == 1
-    df = captured_dfs[0]
-    assert "raw_object_id" in df.columns
-    assert (df["raw_object_id"] == "raw-pilot-1").all()
+    assert len(captured_batches) == 1
+    assert all(m.raw_object_id == "raw-pilot-1" for m in captured_batches[0])
 
 
 def test_single_file_mode_dry_run_no_write(tmp_path, monkeypatch):
@@ -83,4 +76,42 @@ def test_single_file_mode_dry_run_no_write(tmp_path, monkeypatch):
     )
 
     assert stats["written"] == 0
+    fake_bq.load_table_from_dataframe.assert_not_called()
+
+
+def test_write_without_raw_object_id_is_refused(tmp_path, monkeypatch):
+    """I9 fail-closed: no raw_object_id + not dry_run → no BQ write, errors=1.
+
+    Closes the legacy batch-mode bypass that produced the 62.5% FK-void rows
+    in f_banche_movimenti 2026 (issue #86).
+    """
+    f = _fake_csv_sella(tmp_path)
+
+    fake_bq = MagicMock()
+    monkeypatch.setattr("ingest.banca.ingest.load_hashes", lambda _c: set())
+
+    gate_calls = []
+    monkeypatch.setattr(
+        "ingest.banca.ingest.bq_write_validated",
+        lambda *a, **k: gate_calls.append((a, k)),
+    )
+
+    import logging
+
+    from ingest.banca.ingest import infer_meta, process_file
+
+    stats = process_file(
+        f,
+        fake_bq,
+        mappings={},
+        hashes=set(),
+        logger=logging.getLogger("test"),
+        dry_run=False,
+        meta=infer_meta(f),
+        raw_object_id=None,
+    )
+
+    assert stats["errors"] == 1
+    assert stats["written"] == 0
+    assert gate_calls == []
     fake_bq.load_table_from_dataframe.assert_not_called()

@@ -85,6 +85,8 @@ Steps:
    Default is yes (enter). If yes, invoke vault-loop Mode B reading §Key insights of the just-written file. If skip, done.
 9. **δ — soft prompt on wrap signals**: this is separate from explicit trigger phrases. If during normal conversation (no explicit "wrap up") the user signals end-of-session (says "buonanotte", "abbiamo finito", "ci sentiamo domani", closes a topic with no continuation), the agent MAY propose **once**: "Stiamo per chiudere — vuoi un session-reflect?" Soft suggestion, no auto-fire. If user says no or doesn't respond, drop it.
 
+**OKF Lite**: `id:` e `authority: historical` sono obbligatori nel frontmatter (dal 2026-07-17): senza, il file fallisce VAL-E-004 al linter post-migrazione. Lo slug dell'id è il filename senza data, lowercase, `_`→`-`.
+
 **Never auto-write.** Always show the draft after step 3, get sign-off, then write. The vault is Stefano's reasoning substrate, not a write target.
 
 ## Template (Mode B output)
@@ -94,6 +96,8 @@ The template has 9 sections. **Skip any section that has no content** — never 
 ```markdown
 ---
 type: session
+id: session:YYYY-MM-DD-<slug con _ sostituiti da ->
+authority: historical
 date: YYYY-MM-DD
 duration: ~Nh
 mode: light | balanced | heavy

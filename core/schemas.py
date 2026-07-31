@@ -557,11 +557,13 @@ class MappingPianoFinanziarioRow(BaseModel):
 
 
 class CameraRow(BaseModel):
-    """Schema for d_camere — physical room inventory (Hotel Panorama).
+    """Schema for d_camere — physical room inventory del gruppo.
 
-    Static hand-curated dimension (source: sheet "Distribuzione camere",
-    86 rooms). Denominator for occupancy/booking pace once f_prenotazioni_otb
-    lands. Pattern: WRITE_TRUNCATE (full reload from CSV).
+    Static hand-curated dimension (115 unità: 86 HOTEL + 20 RESIDENCE + 9 CVM;
+    fonte: foglio "Distribuzione camere" + rooming list 2026-07-21). Denominator
+    for occupancy/booking pace once f_prenotazioni_otb lands. Gli attributi
+    fisici (occupazione, letti, vista...) sono compilati solo per HOTEL.
+    Pattern: WRITE_TRUNCATE (full reload from CSV).
     """
 
     room_id: str
@@ -1327,6 +1329,38 @@ class RistocubeOrderRow(BaseModel):
     item_importo_sconto: Optional[float] = None
     item_importo_finale: Optional[float] = None
     file_sorgente: Optional[str] = None
+    raw_object_id: Optional[str] = None
+    data_caricamento: datetime
+
+
+class MenuEngineeringRow(BaseModel):
+    """Schema for f_menu_engineering — menu engineering RistoCube per piatto.
+
+    Source: "Engineering F&B Data.xlsx" — CUMULATO sul periodo del filtro
+    Power BI, senza data nel contenuto: `snapshot_date` fa fede dall'intake
+    (pattern OTB). Le foto si accumulano; l'ultima foto si seleziona con
+    MAX(snapshot_date). Unica fonte col costo unitario per piatto.
+    """
+
+    hash_riga: str
+    societa_id: SocietaId
+    business_unit_id: str
+    snapshot_date: date
+    sala: str
+    piatto: str
+    descrizione: Optional[str] = None
+    tipo: Optional[str] = None
+    m_class: Optional[str] = None
+    prezzo_unitario: Optional[float] = None
+    costo_unitario: Optional[float] = None
+    quantita: Optional[float] = None
+    incidenza_pct: Optional[float] = None
+    costo_totale: Optional[float] = None
+    listino: Optional[float] = None
+    vendita: Optional[float] = None
+    importo_addebitato: Optional[float] = None
+    importo_fatturato: Optional[float] = None
+    file_sorgente: str
     raw_object_id: Optional[str] = None
     data_caricamento: datetime
 

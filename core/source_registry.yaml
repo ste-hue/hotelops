@@ -396,6 +396,36 @@ sources:
       RAW_ONLY (hard gate): canonical_table/parser sono nomi TARGET futuri
       (candidata unificazione in un flusso incassi cassa).
 
+  # ── RistoCube Stampa Cassa (documenti fiscali POS) — RAW_ONLY ─────────────
+  RISTOCUBE_STAMPACASSA_ORTI_APPEND:
+    system: RISTOCUBE
+    dataset: STAMPACASSA
+    dataset_label: "Stampa Cassa POS RistoCube — ricevute/fatture emesse per sala con incasso spaccato Pagato/Pos/Sospesi"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_stampa_cassa_pos            # nome TARGET — parser non scritto
+    parser_module: ingest.flussi.ingest_stampa_cassa_pos   # nome TARGET
+    hash_basis: hash_riga
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: stampa_cassa_pos
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "ristocube/stampa_cassa/ORTI"
+    notes: |
+      Variante POS della famiglia "stampa cassa" — NON è
+      HOTELCUBE_STAMPACASSA (PMS: camere H_, Caparra, Matricola RT).
+      Colonne: N. Documento Fiscale (es. "2026 R 1000 A"), Cod. Risorsa
+      (= sala POS: BAR/RISLUNCH/RISDINNE), Data, Ora, Pagante, Totale,
+      Sospesi, Pagato, Pos, Operatore.
+      ⚠️ Stesso cap export a 1000 righe del fratello HotelCube, taglio in
+      ordine ALFABETICO di N. Documento → serie bucata su tutto il periodo
+      (primo file 2026-07-30: serie 2026-R-A, doc 684–1942, 259 buchi).
+      Verificare gap numerici per serie a ogni intake; riesportare spezzando
+      per numero documento/mese, non "dall'ultima data".
+
   # ── Coperti — APPEND ──────────────────────────────────────────────────────
   ORTI_COPERTI_ORTI_APPEND:
     system: ORTI
@@ -522,6 +552,37 @@ sources:
       bucket: hotelops-raw
       path_template: "powerbi/vendite_fb/ORTI"
 
+  # ── Menu engineering F&B — AUTO (consumer: modello F&B Feliciani) ─────────
+  POWERBI_MENUENGINEERING_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: MENUENGINEERING
+    dataset_label: "Menu engineering F&B per piatto (prezzo/costo unitario, qtà, incidenza — export Power BI RistoCube)"
+    societa: ORTI
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_menu_engineering
+    parser_module: ingest.flussi.ingest_menu_engineering
+    natural_key: [snapshot_date, sala, piatto]
+    loop_targets: [fb_model]
+    promotion_policy: AUTO
+    detector_category: menu_engineering
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/menu_engineering/ORTI"
+    notes: |
+      Export "Engineering F&B Data.xlsx": una riga per (Sala × Piatto) con
+      Prz./Costo unitario, Qtà, %Inc., Costo, Listino, Vendita — CUMULATO sul
+      periodo del filtro Power BI, SENZA dimensione data nel contenuto (il
+      footer "Applied filters" non dichiara il periodo).
+      Promosso 2026-07-30 (consumer: modello F&B Feliciani, spec
+      2026-07-30-modello-fb-feliciani): snapshot_date da intake_at (pattern
+      OTB), foto accumulate, hash su (snapshot_date, sala, piatto) → una
+      foto per giorno, l'ultima si legge con MAX(snapshot_date). Unica fonte
+      col COSTO UNITARIO per piatto; le Qtà del file (periodo ignoto) NON si
+      usano come denominatore — coperti da f_coperti_giornalieri, qty da
+      f_vendite_fb sul periodo del report.
+
   # ── Produzione PMS giornaliera per classe — SNAPSHOT ──────────────────────
   POWERBI_PRODUZIONE_ORTI_SNAPSHOT:
     system: POWERBI
@@ -644,6 +705,38 @@ sources:
       (dominio ROOM_TYPE); BU dal prefisso filename.
       Consuntivo (fotografia rivedibile) → SNAPSHOT replace per (bu, data).
       Flip a MANUAL 2026-07-11 (loop season_forecast, parser+tabella live).
+
+  # ── Numero Camera Clienti (rollup annuale per camera fisica) — RAW_ONLY ──
+  POWERBI_NUMEROCAMERACLIENTI_ORTI_SNAPSHOT:
+    system: POWERBI
+    dataset: NUMEROCAMERACLIENTI
+    dataset_label: "Numero Camera Clienti — rollup annuale per singola camera fisica (volte/notti, pax, infant, ADR, ricavo camera/extra), per struttura"
+    societa: ORTI
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_ricavi_camera_anno            # nome TARGET — parser non scritto
+    parser_module: ingest.flussi.ingest_numero_camera_clienti   # nome TARGET
+    natural_key: [business_unit_id, anno, camera]
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: numero_camera_clienti
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "powerbi/numero_camera_clienti/ORTI"
+    notes: |
+      Rollup ANNUALE per camera fisica: Camera (= room_id di d_camere,
+      join diretto), Volte (notti vendute), ARB/Infant, ADR, ricavo
+      Appartamento vs Extra, Imponibile. Un file per (struttura × anno).
+      ⚠️ BU dal footer per AFFERMAZIONE ("CodiceHotel is PANORAMAHT|
+      ANGELINARES|HOMEHOLIDAY") — diverso dai fratelli CONSPREV/
+      BOOKINGSTIPOLOGIA che la negano; anno dal footer ("Anno is YYYY").
+      Export Panorama contiene anche D201/D202 = DEPENDANCE (confermato
+      2026-07-21: quadrano con tipologia DEP, 6 notti/593€ nel 2025, ADR
+      ~60€): fuori inventario d_camere per scelta, non un buco.
+      Fotografia rivedibile (l'anno in corso si aggiorna a ogni export)
+      → SNAPSHOT. RAW_ONLY: nessun loop consumer dichiarato; flip quando
+      un loop vorrà il ricavo per camera (es. ROI ristrutturazione).
 
   # ── Consuntivo+Previsione mensile per classe (rollup forecast PMS) ────────
   POWERBI_CONSPREV_ORTI_SNAPSHOT:

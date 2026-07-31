@@ -16,8 +16,6 @@ MPS principale vs MPS_KROSS for ORTI.
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pandas as pd
-import pytest
 from openpyxl import Workbook
 
 
@@ -177,17 +175,13 @@ def test_orti_no_banca_keyword_writes_rows_via_iban(tmp_path, monkeypatch):
         iban="IT18X0103076230000001194052",
     )
 
-    captured_dfs: list[pd.DataFrame] = []
+    captured_batches: list[list] = []
     fake_bq = MagicMock()
-    fake_load_job = MagicMock()
-    fake_load_job.result.return_value = None
 
-    def capture_load(df, table, job_config=None):
-        captured_dfs.append(df.copy())
-        return fake_load_job
+    def capture_gate(table, rows, mode="append", **kwargs):
+        captured_batches.append(list(rows))
 
-    fake_bq.load_table_from_dataframe.side_effect = capture_load
-
+    monkeypatch.setattr("ingest.banca.ingest.bq_write_validated", capture_gate)
     monkeypatch.setattr("ingest.banca.ingest.get_client", lambda: fake_bq)
     monkeypatch.setattr("ingest.banca.ingest.load_hashes", lambda _c: set())
     monkeypatch.setattr("ingest.banca.ingest.load_mappings", lambda _p, _l: {})
@@ -209,9 +203,47 @@ def test_orti_no_banca_keyword_writes_rows_via_iban(tmp_path, monkeypatch):
         f"expected ≥1 row from 3 fixture rows, got stats={stats}. "
         f"IBAN-based bank detection probably did not fire."
     )
-    assert len(captured_dfs) == 1
-    df = captured_dfs[0]
-    assert (df["banca_id"] == "MPS").all(), (
-        f"banca_id should be 'MPS' (ABI 01030), got {df['banca_id'].unique()}"
+    assert len(captured_batches) == 1
+    batch = captured_batches[0]
+    assert all(m.banca_id == "MPS" for m in batch), (
+        f"banca_id should be 'MPS' (ABI 01030), got {set(m.banca_id for m in batch)}"
     )
-    assert (df["raw_object_id"] == "raw-pilot-test").all()
+    assert all(m.raw_object_id == "raw-pilot-test" for m in batch)
+
+
+# ── Tests: infer_meta content-first (issue #27) ──────────────────────────
+# Il mislabel MPS↔MPS_KROSS nasce dal filename keyword-match che vince sul
+# contenuto. L'IBAN nel preambolo è autoritativo: quando c'è, il filename
+# non conta. Il fallback filename resta per i file senza IBAN leggibile.
+
+def test_infer_meta_iban_beats_filename_mps_is_really_kross(tmp_path):
+    """File named MPS but containing the Kross IBAN → MPS_KROSS."""
+    f = _build_mps_web2026_xlsx(
+        tmp_path,
+        filename="ORTI_MPS_giugno.xlsx",
+        iban="IT99X0103076230000001205058",  # conto Kross
+    )
+
+    from ingest.banca.ingest import infer_meta
+    assert infer_meta(f)["societa_banca"] == "ORTI_MPS_KROSS"
+
+
+def test_infer_meta_iban_beats_filename_kross_is_really_mps(tmp_path):
+    """File named KROSS but containing the MPS principale IBAN → MPS."""
+    f = _build_mps_web2026_xlsx(
+        tmp_path,
+        filename="ORTI_MPS_KROSS_giugno.xlsx",
+        iban="IT18X0103076230000001194052",  # conto MPS principale
+    )
+
+    from ingest.banca.ingest import infer_meta
+    assert infer_meta(f)["societa_banca"] == "ORTI_MPS"
+
+
+def test_infer_meta_filename_fallback_without_iban(tmp_path):
+    """No readable IBAN → filename keywords still decide (no regression)."""
+    f = tmp_path / "INTUR_SELLA_20260701.csv"
+    f.write_text("Codice identificativo,Data operazione\n", encoding="utf-8")
+
+    from ingest.banca.ingest import infer_meta
+    assert infer_meta(f)["societa_banca"] == "INTUR_SELLA"

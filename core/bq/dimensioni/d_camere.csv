@@ -2,10 +2,10 @@ room_id,piano,cod_camera,tipologia,occupazione,pax_max,vista,esposizione,affacci
 H101,1,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Strada,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H102,1,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Strada,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H103,1,DSTA,Standard,Doppia,2,Vista Città,Lato Amalfi Strada,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
-H104,1,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Interna,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,F,,,HOTEL,ORTI
+H104,1,DSTA,Standard,Doppia,2,Vista Città,Lato Amalfi Interna,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,F,,,HOTEL,ORTI
 H105,1,TCLP,Classic plus,Tripla,3,Vista Città,Lato Amalfi Interna,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,Vasca idromassaggio esterna (distingue la Classic plus),HOTEL,ORTI
 H106,1,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,F,H107,,HOTEL,ORTI
-H107,1,DSUP,Superior,Doppia,2,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,,A,H106,,HOTEL,ORTI
+H107,1,DSTA,Standard,Doppia,2,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,,A,H106,,HOTEL,ORTI
 H108,1,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,H109,,HOTEL,ORTI
 H109,1,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,H108,,HOTEL,ORTI
 H110,1,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,H111,,HOTEL,ORTI
@@ -30,7 +30,7 @@ H205,2,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Interna,Finestra,Doccia,T
 H206,2,FAM,Family,Family,4,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,F,,,HOTEL,ORTI
 H207,2,DSUP,Superior,Doppia,2,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,,A,,,HOTEL,ORTI
 H208,2,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,H209,,HOTEL,ORTI
-H209,2,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,H208,,HOTEL,ORTI
+H209,2,DSUP,Superior,Doppia,2,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,H208,,HOTEL,ORTI
 H210,2,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,H211,,HOTEL,ORTI
 H211,2,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,H210,,HOTEL,ORTI
 H212,2,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
@@ -38,23 +38,23 @@ H214,2,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,S
 H215,2,DSUP,Superior,Doppia,2,Fronte Mare,Mare,Balcone,Doccia,Matrimoniale Reg,,A,,,HOTEL,ORTI
 H216,2,DSUP,Superior,Doppia,2,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,,A,,XX+XX,HOTEL,ORTI
 H218,2,FAM,Family,Family,4,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,F,,,HOTEL,ORTI
-H219,2,DCOM,Comfort,Doppia,2,Vista Mare Laterale,Lato Vietri Strada,Balcone,Doccia,Twin Reg 170x195,,A,,,HOTEL,ORTI
+H219,2,TCOM,Comfort,Tripla,3,Vista Mare Laterale,Lato Vietri Strada,Balcone,Doccia,Twin Reg 170x195,,A,,,HOTEL,ORTI
 H220,2,TCOM,Comfort,Tripla,3,Vista Mare Laterale,Lato Vietri Strada,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H221,2,TCOM,Comfort,Tripla,3,Vista Mare Laterale,Lato Vietri Strada,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H222,2,DSTA,Standard,Doppia,2,Vista Terrazzo,Lato Vietri Interna,Finestra,Doccia,Twin Reg 170x195,,A,,,HOTEL,ORTI
 H223,2,TCLP,Classic plus,Tripla,3,Vista Città,Lato Vietri Interna,Terrazzino,Doccia,Matrimoniale Reg,Sofa 60x180,F,,Vasca idromassaggio esterna (distingue la Classic plus),HOTEL,ORTI
 H301,3,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Strada,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
-H302,3,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Strada,Finestra,Doccia,Twin Reg 170x195,,A,,,HOTEL,ORTI
-H303,3,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Strada,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
-H304,3,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Interna,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,F,,,HOTEL,ORTI
-H305,3,DSTA,Standard,Doppia,2,Vista Città,Lato Amalfi Interna,Finestra,Doccia,Twin Reg 170x195,,A,,,HOTEL,ORTI
+H302,3,DSTA,Standard,Doppia,2,Vista Città,Lato Amalfi Strada,Finestra,Doccia,Twin Reg 170x195,,A,,,HOTEL,ORTI
+H303,3,DSTA,Standard,Doppia,2,Vista Città,Lato Amalfi Strada,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
+H304,3,DSTA,Standard,Doppia,2,Vista Città,Lato Amalfi Interna,Finestra,Doccia,Twin Reg 170x195,Single Reg 85x195,F,,,HOTEL,ORTI
+H305,3,TSTA,Standard,Tripla,3,Vista Città,Lato Amalfi Interna,Finestra,Doccia,Twin Reg 170x195,,A,,,HOTEL,ORTI
 H306,3,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,,F,,è TRIPLA — in caso di emergenza Family con aggiunta letto,HOTEL,ORTI
 H307,3,DSUP,Superior,Doppia,2,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,,A,,,HOTEL,ORTI
 H308,3,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H309,3,DSUP,Superior,Doppia,2,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H310,3,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H311,3,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
-H312,3,TSUP,Superior,Tripla,3,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
+H312,3,DSUP,Superior,Doppia,2,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H314,3,DSUP,Superior,Doppia,2,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H315,3,DSUP,Superior,Doppia,2,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
 H316,3,DSUP,Superior,Doppia,2,Fronte Mare,Mare,Balcone,Doccia,Twin Reg 170x195,Single Reg 85x195,A,,,HOTEL,ORTI
@@ -85,3 +85,32 @@ H420,4,DEXE,Executive,Doppia,2,Vista Mare Laterale,Lato Vietri Strada,Balcone,Do
 H421,4,DEXE,Executive,Doppia,2,Vista Mare Laterale,Lato Vietri Strada,Balcone,Doccia,Twin Queen 180x200,,F,,,HOTEL,ORTI
 H422,4,DCLA,Classic,Doppia,2,Vista Città,Lato Vietri Interna,Finestra,Doccia,Twin Queen 180x200,,F,,,HOTEL,ORTI
 H423,4,TCLA,Classic,Tripla,3,Vista Città,Lato Vietri Interna,Finestra,Vasca,Matrimoniale Reg,Sofa 60x180,F,,,HOTEL,ORTI
+R101,1,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R102,1,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R103,1,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R104,1,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R110,1,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R111,1,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R210,2,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R211,2,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R310,3,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R311,3,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R410,4,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R411,4,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R501,5,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R502,5,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R503,5,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R504,5,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R505,5,BILOSUP,Bilocale Superior,,,,,,,,,,,,RESIDENCE,ORTI
+R506,5,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+R510,5,MONO,Monolocale,,,,,,,,,,,,RESIDENCE,ORTI
+R511,5,BILO,Bilocale,,,,,,,,,,,,RESIDENCE,ORTI
+C011,0,SLV,Silver,,,,,,,,,,,,CVM,ORTI
+C012,0,GLD,Gold,,,,,,,,,,,,CVM,ORTI
+C013,0,GLD,Gold,,,,,,,,,,,,CVM,ORTI
+C014,0,SLV,Silver,,,,,,,,,,,,CVM,ORTI
+C101,1,STD,Standard,,,,,,,,,,,,CVM,ORTI
+C401,4,SUP,Superior,,,,,,,,,,,,CVM,ORTI
+C404,4,SUP,Superior,,,,,,,,,,,,CVM,ORTI
+C503,5,GLD,Gold,,,,,,,,,,,,CVM,ORTI
+C504,5,SLV,Silver,,,,,,,,,,,,CVM,ORTI

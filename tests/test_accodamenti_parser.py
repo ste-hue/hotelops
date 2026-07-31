@@ -184,3 +184,54 @@ def test_detect_struttura_promotion_tempfile_prefix(tmp_path):
     events = parse_movimenti(str(path))
     assert len(events) == 1
     assert events[0]["struttura"] == "hotel"
+
+
+# ── I9 fail-closed (issue #86) ────────────────────────────────────────────────
+
+
+def test_single_file_mode_requires_raw_object_id(monkeypatch, tmp_path):
+    """--file senza --raw-object-id → exit 2 (contratto allineato a ingest.py)."""
+    import pytest
+
+    f = tmp_path / "C_Movimenti.txt"
+    f.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "sys.argv",
+        ["ingest_accodamenti", "--file", str(f)],
+    )
+    from ingest.banca.ingest_accodamenti import main
+
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+
+
+def test_process_file_refuses_write_without_raw_object_id(monkeypatch, tmp_path):
+    """Righe pronte ma raw_object_id=None e non dry-run → nessuna write, errors=1."""
+    import logging
+
+    from ingest.banca import ingest_accodamenti as mod
+
+    fake_rows = [{"hash_riga": "h1"}]
+    monkeypatch.setattr(
+        mod, "parse_and_transform", lambda *a, **k: [dict(r) for r in fake_rows]
+    )
+    write_calls = []
+    monkeypatch.setattr(mod, "write_to_bq", lambda *a, **k: write_calls.append(a))
+    monkeypatch.setattr(mod, "write_to_csv", lambda *a, **k: write_calls.append(a))
+
+    f = tmp_path / "C_Movimenti.txt"
+    f.write_text("", encoding="utf-8")
+    stats = mod.process_file(
+        f,
+        bq_client=None,
+        hashes=set(),
+        datahub=tmp_path,
+        societa="ORTI",
+        logger=logging.getLogger("test"),
+        dry_run=False,
+        raw_object_id=None,
+    )
+
+    assert stats["errors"] == 1
+    assert write_calls == []
