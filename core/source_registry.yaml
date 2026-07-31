@@ -552,7 +552,7 @@ sources:
       bucket: hotelops-raw
       path_template: "powerbi/vendite_fb/ORTI"
 
-  # ── Menu engineering F&B — RAW_ONLY (nessun consumer dichiarato) ──────────
+  # ── Menu engineering F&B — AUTO (consumer: modello F&B Feliciani) ─────────
   POWERBI_MENUENGINEERING_ORTI_SNAPSHOT:
     system: POWERBI
     dataset: MENUENGINEERING
@@ -560,11 +560,11 @@ sources:
     societa: ORTI
     business_unit: null
     lifecycle: SNAPSHOT
-    canonical_table: f_menu_engineering            # nome TARGET — parser non scritto
-    parser_module: ingest.flussi.ingest_menu_engineering   # nome TARGET
-    natural_key: [sala, piatto]
-    loop_targets: []
-    promotion_policy: RAW_ONLY
+    canonical_table: f_menu_engineering
+    parser_module: ingest.flussi.ingest_menu_engineering
+    natural_key: [snapshot_date, sala, piatto]
+    loop_targets: [fb_model]
+    promotion_policy: AUTO
     detector_category: menu_engineering
     raw_storage:
       backend: gcs
@@ -574,11 +574,14 @@ sources:
       Export "Engineering F&B Data.xlsx": una riga per (Sala × Piatto) con
       Prz./Costo unitario, Qtà, %Inc., Costo, Listino, Vendita — CUMULATO sul
       periodo del filtro Power BI, SENZA dimensione data nel contenuto (il
-      footer "Applied filters" non dichiara il periodo). Se promosso in
-      futuro: snapshot_date da intake_at (pattern OTB), mai dal contenuto.
-      Unica fonte col COSTO UNITARIO per piatto (le altre F&B sono solo
-      ricavo) — candidato naturale per margine/menu-engineering nel report
-      Feliciani quando ci sarà il loop consumer.
+      footer "Applied filters" non dichiara il periodo).
+      Promosso 2026-07-30 (consumer: modello F&B Feliciani, spec
+      2026-07-30-modello-fb-feliciani): snapshot_date da intake_at (pattern
+      OTB), foto accumulate, hash su (snapshot_date, sala, piatto) → una
+      foto per giorno, l'ultima si legge con MAX(snapshot_date). Unica fonte
+      col COSTO UNITARIO per piatto; le Qtà del file (periodo ignoto) NON si
+      usano come denominatore — coperti da f_coperti_giornalieri, qty da
+      f_vendite_fb sul periodo del report.
 
   # ── Produzione PMS giornaliera per classe — SNAPSHOT ──────────────────────
   POWERBI_PRODUZIONE_ORTI_SNAPSHOT:
