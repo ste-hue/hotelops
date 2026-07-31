@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime
+from email.message import EmailMessage
+from pathlib import Path
 
 import pytest
 
@@ -134,9 +136,6 @@ def test_source_pec_senza_casella_rifiutata():
 
 # ── Parser generalizzato ─────────────────────────────────────────────────────
 
-from email.message import EmailMessage
-from pathlib import Path
-
 
 def _make_eml(path: Path, from_addr: str, to_addr: str, subject: str,
               attach: tuple[str, bytes] | None = None) -> Path:
@@ -196,7 +195,6 @@ def test_ingest_eml_personale(tmp_path):
 def test_entity_dal_registry_mai_dal_contenuto(tmp_path):
     """I-PEC-2: un .eml 'della casella sbagliata' resta attribuito alla
     sorgente dichiarata, con warning — mai riattribuito a un'altra entity."""
-    import mailbox as mb
 
     from ingest.flussi.ingest_pec_mbox import extract_message, AllegatiStore
 

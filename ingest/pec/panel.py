@@ -119,7 +119,6 @@ def _resolve_dest(
 
 def _candidati(client) -> list:
     """Allegati con importance=ALTA di entity in whitelist, non ancora proiettati."""
-    from google.cloud import bigquery
 
     entities = ", ".join(f"'{e}'" for e in PANEL_ENTITIES)
     sql = f"""

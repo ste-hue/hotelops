@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from ingest.pec.classify import Rule, Ruleset, classify_message, load_ruleset
 

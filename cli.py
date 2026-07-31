@@ -969,7 +969,9 @@ def cmd_pec(args):
     elif args.pec_cmd == "digest":
         from ingest.pec.digest import run_digest
 
-        parse = lambda s: datetime.strptime(s, "%Y-%m-%d") if s else None
+        def parse(s):
+            return datetime.strptime(s, "%Y-%m-%d") if s else None
+
         print(run_digest(
             da=parse(args.da), a=parse(args.a), casella=args.casella,
             entity=args.entity, solo_anomalie=args.solo_anomalie,
