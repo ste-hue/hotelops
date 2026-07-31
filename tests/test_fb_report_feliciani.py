@@ -96,40 +96,59 @@ def test_trend_settimanale_vuoto():
     assert build_trend_settimanale(pd.DataFrame()).empty
 
 
-def test_build_workbook_4_sheet_e_valori():
+def test_build_workbook_8_fogli():
+    from verticals.fb.genera_report_feliciani import classifica_quadranti
+
     df = _df_due_settimane_complete()
-    df_top = pd.DataFrame(
-        [
-            {
-                "articolo": "GNOCCHI ALLA SORRENTINA",
-                "categoria": "PRIMI PIATTI",
-                "qty": 30.0,
-                "ricavo": 540.0,
-            },
-            {
-                "articolo": "ACQUA ELECTA LT.1",
-                "categoria": "SOFT DRINK",
-                "qty": 70.0,
-                "ricavo": 210.0,
-            },
-        ]
+    wb = build_workbook(
+        df_giorni=df,
+        df_trend=build_trend_settimanale(df),
+        df_coperti=_df_coperti(),
+        df_modello=_df_modello(),
+        df_reparti=pd.DataFrame(
+            [
+                {
+                    "anno": 2026,
+                    "mese": 6,
+                    "reparto": "CUCINA",
+                    "outlet": "RISTORANTE",
+                    "importo": 12000.0,
+                }
+            ]
+        ),
+        df_menu=classifica_quadranti(
+            pd.DataFrame(
+                [
+                    {
+                        "piatto": "PD.00004",
+                        "descrizione": "GNOCCHI",
+                        "tipo": "PRIMI PIATTI",
+                        "qty": 100.0,
+                        "prezzo_medio_netto": 14.0,
+                        "costo_unitario": 4.0,
+                        "margine_unitario": 10.0,
+                        "margine_totale": 1000.0,
+                    }
+                ]
+            )
+        ),
     )
-    wb = build_workbook(df, df_top, build_trend_settimanale(df))
     assert wb.sheetnames == [
-        "Riepilogo Giornaliero",
-        "Breakdown Categorie",
-        "Top Articoli",
+        "Cruscotto",
+        "Giornaliero Servizio",
+        "Coperti Completi",
+        "Breakfast",
+        "Consumi",
+        "Menu Engineering",
+        "Definizioni",
         "Trend Settimanale",
     ]
-    ws = wb["Riepilogo Giornaliero"]
+    ws = wb["Giornaliero Servizio"]
     assert ws.max_row == 29  # header + 14 giorni × 2 servizi
     assert ws.cell(row=2, column=2).value == "Pranzo"
     assert ws.cell(row=2, column=5).value == 100.0
-    # Top articoli: % su top = qty / somma qty del ranking
-    ws3 = wb["Top Articoli"]
-    assert abs(ws3.cell(row=2, column=4).value - 0.3) < 1e-9
-    ws4 = wb["Trend Settimanale"]
-    assert ws4.max_row == 3
+    # colonne breakdown accodate nella stessa riga
+    assert ws.cell(row=1, column=9).value == "Bevande/Cop"
 
 
 def test_trend_buco_stagionale_annulla_delta():
@@ -158,12 +177,32 @@ def test_trend_buco_stagionale_annulla_delta():
 def _df_coperti() -> pd.DataFrame:
     return pd.DataFrame(
         [
-            {"data_servizio": date(2026, 7, 20), "tipo_pasto": "BRK", "hotel": 120,
-             "residence": 8, "cvm": 2, "esterni": 0, "paganti": 130,
-             "dipendenti": 0, "courtesy_pm": 3, "non_paganti": 3, "totale": 133},
-            {"data_servizio": date(2026, 7, 20), "tipo_pasto": "DINNER", "hotel": 30,
-             "residence": 0, "cvm": 0, "esterni": 5, "paganti": 35,
-             "dipendenti": 14, "courtesy_pm": 2, "non_paganti": 16, "totale": 51},
+            {
+                "data_servizio": date(2026, 7, 20),
+                "tipo_pasto": "BRK",
+                "hotel": 120,
+                "residence": 8,
+                "cvm": 2,
+                "esterni": 0,
+                "paganti": 130,
+                "dipendenti": 0,
+                "courtesy_pm": 3,
+                "non_paganti": 3,
+                "totale": 133,
+            },
+            {
+                "data_servizio": date(2026, 7, 20),
+                "tipo_pasto": "DINNER",
+                "hotel": 30,
+                "residence": 0,
+                "cvm": 0,
+                "esterni": 5,
+                "paganti": 35,
+                "dipendenti": 14,
+                "courtesy_pm": 2,
+                "non_paganti": 16,
+                "totale": 51,
+            },
         ]
     )
 
@@ -178,24 +217,58 @@ def test_add_sheet_coperti():
     ws = wb["Coperti Completi"]
     assert ws.max_row == 3
     header = [ws.cell(1, c).value for c in range(1, 11)]
-    assert header == ["Data", "Pasto", "Hotel", "Residence", "CVM", "Esterni",
-                      "Paganti", "Dipendenti", "Courtesy/PM", "Totale"]
+    assert header == [
+        "Data",
+        "Pasto",
+        "Hotel",
+        "Residence",
+        "CVM",
+        "Esterni",
+        "Paganti",
+        "Dipendenti",
+        "Courtesy/PM",
+        "Totale",
+    ]
     assert ws.cell(2, 7).value == 130  # paganti BRK
 
 
 def _df_modello() -> pd.DataFrame:
     return pd.DataFrame(
         [
-            {"anno": 2026, "mese": 6, "periodo": date(2026, 6, 1), "outlet": "RISTORANTE",
-             "coperti_paganti": 1000, "coperti_non_paganti": 200, "ricavo_netto": 40000.0,
-             "costo_netto": 12000.0, "margine": 28000.0, "food_cost_pct": 0.30,
-             "ricavo_per_coperto": 40.0, "costo_per_coperto": 12.0,
-             "margine_per_coperto": 28.0, "has_costi": True, "has_ricavi": True},
-            {"anno": 2026, "mese": 7, "periodo": date(2026, 7, 1), "outlet": "RISTORANTE",
-             "coperti_paganti": 1100, "coperti_non_paganti": 180, "ricavo_netto": None,
-             "costo_netto": None, "margine": None, "food_cost_pct": None,
-             "ricavo_per_coperto": None, "costo_per_coperto": None,
-             "margine_per_coperto": None, "has_costi": False, "has_ricavi": False},
+            {
+                "anno": 2026,
+                "mese": 6,
+                "periodo": date(2026, 6, 1),
+                "outlet": "RISTORANTE",
+                "coperti_paganti": 1000,
+                "coperti_non_paganti": 200,
+                "ricavo_netto": 40000.0,
+                "costo_netto": 12000.0,
+                "margine": 28000.0,
+                "food_cost_pct": 0.30,
+                "ricavo_per_coperto": 40.0,
+                "costo_per_coperto": 12.0,
+                "margine_per_coperto": 28.0,
+                "has_costi": True,
+                "has_ricavi": True,
+            },
+            {
+                "anno": 2026,
+                "mese": 7,
+                "periodo": date(2026, 7, 1),
+                "outlet": "RISTORANTE",
+                "coperti_paganti": 1100,
+                "coperti_non_paganti": 180,
+                "ricavo_netto": None,
+                "costo_netto": None,
+                "margine": None,
+                "food_cost_pct": None,
+                "ricavo_per_coperto": None,
+                "costo_per_coperto": None,
+                "margine_per_coperto": None,
+                "has_costi": False,
+                "has_ricavi": False,
+            },
         ]
     )
 
@@ -230,3 +303,39 @@ def test_classifica_quadranti_mediane():
     out = classifica_quadranti(df)
     q = dict(zip(out["piatto"], out["quadrante"]))
     assert q == {"A": "Star", "B": "Cavallo", "C": "Enigma", "D": "Cane"}
+
+
+def test_mensa_staff_senza_etichetta_in_corso():
+    from openpyxl import Workbook
+
+    from verticals.fb.genera_report_feliciani import add_sheet_cruscotto
+
+    righe = _df_modello().to_dict("records")
+    righe.append(
+        {
+            "anno": 2026,
+            "mese": 6,
+            "periodo": date(2026, 6, 1),
+            "outlet": "MENSA_STAFF",
+            "coperti_paganti": 0,
+            "coperti_non_paganti": 900,
+            "ricavo_netto": None,
+            "costo_netto": None,
+            "margine": None,
+            "food_cost_pct": None,
+            "ricavo_per_coperto": None,
+            "costo_per_coperto": None,
+            "margine_per_coperto": None,
+            "has_costi": False,
+            "has_ricavi": False,
+        }
+    )
+    df = pd.DataFrame(righe)
+    wb = Workbook()
+    add_sheet_cruscotto(wb, df)
+    ws = wb["Cruscotto"]
+    labels = {
+        ws.cell(r, 2).value: ws.cell(r, 1).value for r in range(2, ws.max_row + 1)
+    }
+    assert "in corso" not in labels["MENSA_STAFF"]  # costo non separabile ≠ in arrivo
+    assert "in corso" in labels["RISTORANTE"] or labels["RISTORANTE"] == "2026-06"
