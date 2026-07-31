@@ -153,3 +153,31 @@ def test_trend_buco_stagionale_annulla_delta():
     assert "(parziale)" not in dopo_buco["settimana"]
     assert pd.isna(dopo_buco["delta_ricavi_pct"])  # confronto oltre il buco: mai
     assert abs(wk.iloc[1]["delta_ricavi_pct"] - 0.1) < 1e-9  # consecutive intatte
+
+
+def _df_coperti() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {"data_servizio": date(2026, 7, 20), "tipo_pasto": "BRK", "hotel": 120,
+             "residence": 8, "cvm": 2, "esterni": 0, "paganti": 130,
+             "dipendenti": 0, "courtesy_pm": 3, "non_paganti": 3, "totale": 133},
+            {"data_servizio": date(2026, 7, 20), "tipo_pasto": "DINNER", "hotel": 30,
+             "residence": 0, "cvm": 0, "esterni": 5, "paganti": 35,
+             "dipendenti": 14, "courtesy_pm": 2, "non_paganti": 16, "totale": 51},
+        ]
+    )
+
+
+def test_add_sheet_coperti():
+    from openpyxl import Workbook
+
+    from verticals.fb.genera_report_feliciani import add_sheet_coperti
+
+    wb = Workbook()
+    add_sheet_coperti(wb, _df_coperti())
+    ws = wb["Coperti Completi"]
+    assert ws.max_row == 3
+    header = [ws.cell(1, c).value for c in range(1, 11)]
+    assert header == ["Data", "Pasto", "Hotel", "Residence", "CVM", "Esterni",
+                      "Paganti", "Dipendenti", "Courtesy/PM", "Totale"]
+    assert ws.cell(2, 7).value == 130  # paganti BRK

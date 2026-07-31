@@ -117,6 +117,49 @@ def query_top_articoli(client, days: int, limit: int = 40) -> pd.DataFrame:
     return pd.DataFrame([dict(r) for r in job.result()])
 
 
+PASTO_ORDER = {"BRK": 0, "LUNCH": 1, "DINNER": 2}
+
+
+def query_coperti_completi(client, days: int) -> pd.DataFrame:
+    from google.cloud import bigquery
+
+    q = f"""
+    SELECT * FROM `{PROJECT}.{DATASET}.v_fb_coperti_giornaliero`
+    WHERE data_servizio >= DATE_SUB(
+      (SELECT MAX(data_servizio) FROM `{PROJECT}.{DATASET}.v_fb_coperti_giornaliero`),
+      INTERVAL @days - 1 DAY)
+    """
+    job = client.query(
+        q,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ScalarQueryParameter("days", "INT64", days)]
+        ),
+    )
+    df = pd.DataFrame([dict(r) for r in job.result()])
+    if df.empty:
+        return df
+    df["_ord"] = df["tipo_pasto"].map(PASTO_ORDER).fillna(9)
+    return (
+        df.sort_values(["data_servizio", "_ord"]).drop(columns="_ord").reset_index(drop=True)
+    )
+
+
+def add_sheet_coperti(wb: Workbook, df: pd.DataFrame) -> None:
+    ws = wb.create_sheet("Coperti Completi")
+    rows = [
+        [r["data_servizio"], r["tipo_pasto"], r["hotel"], r["residence"], r["cvm"],
+         r["esterni"], r["paganti"], r["dipendenti"], r["courtesy_pm"], r["totale"]]
+        for _, r in df.iterrows()
+    ]
+    _write_sheet(
+        ws,
+        ["Data", "Pasto", "Hotel", "Residence", "CVM", "Esterni", "Paganti",
+         "Dipendenti", "Courtesy/PM", "Totale"],
+        rows,
+        dict.fromkeys(range(2, 10), FMT_INT),
+    )
+
+
 def build_trend_settimanale(df: pd.DataFrame) -> pd.DataFrame:
     """Aggrega il giornaliero per settimana ISO (lun-dom) con Δ% vs settimana precedente."""
     if df.empty:
