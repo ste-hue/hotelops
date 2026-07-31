@@ -447,8 +447,13 @@ In `core/source_registry.yaml`, entry `POWERBI_MENUENGINEERING_ORTI_SNAPSHOT`:
 
 - [ ] **Step 5: Promote del raw object già intakato + verifica**
 
+Due foto intakate il 2026-07-30: `98f431e0…` (Engineering F&B Data.xlsx, periodo corto) e
+`e82f7176…` (Data from Power BI (3).xlsx, periodo pieno — 834 righe, qty 60.338). L'hash è
+`(snapshot_date, sala, piatto)` → una sola foto per giorno: si promuove la **più completa**,
+la prima resta CLASSIFIED (superseded, pattern re-export bilancini aprile).
+
 ```bash
-hotelops promote --raw-object-id 98f431e0-f9e9-477d-948f-42345be90865
+hotelops promote --raw-object-id e82f7176-dca9-4e2c-b644-7b04834fd87d
 ```
 
 Verifica (output-based):
@@ -461,7 +466,7 @@ for r in c.query('''SELECT COUNT(*) tot, COUNTIF(raw_object_id IS NOT NULL) fk,
   COUNT(DISTINCT sala) sale, MIN(snapshot_date) snap
   FROM \`hotelops-suite.hotelops.f_menu_engineering\`''').result(): print(dict(r))
 for r in c.query('''SELECT current_status FROM \`hotelops-suite.hotelops.v_raw_objects_current\`
-  WHERE raw_object_id='98f431e0-f9e9-477d-948f-42345be90865' ''').result(): print(dict(r))"
+  WHERE raw_object_id='e82f7176-dca9-4e2c-b644-7b04834fd87d' ''').result(): print(dict(r))"
 ```
 
 Expected: tot ≈ dry-run count, fk == tot, snap == 2026-07-30, status PROMOTED.
