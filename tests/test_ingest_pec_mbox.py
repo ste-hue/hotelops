@@ -8,6 +8,15 @@ from datetime import datetime, timezone
 import pytest
 
 from core.schemas import PecAllegatoRow, PecMessageRow, validate_batch
+from ingest.flussi.ingest_pec_mbox import PecSource
+
+SRC_INTUR = PecSource(
+    source_name="PEC_MAILBOX_INTUR_APPEND",
+    casella="in.tur@pec.it",
+    entity_id="INTUR",
+    bucket="hotelops-raw",
+    input_formats=("mbox",),
+)
 
 
 def _msg_row(**over) -> dict:
@@ -25,6 +34,7 @@ def _msg_row(**over) -> dict:
         "body_text": "testo",
         "provider": "pec.aruba.it",
         "casella": "in.tur@pec.it",
+        "entity_id": "INTUR",
         "societa_id": "INTUR",
         "n_allegati": 1,
         "ha_postacert": True,
@@ -447,7 +457,9 @@ def test_allegati_store_content_addressed():
     from ingest.flussi.ingest_pec_mbox import AllegatiStore
 
     client = _FakeGcsClient()
-    s = AllegatiStore(dry_run=False, client=client)
+    s = AllegatiStore(
+        bucket_name="hotelops-raw", prefix="PEC_MAILBOX_INTUR_APPEND", dry_run=False, client=client
+    )
     sha1, uri1 = s.store("Diffida.pdf", b"%PDF-fake")
     sha2, uri2 = s.store("Copia di Diffida.pdf", b"%PDF-fake")  # stesso contenuto
     assert sha1 == sha2
@@ -463,7 +475,9 @@ def test_allegati_store_content_addressed():
 def test_allegati_store_dry_run_non_tocca_rete():
     from ingest.flussi.ingest_pec_mbox import AllegatiStore
 
-    s = AllegatiStore(dry_run=True, client=None)  # client None: se lo tocca, esplode
+    s = AllegatiStore(
+        bucket_name="hotelops-raw", prefix="PEC_MAILBOX_INTUR_APPEND", dry_run=True, client=None
+    )  # client None: se lo tocca, esplode
     sha, uri = s.store("x.pdf", b"abc")
     assert uri.startswith("gs://")
 
@@ -475,8 +489,9 @@ def _extract(msg):
 
     return extract_message(
         msg,
+        SRC_INTUR,
         raw_object_id="raw-001",
-        store=AllegatiStore(dry_run=True),
+        store=AllegatiStore(bucket_name="hotelops-raw", prefix="PEC_MAILBOX_INTUR_APPEND", dry_run=True),
         now=datetime(2026, 7, 8, 12, 0),
     )
 
@@ -712,7 +727,7 @@ def test_riga_fallback_deterministica():
     from ingest.flussi.ingest_pec_mbox import _riga_fallback
 
     now = datetime(2026, 7, 8, 12, 0)
-    riga = _riga_fallback(_busta_con_postacert(), "raw-001", now, ValueError("boom"))
+    riga = _riga_fallback(_busta_con_postacert(), SRC_INTUR, "raw-001", now, ValueError("boom"))
     assert riga["msgid"] == "busta.consegna.001@pec.aruba.it"  # header preservato
     assert riga["tipo"] == "ALTRO"
     assert riga["source_folder"] == "RECEIVED"
@@ -733,11 +748,11 @@ def test_ingest_file_extract_fail_non_abortisce(tmp_path, monkeypatch):
     mb.add(_busta_con_postacert())
     mb.flush()
 
-    def boom(msg, raw_object_id, store, now):
+    def boom(msg, src, raw_object_id, store, now):
         raise RuntimeError("parser rotto")
 
     monkeypatch.setattr(mod, "extract_message", boom)
-    report = mod.ingest_file(mbox_path, raw_object_id="raw-001", dry_run=True)
+    report = mod.ingest_file(mbox_path, SRC_INTUR, raw_object_id="raw-001", dry_run=True)
     assert report["estrazioni_fallite"] == 1
     assert report["righe_messaggi"] == 1  # la riga fallback c'è
     assert report["con_warning"] == 1
@@ -766,7 +781,7 @@ def test_ingest_file_dry_run_su_mbox_sintetico(tmp_path, monkeypatch):
     mb.add(_busta_con_postacert())  # duplicato esatto: stesso msgid
     mb.flush()
 
-    report = mod.ingest_file(mbox_path, raw_object_id="raw-001", dry_run=True)
+    report = mod.ingest_file(mbox_path, SRC_INTUR, raw_object_id="raw-001", dry_run=True)
     assert report["messaggi_letti"] == 2
     assert report["righe_messaggi"] == 1  # dedup in-file su msgid
     assert report["dedup_in_file"] == 1
@@ -857,7 +872,7 @@ def test_ingest_file_dedup_allegati_indipendente_dai_messaggi(tmp_path, monkeypa
     monkeypatch.setattr(write_mod, "bq_write_validated", fake_write)
     monkeypatch.setattr(mod.AllegatiStore, "_get_client", lambda self: _FakeGcsClient())
 
-    report = mod.ingest_file(mbox_path, raw_object_id="raw-001", dry_run=False)
+    report = mod.ingest_file(mbox_path, SRC_INTUR, raw_object_id="raw-001", dry_run=False)
     assert report["righe_messaggi"] == 0
     assert report["dedup_bq"] == 1
     assert report["righe_allegati"] == 2  # scritte nonostante il msg sia dedup
@@ -866,7 +881,10 @@ def test_ingest_file_dedup_allegati_indipendente_dai_messaggi(tmp_path, monkeypa
     assert len(written[mod.F_PEC_ALLEGATI]) == 2
 
 
-def test_main_accetta_societa_coerente(tmp_path, monkeypatch, capsys):
+def test_main_accetta_source_valido(tmp_path, monkeypatch, capsys):
+    """--source è sempre obbligatorio e risolve casella/entity dal registry
+    (I-PEC-2): un source valido non solleva, uno che non è una sorgente PEC
+    (o non nel registry) sì."""
     import mailbox
     import sys
 
@@ -880,17 +898,23 @@ def test_main_accetta_societa_coerente(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(
         sys,
         "argv",
-        ["prog", "--file", str(mbox_path), "--societa", "INTUR", "--dry-run"],
+        ["prog", "--file", str(mbox_path), "--source", "PEC_MAILBOX_INTUR_APPEND", "--dry-run"],
     )
     mod.main()  # non deve sollevare
 
     monkeypatch.setattr(
         sys,
         "argv",
-        ["prog", "--file", str(mbox_path), "--societa", "ORTI", "--dry-run"],
+        ["prog", "--file", str(mbox_path), "--source", "ESOLVER_MOVIMENTI_ORTI_APPEND", "--dry-run"],
     )
-    import pytest
+    with pytest.raises(ValueError):
+        mod.main()
 
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["prog", "--file", str(mbox_path), "--dry-run"],  # --source mancante
+    )
     with pytest.raises(SystemExit):
         mod.main()
 
@@ -909,7 +933,9 @@ def test_allegati_store_sanitizza_object_name():
     from ingest.flussi.ingest_pec_mbox import AllegatiStore
 
     client = _FakeGcsClient()
-    s = AllegatiStore(dry_run=False, client=client)
+    s = AllegatiStore(
+        bucket_name="hotelops-raw", prefix="PEC_MAILBOX_INTUR_APPEND", dry_run=False, client=client
+    )
     _, uri = s.store("Documento\r\n finale.pdf", b"contenuto")
     assert "\r" not in uri and "\n" not in uri
     assert all("\r" not in k and "\n" not in k for k in client.store)

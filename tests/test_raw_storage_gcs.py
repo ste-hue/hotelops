@@ -65,7 +65,7 @@ def test_gcs_backend_upload_returns_uri_and_generation(
     fake_bucket.blob.assert_called_once_with(
         "ESOLVER_PARTITE_ORTI_SNAPSHOT/2026/05/x.xlsx"
     )
-    fake_blob.upload_from_filename.assert_called_once_with(str(f))
+    fake_blob.upload_from_filename.assert_called_once_with(str(f), timeout=300)
 
 
 def test_gcs_backend_download_to_temp_writes_bytes(
@@ -125,3 +125,31 @@ def test_gcs_backend_rejects_uri_for_different_bucket() -> None:
         GCSBackend(bucket="hotelops-raw").download_to_temp(
             raw_uri="gs://other-bucket/key", generation=1
         )
+
+
+def test_gcs_backend_upload_resumable_con_timeout_esplicito(
+    fake_storage_client, tmp_path: Path
+) -> None:
+    """Un mbox da 100MB su uplink saturo muore col timeout di default (60s
+    per request, 120s di retry totale — pagato 2026-07-18). L'upload deve
+    essere resumable a chunk, con timeout per-request esplicito e generoso:
+    così ogni singola richiesta trasferisce un chunk piccolo e nessuna
+    supera mai il timeout, qualunque sia la banda."""
+    fake_client, fake_bucket, fake_blob = fake_storage_client
+    from core.lineage.raw_storage import GCSBackend
+
+    f = tmp_path / "PEC Webmail Export.mbox"
+    f.write_bytes(b"x" * 1024)
+
+    backend = GCSBackend(bucket="hotelops-raw")
+    backend.upload(
+        local_path=f,
+        source_name="PEC_MAILBOX_INTUR_APPEND",
+        intake_at=datetime(2026, 7, 18, tzinfo=timezone.utc),
+    )
+
+    # chunk_size impostato PRIMA dell'upload → upload resumable a chunk
+    assert fake_blob.chunk_size is not None and fake_blob.chunk_size > 0
+    # timeout per-request esplicito, ben oltre il default di 60s
+    _, kwargs = fake_blob.upload_from_filename.call_args
+    assert kwargs.get("timeout", 0) >= 300

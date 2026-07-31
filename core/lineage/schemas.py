@@ -31,7 +31,7 @@ import re
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # ── Era boundary ──────────────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ LineageEra = Literal["pre_phase4", "live"]
 
 # ── Closed enums ──────────────────────────────────────────────────────────────
 
-SOCIETA_VALUES = ("ORTI", "INTUR", "GROUP")
+SOCIETA_VALUES = ("ORTI", "INTUR", "GROUP", "VIGNA", "STEFANO_PERSONALE", "PERSONALE")
 LIFECYCLE_VALUES = ("APPEND", "SNAPSHOT")
 TOKEN_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*$")
 
@@ -119,7 +119,7 @@ class SourceDefinition(BaseModel):
     system: str
     dataset: str
     dataset_label: Optional[str] = None
-    societa: Literal["ORTI", "INTUR", "GROUP"]
+    societa: Literal["ORTI", "INTUR", "GROUP", "VIGNA", "STEFANO_PERSONALE"]
     business_unit: Optional[str] = None
     lifecycle: Literal["APPEND", "SNAPSHOT"]
     canonical_table: str
@@ -131,6 +131,15 @@ class SourceDefinition(BaseModel):
     promotion_policy: PromotionPolicy
     detector_category: str
     raw_storage: RawStorage
+    # Sorgenti PEC (system == "PEC"): identità della casella. La policy di
+    # visibilità sul pannello NON sta qui: vive in PANEL_ENTITIES (whitelist).
+    casella: Optional[str] = None
+    entity_id: Optional[
+        Literal["INTUR", "ORTI", "VIGNA", "STEFANO_PERSONALE"]
+    ] = None
+    input_formats: list[Literal["mbox", "eml"]] = Field(
+        default_factory=lambda: ["mbox"]
+    )
     drive_file_id: Optional[str] = None
     notes: Optional[str] = None
 
@@ -139,6 +148,14 @@ class SourceDefinition(BaseModel):
     def _validate_name(cls, v: str) -> str:
         validate_source_name(v)
         return v
+
+    @model_validator(mode="after")
+    def _pec_richiede_identita_casella(self):
+        if self.system == "PEC" and (not self.casella or not self.entity_id):
+            raise ValueError(
+                f"{self.source_name}: sorgente PEC richiede casella ed entity_id"
+            )
+        return self
 
 
 # ── Raw object (identity row) ─────────────────────────────────────────────────

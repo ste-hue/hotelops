@@ -21,6 +21,9 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # ── Shared types ─────────────────────────────────────────────────────────────
 
 SocietaId = Literal["ORTI", "INTUR"]
+# Soggetti giuridici monitorati (PEC/pannello CEO). NON è SocietaId: la PEC
+# personale è un perimetro documentale, non una società (spec 2026-07-17).
+EntityId = Literal["INTUR", "ORTI", "VIGNA", "STEFANO_PERSONALE"]
 BusinessUnitId = Literal["HOTEL", "RESIDENCE", "CVM", "LIDO", "HQ"]
 TipoCosto = Literal["F", "V", "P", "X", "IP"]
 Sezione = Literal["ENTRATE", "USCITE"]
@@ -643,6 +646,9 @@ class PecMessageRow(BaseModel):
     osservato (derivato dall'anatomia: busta ⇒ RECEIVED, raw ⇒ SENT); ogni
     semantica derivata vive in v_pec_conversazioni. Fatti documentali, non
     finanziari: I4 non applicabile. Lifecycle: APPEND, dedup su hash_riga=md5(msgid).
+
+    entity_id dal registry della sorgente (I-PEC-2); societa_id deprecata nelle
+    query nuove, popolata solo per ORTI/INTUR.
     """
 
     msgid: str
@@ -658,7 +664,8 @@ class PecMessageRow(BaseModel):
     body_text: Optional[str] = None
     provider: Optional[str] = None  # dominio busta — solo RECEIVED
     casella: str
-    societa_id: SocietaId
+    entity_id: EntityId
+    societa_id: Optional[SocietaId] = None
     n_allegati: int = 0
     ha_postacert: bool = False
     parse_warning: Optional[str] = None
@@ -697,6 +704,138 @@ class PecAllegatoRow(BaseModel):
     @field_validator("msgid", "nome_file", "sha256", "hash_riga", "raw_object_id")
     @classmethod
     def pec_all_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("campo vuoto")
+        return v
+
+
+class PecClassificazioneRow(BaseModel):
+    """Schema for f_pec_classificazioni — una classificazione per messaggio+versione.
+
+    APPEND-only: riclassificare = riga nuova con ruleset_version più recente;
+    l'override umano è una riga con override_source=HUMAN. La "corrente" è
+    responsabilità della vista v_pec_classificazione_corrente (I-PEC-8).
+    Dedup su hash_riga = md5(msgid|ruleset_version|override_source).
+    """
+
+    msgid: str
+    entity_id: EntityId
+    stato: Literal[
+        "CLASSIFICATO", "NON_CLASSIFICATO", "AMBIGUO", "ERRORE_CLASSIFICAZIONE"
+    ]
+    primary_category: Optional[
+        Literal[
+            "BANCA",
+            "LEGALE",
+            "FISCO",
+            "REGISTRO_IMPRESE",
+            "ASSICURAZIONE",
+            "PA",
+            "FORNITORE",
+            "ALTRO",
+        ]
+    ] = None
+    importance: Literal["ALTA", "NORMALE", "DA_RIVEDERE"]
+    document_type: Optional[
+        Literal[
+            "CONTRATTO",
+            "VERBALE",
+            "BILANCIO",
+            "DIFFIDA",
+            "FATTURA",
+            "ATTO_GIUDIZIARIO",
+            "RICEVUTA_PEC",
+            "ALTRO",
+        ]
+    ] = None
+    matches: str  # JSON array di id regola
+    ruleset_version: str
+    classified_at: datetime
+    override_source: Optional[Literal["HUMAN"]] = None
+    override_note: Optional[str] = None
+    hash_riga: str
+    data_caricamento: datetime
+
+    @field_validator("msgid", "ruleset_version", "hash_riga")
+    @classmethod
+    def pec_class_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("campo vuoto")
+        return v
+
+
+class PecPanelProjectionRow(BaseModel):
+    """Schema for f_pec_panel_projections — stato CANONICO della projection.
+
+    Il pannello Drive è solo una copia consultabile (spec 2026-07-17): la
+    verità su cosa è stato proiettato sta in questa tabella. projection_key =
+    md5(msgid|sha256|destination_path): lo stesso PDF in due PEC diverse è due
+    proiezioni legittime. APPEND; mai delete (I-PEC-4, I-PEC-5).
+    """
+
+    projection_key: str
+    msgid: str
+    sha256: str
+    entity_id: EntityId
+    gcs_uri: str
+    destination_path: str  # relativo a PANEL_ROOT
+    run_id: str
+    projected_at: datetime
+    status: Literal["COPIED", "SKIPPED_EXISTS", "FAILED"]
+
+    @field_validator("projection_key", "msgid", "sha256", "destination_path")
+    @classmethod
+    def pec_proj_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("campo vuoto")
+        return v
+
+
+class PecDigestRunRow(BaseModel):
+    """Schema for f_pec_digest_runs — checkpoint tecnico del digest.
+
+    Il markdown su Drive è output umano; lo stato applicativo è QUI (spec
+    2026-07-17). Il default --da del run successivo è il to_ts dell'ultimo
+    run SUCCESS. Un solo run RUNNING alla volta.
+    """
+
+    run_id: str
+    started_at: datetime
+    finished_at: Optional[datetime] = None
+    status: Literal["RUNNING", "SUCCESS", "FAILED"]
+    from_ts: datetime
+    to_ts: datetime
+    params: Optional[str] = None  # JSON dei filtri richiesti
+
+
+class PecPersonaRow(BaseModel):
+    """Schema for d_pec_persone — rubrica indirizzi → persona nel corpus PEC.
+
+    Una riga = un indirizzo (PEC o email ordinaria) attribuito a una persona
+    della famiglia/compagine. Serve a disambiguare le ricerche (due omonimi
+    "Stefano Della Pietra": sr = generazione 2, jr = generazione 3) e a fare
+    join su mittente/destinatari. Solo dati fattuali: indirizzi, ruolo
+    societario documentato, generazione. Static hand-curated dimension.
+    Pattern: WRITE_TRUNCATE (full reload from CSV). Natural key: indirizzo.
+    """
+
+    indirizzo: str
+    tipo_indirizzo: Literal["PEC", "EMAIL"]
+    persona: str
+    generazione: int = Field(ge=1, le=5)
+    ruolo: Optional[str] = None
+
+    @field_validator("indirizzo")
+    @classmethod
+    def pec_pers_indirizzo(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not v or "@" not in v:
+            raise ValueError("indirizzo email non valido")
+        return v
+
+    @field_validator("persona")
+    @classmethod
+    def pec_pers_not_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("campo vuoto")
         return v

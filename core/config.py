@@ -1,3 +1,5 @@
+import os
+
 PROJECT = "hotelops-suite"
 DATASET = "hotelops"
 
@@ -39,6 +41,7 @@ F_SPIAGGIA_CORRISPETTIVI    = _t("f_spiaggia_corrispettivi")
 F_SPIAGGIA_FB_ORDINI        = _t("f_spiaggia_fb_ordini")
 F_PEC_MESSAGES              = _t("f_pec_messages")
 F_PEC_ALLEGATI              = _t("f_pec_allegati")
+F_PEC_CLASSIFICAZIONI       = _t("f_pec_classificazioni")
 F_PF_ROTAZIONI              = _t("f_pf_rotazioni")
 F_PRENOTAZIONI_OTB          = _t("f_prenotazioni_otb")
 F_BOOKINGS_TIPOLOGIA        = _t("f_bookings_tipologia")
@@ -55,6 +58,7 @@ D_COEFFICIENTI_STAGIONALITA = _t("d_coefficienti_stagionalita")
 D_PROGETTI                  = _t("d_progetti")
 D_CAMERE                    = _t("d_camere")
 D_PMS_CODICI                = _t("d_pms_codici")
+D_PEC_PERSONE               = _t("d_pec_persone")
 
 # Views
 V_PIANO_FINANZIARIO_MENSILE = _t("v_piano_finanziario_mensile")
@@ -81,3 +85,27 @@ V_FB_CONSUMI                 = _t("v_fb_consumi")
 V_FB_RICAVI                  = _t("v_fb_ricavi")
 V_FB_PASTI                   = _t("v_fb_pasti")
 V_CE_MENSILE_BILANCINO       = _t("v_ce_mensile_bilancino")
+
+# ── Pannello CEO (projection PEC su Drive) — spec 2026-07-17 ─────────────────
+F_PEC_PANEL_PROJECTIONS     = _t("f_pec_panel_projections")
+F_PEC_DIGEST_RUNS           = _t("f_pec_digest_runs")
+
+# Whitelist POSITIVA delle entity ammesse nel pannello (I-PEC-3): una entity
+# nuova NON entra finché non viene aggiunta qui deliberatamente.
+PANEL_ENTITIES = ["INTUR", "ORTI", "VIGNA"]
+
+# Root della projection: mirror locale Drive di 01_societario/AMM_CEO.
+# Override nei test/ambienti: env HOTELOPS_PANEL_ROOT.
+PANEL_ROOT = os.environ.get(
+    "HOTELOPS_PANEL_ROOT",
+    "/Users/stefanodellapietra/My Drive (stefano@panoramagroup.it)/01_societario/AMM_CEO",
+)
+
+# Cartelle leggibili per categoria (decisione spec: nomi umani, enum nel dato)
+PANEL_CATEGORY_FOLDERS = {
+    "BANCA": "Banca", "LEGALE": "Legale", "FISCO": "Fisco",
+    "REGISTRO_IMPRESE": "Registro Imprese", "ASSICURAZIONE": "Assicurazione",
+    "PA": "PA", "FORNITORE": "Fornitori", "ALTRO": "Altro",
+}
+
+PANEL_MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024
