@@ -139,7 +139,7 @@ In `core/source_registry.yaml`, su ognuna delle quattro sorgenti PEC aggiungere 
       password_env: PEC_PASSWORD_INTUR
 ```
 
-⚠️ `PEC_MAILBOX_PERSONALE_APPEND` è su `mpspec.it`, **non** Aruba: usare host e porta reali quando disponibili. Se ancora ignoti, lasciarla senza blocco `imap` — il fetcher la salterà, e il test parametrizzato sopra non la include.
+⚠️ **`PEC_MAILBOX_PERSONALE_APPEND` resta fuori dal giro automatico** (decisione Stefano, 31/07): niente blocco `imap`, il fetcher la salta. La sorgente resta nel registry e continua ad accettare export manuali — è la casella personale, ha 6 buste in totale, e non vale una password in Secret Manager. Per agganciarla in futuro servono host e porta di `mpspec.it` (non è Aruba) e il blocco `imap` con `password_env: PEC_PASSWORD_PERSONALE`: nient'altro cambia.
 
 E su INTUR, ORTI, VIGNA cambiare:
 
