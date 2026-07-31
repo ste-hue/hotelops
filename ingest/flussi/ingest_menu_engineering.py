@@ -46,7 +46,9 @@ def _f(v) -> float | None:
         return None
 
 
-def parse_xlsx(path: Path, snapshot_date: date, raw_object_id: str | None) -> list[dict]:
+def parse_xlsx(
+    path: Path, snapshot_date: date, raw_object_id: str | None
+) -> list[dict]:
     wb = load_workbook(path, read_only=True, data_only=True)
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
@@ -60,29 +62,31 @@ def parse_xlsx(path: Path, snapshot_date: date, raw_object_id: str | None) -> li
         sala, piatto = _s(r[2]), _s(r[3])
         if piatto is None or sala in (None, "Total"):
             continue  # subtotali, riga Total finale, footer "Applied filters"
-        out.append({
-            "hash_riga": make_hash(str(snapshot_date), sala, piatto),
-            "societa_id": SOCIETA_ID,
-            "business_unit_id": BUSINESS_UNIT_ID,
-            "snapshot_date": snapshot_date,
-            "sala": sala,
-            "piatto": piatto,
-            "descrizione": _s(r[4]),
-            "tipo": _s(r[1]),
-            "m_class": _s(r[0]),
-            "prezzo_unitario": _f(r[5]),
-            "costo_unitario": _f(r[6]),
-            "quantita": _f(r[7]),
-            "incidenza_pct": _f(r[8]),
-            "costo_totale": _f(r[9]),
-            "listino": _f(r[10]),
-            "vendita": _f(r[11]),
-            "importo_addebitato": _f(r[12]),
-            "importo_fatturato": _f(r[13]),
-            "file_sorgente": path.name,
-            "raw_object_id": raw_object_id,
-            "data_caricamento": now,
-        })
+        out.append(
+            {
+                "hash_riga": make_hash(str(snapshot_date), sala, piatto),
+                "societa_id": SOCIETA_ID,
+                "business_unit_id": BUSINESS_UNIT_ID,
+                "snapshot_date": snapshot_date,
+                "sala": sala,
+                "piatto": piatto,
+                "descrizione": _s(r[4]),
+                "tipo": _s(r[1]),
+                "m_class": _s(r[0]),
+                "prezzo_unitario": _f(r[5]),
+                "costo_unitario": _f(r[6]),
+                "quantita": _f(r[7]),
+                "incidenza_pct": _f(r[8]),
+                "costo_totale": _f(r[9]),
+                "listino": _f(r[10]),
+                "vendita": _f(r[11]),
+                "importo_addebitato": _f(r[12]),
+                "importo_fatturato": _f(r[13]),
+                "file_sorgente": path.name,
+                "raw_object_id": raw_object_id,
+                "data_caricamento": now,
+            }
+        )
     return out
 
 
@@ -101,7 +105,9 @@ def _snapshot_date_from_raw(raw_object_id: str) -> date:
     job = client.query(
         sql,
         job_config=bigquery.QueryJobConfig(
-            query_parameters=[bigquery.ScalarQueryParameter("rid", "STRING", raw_object_id)]
+            query_parameters=[
+                bigquery.ScalarQueryParameter("rid", "STRING", raw_object_id)
+            ]
         ),
     )
     rows = list(job.result())
@@ -117,7 +123,9 @@ def ingest_file(path: Path, raw_object_id: str | None, dry_run: bool) -> int:
     rows = parse_xlsx(path, snapshot_date=snapshot_date, raw_object_id=raw_object_id)
     validate_batch(rows, MenuEngineeringRow, context=f"menu_engineering {path.name}")
     if dry_run:
-        log.info("[DRY-RUN] %s : %d righe (snapshot %s)", path.name, len(rows), snapshot_date)
+        log.info(
+            "[DRY-RUN] %s : %d righe (snapshot %s)", path.name, len(rows), snapshot_date
+        )
         return len(rows)
 
     from core.bq.dedup import filter_new_rows_by_hash
@@ -135,15 +143,21 @@ def ingest_file(path: Path, raw_object_id: str | None, dry_run: bool) -> int:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Ingest menu engineering → f_menu_engineering")
+    ap = argparse.ArgumentParser(
+        description="Ingest menu engineering → f_menu_engineering"
+    )
     ap.add_argument("--file", required=True, type=Path)
     ap.add_argument("--raw-object-id", default=None)
-    ap.add_argument("--societa", default=None, help="Accettato da promote — sempre ORTI")
+    ap.add_argument(
+        "--societa", default=None, help="Accettato da promote — sempre ORTI"
+    )
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     if args.societa and args.societa != SOCIETA_ID:
-        raise SystemExit(f"societa {args.societa} != {SOCIETA_ID}: file menu engineering è ORTI")
+        raise SystemExit(
+            f"societa {args.societa} != {SOCIETA_ID}: file menu engineering è ORTI"
+        )
 
     from core.pipeline_run import PipelineRun
 
