@@ -181,3 +181,36 @@ def test_add_sheet_coperti():
     assert header == ["Data", "Pasto", "Hotel", "Residence", "CVM", "Esterni",
                       "Paganti", "Dipendenti", "Courtesy/PM", "Totale"]
     assert ws.cell(2, 7).value == 130  # paganti BRK
+
+
+def _df_modello() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {"anno": 2026, "mese": 6, "periodo": date(2026, 6, 1), "outlet": "RISTORANTE",
+             "coperti_paganti": 1000, "coperti_non_paganti": 200, "ricavo_netto": 40000.0,
+             "costo_netto": 12000.0, "margine": 28000.0, "food_cost_pct": 0.30,
+             "ricavo_per_coperto": 40.0, "costo_per_coperto": 12.0,
+             "margine_per_coperto": 28.0, "has_costi": True, "has_ricavi": True},
+            {"anno": 2026, "mese": 7, "periodo": date(2026, 7, 1), "outlet": "RISTORANTE",
+             "coperti_paganti": 1100, "coperti_non_paganti": 180, "ricavo_netto": None,
+             "costo_netto": None, "margine": None, "food_cost_pct": None,
+             "ricavo_per_coperto": None, "costo_per_coperto": None,
+             "margine_per_coperto": None, "has_costi": False, "has_ricavi": False},
+        ]
+    )
+
+
+def test_cruscotto_gating_mese_senza_costi():
+    from openpyxl import Workbook
+
+    from verticals.fb.genera_report_feliciani import add_sheet_cruscotto
+
+    wb = Workbook()
+    add_sheet_cruscotto(wb, _df_modello())
+    ws = wb["Cruscotto"]
+    assert ws.max_row == 3
+    # mese chiuso: margine/cop presente
+    assert ws.cell(2, 8).value == 28.0
+    # mese senza costi: margine vuoto, mese marcato
+    assert ws.cell(3, 8).value is None
+    assert "in corso" in str(ws.cell(3, 1).value)

@@ -198,6 +198,134 @@ def build_trend_settimanale(df: pd.DataFrame) -> pd.DataFrame:
     )  # più recente in alto
 
 
+OUTLET_ORDER = {"BREAKFAST": 0, "RISTORANTE": 1, "BAR": 2, "MENSA_STAFF": 3}
+
+
+def query_modello_mensile(client, months: int = 13) -> pd.DataFrame:
+    from google.cloud import bigquery
+
+    q = f"""
+    SELECT * FROM `{PROJECT}.{DATASET}.v_fb_modello_mensile`
+    WHERE periodo >= DATE_SUB(
+      (SELECT MAX(periodo) FROM `{PROJECT}.{DATASET}.v_fb_modello_mensile`),
+      INTERVAL @months MONTH)
+    ORDER BY periodo, outlet
+    """
+    job = client.query(
+        q,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ScalarQueryParameter("months", "INT64", months)]
+        ),
+    )
+    df = pd.DataFrame([dict(r) for r in job.result()])
+    if df.empty:
+        return df
+    df["_ord"] = df["outlet"].map(OUTLET_ORDER).fillna(9)
+    return df.sort_values(["periodo", "_ord"]).drop(columns="_ord").reset_index(drop=True)
+
+
+def _label_mese(r) -> str:
+    label = f"{r['anno']}-{r['mese']:02d}"
+    if not r["has_costi"]:
+        label += " (in corso — senza costi)"
+    return label
+
+
+def add_sheet_cruscotto(wb: Workbook, df: pd.DataFrame) -> None:
+    ws = wb.create_sheet("Cruscotto")
+    rows = []
+    for _, r in df.iterrows():
+        chiuso = bool(r["has_costi"])
+        rows.append([
+            _label_mese(r), r["outlet"], r["coperti_paganti"], r["coperti_non_paganti"],
+            r["ricavo_per_coperto"] if r["has_ricavi"] else None,
+            r["costo_per_coperto"] if chiuso else None,
+            r["food_cost_pct"] if chiuso else None,
+            r["margine_per_coperto"] if chiuso else None,
+            None, None,  # Target €/cop, Δ vs Target — compila Feliciani
+        ])
+    _write_sheet(
+        ws,
+        ["Mese", "Outlet", "Coperti Paganti", "Coperti Non Paganti", "Ricavo/Cop",
+         "Costo/Cop", "Food Cost %", "Margine/Cop", "Target Margine/Cop", "Δ vs Target"],
+        rows,
+        {2: FMT_INT, 3: FMT_INT, 4: FMT_EURO, 5: FMT_EURO, 6: "0.0%",
+         7: FMT_EURO, 8: FMT_EURO, 9: FMT_EURO},
+    )
+    ws.column_dimensions["A"].width = 26
+
+
+def add_sheet_breakfast(wb: Workbook, df: pd.DataFrame) -> None:
+    ws = wb.create_sheet("Breakfast")
+    brk = df[df["outlet"] == "BREAKFAST"]
+    rows = [
+        [_label_mese(r), r["coperti_paganti"],
+         r["costo_netto"] if r["has_costi"] else None,
+         r["costo_per_coperto"] if r["has_costi"] else None,
+         r["ricavo_netto"] if r["has_ricavi"] else None]
+        for _, r in brk.iterrows()
+    ]
+    _write_sheet(
+        ws,
+        ["Mese", "Coperti", "Costo Economato", "Costo/Coperto",
+         "Ricavo Esplicito (il grosso è in tariffa camera)"],
+        rows,
+        {1: FMT_INT, 2: FMT_EURO, 3: FMT_EURO, 4: FMT_EURO},
+    )
+    ws.column_dimensions["A"].width = 26
+    ws.column_dimensions["E"].width = 42
+
+
+def query_consumi_reparto(client, months: int = 13) -> pd.DataFrame:
+    from google.cloud import bigquery
+
+    q = f"""
+    SELECT anno, mese,
+      IF(reparto_id IN ('BRK','CUCINA','CANTINA'), reparto_id, 'ALTRI') AS reparto,
+      CASE reparto_id WHEN 'BRK' THEN 'BREAKFAST' WHEN 'CUCINA' THEN 'RISTORANTE'
+                      WHEN 'CANTINA' THEN 'BAR' END AS outlet,
+      SUM(importo) AS importo
+    FROM `{PROJECT}.{DATASET}.f_consumi_economato`
+    WHERE codice_prodotto NOT IN (
+      'BEV.CAF.00014','FOO.FRS.00013','FOO.FRS.00011','FOO.FRS.00012','FOO.FRS.00009',
+      'BEV.BOL.00013','FOO.FRS.00008','FOO.FAR.00003','FOO.BUR.00001')
+      AND DATE(anno, mese, 1) >= DATE_SUB(
+        (SELECT DATE(MAX(anno), MAX(mese), 1) FROM `{PROJECT}.{DATASET}.f_consumi_economato`),
+        INTERVAL @months MONTH)
+    GROUP BY 1, 2, 3, 4
+    ORDER BY 1, 2, 3
+    """
+    job = client.query(
+        q,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ScalarQueryParameter("months", "INT64", months)]
+        ),
+    )
+    return pd.DataFrame([dict(r) for r in job.result()])
+
+
+def add_sheet_consumi(wb: Workbook, df_reparti: pd.DataFrame, df_modello: pd.DataFrame) -> None:
+    ws = wb.create_sheet("Consumi")
+    cop = {
+        (r["anno"], r["mese"], r["outlet"]): r["coperti_paganti"]
+        for _, r in df_modello.iterrows()
+    }
+    rows = []
+    for _, r in df_reparti.iterrows():
+        denominatore = cop.get((r["anno"], r["mese"], r["outlet"]))
+        rows.append([
+            f"{r['anno']}-{r['mese']:02d}", r["reparto"], r["outlet"] or "—",
+            r["importo"],
+            (r["importo"] / denominatore) if denominatore else None,
+        ])
+    _write_sheet(
+        ws,
+        ["Mese", "Reparto", "Outlet", "Consumo €", "€/Coperto Pagante"],
+        rows,
+        {3: FMT_EURO, 4: FMT_EURO},
+    )
+
+
 def _style_header(ws, ncols: int) -> None:
     fill = PatternFill("solid", fgColor="1F4E5F")
     for col in range(1, ncols + 1):
