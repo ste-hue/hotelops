@@ -1,5 +1,25 @@
 # PEC fetch automatico (IMAP) — Implementation Plan
 
+> ## ⛔ NON ESEGUIRE — piano superato, da riscrivere
+>
+> Scritto il 2026-07-31 senza aver letto `STATUS.md`, quindi contro uno stato
+> del repo che non esisteva più. La PR #113 ha portato su main il fronte
+> `pec-multicasella`, che rende **obsoleti i Task 1, 2 e 3**:
+>
+> - **Task 1** (VIGNA/STEFANO in `SOCIETA_VALUES`) → già fatto, e meglio: c'è
+>   un tipo `EntityId` proprio.
+> - **Task 2** (blocco `imap` con `password_env`) → il registry usa campi
+>   diversi e già esistenti: `casella`, `entity_id`, `input_formats`.
+> - **Task 3** (sorgenti ORTI/VIGNA) → tutte e quattro già nel registry,
+>   PERSONALE inclusa.
+>
+> Sopravvivono nella sostanza i **Task 4-7** (watermark UID, client IMAP
+> read-only, fetcher, deploy), ma vanno riscritti contro i campi veri.
+> La trappola `UID N:*` del Task 5 resta valida e vale la pena riportarla.
+>
+> Lavoro tracciato in **issue #114**. Spec di riferimento (ancora buona):
+> `docs/superpowers/specs/2026-07-31-pec-fetch-automatico-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Sostituire lo scarico manuale degli mbox dalla webmail PEC con un job notturno che legge quattro caselle via IMAP in sola lettura e le consegna alla pipeline di lineage esistente.
