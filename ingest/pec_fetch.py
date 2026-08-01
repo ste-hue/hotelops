@@ -98,28 +98,27 @@ def fetch_mailbox(
         else None
     )
 
+    highest = watermark
     try:
         messages = d.fetch_since(cfg, watermark, since_date=since_date)
+        res.fetched = len(messages)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            for uid, raw in messages:
+                path = Path(tmp) / f"{entity}_{uid}.eml"
+                path.write_bytes(raw)
+                out = d.intake_file(path, source_name=source_name, actor="pec_fetch")
+                if out.deduped:
+                    res.deduped += 1
+                else:
+                    res.ingested += 1
+                    if promote and out.raw_object_id:
+                        d.promote_raw_object(out.raw_object_id, actor="pec_fetch")
+                highest = max(highest, uid)
     except Exception as exc:  # noqa: BLE001 — una casella giù non ferma le altre
         log.error("%s: fetch fallita: %s", entity, exc)
         res.status, res.error = "FAILED", str(exc)
-        return res
-
-    res.fetched = len(messages)
-    highest = watermark
-
-    with tempfile.TemporaryDirectory() as tmp:
-        for uid, raw in messages:
-            path = Path(tmp) / f"{entity}_{uid}.eml"
-            path.write_bytes(raw)
-            out = d.intake_file(path, source_name=source_name, actor="pec_fetch")
-            if out.deduped:
-                res.deduped += 1
-            else:
-                res.ingested += 1
-                if promote and out.raw_object_id:
-                    d.promote_raw_object(out.raw_object_id, actor="pec_fetch")
-            highest = max(highest, uid)
+        return res  # watermark NON avanza: il content-hash protegge dai duplicati al giro dopo
 
     if highest > watermark:
         d.write_watermark(bucket, entity, highest)
@@ -160,7 +159,11 @@ def main() -> None:
 
     failed = []
     for name in names:
-        r = fetch_mailbox(name, since_days=args.since_days, promote=not args.no_promote)
+        try:
+            r = fetch_mailbox(name, since_days=args.since_days, promote=not args.no_promote)
+        except Exception as exc:  # noqa: BLE001 — una casella guasta non blocca le altre
+            log.error("%s: errore inatteso: %s", name, exc)
+            r = FetchResult(entity_id=name, status="FAILED", error=str(exc))
         print(
             f"{r.entity_id}: status={r.status} fetched={r.fetched} "
             f"ingested={r.ingested} deduped={r.deduped} last_uid={r.last_uid}"
