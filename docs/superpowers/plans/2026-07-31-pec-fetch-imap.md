@@ -855,24 +855,28 @@ done
 
 Verifica: `gcloud secrets list --project=hotelops-suite | grep pec-password` → tre segreti.
 
-- [ ] **Step 2: Gate — provare in locale, senza promote**
+- [ ] **Step 2: Primo giro reale su una casella sola**
+
+> ⚠️ **Correzione (eseguito 2026-08-01).** Il piano prevedeva prima un giro `--no-promote` e poi uno con promote. **Non funziona:** il watermark avanza in entrambi i casi, quindi il secondo giro trova `fetched=0` e le buste del primo restano su GCS senza essere mai promosse — orfane. Il gate va fatto sul giro vero.
+>
+> Nota anche che `--no-promote` non è un giro a vuoto: `intake_file` carica comunque su GCS e scrive `f_raw_objects`. Contro la produzione non esiste una prova innocua.
 
 ```bash
-export PEC_PASSWORD_VIGNA='<password>'
-python -m ingest.pec_fetch --source-name PEC_MAILBOX_VIGNA_APPEND --no-promote -v
-```
-
-Expected: `VIGNA: status=OK fetched=N ...` con N > 0 (la vigna è ferma all'08/07, quindi ci sono buste da recuperare).
-
-**Gate bloccante:** rilanciare *lo stesso comando*. Deve stampare `fetched=0`. Se stampa altro, il watermark non si scrive e non si prosegue al deploy.
-
-- [ ] **Step 3: Primo giro reale con promote su una casella sola**
-
-```bash
+export PEC_PASSWORD_VIGNA="$(gcloud secrets versions access latest --secret=pec-password-VIGNA --project=hotelops-suite)"
 python -m ingest.pec_fetch --source-name PEC_MAILBOX_VIGNA_APPEND -v
 ```
 
-Poi verificare che le righe siano atterrate:
+Expected: `VIGNA: status=OK fetched=N ingested=M deduped=K last_uid=<uid>`.
+
+⏱️ **Dura ~21 secondi a busta** (upload GCS + intake + parse + insert). VIGNA sono ~40 minuti. Se lo lanci da un tool con timeout, mandalo in background: interrotto a metà non fa danni (il watermark si scrive solo a fine ciclo, quindi il rilancio riprende tutto e il content-hash deduplica) — ma perdi il giro.
+
+- [ ] **Step 3: Gate bloccante — idempotenza**
+
+Rilancia *lo stesso identico comando*.
+
+Expected: **`fetched=0`**. Se stampa altro, il watermark non si sta scrivendo e non si prosegue al deploy.
+
+Poi verifica che le righe siano atterrate:
 
 ```bash
 python -c "
@@ -884,23 +888,38 @@ for r in c.query(q): print(f'VIGNA: {r.n} buste, ultima {r.al}')
 "
 ```
 
-Expected: conteggio superiore a 107 e data più recente dell'08/07.
+Expected: conteggio superiore a quello di partenza. **Non aspettarti una data più recente**: le buste recuperate sono quelle che gli export manuali avevano mancato, non arrivi nuovi (su VIGNA: 107 → 116, tutte ≤ 08/07).
 
-- [ ] **Step 4: Creare il Cloud Run Job ed eseguirlo**
+- [ ] **Step 4: Backfill delle altre caselle DA LOCALE, prima del deploy**
+
+> **Il job schedulato deve nascere già in regime incrementale.** Il primo giro di una casella mai fetchata scarica l'intera INBOX — INTUR 526 buste ≈ 3 ore, ORTI 355 ≈ 2 ore. Nessun Cloud Run Job va dimensionato per quel carico: si fa una volta da locale, poi il notturno vede poche buste al giorno e chiude in un minuto.
+
+```bash
+export PEC_PASSWORD_INTUR="$(gcloud secrets versions access latest --secret=pec-password-INTUR --project=hotelops-suite)"
+export PEC_PASSWORD_ORTI="$(gcloud secrets versions access latest --secret=pec-password-ORTI --project=hotelops-suite)"
+python -m ingest.pec_fetch --source-name PEC_MAILBOX_INTUR_APPEND
+python -m ingest.pec_fetch --source-name PEC_MAILBOX_ORTI_APPEND
+```
+
+⚠️ **In sequenza, mai in parallelo.** La deduplicazione dei messaggi legge-poi-scrive sul `msgid`: una PEC inviata sia a INTUR sia a ORTI ha lo stesso `msgid`, e due processi concorrenti la vedrebbero entrambi come assente inserendola due volte.
+
+**Aspettativa realistica sul rendimento:** l'archivio è già più grande delle INBOX (INTUR 2189 righe in BQ contro 526 in casella — gli export coprivano ricevute *e* inviate dal 2017, la INBOX è stata potata negli anni). Questo backfill non carica il grosso: recupera le buste che gli export avevano mancato. Su VIGNA sono state 9 su 112, l'8%.
+
+- [ ] **Step 5: Creare il Cloud Run Job ed eseguirlo**
 
 ```bash
 gcloud run jobs deploy pec-fetch-daily \
   --source . --region=europe-west1 --project=hotelops-suite \
   --command=python --args=-m,ingest.pec_fetch,--all \
   --set-secrets=PEC_PASSWORD_INTUR=pec-password-INTUR:latest,PEC_PASSWORD_ORTI=pec-password-ORTI:latest,PEC_PASSWORD_VIGNA=pec-password-VIGNA:latest \
-  --max-retries=1 --task-timeout=15m
+  --max-retries=1 --task-timeout=60m
 
 gcloud run jobs execute pec-fetch-daily --region=europe-west1 --wait
 ```
 
 Expected: una riga `status=OK` per casella. Una `FAILED` dà exit 2 e nomina la casella — comportamento voluto.
 
-- [ ] **Step 5: Schedulare e committare la nota**
+- [ ] **Step 6: Schedulare e committare la nota**
 
 ```bash
 gcloud scheduler jobs create http pec-fetch-daily-trigger \
