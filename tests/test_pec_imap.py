@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 
 from ingest.pec_imap import ImapConfig, fetch_since
@@ -6,8 +8,9 @@ CFG = ImapConfig(host="imaps.pec.aruba.it", port=993, user="x@pec.it", password=
 
 
 class _FakeImap:
-    def __init__(self, messages: dict[int, bytes]):
+    def __init__(self, messages: dict[int, bytes], dates: dict[int, str] | None = None):
         self.messages = messages
+        self.dates = dates or {}
         self.selected_readonly = None
         self.logged_out = False
 
@@ -29,6 +32,14 @@ class _FakeImap:
                 if uids and uids[-1] not in hit:
                     hit.append(uids[-1])
                 uids = hit
+            elif criterion.startswith("SINCE"):
+                since = datetime.strptime(criterion.split(maxsplit=1)[1], "%d-%b-%Y").date()
+                uids = [
+                    u
+                    for u in uids
+                    if u in self.dates
+                    and datetime.strptime(self.dates[u], "%d-%b-%Y").date() >= since
+                ]
             return ("OK", [" ".join(str(u) for u in uids).encode()])
         if command == "fetch":
             return ("OK", [(b"", self.messages[int(args[0])])])
@@ -88,6 +99,21 @@ def test_logout_anche_su_errore() -> None:
     with pytest.raises(RuntimeError):
         fetch_since(CFG, since_uid=0, conn_factory=exploding)
     assert fake.logged_out is True
+
+
+def test_since_date_recupera_uid_sotto_il_watermark() -> None:
+    """La finestra di sicurezza SINCE deve recuperare buste con UID basso
+    (sotto il watermark) purché la data ricada nella finestra — è il caso
+    d'uso per cui il parametro esiste. Il content-hash all'intake dedup
+    contro quanto già visto via UID."""
+    fake = _FakeImap(
+        {5: b"cinque", 20: b"venti"},
+        dates={5: "15-Jul-2026", 20: "20-Jul-2026"},
+    )
+    got = fetch_since(
+        CFG, since_uid=10, since_date="01-Jul-2026", conn_factory=_factory(fake)
+    )
+    assert sorted(uid for uid, _ in got) == [5, 20]
 
 
 def test_byte_restituiti_intatti() -> None:

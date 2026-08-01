@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import imaplib
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 log = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class ImapConfig:
     host: str
     port: int
     user: str
-    password: str
+    password: str = field(repr=False)
 
 
 def _connect(cfg: ImapConfig):
@@ -47,12 +47,14 @@ def fetch_since(
     """Buste con UID > since_uid, più quelle da since_date (formato "01-Jul-2026")."""
     conn = (conn_factory or _connect)(cfg)
     try:
-        uids = _search(conn, f"UID {since_uid + 1}:*")
-        if since_date:
-            uids |= _search(conn, f"SINCE {since_date}")
         # "UID N:*" torna sempre anche l'ultimo messaggio, pure se il suo UID
         # è < N. Senza questo filtro lo si rilavora a ogni giro, per sempre.
-        uids = {u for u in uids if u > since_uid}
+        # Il filtro va applicato SOLO qui: se lo si applica anche all'unione
+        # con SINCE sotto, la finestra di sicurezza diventa un no-op, perché
+        # esiste apposta per recuperare UID bassi con data recente.
+        uids = {u for u in _search(conn, f"UID {since_uid + 1}:*") if u > since_uid}
+        if since_date:
+            uids |= _search(conn, f"SINCE {since_date}")
 
         out: list[tuple[int, bytes]] = []
         for uid in sorted(uids):
