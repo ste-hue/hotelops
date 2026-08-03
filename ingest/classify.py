@@ -43,6 +43,7 @@ from core.datahub_sync import (
     rclone_copy_to_remote,
     rclone_copyto,
 )
+from ingest.signatures import AmbiguousSignature
 
 log = logging.getLogger("ingest.classify")
 
@@ -1108,7 +1109,16 @@ def classify(path: Path) -> ClassificationResult:
 
     # Firme dichiarative da core/registry.yaml: vincono sui detector Python.
     # Se nessuna matcha, i DETECTORS restano la rete (spec 2026-08-03).
-    by_signature = _classify_by_signature(path)
+    # Un bug nel valutatore (es. registry.yaml malformato) non deve rompere
+    # classify() per OGNI file — solo AmbiguousSignature propaga, è un
+    # errore di configurazione che deve essere rumoroso.
+    try:
+        by_signature = _classify_by_signature(path)
+    except AmbiguousSignature:
+        raise
+    except Exception as e:
+        log.warning(f"_classify_by_signature failed on {path.name}: {e}")
+        by_signature = None
     if by_signature:
         return by_signature
 
@@ -1131,8 +1141,23 @@ def classify(path: Path) -> ClassificationResult:
 
 
 def classify_batch(paths: list[Path]) -> list[ClassificationResult]:
-    """Classify multiple files."""
-    return [classify(p) for p in paths]
+    """Classify multiple files. One unreadable file must not abort the batch."""
+    results = []
+    for p in paths:
+        try:
+            results.append(classify(p))
+        except Exception as e:
+            log.warning(f"classify failed on {p}: {e}")
+            results.append(
+                ClassificationResult(
+                    file_path=p,
+                    file_type="error",
+                    category="error",
+                    confidence=0.0,
+                    details={"error": str(e)},
+                )
+            )
+    return results
 
 
 # ── Route (copy + rename) ────────────────────────────────────────────────────

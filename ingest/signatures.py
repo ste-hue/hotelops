@@ -131,4 +131,12 @@ def identify(path: Path, file_types: Optional[dict] = None) -> Optional[str]:
     hits = [cat for cat, entry in ft.items() if matches(path, entry, cache)]
     if len(hits) > 1:
         raise AmbiguousSignature(f"{path.name} matcha più categorie: {sorted(hits)}")
+    if not hits and path.suffix.lower() == ".xlsx":
+        view = cache.get("Export")
+        if view is not None and view.sheet_used == "Export":
+            log.debug(
+                "%s: foglio 'Export' presente ma nessuna firma matcha — "
+                "possibile header Power BI cambiato",
+                path.name,
+            )
     return hits[0] if hits else None

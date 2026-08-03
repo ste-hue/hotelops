@@ -264,14 +264,6 @@ file_types:
       - type: structure
         header_prefix: ["Anno", "Mese", "Tipo", "Mese Cons"]
 
-  consumi_powerbi:
-    formats: [.xlsx]
-    signatures:
-      - type: sheets
-        required: ["Export"]
-      - type: structure
-        header_prefix: ["Data - Anno", "Data - Mese", "Data - Giorno", "Reparto"]
-
   dettaglio_prenotazioni:
     formats: [.xlsx]
     signatures:

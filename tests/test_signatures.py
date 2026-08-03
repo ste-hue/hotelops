@@ -12,7 +12,6 @@ from ingest.signatures import (
     AmbiguousSignature,
     _entry_is_supported,
     identify,
-    matches,  # noqa: F401 (public API, used in test_registry_signatures)
 )
 
 
