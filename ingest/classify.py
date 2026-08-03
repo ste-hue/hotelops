@@ -1146,6 +1146,13 @@ def classify_batch(paths: list[Path]) -> list[ClassificationResult]:
     for p in paths:
         try:
             results.append(classify(p))
+        except AmbiguousSignature:
+            # Non è un problema del singolo file: due entry di core/registry.yaml
+            # matchano la stessa forma di header, quindi OGNI file con quella
+            # forma la incontrerebbe identica. Inghiottirla qui la trasformerebbe
+            # in N risultati "error" indistinguibili e, sul path `hotelops drop`,
+            # il messaggio vero non arriverebbe mai all'utente. Deve propagare.
+            raise
         except Exception as e:
             log.warning(f"classify failed on {p}: {e}")
             results.append(

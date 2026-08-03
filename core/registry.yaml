@@ -229,8 +229,9 @@ file_types:
   # ── Report Power BI — firme dichiarative (spec 2026-08-03) ─────────────
   # Portano SOLO formats + signatures: lifecycle, tabella, parser e policy
   # vivono in core/source_registry.yaml sotto lo stesso detector_category.
-  # Il prefisso è di 4 colonne perché tre non bastano: consumi_powerbi e
-  # vendite_fb condividono le prime tre e divergono alla quarta.
+  # Il prefisso è di 4 colonne per margine deliberato: per le 10 entry
+  # attuali basterebbero le prime tre (nessuna coppia collide), ma un
+  # prefisso più lungo costa poco e lascia spazio ai report che arriveranno.
 
   andamento_prenotazioni:
     formats: [.xlsx]
