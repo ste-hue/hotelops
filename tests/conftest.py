@@ -323,3 +323,27 @@ def _build_minimal_pf_intur() -> BytesIO:
 def intur_pf_bytes() -> bytes:
     """INTUR PF minimal: MARZO chiuso, saldo r3, saldi banca r31-33, saldo proiettato r38."""
     return _build_minimal_pf_intur().getvalue()
+
+
+@pytest.fixture(autouse=True)
+def _mai_il_lock_pec_vero(monkeypatch):
+    """Rete di sicurezza: nessun test può prendere il lock PEC reale su
+    `gs://hotelops-raw`. Un test di `main()` che dimenticasse di fingere il
+    lock, girando su una macchina con ADC configurate, scriverebbe in
+    produzione — e se crashasse la bloccherebbe per due ore.
+
+    I test del lock passano un client finto: quelli continuano a funzionare.
+    """
+    from ingest import pec_lock
+
+    reale = pec_lock._blob
+
+    def guardia(bucket, client=None):
+        if client is None:
+            raise AssertionError(
+                "questo test sta per prendere il lock PEC VERO su GCS: "
+                "inietta un client finto o usa la fixture `lock_libero`"
+            )
+        return reale(bucket, client)
+
+    monkeypatch.setattr(pec_lock, "_blob", guardia)
