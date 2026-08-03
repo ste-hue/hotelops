@@ -1,3 +1,6 @@
+import contextlib
+import datetime as dt
+import logging
 import sys
 from dataclasses import dataclass
 
@@ -6,9 +9,28 @@ import pytest
 from ingest import pec_fetch
 from ingest.pec_fetch import Deps, FetchResult, fetch_mailbox
 from ingest.pec_imap import Block
+from ingest.pec_lock import LockBusy
 from ingest.pec_watermark import Watermark
 
 UV = 1000  # UIDVALIDITY finta, stabile in quasi tutti i test
+
+
+@pytest.fixture
+def lock_libero(monkeypatch):
+    """main() prende il lock globale su GCS: qui lo si finge libero.
+    La lista torna la sequenza acquisito/rilasciato, per i test che la guardano."""
+    eventi: list[str] = []
+
+    @contextlib.contextmanager
+    def finto(*a, **k):
+        eventi.append("acquisito")
+        try:
+            yield
+        finally:
+            eventi.append("rilasciato")
+
+    monkeypatch.setattr(pec_fetch, "pec_lock_held", finto)
+    return eventi
 
 
 @dataclass
@@ -282,18 +304,43 @@ def test_uidvalidity_scritta_nel_watermark() -> None:
 # --- il promote non fallisce in silenzio ------------------------------------
 
 
-def test_promote_rejected_conta_e_fa_fallire_il_giro() -> None:
-    """promote_raw_object non solleva: torna REJECTED. Se non lo si guarda,
-    la busta sta su GCS ma non in f_pec_messages, invisibile a tutti."""
+def test_promote_rejected_conta_ma_non_fa_fallire_il_giro(caplog) -> None:
+    """Una busta che il parser rifiuta è qualità del dato, non guasto di
+    sistema: l'oggetto è su GCS e in f_raw_objects, si recupera con
+    `hotelops promote --raw-object-id`. Farne un allarme notturno significa
+    che l'utente smette di leggere gli allarmi."""
     deps, _, _ = _deps(
         [(11, b"una"), (12, b"due")],
         promotion=lambda: _promotion("REJECTED", "VALIDATE_FAIL"),
     )
-    res = fetch_mailbox("PEC_MAILBOX_VIGNA_APPEND", deps=deps)
+    with caplog.at_level(logging.ERROR, logger="ingest.pec_fetch"):
+        res = fetch_mailbox("PEC_MAILBOX_VIGNA_APPEND", deps=deps)
 
     assert (res.ingested, res.promoted, res.rejected) == (2, 0, 2)
-    assert res.status == "FAILED"
-    assert "rifiutate" in res.error
+    assert res.status == "OK", "rejected non è un guasto di sistema"
+    assert res.error is None
+    assert "ro-" in caplog.text, "ma il raw_object_id resta a log, recuperabile"
+
+
+def test_rifiuti_non_mascherano_una_cartella_giu() -> None:
+    """Se cade una cartella E ci sono rifiuti, il guasto vince: FAILED."""
+    deps, _, _ = _deps(
+        {"INBOX": [(11, b"una")]},
+        promotion=lambda: _promotion("REJECTED", "VALIDATE_FAIL"),
+    )
+    real_fetch = deps.fetch_since
+
+    def fake_fetch(cfg, since_uid, folder="INBOX", since_date=None, conn_factory=None,
+                   uidvalidity=None, chunk_size=50):
+        if folder == "INBOX.Inviata":
+            raise ConnectionError("Inviata giù")
+        return real_fetch(cfg, since_uid, folder=folder, since_date=since_date)
+
+    deps.fetch_since = fake_fetch
+    res = fetch_mailbox("PEC_MAILBOX_VIGNA_APPEND", deps=deps)
+
+    assert (res.status, res.rejected) == ("FAILED", 1)
+    assert "Inviata" in res.error
 
 
 def test_promote_ok_conta_i_promossi() -> None:
@@ -331,7 +378,7 @@ def test_no_promote_non_richiede_raw_object_id() -> None:
     assert wm[("VIGNA", "INBOX")].last_uid == 11
 
 
-def test_main_exit_2_su_fallimento(monkeypatch, capsys) -> None:
+def test_main_exit_2_su_fallimento(monkeypatch, capsys, lock_libero) -> None:
     def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
         if name == "PEC_MAILBOX_ORTI_APPEND":
             return FetchResult(entity_id="ORTI", status="FAILED", error="giù")
@@ -348,7 +395,7 @@ def test_main_exit_2_su_fallimento(monkeypatch, capsys) -> None:
     assert "ORTI" in captured.err
 
 
-def test_main_ok_quando_tutte_riescono(monkeypatch, capsys) -> None:
+def test_main_ok_quando_tutte_riescono(monkeypatch, capsys, lock_libero) -> None:
     def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
         return FetchResult(entity_id=name, status="OK")
 
@@ -361,7 +408,7 @@ def test_main_ok_quando_tutte_riescono(monkeypatch, capsys) -> None:
     assert "PARZIALE" not in captured.err
 
 
-def test_main_all_seleziona_solo_caselle_con_imap(monkeypatch) -> None:
+def test_main_all_seleziona_solo_caselle_con_imap(monkeypatch, lock_libero) -> None:
     """Legge il registry reale: deve includere le 3 caselle con blocco imap
     ed escludere PEC_MAILBOX_PERSONALE_APPEND, che non ce l'ha."""
     seen = []
@@ -403,7 +450,7 @@ def test_main_all_senza_caselle_grida(monkeypatch) -> None:
     assert "imap" in str(exc_info.value.code)
 
 
-def test_main_stampa_cartelle_e_rifiutate(monkeypatch, capsys) -> None:
+def test_main_stampa_cartelle_e_rifiutate(monkeypatch, capsys, lock_libero) -> None:
     def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
         return FetchResult(
             entity_id=name,
@@ -412,7 +459,7 @@ def test_main_stampa_cartelle_e_rifiutate(monkeypatch, capsys) -> None:
             promoted=4,
             rejected=1,
             status="FAILED",
-            error="1 buste rifiutate dal promote",
+            error="INBOX.Inviata: giù",
             per_folder={"INBOX": 5, "INBOX.Inviata": 0},
         )
 
@@ -427,7 +474,9 @@ def test_main_stampa_cartelle_e_rifiutate(monkeypatch, capsys) -> None:
     assert "INBOX=5" in out and "INBOX.Inviata=0" in out
 
 
-def test_main_continua_se_una_casella_solleva_inaspettatamente(monkeypatch, capsys) -> None:
+def test_main_continua_se_una_casella_solleva_inaspettatamente(
+    monkeypatch, capsys, lock_libero
+) -> None:
     """Un bug non intercettato in fetch_mailbox non deve fermare il giro:
     le altre caselle vanno comunque tentate, exit 2 con l'elenco."""
     seen = []
@@ -449,3 +498,121 @@ def test_main_continua_se_una_casella_solleva_inaspettatamente(monkeypatch, caps
     assert "PEC_MAILBOX_VIGNA_APPEND" in seen, "la casella dopo quella guasta va comunque tentata"
     captured = capsys.readouterr()
     assert "PEC_MAILBOX_ORTI_APPEND" in captured.err
+
+
+# --- rifiuti visibili ma non allarmanti in main() ----------------------------
+
+
+def test_main_non_esce_2_per_soli_rifiuti(monkeypatch, capsys, lock_libero) -> None:
+    """Il job notturno non presidiato manda mail solo sui guasti veri."""
+
+    def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
+        return FetchResult(entity_id=name, fetched=3, ingested=3, promoted=2, rejected=1)
+
+    monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
+    monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
+
+    pec_fetch.main()  # niente SystemExit = exit 0
+
+    out = capsys.readouterr()
+    assert "rejected=1" in out.out
+    assert "PARZIALE" not in out.err
+
+
+def test_main_riepiloga_i_rifiuti_a_fine_giro(monkeypatch, capsys, lock_libero) -> None:
+    """Non-allarmanti sì, invisibili no: nei log del job il totale si vede."""
+
+    def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
+        return FetchResult(entity_id=name, rejected=2)
+
+    monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
+    monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
+
+    pec_fetch.main()
+
+    out = capsys.readouterr().out
+    assert "6 buste rifiutate" in out, "3 caselle x 2 rifiuti"
+    assert "promote --raw-object-id" in out, "dice come si recuperano"
+
+
+def test_main_niente_riga_rifiuti_se_zero(monkeypatch, capsys, lock_libero) -> None:
+    def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
+        return FetchResult(entity_id=name)
+
+    monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
+    monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
+
+    pec_fetch.main()
+
+    assert "rifiutate" not in capsys.readouterr().out
+
+
+# --- lock globale in main() --------------------------------------------------
+
+
+def test_main_esce_zero_se_un_giro_e_gia_in_corso(monkeypatch, capsys) -> None:
+    """Lock occupato da un giro vivo: non è un errore. Exit 2 qui vorrebbe
+    dire una mail d'allarme per un'esecuzione manuale innocua."""
+    chiamate = []
+
+    @contextlib.contextmanager
+    def occupato(*a, **k):
+        raise LockBusy(dt.datetime(2026, 7, 31, 4, 0, tzinfo=dt.timezone.utc))
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(pec_fetch, "pec_lock_held", occupato)
+    monkeypatch.setattr(
+        pec_fetch, "fetch_mailbox", lambda *a, **k: chiamate.append(a) or FetchResult("X")
+    )
+    monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
+
+    pec_fetch.main()  # niente SystemExit = exit 0
+
+    out = capsys.readouterr().out
+    assert "in corso" in out and "2026-07-31" in out
+    assert chiamate == [], "nessuna casella lavorata in parallelo"
+
+
+def test_main_prende_e_rilascia_il_lock(monkeypatch, capsys, lock_libero) -> None:
+    def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
+        return FetchResult(entity_id=name)
+
+    monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
+    monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
+
+    pec_fetch.main()
+
+    assert lock_libero == ["acquisito", "rilasciato"]
+
+
+def test_main_rilascia_il_lock_anche_se_il_giro_fallisce(
+    monkeypatch, capsys, lock_libero
+) -> None:
+    """Il giro esce 2 (SystemExit): il lock non deve restare appeso, se no
+    la notte dopo il job si trova bloccato dal proprio cadavere."""
+
+    def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
+        return FetchResult(entity_id=name, status="FAILED", error="giù")
+
+    monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
+    monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
+
+    with pytest.raises(SystemExit):
+        pec_fetch.main()
+
+    assert lock_libero == ["acquisito", "rilasciato"]
+
+
+def test_main_prende_il_lock_anche_con_source_name(monkeypatch, capsys, lock_libero) -> None:
+    """Il lock è globale: la stessa PEC arriva a INTUR e a ORTI con lo stesso
+    msgid, quindi anche un giro su una sola casella deve prenderlo."""
+    monkeypatch.setattr(
+        pec_fetch, "fetch_mailbox", lambda *a, **k: FetchResult(entity_id="VIGNA")
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["pec_fetch", "--source-name", "PEC_MAILBOX_VIGNA_APPEND"]
+    )
+
+    pec_fetch.main()
+
+    assert lock_libero == ["acquisito", "rilasciato"]
