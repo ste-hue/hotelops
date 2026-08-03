@@ -12,6 +12,7 @@ class _FakeImap:
         self.messages = messages
         self.dates = dates or {}
         self.selected_readonly = None
+        self.selected_mailbox = None
         self.logged_out = False
 
     def login(self, user, password):
@@ -19,6 +20,7 @@ class _FakeImap:
 
     def select(self, mailbox="INBOX", readonly=False):
         self.selected_readonly = readonly
+        self.selected_mailbox = mailbox
         return ("OK", [b"1"])
 
     def uid(self, command, *args):
@@ -50,9 +52,9 @@ class _FakeImap:
 
 
 def _factory(fake):
-    def make(cfg):
+    def make(cfg, folder="INBOX"):
         fake.login(cfg.user, cfg.password)
-        fake.select("INBOX", readonly=True)
+        fake.select(folder, readonly=True)
         return fake
 
     return make
@@ -90,9 +92,9 @@ def test_casella_aperta_readonly() -> None:
 def test_logout_anche_su_errore() -> None:
     fake = _FakeImap({1: b"uno"})
 
-    def exploding(cfg):
+    def exploding(cfg, folder="INBOX"):
         fake.login(cfg.user, cfg.password)
-        fake.select("INBOX", readonly=True)
+        fake.select(folder, readonly=True)
         fake.uid = lambda *a: (_ for _ in ()).throw(RuntimeError("boom"))
         return fake
 
@@ -114,6 +116,29 @@ def test_since_date_recupera_uid_sotto_il_watermark() -> None:
         CFG, since_uid=10, since_date="01-Jul-2026", conn_factory=_factory(fake)
     )
     assert sorted(uid for uid, _ in got) == [5, 20]
+
+
+def test_cartella_passata_a_select() -> None:
+    fake = _FakeImap({1: b"uno"})
+    fetch_since(
+        CFG, since_uid=0, folder="INBOX.Inviata", conn_factory=_factory(fake)
+    )
+    assert fake.selected_mailbox == "INBOX.Inviata"
+
+
+def test_cartella_inviata_aperta_readonly() -> None:
+    """Il vincolo di sola lettura resta assoluto anche sulla cartella Inviata."""
+    fake = _FakeImap({1: b"uno"})
+    fetch_since(
+        CFG, since_uid=0, folder="INBOX.Inviata", conn_factory=_factory(fake)
+    )
+    assert fake.selected_readonly is True
+
+
+def test_default_cartella_e_inbox() -> None:
+    fake = _FakeImap({1: b"uno"})
+    fetch_since(CFG, since_uid=0, conn_factory=_factory(fake))
+    assert fake.selected_mailbox == "INBOX"
 
 
 def test_byte_restituiti_intatti() -> None:

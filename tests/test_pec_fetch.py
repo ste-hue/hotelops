@@ -15,12 +15,17 @@ class _IntakeResult:
 
 
 def _deps(messages, watermarks=None):
-    wm = dict(watermarks or {})
+    """`messages` è o una lista (trattata come sola INBOX) o un dict
+    {folder: [(uid, bytes), ...]} per test multi-cartella. Le cartelle non
+    presenti nel dict tornano vuote (comportamento della vera Inviata quando
+    un test non se ne occupa)."""
+    messages_by_folder = messages if isinstance(messages, dict) else {"INBOX": messages}
+    wm = {(entity, "INBOX"): uid for entity, uid in (watermarks or {}).items()}
     seen = set()
     calls = {"intake": [], "promote": []}
 
-    def fake_fetch(cfg, since_uid, since_date=None, conn_factory=None):
-        return [(u, b) for u, b in messages if u > since_uid]
+    def fake_fetch(cfg, since_uid, folder="INBOX", since_date=None, conn_factory=None):
+        return [(u, b) for u, b in messages_by_folder.get(folder, []) if u > since_uid]
 
     def fake_intake(path, source_name, actor):
         h = str(hash(path.read_bytes()))
@@ -35,8 +40,8 @@ def _deps(messages, watermarks=None):
 
     return Deps(
         fetch_since=fake_fetch,
-        read_watermark=lambda b, e: wm.get(e, 0),
-        write_watermark=lambda b, e, u: wm.__setitem__(e, u),
+        read_watermark=lambda b, e, folder="INBOX": wm.get((e, folder), 0),
+        write_watermark=lambda b, e, u, folder="INBOX": wm.__setitem__((e, folder), u),
         intake_file=fake_intake,
         promote_raw_object=fake_promote,
         get_password=lambda env: "s3cret",
@@ -54,7 +59,7 @@ def test_watermark_avanza_al_uid_massimo() -> None:
     deps, wm, _ = _deps([(11, b"una"), (12, b"due")])
     res = fetch_mailbox("PEC_MAILBOX_VIGNA_APPEND", deps=deps)
     assert res.last_uid == 12
-    assert wm["VIGNA"] == 12
+    assert wm[("VIGNA", "INBOX")] == 12
 
 
 def test_secondo_giro_zero_duplicati() -> None:
@@ -92,7 +97,7 @@ def test_watermark_fermo_su_fallimento() -> None:
     deps, wm, _ = _deps([], watermarks={"VIGNA": 50})
     deps.fetch_since = lambda *a, **k: (_ for _ in ()).throw(ConnectionError("giù"))
     fetch_mailbox("PEC_MAILBOX_VIGNA_APPEND", deps=deps)
-    assert wm["VIGNA"] == 50
+    assert wm[("VIGNA", "INBOX")] == 50
 
 
 def test_sorgente_sconosciuta_solleva() -> None:
@@ -107,7 +112,9 @@ def test_intake_fallisce_a_meta_giro_produce_failed_e_non_avanza_watermark() -> 
     wm: dict = {}
     calls = {"intake": [], "promote": []}
 
-    def fake_fetch(cfg, since_uid, since_date=None, conn_factory=None):
+    def fake_fetch(cfg, since_uid, folder="INBOX", since_date=None, conn_factory=None):
+        if folder != "INBOX":
+            return []
         return [(u, b) for u, b in messages if u > since_uid]
 
     def fake_intake(path, source_name, actor):
@@ -122,8 +129,8 @@ def test_intake_fallisce_a_meta_giro_produce_failed_e_non_avanza_watermark() -> 
 
     deps = Deps(
         fetch_since=fake_fetch,
-        read_watermark=lambda b, e: wm.get(e, 0),
-        write_watermark=lambda b, e, u: wm.__setitem__(e, u),
+        read_watermark=lambda b, e, folder="INBOX": wm.get(e, 0),
+        write_watermark=lambda b, e, u, folder="INBOX": wm.__setitem__(e, u),
         intake_file=fake_intake,
         promote_raw_object=fake_promote,
         get_password=lambda env: "s3cret",
@@ -134,6 +141,29 @@ def test_intake_fallisce_a_meta_giro_produce_failed_e_non_avanza_watermark() -> 
     assert res.status == "FAILED"
     assert "VIGNA" not in wm
     assert len(calls["intake"]) == 2, "si è fermato al secondo, non ha proseguito"
+
+
+def test_cartella_inviata_irraggiungibile_non_blocca_inbox() -> None:
+    """La cartella INBOX.Inviata registry di VIGNA è irraggiungibile:
+    INBOX va comunque ingerita e il suo watermark avanza, quello di
+    Inviata resta fermo, e lo stato riflette il fallimento parziale."""
+    deps, wm, calls = _deps({"INBOX": [(11, b"una"), (12, b"due")]})
+    real_fetch = deps.fetch_since
+
+    def fake_fetch(cfg, since_uid, folder="INBOX", since_date=None, conn_factory=None):
+        if folder == "INBOX.Inviata":
+            raise ConnectionError("Inviata giù")
+        return real_fetch(cfg, since_uid, folder=folder, since_date=since_date)
+
+    deps.fetch_since = fake_fetch
+
+    res = fetch_mailbox("PEC_MAILBOX_VIGNA_APPEND", deps=deps)
+
+    assert res.per_folder["INBOX"] == 2
+    assert len(calls["intake"]) == 2
+    assert wm[("VIGNA", "INBOX")] == 12
+    assert ("VIGNA", "INBOX.Inviata") not in wm
+    assert res.status == "FAILED"
 
 
 def test_main_exit_2_su_fallimento(monkeypatch, capsys) -> None:

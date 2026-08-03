@@ -22,10 +22,10 @@ class ImapConfig:
     password: str = field(repr=False)
 
 
-def _connect(cfg: ImapConfig):
+def _connect(cfg: ImapConfig, folder: str = "INBOX"):
     conn = imaplib.IMAP4_SSL(cfg.host, cfg.port)
     conn.login(cfg.user, cfg.password)
-    conn.select("INBOX", readonly=True)  # <- la garanzia di sola lettura
+    conn.select(folder, readonly=True)  # <- la garanzia di sola lettura
     return conn
 
 
@@ -41,11 +41,16 @@ def _search(conn, criterion: str) -> set[int]:
 def fetch_since(
     cfg: ImapConfig,
     since_uid: int,
+    folder: str = "INBOX",
     since_date: str | None = None,
     conn_factory=None,
 ) -> list[tuple[int, bytes]]:
-    """Buste con UID > since_uid, più quelle da since_date (formato "01-Jul-2026")."""
-    conn = (conn_factory or _connect)(cfg)
+    """Buste con UID > since_uid, più quelle da since_date (formato "01-Jul-2026").
+
+    `folder` seleziona la cartella IMAP (es. "INBOX.Inviata"); la sola
+    lettura resta garantita anche lì (`select(folder, readonly=True)`).
+    """
+    conn = (conn_factory or _connect)(cfg, folder)
     try:
         # "UID N:*" torna sempre anche l'ultimo messaggio, pure se il suo UID
         # è < N. Senza questo filtro lo si rilavora a ogni giro, per sempre.

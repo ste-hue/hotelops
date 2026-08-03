@@ -17,7 +17,7 @@ import logging
 import os
 import sys
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -33,6 +33,7 @@ class FetchResult:
     last_uid: int = 0
     status: str = "OK"
     error: Optional[str] = None
+    per_folder: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -91,38 +92,44 @@ def fetch_mailbox(
         password=d.get_password(sd.imap.password_env),
     )
 
-    watermark = d.read_watermark(bucket, entity)
     since_date = (
         (dt.date.today() - dt.timedelta(days=since_days)).strftime("%d-%b-%Y")
         if since_days
         else None
     )
 
-    highest = watermark
-    try:
-        messages = d.fetch_since(cfg, watermark, since_date=since_date)
-        res.fetched = len(messages)
+    errors: list[str] = []
+    for folder in sd.imap.folders:
+        try:
+            watermark = d.read_watermark(bucket, entity, folder=folder)
+            messages = d.fetch_since(cfg, watermark, folder=folder, since_date=since_date)
+            res.per_folder[folder] = len(messages)
+            res.fetched += len(messages)
 
-        with tempfile.TemporaryDirectory() as tmp:
-            for uid, raw in messages:
-                path = Path(tmp) / f"{entity}_{uid}.eml"
-                path.write_bytes(raw)
-                out = d.intake_file(path, source_name=source_name, actor="pec_fetch")
-                if out.deduped:
-                    res.deduped += 1
-                else:
-                    res.ingested += 1
-                    if promote and out.raw_object_id:
-                        d.promote_raw_object(out.raw_object_id, actor="pec_fetch")
-                highest = max(highest, uid)
-    except Exception as exc:  # noqa: BLE001 — una casella giù non ferma le altre
-        log.error("%s: fetch fallita: %s", entity, exc)
-        res.status, res.error = "FAILED", str(exc)
-        return res  # watermark NON avanza: il content-hash protegge dai duplicati al giro dopo
+            highest = watermark
+            with tempfile.TemporaryDirectory() as tmp:
+                for uid, raw in messages:
+                    path = Path(tmp) / f"{entity}_{uid}.eml"
+                    path.write_bytes(raw)
+                    out = d.intake_file(path, source_name=source_name, actor="pec_fetch")
+                    if out.deduped:
+                        res.deduped += 1
+                    else:
+                        res.ingested += 1
+                        if promote and out.raw_object_id:
+                            d.promote_raw_object(out.raw_object_id, actor="pec_fetch")
+                    highest = max(highest, uid)
+        except Exception as exc:  # noqa: BLE001 — una cartella giù non ferma le altre
+            log.error("%s/%s: fetch fallita: %s", entity, folder, exc)
+            errors.append(f"{folder}: {exc}")
+            continue  # watermark NON avanza: il content-hash protegge dai duplicati al giro dopo
 
-    if highest > watermark:
-        d.write_watermark(bucket, entity, highest)
-    res.last_uid = highest
+        if highest > watermark:
+            d.write_watermark(bucket, entity, highest, folder=folder)
+        res.last_uid = max(res.last_uid, highest)
+
+    if errors:
+        res.status, res.error = "FAILED", "; ".join(errors)
     return res
 
 

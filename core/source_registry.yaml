@@ -804,6 +804,7 @@ sources:
       host: imaps.pec.aruba.it
       port: 993
       password_env: PEC_PASSWORD_INTUR
+      folders: [INBOX, INBOX.Inviata]
     business_unit: null
     lifecycle: APPEND
     canonical_table: f_pec_messages
@@ -839,6 +840,7 @@ sources:
       host: imaps.pec.aruba.it
       port: 993
       password_env: PEC_PASSWORD_ORTI
+      folders: [INBOX, INBOX.Inviata]
     business_unit: null
     lifecycle: APPEND
     canonical_table: f_pec_messages
@@ -868,6 +870,7 @@ sources:
       host: imaps.pec.aruba.it
       port: 993
       password_env: PEC_PASSWORD_VIGNA
+      folders: [INBOX, INBOX.Inviata]
     business_unit: null
     lifecycle: APPEND
     canonical_table: f_pec_messages

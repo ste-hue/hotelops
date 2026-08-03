@@ -55,3 +55,31 @@ def test_payload_json_con_last_uid() -> None:
     c = _FakeClient()
     write_watermark("vigna-raw", "VIGNA", 7, client=c)
     assert json.loads(next(iter(c.store.values())))["last_uid"] == 7
+
+
+def test_migrazione_da_path_legacy() -> None:
+    """Il watermark vecchio (per-casella) diventa quello di INBOX."""
+    c = _FakeClient()
+    c.store["pec/_watermark/VIGNA.json"] = '{"last_uid": 112}'
+    assert read_watermark("vigna-raw", "VIGNA", folder="INBOX", client=c) == 112
+    assert "pec/_watermark/VIGNA/INBOX.json" in c.store
+
+
+def test_migrazione_non_contamina_altre_cartelle() -> None:
+    c = _FakeClient()
+    c.store["pec/_watermark/VIGNA.json"] = '{"last_uid": 112}'
+    assert read_watermark("vigna-raw", "VIGNA", folder="INBOX.Inviata", client=c) == 0
+
+
+def test_cartelle_hanno_watermark_indipendenti() -> None:
+    c = _FakeClient()
+    write_watermark("vigna-raw", "VIGNA", 112, folder="INBOX", client=c)
+    write_watermark("vigna-raw", "VIGNA", 47, folder="INBOX.Inviata", client=c)
+    assert read_watermark("vigna-raw", "VIGNA", folder="INBOX", client=c) == 112
+    assert read_watermark("vigna-raw", "VIGNA", folder="INBOX.Inviata", client=c) == 47
+
+
+def test_punto_nel_nome_cartella_non_crea_sottocartelle() -> None:
+    c = _FakeClient()
+    write_watermark("vigna-raw", "VIGNA", 47, folder="INBOX.Inviata", client=c)
+    assert "pec/_watermark/VIGNA/INBOX_Inviata.json" in c.store

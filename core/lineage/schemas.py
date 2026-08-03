@@ -124,6 +124,7 @@ class ImapMailbox(BaseModel):
     host: str
     port: int = 993
     password_env: str
+    folders: list[str] = Field(default_factory=lambda: ["INBOX"])
 
 
 class SourceDefinition(BaseModel):

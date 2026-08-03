@@ -27,6 +27,17 @@ def test_eml_accettato(name, _c, _h, _e) -> None:
     assert "eml" in sd.input_formats, f"{name} non accetta eml"
 
 
+@pytest.mark.parametrize("name,_c,_h,_e", CASELLE)
+def test_folders_include_inbox_e_inviata(name, _c, _h, _e) -> None:
+    sd = load_registry().get(name)
+    assert sd.imap.folders == ["INBOX", "INBOX.Inviata"]
+
+
+def test_personale_resta_senza_blocco_imap() -> None:
+    sd = load_registry().get("PEC_MAILBOX_PERSONALE_APPEND")
+    assert sd.imap is None
+
+
 def test_imap_model_non_ha_campo_password() -> None:
     from core.lineage.schemas import ImapMailbox
 
