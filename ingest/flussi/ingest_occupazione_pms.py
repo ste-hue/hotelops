@@ -5,8 +5,9 @@ One xlsx = one struttura (BU), serie giornaliera. Colonne:
   Data | Cam. Totali | OOO | Cam. Vendibili | Cam. Occupate | Cam. Day Use |
   Adulti | Ragazzi | Bambini | ARB | Infant | Pax Day Use | Importo
 
-BU dedotta dal prefisso filename (ANGELINA→RESIDENCE, CVM→CVM, PANORAMA→HOTEL),
-cross-check su Cam. Totali (76/20/10). `pax_in_casa` = ARB (= Adulti+Ragazzi+Bambini).
+BU content-first dal footer "Applied filters" (CodiceHotel is …), fallback sul
+prefisso filename (ANGELINA→RESIDENCE, CVM→CVM, PANORAMA→HOTEL).
+`pax_in_casa` = ARB (= Adulti+Ragazzi+Bambini).
 `revenue_room` = Importo; revenue_fb/parking non sono nel file → 0.
 
 Lifecycle: SNAPSHOT, natural_key (business_unit_id, data) — ri-caricare una struttura
@@ -19,10 +20,12 @@ Usage:
     python -m ingest.flussi.ingest_occupazione_pms --file <xlsx> --raw-object-id <id>
     python -m ingest.flussi.ingest_occupazione_pms --file <xlsx> --dry-run
 """
+
 from __future__ import annotations
 
 import argparse
 import logging
+import re
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -30,6 +33,7 @@ from openpyxl import load_workbook
 
 from core.config import F_PMS_STATISTICHE
 from core.schemas import PmsStatisticheRow, make_hash, validate_batch
+from ingest.flussi.ingest_produzione_pms import HOTEL_TO_BU
 
 log = logging.getLogger("ingest.occupazione_pms")
 
@@ -49,9 +53,33 @@ def detect_bu(file_name: str) -> str:
         if key in upper:
             return bu
     raise ValueError(
-        f"BU non deducibile dal nome '{file_name}' "
-        f"(atteso uno di {list(NAME_TO_BU)})"
+        f"BU non deducibile dal nome '{file_name}' (atteso uno di {list(NAME_TO_BU)})"
     )
+
+
+def detect_bu_from_footer(path: Path) -> str | None:
+    """Content-first: 'CodiceHotel is <X>' nella cella 'Applied filters' → BU."""
+    wb = load_workbook(path, read_only=True, data_only=True)
+    text = ""
+    for row in wb.active.iter_rows(values_only=True):
+        for cell in row:
+            if isinstance(cell, str) and "Applied filters" in cell:
+                text = cell
+    wb.close()
+    if not text:
+        return None
+    # Export multi-struttura: l'aggregato finirebbe etichettato su UNA BU — rifiuta.
+    if re.search(r"CodiceHotel is \w+\s*(,| or )", text):
+        raise ValueError(
+            f"CodiceHotel multiplo: serve un export per singola struttura: {text[:160]!r}"
+        )
+    m = re.search(r"CodiceHotel is (\w+)", text)
+    if not m:
+        return None
+    codice = m.group(1)
+    if codice not in HOTEL_TO_BU:
+        raise ValueError(f"CodiceHotel sconosciuto: {codice}")
+    return HOTEL_TO_BU[codice]
 
 
 def _num(v) -> float:
@@ -136,13 +164,19 @@ def ingest_file(
     path: Path, raw_object_id: str | None = None, dry_run: bool = False
 ) -> int:
     """Parse one xlsx e SNAPSHOT-write su f_pms_statistiche. Ritorna n righe."""
-    bu = detect_bu(path.name)
+    bu = detect_bu_from_footer(path) or detect_bu(path.name)
     raw = parse_xlsx(path)
     rows = build_rows(raw, bu, path.name, raw_object_id)
     validate_batch(rows, PmsStatisticheRow, context=f"occupazione_pms {path.name}")
     if dry_run:
         occ = sum(1 for r in rows if r["camere_vendute"] > 0)
-        log.info("[DRY-RUN] %s → %s : %d righe (%d giorni occupati)", path.name, bu, len(rows), occ)
+        log.info(
+            "[DRY-RUN] %s → %s : %d righe (%d giorni occupati)",
+            path.name,
+            bu,
+            len(rows),
+            occ,
+        )
         return len(rows)
 
     from core.bq.write import bq_write_validated
@@ -162,12 +196,21 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description="Ingest Daily Production Report (occupazione) → f_pms_statistiche"
     )
-    ap.add_argument("--file", required=True, type=Path, help="xlsx Daily Production Report (occupazione)")
     ap.add_argument(
-        "--raw-object-id", default=None, help="FK a f_raw_objects — passato da `hotelops promote`"
+        "--file",
+        required=True,
+        type=Path,
+        help="xlsx Daily Production Report (occupazione)",
     )
     ap.add_argument(
-        "--societa", default=None, help="Ignorato — sempre ORTI. Accettato da `hotelops promote`."
+        "--raw-object-id",
+        default=None,
+        help="FK a f_raw_objects — passato da `hotelops promote`",
+    )
+    ap.add_argument(
+        "--societa",
+        default=None,
+        help="Ignorato — sempre ORTI. Accettato da `hotelops promote`.",
     )
     ap.add_argument("--dry-run", action="store_true", help="parse senza scrivere")
     args = ap.parse_args()

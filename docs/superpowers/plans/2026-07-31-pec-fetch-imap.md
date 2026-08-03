@@ -855,24 +855,28 @@ done
 
 Verifica: `gcloud secrets list --project=hotelops-suite | grep pec-password` → tre segreti.
 
-- [ ] **Step 2: Gate — provare in locale, senza promote**
+- [ ] **Step 2: Primo giro reale su una casella sola**
+
+> ⚠️ **Correzione (eseguito 2026-08-01).** Il piano prevedeva prima un giro `--no-promote` e poi uno con promote. **Non funziona:** il watermark avanza in entrambi i casi, quindi il secondo giro trova `fetched=0` e le buste del primo restano su GCS senza essere mai promosse — orfane. Il gate va fatto sul giro vero.
+>
+> Nota anche che `--no-promote` non è un giro a vuoto: `intake_file` carica comunque su GCS e scrive `f_raw_objects`. Contro la produzione non esiste una prova innocua.
 
 ```bash
-export PEC_PASSWORD_VIGNA='<password>'
-python -m ingest.pec_fetch --source-name PEC_MAILBOX_VIGNA_APPEND --no-promote -v
-```
-
-Expected: `VIGNA: status=OK fetched=N ...` con N > 0 (la vigna è ferma all'08/07, quindi ci sono buste da recuperare).
-
-**Gate bloccante:** rilanciare *lo stesso comando*. Deve stampare `fetched=0`. Se stampa altro, il watermark non si scrive e non si prosegue al deploy.
-
-- [ ] **Step 3: Primo giro reale con promote su una casella sola**
-
-```bash
+export PEC_PASSWORD_VIGNA="$(gcloud secrets versions access latest --secret=pec-password-VIGNA --project=hotelops-suite)"
 python -m ingest.pec_fetch --source-name PEC_MAILBOX_VIGNA_APPEND -v
 ```
 
-Poi verificare che le righe siano atterrate:
+Expected: `VIGNA: status=OK fetched=N ingested=M deduped=K last_uid=<uid>`.
+
+⏱️ **Dura ~21 secondi a busta** (upload GCS + intake + parse + insert). VIGNA sono ~40 minuti. Se lo lanci da un tool con timeout, mandalo in background: interrotto a metà non fa danni (il watermark si scrive solo a fine ciclo, quindi il rilancio riprende tutto e il content-hash deduplica) — ma perdi il giro.
+
+- [ ] **Step 3: Gate bloccante — idempotenza**
+
+Rilancia *lo stesso identico comando*.
+
+Expected: **`fetched=0`**. Se stampa altro, il watermark non si sta scrivendo e non si prosegue al deploy.
+
+Poi verifica che le righe siano atterrate:
 
 ```bash
 python -c "
@@ -884,23 +888,38 @@ for r in c.query(q): print(f'VIGNA: {r.n} buste, ultima {r.al}')
 "
 ```
 
-Expected: conteggio superiore a 107 e data più recente dell'08/07.
+Expected: conteggio superiore a quello di partenza. **Non aspettarti una data più recente**: le buste recuperate sono quelle che gli export manuali avevano mancato, non arrivi nuovi (su VIGNA: 107 → 116, tutte ≤ 08/07).
 
-- [ ] **Step 4: Creare il Cloud Run Job ed eseguirlo**
+- [ ] **Step 4: Backfill delle altre caselle DA LOCALE, prima del deploy**
+
+> **Il job schedulato deve nascere già in regime incrementale.** Il primo giro di una casella mai fetchata scarica l'intera INBOX — INTUR 526 buste ≈ 3 ore, ORTI 355 ≈ 2 ore. Nessun Cloud Run Job va dimensionato per quel carico: si fa una volta da locale, poi il notturno vede poche buste al giorno e chiude in un minuto.
+
+```bash
+export PEC_PASSWORD_INTUR="$(gcloud secrets versions access latest --secret=pec-password-INTUR --project=hotelops-suite)"
+export PEC_PASSWORD_ORTI="$(gcloud secrets versions access latest --secret=pec-password-ORTI --project=hotelops-suite)"
+python -m ingest.pec_fetch --source-name PEC_MAILBOX_INTUR_APPEND
+python -m ingest.pec_fetch --source-name PEC_MAILBOX_ORTI_APPEND
+```
+
+⚠️ **In sequenza, mai in parallelo.** La deduplicazione dei messaggi legge-poi-scrive sul `msgid`: una PEC inviata sia a INTUR sia a ORTI ha lo stesso `msgid`, e due processi concorrenti la vedrebbero entrambi come assente inserendola due volte.
+
+**Aspettativa realistica sul rendimento:** l'archivio è già più grande delle INBOX (INTUR 2189 righe in BQ contro 526 in casella — gli export coprivano ricevute *e* inviate dal 2017, la INBOX è stata potata negli anni). Questo backfill non carica il grosso: recupera le buste che gli export avevano mancato. Su VIGNA sono state 9 su 112, l'8%.
+
+- [ ] **Step 5: Creare il Cloud Run Job ed eseguirlo**
 
 ```bash
 gcloud run jobs deploy pec-fetch-daily \
   --source . --region=europe-west1 --project=hotelops-suite \
   --command=python --args=-m,ingest.pec_fetch,--all \
   --set-secrets=PEC_PASSWORD_INTUR=pec-password-INTUR:latest,PEC_PASSWORD_ORTI=pec-password-ORTI:latest,PEC_PASSWORD_VIGNA=pec-password-VIGNA:latest \
-  --max-retries=1 --task-timeout=15m
+  --max-retries=1 --task-timeout=60m
 
 gcloud run jobs execute pec-fetch-daily --region=europe-west1 --wait
 ```
 
 Expected: una riga `status=OK` per casella. Una `FAILED` dà exit 2 e nomina la casella — comportamento voluto.
 
-- [ ] **Step 5: Schedulare e committare la nota**
+- [ ] **Step 6: Schedulare e committare la nota**
 
 ```bash
 gcloud scheduler jobs create http pec-fetch-daily-trigger \
@@ -923,3 +942,76 @@ git commit -m "docs(pec): comandi deploy del job pec-fetch-daily"
 **Placeholder.** Nessuno, tranne host e porta di `mpspec.it`, dichiarati in Task 1 con la via d'uscita esplicita (lasciare PERSONALE senza blocco `imap`: il fetcher la salta).
 
 **Coerenza dei tipi.** `fetch_since(cfg, since_uid, since_date, conn_factory)` identica fra Task 3, i finti di Task 4 e la chiamata reale. `read_watermark(bucket, entity_id)` / `write_watermark(bucket, entity_id, uid)` coincidono fra Task 2 e Task 4. `intake_file(path, source_name=, actor=)` e `promote_raw_object(raw_object_id, actor=)` combaciano con `ingest/drive_fetch.py:104,118`. `ImapMailbox` (registry: host/port/password_env) e `ImapConfig` (runtime: + user/password) sono distinti di proposito: `user` viene da `sd.casella`, `password` da `os.environ`, e nessuno dei due può finire nel repo.
+
+---
+
+### Task 6: Cartella Inviata — ricostruire la storia completa
+
+Il fetcher legge solo `INBOX`. Nel corpus esistente ci sono **575 messaggi dalla cartella Inviata** (571 `MESSAGGIO_INVIATO` + 4 `ALTRO`, ultimo il 16/07) che il job automatico non prenderebbe mai: da qui in poi l'archivio conserverebbe le *ricevute* (prova che hai notificato, e quando) ma non il **contenuto di ciò che hai mandato**. Per un archivio che esiste per i contenziosi è un dimezzamento.
+
+Su Aruba la cartella è `INBOX.Inviata` (flag `\Sent`, verificato con `LIST`).
+
+**Il punto che rende il task non banale:** in IMAP **gli UID sono per-cartella**. Il watermark oggi è per casella (`pec/_watermark/<ENTITY>.json`); tenendolo così, i contatori di INBOX e Inviata si sovrascriverebbero a vicenda e il risultato sarebbe peggio di non averli. Va portato a chiave doppia — **con migrazione**, perché i watermark già scritti valgono ore di backfill: perderli significa riscaricare 526 buste su INTUR.
+
+Il parser non si tocca: distingue busta ricevuta e messaggio inviato **dal contenuto**, e la colonna `source_folder` esiste già.
+
+**Files:**
+- Modify: `core/lineage/schemas.py` (campo `folders` su `ImapMailbox`)
+- Modify: `core/source_registry.yaml` (3 caselle)
+- Modify: `ingest/pec_imap.py` (parametro cartella)
+- Modify: `ingest/pec_watermark.py` (chiave doppia + migrazione)
+- Modify: `ingest/pec_fetch.py` (ciclo sulle cartelle)
+- Test: i rispettivi file di test
+
+**Interfaces:**
+- `ImapMailbox.folders: list[str] = ["INBOX"]`
+- `fetch_since(cfg, since_uid, folder="INBOX", since_date=None, conn_factory=None)`
+- `read_watermark(bucket, entity_id, folder="INBOX", client=None)` / `write_watermark(bucket, entity_id, uid, folder="INBOX", client=None)`
+- Path nuovo: `pec/_watermark/<ENTITY>/<folder>.json` (il `.` di `INBOX.Inviata` diventa `_`)
+- `FetchResult` guadagna un campo `per_folder: dict[str, int]` con le buste scaricate per cartella
+
+**Migrazione obbligatoria:** al primo accesso, se esiste `pec/_watermark/<ENTITY>.json` e non esiste `pec/_watermark/<ENTITY>/INBOX.json`, copiare il valore nel path nuovo prima di leggerlo. Senza questo, il primo giro dopo il deploy riscarica tutte le INBOX da capo (3 ore su INTUR).
+
+- [ ] **Step 1: Test della migrazione del watermark** — è il pezzo che, se sbagliato, costa ore
+
+```python
+# tests/test_pec_watermark.py — aggiungere
+def test_migrazione_da_path_legacy() -> None:
+    """Il watermark vecchio (per-casella) diventa quello di INBOX."""
+    c = _FakeClient()
+    c.store["pec/_watermark/VIGNA.json"] = '{"last_uid": 112}'
+    assert read_watermark("vigna-raw", "VIGNA", folder="INBOX", client=c) == 112
+    assert "pec/_watermark/VIGNA/INBOX.json" in c.store
+
+
+def test_migrazione_non_contamina_altre_cartelle() -> None:
+    c = _FakeClient()
+    c.store["pec/_watermark/VIGNA.json"] = '{"last_uid": 112}'
+    assert read_watermark("vigna-raw", "VIGNA", folder="INBOX.Inviata", client=c) == 0
+
+
+def test_cartelle_hanno_watermark_indipendenti() -> None:
+    c = _FakeClient()
+    write_watermark("vigna-raw", "VIGNA", 112, folder="INBOX", client=c)
+    write_watermark("vigna-raw", "VIGNA", 47, folder="INBOX.Inviata", client=c)
+    assert read_watermark("vigna-raw", "VIGNA", folder="INBOX", client=c) == 112
+    assert read_watermark("vigna-raw", "VIGNA", folder="INBOX.Inviata", client=c) == 47
+
+
+def test_punto_nel_nome_cartella_non_crea_sottocartelle() -> None:
+    c = _FakeClient()
+    write_watermark("vigna-raw", "VIGNA", 47, folder="INBOX.Inviata", client=c)
+    assert "pec/_watermark/VIGNA/INBOX_Inviata.json" in c.store
+```
+
+- [ ] **Step 2: Verificare che falliscano**, poi implementare watermark a chiave doppia con migrazione
+
+- [ ] **Step 3: Cartella su `fetch_since`** — `select(folder, readonly=True)`, default `INBOX`. Il vincolo di sola lettura resta assoluto anche sulla cartella Inviata. Test: che `select` riceva la cartella richiesta.
+
+- [ ] **Step 4: `folders` nel registry** — `folders: [INBOX, INBOX.Inviata]` sulle tre caselle Aruba. Test parametrizzato che le tre ce l'abbiano e che `PERSONALE` resti senza blocco `imap`.
+
+- [ ] **Step 5: Ciclo sulle cartelle in `fetch_mailbox`** — una cartella che fallisce non deve impedire l'altra; `FetchResult.per_folder` riporta il dettaglio; il watermark di una cartella avanza solo se quella cartella è andata a buon fine. Test: cartella Inviata irraggiungibile → INBOX comunque ingerita, watermark INBOX avanzato, watermark Inviata fermo.
+
+- [ ] **Step 6: Suite intera verde + ruff ≤ 87, commit**
+
+- [ ] **Step 7: Backfill della cartella Inviata da locale**, in sequenza sulle tre caselle, come per la INBOX. Attesi ~575 messaggi già noti più quelli che gli export avevano mancato.
