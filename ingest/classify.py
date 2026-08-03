@@ -1025,6 +1025,45 @@ def _build_economato_result(
     )
 
 
+def _classify_by_signature(path: Path) -> Optional[ClassificationResult]:
+    """Identifica il file dalle firme dichiarative di core/registry.yaml.
+
+    lifecycle, società e parser NON stanno nella entry di firma: si derivano
+    da core/source_registry.yaml per detector_category. Se le source della
+    categoria discordano su un campo (es. `banca`, 5 source su 2 società),
+    quel campo resta None e decide la logica esistente.
+    """
+    from ingest.signatures import identify
+
+    category = identify(path)  # AmbiguousSignature propaga: è un errore di config
+    if not category:
+        return None
+
+    from core.lineage.source_resolver import load_registry
+
+    sources = load_registry().find_all_by_detector_category(category)
+    if not sources:
+        log.warning("Firma %s senza source nel source registry", category)
+        return None
+
+    def _unico(attr: str):
+        valori = {getattr(s, attr) for s in sources}
+        return valori.pop() if len(valori) == 1 else None
+
+    parser = _unico("parser_module")
+    return ClassificationResult(
+        file_path=path,
+        file_type=category,
+        category=category,
+        lifecycle=_unico("lifecycle") or LIFECYCLE_APPEND,
+        societa=_unico("societa"),
+        canonical_name=path.name,
+        pipeline_cmd=f"python -m {parser} --file {{dest_file}}" if parser else None,
+        confidence=0.95,
+        details={"matched_by": "registry.yaml signature"},
+    )
+
+
 # ── Master classifier ─────────────────────────────────────────────────────────
 
 # Priority order matters: more specific detectors first
@@ -1066,6 +1105,12 @@ def classify(path: Path) -> ClassificationResult:
             confidence=0.0,
             details={"error": f"Unsupported extension: {path.suffix}"},
         )
+
+    # Firme dichiarative da core/registry.yaml: vincono sui detector Python.
+    # Se nessuna matcha, i DETECTORS restano la rete (spec 2026-08-03).
+    by_signature = _classify_by_signature(path)
+    if by_signature:
+        return by_signature
 
     for detector in DETECTORS:
         try:
