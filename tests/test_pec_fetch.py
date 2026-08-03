@@ -166,6 +166,30 @@ def test_cartella_inviata_irraggiungibile_non_blocca_inbox() -> None:
     assert res.status == "FAILED"
 
 
+def test_cartella_inbox_irraggiungibile_non_blocca_inviata() -> None:
+    """Speculare al test sopra: se a fallire è la PRIMA cartella elencata
+    nel registry (INBOX), la seconda (INBOX.Inviata) deve essere comunque
+    tentata. Un try/except che avvolgesse l'intero ciclo invece della
+    singola iterazione farebbe fallire anche questo assert."""
+    deps, wm, calls = _deps({"INBOX.Inviata": [(21, b"ventuno"), (22, b"ventidue")]})
+    real_fetch = deps.fetch_since
+
+    def fake_fetch(cfg, since_uid, folder="INBOX", since_date=None, conn_factory=None):
+        if folder == "INBOX":
+            raise ConnectionError("INBOX giù")
+        return real_fetch(cfg, since_uid, folder=folder, since_date=since_date)
+
+    deps.fetch_since = fake_fetch
+
+    res = fetch_mailbox("PEC_MAILBOX_VIGNA_APPEND", deps=deps)
+
+    assert res.per_folder["INBOX.Inviata"] == 2
+    assert len(calls["intake"]) == 2
+    assert wm[("VIGNA", "INBOX.Inviata")] == 22
+    assert ("VIGNA", "INBOX") not in wm
+    assert res.status == "FAILED"
+
+
 def test_main_exit_2_su_fallimento(monkeypatch, capsys) -> None:
     def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
         if name == "PEC_MAILBOX_ORTI_APPEND":

@@ -83,3 +83,12 @@ def test_punto_nel_nome_cartella_non_crea_sottocartelle() -> None:
     c = _FakeClient()
     write_watermark("vigna-raw", "VIGNA", 47, folder="INBOX.Inviata", client=c)
     assert "pec/_watermark/VIGNA/INBOX_Inviata.json" in c.store
+
+
+def test_migrazione_non_sovrascrive_watermark_nuovo() -> None:
+    """Se il path nuovo esiste già, la migrazione non deve toccarlo:
+    altrimenti un watermark avanzato tornerebbe indietro."""
+    c = _FakeClient()
+    c.store["pec/_watermark/VIGNA/INBOX.json"] = '{"last_uid": 999}'
+    c.store["pec/_watermark/VIGNA.json"] = '{"last_uid": 1}'
+    assert read_watermark("vigna-raw", "VIGNA", folder="INBOX", client=c) == 999
