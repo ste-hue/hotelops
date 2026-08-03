@@ -114,6 +114,19 @@ class RawStorage(BaseModel):
     bucket: Optional[str] = None
 
 
+class ImapMailbox(BaseModel):
+    """Config IMAP in sola lettura di una casella PEC.
+
+    L'utente NON sta qui: è il campo `casella` della sorgente.
+    La password NON sta qui: `password_env` nomina la variabile d'ambiente.
+    """
+
+    host: str
+    port: int = 993
+    password_env: str
+    folders: list[str] = Field(default_factory=lambda: ["INBOX"])
+
+
 class SourceDefinition(BaseModel):
     source_name: str
     system: str
@@ -141,6 +154,7 @@ class SourceDefinition(BaseModel):
         default_factory=lambda: ["mbox"]
     )
     drive_file_id: Optional[str] = None
+    imap: Optional[ImapMailbox] = None
     notes: Optional[str] = None
 
     @field_validator("source_name")
