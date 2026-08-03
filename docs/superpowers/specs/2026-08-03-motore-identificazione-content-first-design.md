@@ -215,7 +215,12 @@ tre colonne. Tre non bastano: `consumi_powerbi` e `vendite_fb` condividono le
 prime tre e divergono alla quarta. È l'unica aggiunta alla grammatica, e serve a
 un caso reale.
 
-`header_0_2` resta supportato per la entry `ricavi_fb` esistente.
+Il valutatore supporta **solo** `sheets` e `structure.header_prefix`. Una entry
+che usa qualsiasi altro tipo di firma — `columns`, `filename`, `content`, o
+`structure.header_0_2` — viene **saltata**: sono le 11 categorie legacy, che
+restano ai loro detector Python. È così che «nessuna migrazione in questo giro»
+diventa una proprietà del codice invece di una promessa: `ricavi_fb` usa
+`header_0_2`, quindi il valutatore non può matcharla nemmeno volendo.
 
 ### 2. Nessun tipo di firma `footer`
 
