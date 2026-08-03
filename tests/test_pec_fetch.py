@@ -1,6 +1,8 @@
 import contextlib
 import datetime as dt
 import logging
+import os
+import signal
 import sys
 from dataclasses import dataclass
 
@@ -523,7 +525,7 @@ def test_main_riepiloga_i_rifiuti_a_fine_giro(monkeypatch, capsys, lock_libero) 
     """Non-allarmanti sì, invisibili no: nei log del job il totale si vede."""
 
     def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
-        return FetchResult(entity_id=name, rejected=2)
+        return FetchResult(entity_id=name, promoted=1, rejected=2)
 
     monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
     monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
@@ -616,3 +618,104 @@ def test_main_prende_il_lock_anche_con_source_name(monkeypatch, capsys, lock_lib
     pec_fetch.main()
 
     assert lock_libero == ["acquisito", "rilasciato"]
+
+
+# --- il parser rotto non è "qualità del dato" -------------------------------
+
+
+def test_main_esce_2_se_nessuna_busta_e_stata_promossa(
+    monkeypatch, capsys, lock_libero
+) -> None:
+    """Una busta su mille rifiutata è qualità del dato; mille su mille è il
+    parser rotto. Senza questa guardia un deploy sbagliato darebbe giri verdi
+    per quante notti serve, senza una mail."""
+
+    def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
+        return FetchResult(entity_id=name, fetched=4, ingested=4, promoted=0, rejected=4)
+
+    monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
+    monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        pec_fetch.main()
+
+    assert exc_info.value.code == 2
+    assert "nessuna busta promossa" in capsys.readouterr().err
+
+
+def test_main_resta_verde_se_almeno_una_busta_passa(
+    monkeypatch, capsys, lock_libero
+) -> None:
+    """La guardia è sul caso degenere categorico, non su una soglia."""
+
+    def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
+        return FetchResult(entity_id=name, fetched=10, ingested=10, promoted=9, rejected=1)
+
+    monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
+    monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
+
+    pec_fetch.main()  # niente SystemExit
+
+    assert "nessuna busta promossa" not in capsys.readouterr().err
+
+
+def test_main_guarda_i_totali_del_giro_non_la_singola_casella(
+    monkeypatch, capsys, lock_libero
+) -> None:
+    """Il parser è lo stesso per tutte le caselle: se una promuove, non è
+    rotto. La guardia lavora sui totali del giro, di proposito."""
+
+    def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
+        if name == "PEC_MAILBOX_ORTI_APPEND":
+            return FetchResult(entity_id=name, ingested=2, promoted=0, rejected=2)
+        return FetchResult(entity_id=name, ingested=2, promoted=2)
+
+    monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
+    monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
+
+    pec_fetch.main()
+
+    out = capsys.readouterr()
+    assert "2 buste rifiutate" in out.out, "restano visibili"
+    assert "nessuna busta promossa" not in out.err
+
+
+def test_main_niente_falso_allarme_con_no_promote(monkeypatch, capsys, lock_libero) -> None:
+    """`--no-promote` non promuove niente per definizione: non è un guasto."""
+
+    def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
+        return FetchResult(entity_id=name, fetched=3, ingested=3, promoted=0, rejected=0)
+
+    monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
+    monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all", "--no-promote"])
+
+    pec_fetch.main()  # niente SystemExit
+
+
+# --- SIGTERM: il timeout del job non deve diventare un successo -------------
+
+
+def test_sigterm_rilascia_il_lock(monkeypatch, lock_libero) -> None:
+    """Task timeout a 60m → SIGTERM. Senza handler Python non esegue i
+    `finally`: il lock resta appeso, il retry lo trova fresco ed esce 0, e
+    un timeout (che prima era rosso) diventa un'esecuzione riuscita."""
+    precedente = signal.getsignal(signal.SIGTERM)
+
+    def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
+        assert signal.getsignal(signal.SIGTERM) not in (
+            signal.SIG_DFL,
+            signal.SIG_IGN,
+        ), "main() non ha installato l'handler SIGTERM"
+        os.kill(os.getpid(), signal.SIGTERM)
+        return FetchResult(entity_id=name)  # pragma: no cover
+
+    monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
+    monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
+
+    try:
+        with pytest.raises(SystemExit) as exc_info:
+            pec_fetch.main()
+        assert exc_info.value.code == 143, "128 + 15, la convenzione per SIGTERM"
+        assert lock_libero == ["acquisito", "rilasciato"]
+    finally:
+        signal.signal(signal.SIGTERM, precedente)

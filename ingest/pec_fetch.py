@@ -12,7 +12,8 @@ Gira non presidiato (Cloud Run Job, ogni notte), quindi due regole:
 - un giro alla volta, garantito dal lock globale su GCS (`ingest.pec_lock`);
   chi trova il lock occupato esce 0, non è un guasto;
 - exit 2 solo sui guasti di sistema (casella giù, credenziali, GCS/BQ). Le
-  buste rifiutate dal parser si contano e si loggano, ma non allarmano.
+  buste rifiutate dal parser si contano e si loggano, ma non allarmano —
+  a meno che NESSUNA busta sia stata promossa: lì il parser è rotto.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import argparse
 import datetime as dt
 import logging
 import os
+import signal
 import sys
 import tempfile
 from dataclasses import dataclass, field
@@ -228,6 +230,12 @@ def main() -> None:
     else:
         raise SystemExit("ERROR: serve --source-name oppure --all")
 
+    # Il task timeout del job (60m) manda SIGTERM: senza handler Python muore
+    # senza eseguire i `finally` e il lock resta appeso fino al TTL — il retry
+    # lo troverebbe fresco, uscirebbe 0, e un timeout (rosso, prima) passerebbe
+    # per un'esecuzione riuscita.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+
     # Il lock si prende dopo la risoluzione dei nomi: un registry sbagliato
     # deve gridare senza nemmeno toccare GCS.
     try:
@@ -241,7 +249,7 @@ def main() -> None:
 
 def _giro(names: list[str], since_days: int, promote: bool) -> None:
     failed = []
-    rifiutate = 0
+    rifiutate = promossi = 0
     for name in names:
         try:
             r = fetch_mailbox(name, since_days=since_days, promote=promote)
@@ -258,8 +266,15 @@ def _giro(names: list[str], since_days: int, promote: bool) -> None:
             + (f" error={r.error}" if r.error else "")
         )
         rifiutate += r.rejected
+        promossi += r.promoted
         if r.status == "FAILED":
             failed.append(r.entity_id)
+
+    # Caso degenere categorico, non una soglia: c'erano buste da promuovere e
+    # NESSUNA è passata. Una su mille è qualità del dato, mille su mille è il
+    # parser rotto — e un parser rotto in silenzio dà giri verdi per settimane.
+    # I totali sono di tutto il giro: il parser è lo stesso per ogni casella.
+    guasto_promote = bool(rifiutate) and promossi == 0
 
     if rifiutate:
         # Non allarmante ≠ invisibile: nei log del job il totale si vede a
@@ -269,8 +284,15 @@ def _giro(names: list[str], since_days: int, promote: bool) -> None:
             "`hotelops promote --raw-object-id <id>` (id nei log.error qui sopra)"
         )
 
+    if guasto_promote:
+        print(
+            f"GUASTO: nessuna busta promossa su {rifiutate} tentate — "
+            "parser o promote rotti, non è qualità del dato",
+            file=sys.stderr,
+        )
     if failed:
         print(f"PARZIALE: caselle non raggiunte: {', '.join(failed)}", file=sys.stderr)
+    if failed or guasto_promote:
         sys.exit(2)
 
 
