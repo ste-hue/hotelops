@@ -43,6 +43,7 @@ from core.datahub_sync import (
     rclone_copy_to_remote,
     rclone_copyto,
 )
+from ingest.signatures import AmbiguousSignature
 
 log = logging.getLogger("ingest.classify")
 
@@ -1025,6 +1026,45 @@ def _build_economato_result(
     )
 
 
+def _classify_by_signature(path: Path) -> Optional[ClassificationResult]:
+    """Identifica il file dalle firme dichiarative di core/registry.yaml.
+
+    lifecycle, società e parser NON stanno nella entry di firma: si derivano
+    da core/source_registry.yaml per detector_category. Se le source della
+    categoria discordano su un campo (es. `banca`, 5 source su 2 società),
+    quel campo resta None e decide la logica esistente.
+    """
+    from ingest.signatures import identify
+
+    category = identify(path)  # AmbiguousSignature propaga: è un errore di config
+    if not category:
+        return None
+
+    from core.lineage.source_resolver import load_registry
+
+    sources = load_registry().find_all_by_detector_category(category)
+    if not sources:
+        log.warning("Firma %s senza source nel source registry", category)
+        return None
+
+    def _unico(attr: str):
+        valori = {getattr(s, attr) for s in sources}
+        return valori.pop() if len(valori) == 1 else None
+
+    parser = _unico("parser_module")
+    return ClassificationResult(
+        file_path=path,
+        file_type=category,
+        category=category,
+        lifecycle=_unico("lifecycle") or LIFECYCLE_APPEND,
+        societa=_unico("societa"),
+        canonical_name=path.name,
+        pipeline_cmd=f"python -m {parser} --file {{dest_file}}" if parser else None,
+        confidence=0.95,
+        details={"matched_by": "registry.yaml signature"},
+    )
+
+
 # ── Master classifier ─────────────────────────────────────────────────────────
 
 # Priority order matters: more specific detectors first
@@ -1067,6 +1107,21 @@ def classify(path: Path) -> ClassificationResult:
             details={"error": f"Unsupported extension: {path.suffix}"},
         )
 
+    # Firme dichiarative da core/registry.yaml: vincono sui detector Python.
+    # Se nessuna matcha, i DETECTORS restano la rete (spec 2026-08-03).
+    # Un bug nel valutatore (es. registry.yaml malformato) non deve rompere
+    # classify() per OGNI file — solo AmbiguousSignature propaga, è un
+    # errore di configurazione che deve essere rumoroso.
+    try:
+        by_signature = _classify_by_signature(path)
+    except AmbiguousSignature:
+        raise
+    except Exception as e:
+        log.warning(f"_classify_by_signature failed on {path.name}: {e}")
+        by_signature = None
+    if by_signature:
+        return by_signature
+
     for detector in DETECTORS:
         try:
             result = detector(path)
@@ -1086,8 +1141,30 @@ def classify(path: Path) -> ClassificationResult:
 
 
 def classify_batch(paths: list[Path]) -> list[ClassificationResult]:
-    """Classify multiple files."""
-    return [classify(p) for p in paths]
+    """Classify multiple files. One unreadable file must not abort the batch."""
+    results = []
+    for p in paths:
+        try:
+            results.append(classify(p))
+        except AmbiguousSignature:
+            # Non è un problema del singolo file: due entry di core/registry.yaml
+            # matchano la stessa forma di header, quindi OGNI file con quella
+            # forma la incontrerebbe identica. Inghiottirla qui la trasformerebbe
+            # in N risultati "error" indistinguibili e, sul path `hotelops drop`,
+            # il messaggio vero non arriverebbe mai all'utente. Deve propagare.
+            raise
+        except Exception as e:
+            log.warning(f"classify failed on {p}: {e}")
+            results.append(
+                ClassificationResult(
+                    file_path=p,
+                    file_type="error",
+                    category="error",
+                    confidence=0.0,
+                    details={"error": str(e)},
+                )
+            )
+    return results
 
 
 # ── Route (copy + rename) ────────────────────────────────────────────────────

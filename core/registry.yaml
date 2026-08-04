@@ -225,3 +225,90 @@ file_types:
         required: ["Export"]
       - type: structure
         header_0_2: ["Classe", "Codice", "Descrizione Addebito"]
+
+  # ── Report Power BI — firme dichiarative (spec 2026-08-03) ─────────────
+  # Portano SOLO formats + signatures: lifecycle, tabella, parser e policy
+  # vivono in core/source_registry.yaml sotto lo stesso detector_category.
+  # Il prefisso è di 4 colonne per margine deliberato: per le 10 entry
+  # attuali basterebbero le prime tre (nessuna coppia collide), ma un
+  # prefisso più lungo costa poco e lascia spazio ai report che arriveranno.
+
+  andamento_prenotazioni:
+    formats: [.xlsx]
+    signatures:
+      - type: sheets
+        required: ["Export"]
+      - type: structure
+        header_prefix: ["Giorno", "CodiceHotel", "Tipologia Venduta", "Camere"]
+
+  bookings_tipologia:
+    formats: [.xlsx]
+    signatures:
+      - type: sheets
+        required: ["Export"]
+      - type: structure
+        header_prefix: ["Giorno", "Tipologia Venduta", "Camere", "ARB"]
+
+  consprev_mensile:
+    formats: [.xlsx]
+    signatures:
+      - type: sheets
+        required: ["Export"]
+      - type: structure
+        header_prefix: ["Anno", "Mese", "Classe", "Categoria"]
+
+  consprev_pax:
+    formats: [.xlsx]
+    signatures:
+      - type: sheets
+        required: ["Export"]
+      - type: structure
+        header_prefix: ["Anno", "Mese", "Tipo", "Mese Cons"]
+
+  dettaglio_prenotazioni:
+    formats: [.xlsx]
+    signatures:
+      - type: sheets
+        required: ["Export"]
+      - type: structure
+        header_prefix: ["Giorno", "Camere", "ARB", "Infant"]
+
+  menu_engineering:
+    formats: [.xlsx]
+    signatures:
+      - type: sheets
+        required: ["Export"]
+      - type: structure
+        header_prefix: ["M", "Tipo", "Sala", "Piatto"]
+
+  numero_camera_clienti:
+    formats: [.xlsx]
+    signatures:
+      - type: sheets
+        required: ["Export"]
+      - type: structure
+        header_prefix: ["Camera", "Volte", "ARB", "Infant"]
+
+  occupazione_pms:
+    formats: [.xlsx]
+    signatures:
+      - type: sheets
+        required: ["Export"]
+      - type: structure
+        header_prefix: ["Data", "Cam. Totali", "OOO", "Cam. Vendibili"]
+
+  produzione_pms:
+    formats: [.xlsx]
+    signatures:
+      - type: sheets
+        required: ["Export"]
+      - type: structure
+        header_prefix: ["Classe", "01ROOM", "02FB", "03PARK"]
+
+  vendite_fb:
+    formats: [.xlsx]
+    signatures:
+      - type: sheets
+        required: ["Export"]
+      - type: structure
+        header_prefix: ["Data - Anno", "Data - Mese", "Data - Giorno", "Sala"]
