@@ -29,6 +29,24 @@ La colazione e' cambiata a giugno.
 Panorama Team
 """
 
+VOICE_FIXTURE_HOTEL_ONLY = """# Voce — risposte alle recensioni
+
+## Voce
+Scrivi come una persona della reception.
+Frasi corte.
+
+## Temi
+PULIZIA, STRUTTURA
+
+## Playbook
+
+### STRUTTURA (HOTEL)
+L'hotel e' in fase di ristrutturazione.
+
+## Firma
+Panorama Team
+"""
+
 
 def test_load_voice_reads_repo_file():
     text = load_voice()
@@ -97,3 +115,19 @@ def test_build_prompt_nota_propagata():
     assert "menziona la nuova colazione" in con_nota
     assert "NOTA" in con_nota
     assert "NOTA" not in senza_nota
+
+
+def test_build_prompt_guardrail_sempre_presente():
+    # Regression: guardrail vs allucinazioni deve esserci ANCHE quando
+    # non ci sono playbook applicabili (es. RESIDENCE con fixture che ha solo HOTEL playbook)
+    # e nessuna nota.
+    prompt_senza_playbook = build_response_prompt(
+        "Camera datata.", "RESIDENCE", VOICE_FIXTURE_HOTEL_ONLY
+    )
+    # Il guardrail è la frase fondamentale per bloccare allucinazioni
+    assert "senza inventare interventi" in prompt_senza_playbook
+    # La regola "Sulle critiche" dev'esserci
+    assert "Sulle critiche" in prompt_senza_playbook
+    # Non deve dire "PLAYBOOK" se nessuno è applicabile (solo HOTEL playbook,
+    # ma stiamo chiedendo per RESIDENCE = niente riferimento a playbook)
+    assert "Applica i PLAYBOOK" not in prompt_senza_playbook

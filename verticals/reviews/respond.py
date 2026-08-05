@@ -98,32 +98,31 @@ def build_response_prompt(
         "  3. descrivere un'azione concreta.",
     ]
 
-    # Build the playbook/nota reference string conditionally
-    playbook_nota_refs = []
-    if applicabili or nota:
-        playbook_nota_refs = [
-            "- Sulle critiche: se e' credibile, cita un'azione concreta presa o pianificata,",
-        ]
-        if applicabili and nota:
-            playbook_nota_refs.append(
-                "  presa SOLO dai PLAYBOOK o dalla NOTA qui sotto. Se non puoi citarne una,"
-            )
-        elif applicabili:
-            playbook_nota_refs.append(
-                "  presa SOLO dai PLAYBOOK qui sotto. Se non puoi citarne una,"
-            )
-        elif nota:
-            playbook_nota_refs.append(
-                "  presa SOLO dalla NOTA qui sotto. Se non puoi citarne una,"
-            )
-        playbook_nota_refs += [
-            "  riconosci il problema senza inventare interventi. Mai promesse non supportate da fatti.",
-        ]
-
-    parts.extend(playbook_nota_refs)
+    # Always include the "Sulle critiche" guardrail rule
     parts.append(
-        "- Applica i PLAYBOOK solo se il loro tema e' tra quelli trovati in FASE 1."
+        "- Sulle critiche: se e' credibile, cita un'azione concreta presa o pianificata,"
     )
+
+    # Reference text depends on what sources are available
+    if applicabili and nota:
+        parts.append(
+            "  presa SOLO dai PLAYBOOK o dalla NOTA qui sotto. Se non puoi citarne una,"
+        )
+    elif applicabili:
+        parts.append("  presa SOLO dai PLAYBOOK qui sotto. Se non puoi citarne una,")
+    elif nota:
+        parts.append("  presa SOLO dalla NOTA qui sotto. Se non puoi citarne una,")
+
+    # Fallback when no sources: always include this guardrail
+    parts.append(
+        "  riconosci il problema senza inventare interventi. Mai promesse non supportate da fatti."
+    )
+
+    # Only mention PLAYBOOK rule if playbooks are actually present
+    if applicabili:
+        parts.append(
+            "- Applica i PLAYBOOK solo se il loro tema e' tra quelli trovati in FASE 1."
+        )
 
     if applicabili:
         parts += ["", "PLAYBOOK (fatti citabili, per tema):"]
