@@ -1,4 +1,5 @@
 streamlit>=1.30
+starlette<1.0  # vedi pyproject [dashboard]: starlette 1.x rompe il gzip di Streamlit
 openpyxl>=3.1
 pandas>=2.0
 google-cloud-bigquery>=3.20

@@ -19,7 +19,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.4", "reportlab>=4.0.0"]
-dashboard = ["streamlit>=1.35", "plotly>=5.0", "db-dtypes>=1.0"]
+# starlette<1.0: in 1.x GZipResponder.__init__ vuole thread_minimum_size, che il
+# middleware gzip di Streamlit non passa -> 500 su ogni risposta compressa (hub
+# giu' 05/08, rev 00063). Streamlit non vincola starlette: il pin sta qui.
+dashboard = ["streamlit>=1.35", "starlette<1.0", "plotly>=5.0", "db-dtypes>=1.0"]
 drive = ["google-api-python-client"]
 # Runtime deps dei job schedulati (Cloud Run Jobs). Versioni pinnate dalla venv funzionante.
 jobs = [
