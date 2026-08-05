@@ -129,6 +129,9 @@ def _raccogli(client, da: datetime, a: datetime,
     totali = _q(client, f"""
         SELECT m.casella, COUNT(*) AS n FROM `{F_PEC_MESSAGES}` m
         WHERE TRUE {filtro} GROUP BY 1""", **base)
+    totali_entity = _q(client, f"""
+        SELECT m.entity_id, COUNT(*) AS n FROM `{F_PEC_MESSAGES}` m
+        WHERE TRUE {filtro} GROUP BY 1""", **base)
 
     return {
         "finestra": (da, a), "importanti": importanti,
@@ -136,6 +139,7 @@ def _raccogli(client, da: datetime, a: datetime,
         "non_sincronizzati": non_sync, "ambigui": ambigui,
         "non_classificati": non_class, "risolti": risolti,
         "totali_per_casella": {r["casella"]: r["n"] for r in totali},
+        "totali_per_entity": {r["entity_id"]: r["n"] for r in totali_entity},
     }
 
 
@@ -176,6 +180,37 @@ def _render_markdown(dati: dict, solo_anomalie: bool) -> str:
     return "\n".join(out)
 
 
+MAX_RIGHE_WHATSAPP = 8
+
+
+def _render_whatsapp(dati: dict) -> str:
+    """Messaggio breve per il bot: cosa conta, più una riga di salute.
+
+    Sempre almeno due righe, anche a zero importanti: il silenzio deve
+    significare solo che il bot non gira (spec 2026-08-04, D2).
+    """
+    _, a = dati["finestra"]
+    imp = dati["importanti"]
+    if imp:
+        out = [f"PEC {a:%d/%m} — {len(imp)} da guardare"]
+        out += [
+            f"• {r['entity_id']} [{r['primary_category']}] {r['subject']}"
+            f" — da {r['mittente']}"
+            for r in imp[:MAX_RIGHE_WHATSAPP]
+        ]
+        if len(imp) > MAX_RIGHE_WHATSAPP:
+            out.append(f"…e altre {len(imp) - MAX_RIGHE_WHATSAPP}")
+    else:
+        out = [f"PEC {a:%d/%m} — niente di rilevante"]
+
+    per_entity = dati["totali_per_entity"]
+    tot = sum(per_entity.values())
+    dettaglio = ", ".join(f"{e} {n}" for e, n in sorted(per_entity.items()))
+    salute = f"{tot} nuove" + (f" ({dettaglio})" if dettaglio else "")
+    out.append(f"{salute} · {len(dati['non_classificati'])} non classificate")
+    return "\n".join(out)
+
+
 def run_digest(da: datetime | None = None, a: datetime | None = None,
                casella: str | None = None, entity: str | None = None,
                solo_anomalie: bool = False, fmt: str = "markdown",
@@ -207,6 +242,8 @@ def run_digest(da: datetime | None = None, a: datetime | None = None,
         dati = _raccogli(client, da, a, casella, entity)
         if fmt == "json":
             reso = json.dumps(dati, default=str, ensure_ascii=False, indent=2)
+        elif fmt == "whatsapp":
+            reso = _render_whatsapp(dati)
         else:
             reso = _render_markdown(dati, solo_anomalie)
             if not dry_run:

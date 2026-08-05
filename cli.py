@@ -1190,7 +1190,8 @@ def main():
     pp_dg.add_argument("--entity", type=str, default=None,
                        choices=["INTUR", "ORTI", "VIGNA", "STEFANO_PERSONALE"])
     pp_dg.add_argument("--solo-anomalie", action="store_true")
-    pp_dg.add_argument("--format", choices=["markdown", "json"], default="markdown")
+    pp_dg.add_argument("--format", choices=["markdown", "json", "whatsapp"],
+                       default="markdown")
     pp_dg.add_argument("--dry-run", action="store_true")
 
     # docs
