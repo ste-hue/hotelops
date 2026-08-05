@@ -62,3 +62,89 @@ def parse_playbooks(voice_text: str) -> dict[str, dict]:
     for p in playbooks.values():
         p["testo"] = p["testo"].strip()
     return playbooks
+
+
+def build_response_prompt(
+    testo: str, bu: str, voice_text: str, nota: str | None = None
+) -> str:
+    """Assembla il prompt a 3 fasi (temi -> bozza -> pulizia)."""
+    sections = split_sections(voice_text)
+    playbooks = parse_playbooks(voice_text)
+    applicabili = {
+        tema: p["testo"]
+        for tema, p in playbooks.items()
+        if p["bu"] is None or bu in p["bu"]
+    }
+
+    parts = [
+        "Sei l'addetto alla reception che risponde a una recensione online.",
+        "",
+        "VOCE (vincoli di scrittura, non negoziabili):",
+        sections.get("Voce", ""),
+        "",
+        "Procedi in tre fasi.",
+        "",
+        "FASE 1 — TEMI: individua quali di questi temi sono presenti nella recensione:",
+        sections.get("Temi", ""),
+        "Considera solo i temi davvero menzionati dall'ospite.",
+        "",
+        "FASE 2 — BOZZA: scrivi la risposta rispettando TUTTE queste regole:",
+        "- Rispondi nella stessa lingua della recensione.",
+        "- Massimo 100 parole. Nessun minimo: non aggiungere testo per arrivare a una lunghezza.",
+        "- Il ringraziamento deve citare almeno un dettaglio presente nella recensione.",
+        "- Ogni frase deve fare almeno una di queste tre cose, altrimenti eliminala:",
+        "  1. rispondere a qualcosa scritto dall'ospite;",
+        "  2. aggiungere un fatto;",
+        "  3. descrivere un'azione concreta.",
+    ]
+
+    # Build the playbook/nota reference string conditionally
+    playbook_nota_refs = []
+    if applicabili or nota:
+        playbook_nota_refs = [
+            "- Sulle critiche: se e' credibile, cita un'azione concreta presa o pianificata,",
+        ]
+        if applicabili and nota:
+            playbook_nota_refs.append(
+                "  presa SOLO dai PLAYBOOK o dalla NOTA qui sotto. Se non puoi citarne una,"
+            )
+        elif applicabili:
+            playbook_nota_refs.append(
+                "  presa SOLO dai PLAYBOOK qui sotto. Se non puoi citarne una,"
+            )
+        elif nota:
+            playbook_nota_refs.append(
+                "  presa SOLO dalla NOTA qui sotto. Se non puoi citarne una,"
+            )
+        playbook_nota_refs += [
+            "  riconosci il problema senza inventare interventi. Mai promesse non supportate da fatti.",
+        ]
+
+    parts.extend(playbook_nota_refs)
+    parts.append(
+        "- Applica i PLAYBOOK solo se il loro tema e' tra quelli trovati in FASE 1."
+    )
+
+    if applicabili:
+        parts += ["", "PLAYBOOK (fatti citabili, per tema):"]
+        for tema, testo_pb in sorted(applicabili.items()):
+            parts.append(f"- {tema}: {testo_pb}")
+
+    if nota:
+        parts += ["", f"NOTA di Stefano per questa risposta: {nota}"]
+
+    parts += [
+        "",
+        "FASE 3 — PULIZIA: rileggi il testo.",
+        "Elimina ogni frase che potrebbe essere copiata sotto una recensione diversa.",
+        "Se restano meno di 40 parole va bene.",
+        "Non aggiungere testo per arrivare a una certa lunghezza.",
+        "",
+        f"Chiudi con la firma: {sections.get('Firma', 'Panorama Team')}",
+        "",
+        f"Recensione (struttura: {bu}):",
+        testo,
+        "",
+        "Rispondi SOLO con la bozza finale, senza spiegazioni ne' fasi intermedie.",
+    ]
+    return "\n".join(parts)
