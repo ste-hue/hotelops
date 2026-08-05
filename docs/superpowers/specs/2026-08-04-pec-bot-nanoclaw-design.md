@@ -130,12 +130,34 @@ deterministico e ripetibile. Scrive su `f_pec_classificazioni` via
 
 ### Componente 2 — task NanoClaw
 
-Gruppo `hotelops`, jid `120363425423608235@g.us`, cron `0 7 * * *` (Europe/Rome).
+Gruppo **`aziende`**, jid `120363426493586217@g.us`, cron `0 7 * * *` (Europe/Rome).
 
-Il container è **già configurato** e non va toccato: `container_config` monta il repo
-read-only su `hotelops-repo`, la chiave `hotelops-nanoclaw-key.json` sotto `secrets/`,
-e il tool `bq` inietta `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`,
-`PYTHONPATH`.
+Non `hotelops`, che pure avrebbe già tutti i mount pronti: `aziende` monta già
+`gmail-intur`, `gmail-orti`, `gmail-vigna` — la sua identità *è* la posta delle tre
+società, e la PEC è la stessa materia con un altro protocollo. `hotelops` è il
+cruscotto finanziario: mandarci le notifiche PEC mescola due conversazioni diverse.
+Un gruppo dedicato (`PECS`) si giustificherebbe solo se cambiasse il **pubblico** —
+per esempio Rosa o Antonio nelle notifiche PEC ma non nelle Gmail societarie — non
+perché cambia l'argomento.
+
+Il prezzo è che `aziende` oggi ha solo i tre tool Gmail e nessun mount. Vanno aggiunti,
+in `containerConfig`:
+
+- repo hotelops → `hotelops-repo`, `readonly: true`
+- `~/.config/hotelops/hotelops-nanoclaw-key.json` → `secrets/hotelops-nanoclaw-key.json`,
+  **`readonly: true`** — l'allowlist ha quel root con `allowReadWrite: false`, quindi un
+  mount rw verrebbe rifiutato
+- tool `bq`, che inietta `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`,
+  `PYTHONPATH`
+
+Fatti verificati lato NanoClaw (non serve riaprire quel repo):
+
+- l'immagine `nanoclaw-agent:latest` è **unica per tutti i gruppi** e il suo
+  `python-requirements.txt` ha già `google-cloud-bigquery`, `pydantic`, `pyyaml` — le
+  dipendenze non sono un rischio, lo smoke test verifica rete e auth
+- **nessun flag di rete per gruppo**: la connettività è identica ovunque
+- `registeredGroups` è una **cache in memoria**: dopo l'UPDATE della configurazione
+  serve un kickstart del processo, altrimenti il container gira con i mount vecchi
 
 Nota: `groups/hotelops/group_config.yaml` **non è letto da NanoClaw** — nessun
 riferimento nel sorgente. I mount veri vengono da `containerConfig.additionalMounts`
@@ -204,7 +226,10 @@ L'ordine è vincolante: invertirlo fa fallire il primo giro alle 07:00.
    `bigquery.dataViewer` + `bigquery.jobUser`. **A livello di tabella**, non
    `dataEditor` sul dataset: quest'ultimo aprirebbe in scrittura tutto il pool `f_*` a
    un agente conversazionale.
-4. **Registrare il task** su NanoClaw dal gruppo HotelOps.
+4. **Configurare il gruppo `aziende`** (mount del repo + chiave, tool `bq`) e fare il
+   **kickstart** di NanoClaw: `registeredGroups` è cache in memoria, senza riavvio il
+   container gira con i mount vecchi.
+5. **Registrare il task** su NanoClaw dal gruppo Aziende.
 
 ## Test
 

@@ -396,28 +396,38 @@ Expected: un binding `roles/bigquery.dataEditor` con `hotelops-nanoclaw@...` fra
 
 ### Task 4: il bot su NanoClaw
 
-**Files:** nessuno nel repo hotelops. Si agisce dalla chat WhatsApp del gruppo HotelOps (jid `120363425423608235@g.us`).
+**Files:** nessuno nel repo hotelops. Si agisce dalla chat WhatsApp del gruppo **Aziende** (jid `120363426493586217@g.us`).
 
 **Interfaces:**
 - Consuma: `--format whatsapp` (Task 1), il checkpoint piantato (Task 3), il grant (Task 3).
-- Produce: una riga in `scheduled_tasks` (`store/messages.db` di NanoClaw) con `group_folder = 'hotelops'`, `schedule_type = 'cron'`, `schedule_value = '0 7 * * *'`.
+- Produce: una riga in `scheduled_tasks` (`store/messages.db` di NanoClaw) con `group_folder = 'aziende'`, `schedule_type = 'cron'`, `schedule_value = '0 7 * * *'`.
 
-Il container è già configurato e **non va toccato**: `container_config` monta il repo read-only su `/workspace/extra/hotelops-repo`, la chiave `hotelops-nanoclaw-key.json` sotto `/workspace/extra/secrets/`, e il tool `bq` inietta `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`, `PYTHONPATH`.
+**Dipendenza d'ordine — bloccante:** fra il Task 3 e questo task va fatta la
+configurazione di `aziende` (mount del repo `readonly: true`, mount della chiave
+`hotelops-nanoclaw-key.json` **`readonly: true`** perché l'allowlist ha
+`~/.config/hotelops` con `allowReadWrite: false`, più il tool `bq`) e il **kickstart**
+del processo NanoClaw: `registeredGroups` è cache in memoria, senza riavvio il
+container gira con la configurazione vecchia. Quella modifica la fa Stefano lato
+NanoClaw; questo task non parte prima del suo via libera.
+
+Perché `aziende` e non `hotelops`: il gruppo monta già `gmail-intur`, `gmail-orti`,
+`gmail-vigna` — è il canale della posta delle tre società, e la PEC è la stessa materia
+con un altro protocollo. `hotelops` è il cruscotto finanziario.
 
 - [ ] **Step 1: Smoke test dentro il container, prima di schedulare qualsiasi cosa**
 
-Manda nel gruppo HotelOps:
+Manda nel gruppo Aziende:
 
 > Esegui questo comando e incollami l'output esatto, senza commentarlo:
 > `cd /workspace/extra/hotelops-repo && python -m cli pec digest --format whatsapp --dry-run`
 
-Expected: il messaggio formattato. Questo verifica in un colpo solo tre cose mai provate insieme — che il container abbia le dipendenze Python (`google-cloud-bigquery`, `pydantic`, `pyyaml`), che raggiunga BigQuery dalla rete, e che la SA autentichi. `--dry-run` non scrive il checkpoint, quindi è ripetibile.
+Expected: il messaggio formattato. Verifica le due cose mai provate: che il container raggiunga BigQuery dalla rete e che la SA autentichi. Le dipendenze Python non sono in dubbio — l'immagine `nanoclaw-agent:latest` è unica per tutti i gruppi e il suo `python-requirements.txt` ha già `google-cloud-bigquery`, `pydantic`, `pyyaml`. `--dry-run` non scrive il checkpoint, quindi è ripetibile.
 
-Se fallisce per dipendenze mancanti, fermati: va aggiunta l'immagine del container NanoClaw, che è fuori dallo scope di questo piano.
+Se fallisce, l'ipotesi da guardare per prima è il mount: senza kickstart dopo l'UPDATE, il container non vede `/workspace/extra/hotelops-repo` e il comando muore su `No such file or directory`.
 
 - [ ] **Step 2: Registra il task schedulato**
 
-Manda nel gruppo HotelOps:
+Manda nel gruppo Aziende:
 
 > Crea un task schedulato giornaliero alle 07:00 con questo prompt:
 >
@@ -446,7 +456,7 @@ import sqlite3
 db='/Users/stefanodellapietra/education/repos/AI_repos/nanoclaw/store/messages.db'
 c=sqlite3.connect(f'file:{db}?mode=ro',uri=True)
 cols=[d[1] for d in c.execute('PRAGMA table_info(scheduled_tasks)')]
-for r in c.execute(\"select * from scheduled_tasks where group_folder='hotelops'\"):
+for r in c.execute(\"select * from scheduled_tasks where group_folder='aziende'\"):
     d=dict(zip(cols,r))
     print(d['schedule_type'], d['schedule_value'], '|', d['status'], '|', d['next_run'])
 "
