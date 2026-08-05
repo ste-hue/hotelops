@@ -129,9 +129,6 @@ def _raccogli(client, da: datetime, a: datetime,
     totali = _q(client, f"""
         SELECT m.casella, COUNT(*) AS n FROM `{F_PEC_MESSAGES}` m
         WHERE TRUE {filtro} GROUP BY 1""", **base)
-    totali_entity = _q(client, f"""
-        SELECT m.entity_id, COUNT(*) AS n FROM `{F_PEC_MESSAGES}` m
-        WHERE TRUE {filtro} GROUP BY 1""", **base)
 
     return {
         "finestra": (da, a), "importanti": importanti,
@@ -139,7 +136,6 @@ def _raccogli(client, da: datetime, a: datetime,
         "non_sincronizzati": non_sync, "ambigui": ambigui,
         "non_classificati": non_class, "risolti": risolti,
         "totali_per_casella": {r["casella"]: r["n"] for r in totali},
-        "totali_per_entity": {r["entity_id"]: r["n"] for r in totali_entity},
     }
 
 
@@ -183,31 +179,36 @@ def _render_markdown(dati: dict, solo_anomalie: bool) -> str:
 MAX_RIGHE_WHATSAPP = 8
 
 
-def _render_whatsapp(dati: dict) -> str:
-    """Messaggio breve per il bot: cosa conta, più una riga di salute.
+def _motivo_novita(r: dict) -> str:
+    """Perché questa riga è qui. Ordine = forza del segnale (spec N3)."""
+    if r["mittente_nuovo"]:
+        return f"mittente nuovo: {r['mittente']}"
+    if r["oggetto_nuovo"]:
+        return f"oggetto nuovo da {r['mittente']}"
+    return f"allegati nuovi da {r['mittente']}"
 
-    Sempre almeno due righe, anche a zero importanti: il silenzio deve
-    significare solo che il bot non gira (spec 2026-08-04, D2).
+
+def _render_whatsapp(dati: dict) -> str:
+    """Fallback deterministico: le novità, una riga per messaggio.
+
+    Il messaggio quotidiano lo scrive l'agente (spec 2026-08-05, N5); questo
+    è ciò che resta quando l'agente cade. Non giudica: elenca ciò che il
+    corpus non ha mai visto.
     """
     _, a = dati["finestra"]
-    imp = dati["importanti"]
-    if imp:
-        out = [f"PEC {a:%d/%m} — {len(imp)} da guardare"]
-        out += [
-            f"• {r['entity_id']} [{r['primary_category']}] {r['subject']}"
-            f" — da {r['mittente']}"
-            for r in imp[:MAX_RIGHE_WHATSAPP]
-        ]
-        if len(imp) > MAX_RIGHE_WHATSAPP:
-            out.append(f"…e altre {len(imp) - MAX_RIGHE_WHATSAPP}")
-    else:
-        out = [f"PEC {a:%d/%m} — niente di rilevante"]
+    nov, in_arrivo = dati["novita"], dati["in_arrivo"]
+    if not nov:
+        return f"PEC {a:%d/%m} — niente di nuovo · {in_arrivo} in arrivo"
 
-    per_entity = dati["totali_per_entity"]
-    tot = sum(per_entity.values())
-    dettaglio = ", ".join(f"{e} {n}" for e, n in sorted(per_entity.items()))
-    salute = f"{tot} nuove" + (f" ({dettaglio})" if dettaglio else "")
-    out.append(f"{salute} · {len(dati['non_classificati'])} non classificate")
+    out = [f"PEC {a:%d/%m} — {len(nov)} novità"]
+    for r in nov[:MAX_RIGHE_WHATSAPP]:
+        allegati = r.get("allegati") or []
+        coda = f" [{', '.join(allegati[:2])}]" if allegati else ""
+        out.append(f"• {r['entity_id']} — {_motivo_novita(r)}")
+        out.append(f'  "{r["subject"]}"{coda}')
+    if len(nov) > MAX_RIGHE_WHATSAPP:
+        out.append(f"…e altre {len(nov) - MAX_RIGHE_WHATSAPP}")
+    out.append(f"{in_arrivo} in arrivo.")
     return "\n".join(out)
 
 
