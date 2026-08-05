@@ -33,10 +33,14 @@ SECRETS="${SECRETS},PEC_PASSWORD_VIGNA=pec-password-VIGNA:latest"
 # task-timeout 60m, non 10m come gli altri job: ~21 s per busta (upload GCS + intake +
 # parse + insert). In regime incrementale bastano pochi minuti, ma una giornata con molte
 # PEC o un recupero via finestra SINCE può allungarsi.
+# fetch && classify nello stesso container, non due job: il fetch ha task-timeout 60m e
+# un job separato alle 04:30 partirebbe a fetch ancora in corso. La && garantisce che
+# classify non giri su un fetch fallito.
 gcloud run jobs create pec-fetch --project="$PROJECT" --region="$REGION" \
   --image="$IMAGE" --service-account="$DRIVE_SA" \
   --set-secrets="$SECRETS" \
-  --command=python --args=-m,ingest.pec_fetch,--all \
+  --command=/bin/sh \
+  --args=-c,'python -m ingest.pec_fetch --all && python -m cli pec classify' \
   --max-retries=1 --task-timeout=3600s
 
 # max-retries=1 e non 2: un ritentativo automatico su una casella già parzialmente
