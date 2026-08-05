@@ -7,6 +7,7 @@ e assemblaggio prompt. Spec: docs/superpowers/specs/2026-08-05-reviews-responder
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 VOICE_PATH = Path(__file__).parent / "voice.md"
@@ -147,3 +148,36 @@ def build_response_prompt(
         "Rispondi SOLO con la bozza finale, senza spiegazioni ne' fasi intermedie.",
     ]
     return "\n".join(parts)
+
+
+def generate_response(testo: str, bu: str, nota: str | None = None) -> str:
+    """Genera la bozza di risposta. ValueError su input invalido, PRIMA dell'API."""
+    testo = (testo or "").strip()
+    if not testo:
+        raise ValueError("testo recensione vuoto")
+    bu = bu.upper()
+    if bu not in VALID_BU:
+        raise ValueError(
+            f"BU sconosciuta: {bu} (valide: {', '.join(sorted(VALID_BU))})"
+        )
+
+    import anthropic
+
+    from verticals.reviews.config import RESPONDER_MODEL
+
+    prompt = build_response_prompt(testo, bu, load_voice(), nota)
+    client = anthropic.Anthropic()
+    response = client.messages.create(
+        model=RESPONDER_MODEL,
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    bozza = response.content[0].text.strip()
+
+    n_parole = len(bozza.split())
+    if n_parole > MAX_PAROLE:
+        print(
+            f"ATTENZIONE: bozza oltre le {MAX_PAROLE} parole ({n_parole}). Rileggila.",
+            file=sys.stderr,
+        )
+    return bozza

@@ -1,5 +1,7 @@
 """Tests for verticals/reviews/respond.py — bozze di risposta alle recensioni."""
 
+import pytest
+
 from verticals.reviews.respond import (
     VOICE_PATH,
     build_response_prompt,
@@ -131,3 +133,81 @@ def test_build_prompt_guardrail_sempre_presente():
     # Non deve dire "PLAYBOOK" se nessuno è applicabile (solo HOTEL playbook,
     # ma stiamo chiedendo per RESIDENCE = niente riferimento a playbook)
     assert "Applica i PLAYBOOK" not in prompt_senza_playbook
+
+
+# Fake client helpers for testing generate_response
+
+
+class _FakeContent:
+    def __init__(self, text):
+        self.text = text
+
+
+class _FakeResponse:
+    def __init__(self, text):
+        self.content = [_FakeContent(text)]
+
+
+class _FakeMessages:
+    def __init__(self, reply):
+        self.reply = reply
+        self.calls = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return _FakeResponse(self.reply)
+
+
+class _FakeClient:
+    def __init__(self, reply):
+        self.messages = _FakeMessages(reply)
+
+
+def _patch_client(monkeypatch, reply):
+    import anthropic
+
+    fake = _FakeClient(reply)
+    monkeypatch.setattr(anthropic, "Anthropic", lambda: fake)
+    return fake
+
+
+def test_generate_response_happy_path(monkeypatch):
+    from verticals.reviews.config import RESPONDER_MODEL
+    from verticals.reviews.respond import generate_response
+
+    fake = _patch_client(
+        monkeypatch, "Grazie per la nota sulla colazione.\nPanorama Team"
+    )
+    bozza = generate_response("Colazione ottima.", "HOTEL")
+    assert bozza == "Grazie per la nota sulla colazione.\nPanorama Team"
+    (call,) = fake.messages.calls
+    assert call["model"] == RESPONDER_MODEL
+    assert "Colazione ottima." in call["messages"][0]["content"]
+
+
+def test_generate_response_testo_vuoto(monkeypatch):
+    from verticals.reviews.respond import generate_response
+
+    fake = _patch_client(monkeypatch, "irrilevante")
+    with pytest.raises(ValueError, match="vuoto"):
+        generate_response("   ", "HOTEL")
+    assert fake.messages.calls == []  # mai chiamata l'API
+
+
+def test_generate_response_bu_sconosciuta(monkeypatch):
+    from verticals.reviews.respond import generate_response
+
+    fake = _patch_client(monkeypatch, "irrilevante")
+    with pytest.raises(ValueError, match="BU"):
+        generate_response("Bello.", "LIDO")
+    assert fake.messages.calls == []
+
+
+def test_generate_response_warning_oltre_100_parole(monkeypatch, capsys):
+    from verticals.reviews.respond import generate_response
+
+    _patch_client(monkeypatch, "parola " * 120)
+    bozza = generate_response("Testo.", "CVM")
+    assert len(bozza.split()) > 100
+    err = capsys.readouterr().err
+    assert "100 parole" in err
