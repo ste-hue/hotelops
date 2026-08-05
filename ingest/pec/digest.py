@@ -130,20 +130,25 @@ def _raccogli(client, da: datetime, a: datetime,
     totali = _q(client, f"""
         SELECT m.casella, COUNT(*) AS n FROM `{F_PEC_MESSAGES}` m
         WHERE TRUE {filtro} GROUP BY 1""", **base)
-    # Le novità NON usano {filtro}: i filtri --casella/--entity sono costruiti
-    # sull'alias m., e la vista porta già il filtro base N2 (solo posta in
-    # arrivo). Restano validi per le sezioni diagnostiche.
+    # La vista porta già il filtro base N2 (solo posta in arrivo); {filtro} è
+    # sull'alias m., quindi qui il filtro casella/entity si ricostruisce senza alias.
+    filtro_nov = ""
+    if casella:
+        filtro_nov += " AND casella = @casella"
+    if entity:
+        filtro_nov += " AND entity_id = @entity"
     novita = _q(client, f"""
         SELECT entity_id, mittente, subject, allegati,
                mittente_nuovo, oggetto_nuovo, allegati_nuovi
         FROM `{_V_NOVITA}`
         WHERE data_caricamento > @da AND data_caricamento <= @a
-          AND (mittente_nuovo OR oggetto_nuovo OR allegati_nuovi)
+          AND (mittente_nuovo OR oggetto_nuovo OR allegati_nuovi){filtro_nov}
         ORDER BY mittente_nuovo DESC, oggetto_nuovo DESC, data_evento DESC""",
-        da=da, a=a)
+        **base)
     in_arrivo = _q(client, f"""
         SELECT COUNT(*) AS n FROM `{_V_NOVITA}`
-        WHERE data_caricamento > @da AND data_caricamento <= @a""", da=da, a=a)
+        WHERE data_caricamento > @da AND data_caricamento <= @a{filtro_nov}""",
+        **base)
 
     return {
         "finestra": (da, a), "importanti": importanti,

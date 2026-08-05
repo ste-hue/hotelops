@@ -18,9 +18,11 @@
 -- correlato ne' subquery scalari correlate: BigQuery non li de-correla, quindi
 -- gli allegati arrivano da una CTE aggregata in LEFT JOIN.
 --
--- La guardia `forma_allegati IS NOT NULL` su allegati_nuovi non e' cosmetica:
--- PARTITION BY raggruppa i NULL insieme, e senza guardia il primo messaggio
--- SENZA allegati di ogni mittente risulterebbe novita'.
+-- Le guardie IS NOT NULL sui flag non sono cosmetiche: PARTITION BY raggruppa
+-- i NULL insieme, e senza guardia la prima riga di ogni classe NULL (messaggio
+-- senza allegati, subject vuoto, mittente non parsabile) risulterebbe novita'.
+-- Mittente NULL spegne tutti e tre i flag: la novita' e' relativa al mittente,
+-- senza mittente il concetto e' indefinito.
 
 CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_pec_novita` AS
 
@@ -46,9 +48,11 @@ base AS (
 )
 SELECT
   * EXCEPT (rn_mittente, rn_oggetto, rn_allegati),
-  rn_mittente = 1 AS mittente_nuovo,
-  rn_oggetto = 1 AS oggetto_nuovo,
-  forma_allegati IS NOT NULL AND rn_allegati = 1 AS allegati_nuovi
+  mittente IS NOT NULL AND rn_mittente = 1 AS mittente_nuovo,
+  mittente IS NOT NULL AND forma_oggetto IS NOT NULL
+    AND rn_oggetto = 1 AS oggetto_nuovo,
+  mittente IS NOT NULL AND forma_allegati IS NOT NULL
+    AND rn_allegati = 1 AS allegati_nuovi
 FROM (
   SELECT
     b.*,
