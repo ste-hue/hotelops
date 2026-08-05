@@ -46,9 +46,16 @@ già visto contro mai visto. Il giudizio su cosa conta resta a chi legge — che
 divisione del lavoro onesta, perché le regole non sanno che c'è un contenzioso aperto
 con un fornitore, e Stefano sì.
 
-Conseguenza: `importance = 'ALTA'` sparisce dal digest. Il ruleset **resta** e continua
-a dare le categorie al pannello CEO e alle proiezioni su Drive; perde solo il ruolo che
-non sapeva fare, quello di guardiano dell'attenzione.
+Conseguenza: `importance = 'ALTA'` sparisce **dal messaggio** — non dal repo. Il ruleset
+resta e continua a dare le categorie al pannello CEO e alle proiezioni su Drive; perde
+solo il ruolo che non sapeva fare, quello di guardiano dell'attenzione.
+
+Precisazione necessaria, perché la prima stesura era ambigua: `_raccogli` **non perde**
+la chiave `importanti`. Il markdown diagnostico la legge (`digest.py:159`) e continua a
+funzionare com'è. La novità è una **lente aggiuntiva**, non un rimpiazzo: `_raccogli`
+guadagna `novita` e `in_arrivo`, e sono queste due che alimentano il messaggio. Le due
+lenti convivono perché rispondono a domande diverse — "quali documenti sono di categoria
+rilevante" (pannello) e "cosa non ho mai visto" (attenzione quotidiana).
 
 ### N2 — Filtro base: solo posta in arrivo
 
@@ -153,9 +160,21 @@ Senza:
 PEC 06/08 — niente di nuovo · 12 in arrivo
 ```
 
-Il totale finale non è un giudizio: è la prova che il sistema ha guardato. Resta la
-regola D2 del design precedente — **il messaggio arriva sempre**, e il silenzio deve
-significare solo che NanoClaw non gira.
+Il totale finale non è un giudizio: è la prova che il sistema ha guardato, e conta le
+sole PEC in arrivo (N2). Resta la regola D2 del design precedente — **il messaggio
+arriva sempre**, e il silenzio deve significare solo che NanoClaw non gira.
+
+Il fallback deterministico, quando l'agente cade, dice le stesse cose senza prosa —
+una riga per novità, con l'allegato che spesso è la parte informativa:
+
+```
+PEC 06/08 — 4 novità
+• INTUR — mittente nuovo: olivacoperturegroup@pec.it
+  "Sollecito pagament fatt. 125/26" [52.2 ultimo Sollecito pagamento.pdf]
+• INTUR — mittente nuovo: adeguata.verifica.opsaml@pec.nexi.it
+  "Verifica e aggiornamento dei Titolari Effettivi – INTUR SRL"
+17 in arrivo.
+```
 
 ## Cosa non cambia
 
@@ -168,10 +187,23 @@ NanoClaw.
 - **Vista `v_pec_novita`**: sopra `f_pec_messages` + `f_pec_allegati`, applica il filtro
   N2 e restituisce per ogni messaggio i tre flag di novità più la forma. La storia è il
   corpus stesso, quindi la vista si autoaggiorna: nessuna tabella di stato in più.
-- **`_raccogli`** guadagna la chiave `novita` (le righe con almeno un flag) e perde
-  `importanti`. Le sezioni diagnostiche del markdown restano dove sono.
+- **`_raccogli`** guadagna due chiavi, entrambe lette dalla vista:
+  - `novita` — le righe della finestra con almeno un flag di novità
+  - `in_arrivo` — il conteggio delle righe della finestra, cioè **17**, non 35
+
+  Il conteggio deve venire dalla vista e non dagli aggregati esistenti: `totali` e
+  `totali_entity` girano su `WHERE TRUE {filtro}` (`digest.py:129-135`), non conoscono
+  il filtro N2 e restituiscono 35. Sono i totali del *corpus* della finestra, giusti per
+  il markdown, sbagliati per il messaggio.
+- **`totali_per_entity` va rimosso.** È stato aggiunto ieri per la riga di salute
+  `35 nuove (INTUR 16, ORTI 10, VIGNA 9)`; il nuovo messaggio chiude con `17 in arrivo`,
+  senza spaccatura per società — che è un breakdown, e i breakdown si chiedono (N6).
+  Restare sarebbe una query per giro che nessuno legge. Il `totali_per_casella` invece
+  resta: lo usa il markdown.
 - **`--format json`** è il canale verso l'agente. **`--format whatsapp`** resta come
-  output deterministico per debug e come rete di sicurezza se l'agente cade.
+  output deterministico per debug e come rete di sicurezza se l'agente cade — e va
+  riscritto sul nuovo contratto **prima** del task sul prompt: con N5 il fallback è
+  l'unica cosa che regge quando l'agente sbaglia, e una rete rotta non è una rete.
 - Il checkpoint non cambia: la finestra resta `data_caricamento` fra due run.
 
 ## Limiti, dichiarati

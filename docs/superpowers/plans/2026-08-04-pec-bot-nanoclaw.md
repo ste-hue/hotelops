@@ -4,11 +4,25 @@
 
 **Goal:** ogni mattina alle 07:00 un messaggio WhatsApp dice quali PEC sono arrivate che contano, e se la pipeline è viva.
 
-**Architecture:** il job Cloud Run notturno passa da `fetch` a `fetch && classify`, così il dato in BigQuery è sempre classificato. Una `scheduled_task` NanoClaw esegue `hotelops pec digest --format whatsapp` nel container del gruppo `hotelops` e manda l'output verbatim. Il checkpoint su `f_pec_digest_runs` è lo stato "già notificato" e appartiene a chi notifica.
+**Architecture:** il job Cloud Run notturno passa da `fetch` a `fetch && classify`, così il dato in BigQuery è sempre classificato. Una `scheduled_task` NanoClaw esegue `hotelops pec digest` nel container del gruppo `aziende` e manda il messaggio. Il checkpoint su `f_pec_digest_runs` è lo stato "già notificato" e appartiene a chi notifica.
 
 **Tech Stack:** Python 3.11+, BigQuery (`google-cloud-bigquery`), Pydantic, pytest, ruff, Cloud Run Jobs + Cloud Scheduler, NanoClaw (Node/SQLite su launchd).
 
-**Spec:** `docs/superpowers/specs/2026-08-04-pec-bot-nanoclaw-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-04-pec-bot-nanoclaw-design.md`, con §D3 e §Componente 3 sostituiti da `docs/superpowers/specs/2026-08-05-pec-novita-design.md`.
+
+## Stato al 2026-08-05 — leggere prima di eseguire
+
+I Task 1, 2 e 3 sono **completati e applicati alla produzione**: restano qui intatti come registro di ciò che è stato fatto, non vanno rieseguiti né riscritti.
+
+| task | esito | commit |
+|---|---|---|
+| 1 — `--format whatsapp` | fatto, 1216 test verdi | `5349752` |
+| 2 — `classify` nel job notturno | applicato al job `pec-fetch`, 41 → 0 non classificati | `159877a` |
+| 3 — tabella, primo run, grant IAM | `f_pec_digest_runs` creata, run `digest-9ad33fd98fee` SUCCESS, grant table-level verificato | — |
+
+Il **contratto del messaggio prodotto dal Task 1 è superato** dallo spec del 05-08: il Task 1-bis lo rifà. Gli step del Task 1 restano spuntati perché descrivono ciò che è realmente accaduto; il codice che hanno prodotto viene sostituito, non modificato di nascosto.
+
+Ordine dei task residui: **1-bis → 3-bis → 4**. Il fallback deterministico va riscritto prima del prompt: con N5 è la rete di sicurezza per quando l'agente sbaglia, e una rete rotta non è una rete.
 
 ## Scostamento dallo spec — da leggere prima di iniziare
 
@@ -394,6 +408,312 @@ Expected: un binding `roles/bigquery.dataEditor` con `hotelops-nanoclaw@...` fra
 
 ---
 
+### Task 1-bis: il fallback deterministico sul contratto nuovo
+
+Il `_render_whatsapp` del Task 1 legge `dati["importanti"]` e `dati["totali_per_entity"]`, e i suoi sei test asseriscono il formato vecchio. Lo spec del 05-08 cambia il contratto: il messaggio elenca le **novità** e chiude con `in arrivo`. Questo task rifà funzione e test; gli step del Task 1 restano spuntati perché descrivono ciò che è accaduto davvero.
+
+Va **prima** del Task 4: con N5 il messaggio quotidiano lo scrive l'agente, e questo è ciò che resta quando l'agente sbaglia. Una rete rotta non è una rete.
+
+**Files:**
+- Modify: `ingest/pec/digest.py` (`_render_whatsapp` riscritta, `_motivo_novita` nuova)
+- Test: `tests/test_pec_digest.py` (i sei test `test_whatsapp_*` sostituiti)
+
+**Interfaces:**
+- Consuma: `dati["novita"]` — lista di dict con `entity_id`, `mittente`, `subject`, `allegati` (lista di stringhe, può essere vuota), `mittente_nuovo`, `oggetto_nuovo`, `allegati_nuovi` (bool) — e `dati["in_arrivo"]` (int). Le chiavi arrivano dal Task 3-bis; qui si testano con dati finti.
+- Produce: `_render_whatsapp(dati) -> str` sul contratto nuovo. `dati["importanti"]` non viene più letta da questa funzione (ma resta in `_raccogli`, la usa il markdown).
+
+- [ ] **Step 1: Sostituisci i sei test**
+
+In `tests/test_pec_digest.py`, elimina `_dati_whatsapp` e i sei `test_whatsapp_*` esistenti e mettili questi:
+
+```python
+def _dati_novita(n: int = 1, **over) -> dict:
+    base = {
+        "finestra": (datetime(2026, 8, 5), datetime(2026, 8, 6, 7, 0)),
+        "in_arrivo": 17,
+        "novita": [
+            {"entity_id": "INTUR", "mittente": f"nuovo{i}@pec.it",
+             "subject": f"Sollecito {i}", "allegati": ["Sollecito.pdf"],
+             "mittente_nuovo": True, "oggetto_nuovo": True, "allegati_nuovi": True}
+            for i in range(n)
+        ],
+    }
+    base.update(over)
+    return base
+
+
+def test_whatsapp_zero_novita_una_riga_sola():
+    msg = _render_whatsapp(_dati_novita(n=0))
+    assert msg == "PEC 06/08 — niente di nuovo · 17 in arrivo"
+
+
+def test_whatsapp_una_novita_mittente_nuovo():
+    righe = _render_whatsapp(_dati_novita(n=1)).splitlines()
+    assert righe[0] == "PEC 06/08 — 1 novità"
+    assert righe[1] == "• INTUR — mittente nuovo: nuovo0@pec.it"
+    assert righe[2] == '  "Sollecito 0" [Sollecito.pdf]'
+    assert righe[-1] == "17 in arrivo."
+
+
+def test_whatsapp_motivo_oggetto_quando_il_mittente_e_noto():
+    dati = _dati_novita(n=1)
+    dati["novita"][0].update(mittente_nuovo=False, allegati_nuovi=False)
+    assert _render_whatsapp(dati).splitlines()[1] == (
+        "• INTUR — oggetto nuovo da nuovo0@pec.it")
+
+
+def test_whatsapp_motivo_allegati_quando_mittente_e_oggetto_sono_noti():
+    dati = _dati_novita(n=1)
+    dati["novita"][0].update(mittente_nuovo=False, oggetto_nuovo=False)
+    assert _render_whatsapp(dati).splitlines()[1] == (
+        "• INTUR — allegati nuovi da nuovo0@pec.it")
+
+
+def test_whatsapp_senza_allegati_nessuna_parentesi():
+    dati = _dati_novita(n=1)
+    dati["novita"][0]["allegati"] = []
+    assert _render_whatsapp(dati).splitlines()[2] == '  "Sollecito 0"'
+
+
+def test_whatsapp_tronca_a_otto_e_conta_il_resto():
+    righe = _render_whatsapp(_dati_novita(n=10)).splitlines()
+    assert righe[0] == "PEC 06/08 — 10 novità"
+    assert sum(1 for r in righe if r.startswith("•")) == 8
+    assert "…e altre 2" in righe
+```
+
+- [ ] **Step 2: Esegui e verifica che falliscano**
+
+Run: `pytest tests/test_pec_digest.py -v`
+Expected: i sei nuovi falliscono con `KeyError: 'novita'`; i quattro test del markdown continuano a passare.
+
+- [ ] **Step 3: Riscrivi `_render_whatsapp`**
+
+In `ingest/pec/digest.py`, sostituisci la funzione (e tieni `MAX_RIGHE_WHATSAPP`):
+
+```python
+def _motivo_novita(r: dict) -> str:
+    """Perché questa riga è qui. Ordine = forza del segnale (spec N3)."""
+    if r["mittente_nuovo"]:
+        return f"mittente nuovo: {r['mittente']}"
+    if r["oggetto_nuovo"]:
+        return f"oggetto nuovo da {r['mittente']}"
+    return f"allegati nuovi da {r['mittente']}"
+
+
+def _render_whatsapp(dati: dict) -> str:
+    """Fallback deterministico: le novità, una riga per messaggio.
+
+    Il messaggio quotidiano lo scrive l'agente (spec 2026-08-05, N5); questo
+    è ciò che resta quando l'agente cade. Non giudica: elenca ciò che il
+    corpus non ha mai visto.
+    """
+    _, a = dati["finestra"]
+    nov, in_arrivo = dati["novita"], dati["in_arrivo"]
+    if not nov:
+        return f"PEC {a:%d/%m} — niente di nuovo · {in_arrivo} in arrivo"
+
+    out = [f"PEC {a:%d/%m} — {len(nov)} novità"]
+    for r in nov[:MAX_RIGHE_WHATSAPP]:
+        allegati = r.get("allegati") or []
+        coda = f" [{', '.join(allegati[:2])}]" if allegati else ""
+        out.append(f"• {r['entity_id']} — {_motivo_novita(r)}")
+        out.append(f'  "{r["subject"]}"{coda}')
+    if len(nov) > MAX_RIGHE_WHATSAPP:
+        out.append(f"…e altre {len(nov) - MAX_RIGHE_WHATSAPP}")
+    out.append(f"{in_arrivo} in arrivo.")
+    return "\n".join(out)
+```
+
+- [ ] **Step 4: Togli `totali_per_entity`**
+
+Serviva solo alla riga di salute vecchia. In `ingest/pec/digest.py`, elimina il blocco `totali_entity = _q(...)` in `_raccogli` e la chiave `"totali_per_entity"` dal `return`. `totali_per_casella` **resta**: la legge il markdown.
+
+- [ ] **Step 5: Test e lint**
+
+Run: `pytest tests/test_pec_digest.py -v && ruff check .`
+Expected: 10 test PASS, lint pulito.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add ingest/pec/digest.py tests/test_pec_digest.py
+git commit -m "refactor(pec): il fallback whatsapp elenca le novita', non le importanti
+
+Contratto nuovo (spec 2026-08-05): novita' + 'in arrivo' al posto di
+importance=ALTA + totali per entity. Tolto totali_per_entity: era una
+query per giro che nessuno legge piu'."
+```
+
+---
+
+### Task 3-bis: la vista `v_pec_novita` e i due aggregati
+
+**Files:**
+- Create: `core/bq/views/v_pec_novita.sql`
+- Modify: `ingest/pec/digest.py` (`_raccogli` guadagna `novita` e `in_arrivo`)
+
+**Interfaces:**
+- Consuma: `f_pec_messages`, `f_pec_allegati`.
+- Produce: la vista `hotelops-suite.hotelops.v_pec_novita` con una riga per PEC in arrivo e le colonne `msgid, mittente, subject, entity_id, casella, data_evento, data_caricamento, forma_oggetto, forma_allegati, allegati, mittente_nuovo, oggetto_nuovo, allegati_nuovi`. `_raccogli` restituisce `novita` (lista di dict, formato del Task 1-bis) e `in_arrivo` (int).
+
+- [ ] **Step 1: Scrivi la vista**
+
+Crea `core/bq/views/v_pec_novita.sql`:
+
+```sql
+-- v_pec_novita: cosa il corpus non ha mai visto prima.
+--
+-- Il digest non calcola importanza (spec 2026-08-05, N1): risponde solo a
+-- "l'ho gia' visto?". Tre campi, una regola sola — mittente, forma dell'oggetto
+-- e forma dei nomi allegati, dove FORMA = il testo con ogni token che contiene
+-- una cifra sostituito da '#'. Cosi' 'Pratica M26716Q2609 evasa' e
+-- 'Pratica M26715Q2553 evasa' sono la stessa cosa vista due volte.
+--
+-- La storia e' il corpus stesso: la vista si autoaggiorna, nessuna tabella di
+-- stato. La novita' e' RELATIVA AL MITTENTE, non globale: una forma rara in
+-- assoluto ma abituale per quel mittente e' routine.
+--
+-- Base ristretta alla posta IN ARRIVO (N2): ACCETTAZIONE e CONSEGNA sono le
+-- ricevute delle PEC che mandiamo noi, MESSAGGIO_INVIATO siamo noi.
+
+CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_pec_novita` AS
+
+WITH base AS (
+  SELECT
+    m.msgid, m.mittente, m.subject, m.entity_id, m.casella,
+    m.data_evento, m.data_caricamento,
+    REGEXP_REPLACE(m.subject, r'\b\S*\d\S*\b', '#') AS forma_oggetto,
+    (SELECT STRING_AGG(REGEXP_REPLACE(a.nome_file, r'\b\S*\d\S*\b', '#'), '|'
+                       ORDER BY a.nome_file)
+     FROM `hotelops-suite.hotelops.f_pec_allegati` a
+     WHERE a.msgid = m.msgid) AS forma_allegati,
+    ARRAY(SELECT a.nome_file
+          FROM `hotelops-suite.hotelops.f_pec_allegati` a
+          WHERE a.msgid = m.msgid ORDER BY a.nome_file) AS allegati
+  FROM `hotelops-suite.hotelops.f_pec_messages` m
+  WHERE m.tipo = 'POSTA_CERTIFICATA' AND m.source_folder = 'RECEIVED'
+)
+SELECT
+  b.*,
+  NOT EXISTS (
+    SELECT 1 FROM base p
+    WHERE p.mittente = b.mittente AND p.data_caricamento < b.data_caricamento
+  ) AS mittente_nuovo,
+  NOT EXISTS (
+    SELECT 1 FROM base p
+    WHERE p.mittente = b.mittente AND p.forma_oggetto = b.forma_oggetto
+      AND p.data_caricamento < b.data_caricamento
+  ) AS oggetto_nuovo,
+  b.forma_allegati IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM base p
+    WHERE p.mittente = b.mittente AND p.forma_allegati = b.forma_allegati
+      AND p.data_caricamento < b.data_caricamento
+  ) AS allegati_nuovi
+FROM base b
+```
+
+Il `b.forma_allegati IS NOT NULL AND` non è cosmetico: senza, ogni messaggio **senza allegati** risulterebbe `allegati_nuovi = TRUE`, perché `NULL = NULL` non è vero e il `NOT EXISTS` diventa sempre soddisfatto. Sarebbe un generatore di falsi positivi silenzioso.
+
+- [ ] **Step 2: Deploy in dry-run, poi vero**
+
+```bash
+python -m cli deploy-views --dry-run
+python -m cli deploy-views
+```
+
+- [ ] **Step 3: Golden check sui due assi già misurati**
+
+```bash
+bq query --project_id=hotelops-suite --use_legacy_sql=false --format=pretty '
+SELECT COUNTIF(mittente_nuovo) mitt_nuovo,
+       COUNTIF(NOT mittente_nuovo AND oggetto_nuovo) ogg_nuovo,
+       COUNTIF(NOT mittente_nuovo AND NOT oggetto_nuovo AND allegati_nuovi) alleg_nuovo,
+       COUNTIF(NOT mittente_nuovo AND NOT oggetto_nuovo AND NOT allegati_nuovi) gia_visto,
+       COUNT(*) in_arrivo
+FROM `hotelops-suite.hotelops.v_pec_novita`
+WHERE data_caricamento > DATETIME("2026-08-01")'
+```
+
+Expected: `in_arrivo = 17`, `mitt_nuovo = 6`, `ogg_nuovo = 2`. Questi due assi sono già stati misurati a mano e devono coincidere.
+
+Il terzo asse — `alleg_nuovo` — **non è mai stato misurato**: non dare per scontato che sia 0 o 1. Se aggiunge righe, guardale una per una prima di accettarlo:
+
+```bash
+bq query --project_id=hotelops-suite --use_legacy_sql=false --format=pretty '
+SELECT SUBSTR(mittente,1,32) mittente, SUBSTR(subject,1,40) oggetto, allegati
+FROM `hotelops-suite.hotelops.v_pec_novita`
+WHERE data_caricamento > DATETIME("2026-08-01")
+  AND NOT mittente_nuovo AND NOT oggetto_nuovo AND allegati_nuovi'
+```
+
+Se sono ricevute Telemaco, l'asse allegati sta facendo danni e va rivisto prima di proseguire.
+
+- [ ] **Step 4: I due casi che definiscono il successo**
+
+```bash
+bq query --project_id=hotelops-suite --use_legacy_sql=false --format=pretty '
+SELECT SUBSTR(mittente,1,34) mittente, mittente_nuovo, oggetto_nuovo
+FROM `hotelops-suite.hotelops.v_pec_novita`
+WHERE data_caricamento > DATETIME("2026-08-01")
+  AND (mittente LIKE "%olivacoperture%" OR mittente LIKE "%telemaco%")'
+```
+
+Expected: Oliva Coperture presente con `mittente_nuovo = true`; le righe Telemaco presenti ma con **tutti i flag false**.
+
+- [ ] **Step 5: Aggancia `_raccogli` alla vista**
+
+In `ingest/pec/digest.py`, dentro `_raccogli`, dopo la query `totali`:
+
+```python
+    novita = _q(client, f"""
+        SELECT entity_id, mittente, subject, allegati,
+               mittente_nuovo, oggetto_nuovo, allegati_nuovi
+        FROM `{_V_NOVITA}`
+        WHERE data_caricamento > @da AND data_caricamento <= @a
+          AND (mittente_nuovo OR oggetto_nuovo OR allegati_nuovi)
+        ORDER BY mittente_nuovo DESC, oggetto_nuovo DESC, data_evento DESC""",
+        da=da, a=a)
+    in_arrivo = _q(client, f"""
+        SELECT COUNT(*) AS n FROM `{_V_NOVITA}`
+        WHERE data_caricamento > @da AND data_caricamento <= @a""", da=da, a=a)
+```
+
+e nel `return`, accanto a `totali_per_casella`:
+
+```python
+        "novita": novita,
+        "in_arrivo": in_arrivo[0]["n"] if in_arrivo else 0,
+```
+
+In cima al modulo, accanto a `_V_CORRENTE`:
+
+```python
+_V_NOVITA = f"{PROJECT}.hotelops.v_pec_novita"
+```
+
+Nota: queste due query **non** usano `{filtro}`, che porta i filtri `casella`/`entity` costruiti su `m.` — la vista non ha l'alias `m`. I filtri opzionali `--casella`/`--entity` restano validi per le sezioni diagnostiche; sulle novità non si applicano.
+
+- [ ] **Step 6: Verifica end-to-end e commit**
+
+```bash
+python -m cli pec digest --da 2026-08-01 --format whatsapp --dry-run
+```
+
+Expected: il messaggio elenca le novità di agosto — Oliva, Nexi, Paternosto — e chiude con `17 in arrivo.` Nessuna ricevuta Telemaco. `--dry-run` non tocca il checkpoint.
+
+```bash
+git add core/bq/views/v_pec_novita.sql ingest/pec/digest.py
+git commit -m "feat(pec): vista v_pec_novita — gia' visto contro mai visto
+
+Filtro base sulla sola posta in arrivo (35 righe -> 17: il resto erano
+ricevute delle nostre PEC inviate) e tre assi di novita' relativi al
+mittente. Nessuna regola nomina Telemaco: il rumore si autodefinisce
+come cio' che si ripete."
+```
+
+---
+
 ### Task 4: il bot su NanoClaw
 
 **Files:** nessuno nel repo hotelops. Si agisce dalla chat WhatsApp del gruppo **Aziende** (jid `120363426493586217@g.us`).
@@ -434,18 +754,43 @@ Manda nel gruppo Aziende:
 > ```
 > Digest PEC giornaliero. Esegui esattamente questo comando, una volta sola:
 >
-> cd /workspace/extra/hotelops-repo && python -m cli pec digest --format whatsapp
+> cd /workspace/extra/hotelops-repo && python -m cli pec digest --format json
 >
-> Manda l'output del comando VERBATIM, senza aggiungere né togliere nulla:
-> niente commenti, niente interpretazioni, niente consigli.
+> Il JSON ha due chiavi che ti servono: "novita" (le PEC che il sistema non
+> ha mai visto prima — mittente mai sentito, oggetto mai usato da quel
+> mittente, o allegati mai visti) e "in_arrivo" (quante PEC sono arrivate
+> in totale). Tutto il resto ignoralo.
 >
-> Non rilanciarlo mai una seconda volta: il checkpoint su BigQuery viene
-> consumato al primo giro e il secondo tornerebbe vuoto. Se l'output ti
-> sembra scarno, è perché non è arrivato niente — mandalo comunque.
+> Manda UN messaggio così:
 >
-> Se il comando fallisce, manda: "PEC <gg/mm> — digest fallito:" seguito
-> dalla prima riga dell'errore. Non restare mai in silenzio: il silenzio
-> deve significare solo che non sto girando.
+> PEC <gg/mm> — <n> novità
+> <una o tre frasi che riassumono le novità: chi ha scritto e cosa vuole.
+>  Raggruppa le cose simili invece di elencarle una per una. Usa i nomi
+>  degli allegati quando dicono più dell'oggetto.>
+> <in_arrivo> in arrivo.
+>
+> Se "novita" è vuota, manda solo:
+> PEC <gg/mm> — niente di nuovo · <in_arrivo> in arrivo
+>
+> Non giudicare l'importanza e non dare consigli: non sai cosa Stefano ha
+> in corso. Descrivi e basta. Non inventare niente che non sia nel JSON.
+>
+> Non rilanciare mai il comando una seconda volta: il checkpoint su
+> BigQuery viene consumato al primo giro e il secondo tornerebbe vuoto.
+> Se le novità sono zero, è un'informazione — mandala comunque.
+>
+> Se il comando fallisce, ritenta UNA volta con --format whatsapp e manda
+> il suo output verbatim. Se fallisce anche quello, manda:
+> "PEC <gg/mm> — digest fallito:" seguito dalla prima riga dell'errore.
+> Non restare mai in silenzio: il silenzio deve significare solo che non
+> sto girando.
+>
+> Se in chat ti chiedono un breakdown — "fammi vedere tutte", "spacca per
+> casella", "chi ha scritto ieri", "riaprimi quella di Nexi" — interroga
+> BigQuery e rispondi. Le tabelle sono hotelops.f_pec_messages,
+> hotelops.f_pec_allegati e la vista hotelops.v_pec_novita. Quelle query
+> sono in sola lettura e puoi farle quante volte vuoi: è solo il comando
+> del digest che non va ripetuto.
 > ```
 
 - [ ] **Step 3: Verifica che il task sia registrato**
@@ -470,7 +815,9 @@ Aspetta le 07:00 del giorno dopo (oppure chiedi nel gruppo di eseguire il task s
 
 **Il lavoro non è chiuso finché Stefano non ha visto il messaggio sul telefono e detto che si legge.** Un digest che quadra ma è illeggibile sullo schermo del telefono è un digest fallito — è la regola "una pagina, una domanda" del CLAUDE.md applicata al canale WhatsApp.
 
-Da verificare guardandolo: la prima riga dice da sola se devi preoccuparti; le righe `•` stanno su una o due righe di schermo ciascuna; la riga di salute si distingue dalle PEC.
+Da verificare guardandolo: la prima riga dice da sola quante novità ci sono; il riassunto sta in tre frasi e non diventa un elenco travestito; l'agente non ha aggiunto giudizi né consigli; nessuna ricevuta Telemaco è sopravvissuta.
+
+E una verifica che solo tu puoi fare, perché richiede di sapere cosa hai in corso: **fra le novità c'è qualcosa che avresti voluto sapere e che oggi non sapevi?** Se sì, il modello funziona. Se le novità sono tutte roba che già conoscevi da altri canali, il bot è un duplicato e vale la pena dirlo prima di abituarcisi.
 
 - [ ] **Step 5: Verifica che il secondo giorno la finestra sia avanzata**
 
