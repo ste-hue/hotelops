@@ -61,7 +61,7 @@ Il digest oggi produce markdown (scrive su Drive) o JSON. Serve un terzo formato
 
 Perché `totali_per_entity` e non il `totali_per_casella` che c'è già: quest'ultimo è aggregato per indirizzo (`orti@pec.it`, `in.tur@pec.it`) e in un messaggio breve leggere `in.tur@pec.it 6` è peggio di `INTUR 6`. È una chiave nuova, additiva: `_render_markdown` non la legge e resta identico.
 
-- [ ] **Step 1: Scrivi i test che falliscono**
+- [x] **Step 1: Scrivi i test che falliscono**
 
 In coda a `tests/test_pec_digest.py`:
 
@@ -129,12 +129,12 @@ Aggiungi `_render_whatsapp` all'import in cima al file:
 from ingest.pec.digest import _render_markdown, _percorso_file, _render_whatsapp
 ```
 
-- [ ] **Step 2: Esegui i test e verifica che falliscano**
+- [x] **Step 2: Esegui i test e verifica che falliscano**
 
 Run: `pytest tests/test_pec_digest.py -v`
 Expected: `ImportError: cannot import name '_render_whatsapp'` — falliscono tutti i test del file, anche quelli vecchi, perché l'import è in cima.
 
-- [ ] **Step 3: Implementa `_render_whatsapp`**
+- [x] **Step 3: Implementa `_render_whatsapp`**
 
 In `ingest/pec/digest.py`, subito dopo `_render_markdown`:
 
@@ -170,7 +170,7 @@ def _render_whatsapp(dati: dict) -> str:
     return "\n".join(out)
 ```
 
-- [ ] **Step 4: Aggiungi `totali_per_entity` a `_raccogli`**
+- [x] **Step 4: Aggiungi `totali_per_entity` a `_raccogli`**
 
 In `ingest/pec/digest.py`, dentro `_raccogli`, dopo la query `totali`:
 
@@ -186,7 +186,7 @@ e nel `return`, dopo `"totali_per_casella"`:
         "totali_per_entity": {r["entity_id"]: r["n"] for r in totali_entity},
 ```
 
-- [ ] **Step 5: Aggiungi il ramo `whatsapp` a `run_digest`**
+- [x] **Step 5: Aggiungi il ramo `whatsapp` a `run_digest`**
 
 In `ingest/pec/digest.py`, dentro il `try` di `run_digest`, sostituisci
 
@@ -208,7 +208,7 @@ con
 
 Il resto del blocco `else` (render markdown + scrittura su Drive) resta intatto: `whatsapp` non scrive nessun file.
 
-- [ ] **Step 6: Esponi il formato nella CLI**
+- [x] **Step 6: Esponi il formato nella CLI**
 
 In `cli.py`, riga ~1195:
 
@@ -217,17 +217,17 @@ In `cli.py`, riga ~1195:
                        default="markdown")
 ```
 
-- [ ] **Step 7: Esegui i test e verifica che passino**
+- [x] **Step 7: Esegui i test e verifica che passino**
 
 Run: `pytest tests/test_pec_digest.py -v`
 Expected: PASS su tutti, vecchi e nuovi (10 test).
 
-- [ ] **Step 8: Lint**
+- [x] **Step 8: Lint**
 
 Run: `ruff check . && ruff format --check ingest/pec/digest.py cli.py tests/test_pec_digest.py`
 Expected: nessun errore.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add ingest/pec/digest.py cli.py tests/test_pec_digest.py
@@ -253,7 +253,7 @@ Oggi il job scarica e si ferma: i 34 messaggi del 1 e 3 agosto sono in BigQuery 
 
 `classify` è rule-based (`core/pec_ruleset.yaml`): nessuna API key, nessun costo per messaggio. La SA `drive-audit@` scrive già `f_pec_messages`, quindi ha i permessi anche per `f_pec_classificazioni`.
 
-- [ ] **Step 1: Aggiorna lo script di provisioning**
+- [x] **Step 1: Aggiorna lo script di provisioning**
 
 In `scripts/cloud/70_pec_fetch.sh`, sostituisci la riga
 
@@ -276,7 +276,7 @@ e aggiungi sopra al blocco, come commento (lo script è documentazione operativa
 # La && garantisce che classify non giri su un fetch fallito.
 ```
 
-- [ ] **Step 2: Applica la modifica al job già esistente**
+- [x] **Step 2: Applica la modifica al job già esistente**
 
 Lo script serve a creare il job da zero; il job in produzione esiste già, quindi va aggiornato:
 
@@ -286,7 +286,7 @@ gcloud run jobs update pec-fetch --project=hotelops-suite --region=europe-west1 
   --args=-c,'python -m ingest.pec_fetch --all && python -m cli pec classify'
 ```
 
-- [ ] **Step 3: Verifica lo stato PRIMA di eseguire**
+- [x] **Step 3: Verifica lo stato PRIMA di eseguire**
 
 ```bash
 bq query --project_id=hotelops-suite --use_legacy_sql=false '
@@ -298,7 +298,7 @@ WHERE c.msgid IS NULL'
 
 Expected: 34 (o più, se nel frattempo è arrivata altra posta). Annota il numero.
 
-- [ ] **Step 4: Esegui il job e aspetta**
+- [x] **Step 4: Esegui il job e aspetta**
 
 ```bash
 gcloud run jobs execute pec-fetch --project=hotelops-suite --region=europe-west1 --wait
@@ -307,12 +307,12 @@ gcloud run jobs execute pec-fetch --project=hotelops-suite --region=europe-west1
 Expected: exit 0. Se fallisce, i log stanno in
 `gcloud run jobs executions logs read <EXECUTION> --region=europe-west1`.
 
-- [ ] **Step 5: Verifica che i non classificati siano spariti**
+- [x] **Step 5: Verifica che i non classificati siano spariti**
 
 Riesegui la query dello Step 3.
 Expected: **0**. Questo è il criterio di successo del task — non "il job non ha dato errore".
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/cloud/70_pec_fetch.sh
@@ -334,7 +334,7 @@ otteneva importance=ALTA. && e non due job: il fetch ha timeout 60m."
 - Consuma: `--format whatsapp` dal Task 1; `classify` in cloud dal Task 2.
 - Produce: la tabella `hotelops-suite.hotelops.f_pec_digest_runs` con una riga `SUCCESS`, e il grant di scrittura per la SA di NanoClaw.
 
-- [ ] **Step 1: Crea la tabella con schema esplicito**
+- [x] **Step 1: Crea la tabella con schema esplicito**
 
 Lo schema riproduce `PecDigestRunRow` (`core/schemas.py:794`) campo per campo.
 
@@ -351,7 +351,7 @@ CREATE TABLE IF NOT EXISTS `hotelops-suite.hotelops.f_pec_digest_runs` (
 )'
 ```
 
-- [ ] **Step 2: Prova a vuoto il digest**
+- [x] **Step 2: Prova a vuoto il digest**
 
 ```bash
 python -m cli pec digest --da 2026-08-01 --format whatsapp --dry-run
@@ -360,7 +360,7 @@ python -m cli pec digest --da 2026-08-01 --format whatsapp --dry-run
 `--dry-run` non scrive il checkpoint, quindi si può ripetere quante volte serve.
 Expected: il messaggio WhatsApp stampato a terminale, con la riga di salute in fondo. Leggilo: è esattamente quello che riceverai sul telefono.
 
-- [ ] **Step 3: Primo run vero, con finestra esplicita**
+- [x] **Step 3: Primo run vero, con finestra esplicita**
 
 ```bash
 python -m cli pec digest --da 2026-08-01 --format whatsapp
@@ -369,7 +369,7 @@ python -m cli pec digest --da 2026-08-01 --format whatsapp
 Il `--da` è obbligatorio qui: senza nessun run `SUCCESS` precedente, `run_digest` cade sul default `EPOCA_CORPUS = 2018-01-01` e il primo messaggio conterrebbe otto anni di PEC.
 Expected: stesso output dello Step 2, e una riga `SUCCESS` in tabella.
 
-- [ ] **Step 4: Verifica il checkpoint**
+- [x] **Step 4: Verifica il checkpoint**
 
 ```bash
 bq query --project_id=hotelops-suite --use_legacy_sql=false '
@@ -379,7 +379,7 @@ FROM `hotelops-suite.hotelops.f_pec_digest_runs` ORDER BY started_at'
 
 Expected: due righe con lo stesso `run_id` — `RUNNING` poi `SUCCESS` (la tabella è append-only, lo stato di un run è la sua ultima riga).
 
-- [ ] **Step 5: Verifica che nessun file sia finito su Drive**
+- [x] **Step 5: Verifica che nessun file sia finito su Drive**
 
 ```bash
 ls "/Users/stefanodellapietra/My Drive (stefano@panoramagroup.it)/01_societario/AMM_CEO/_digest" 2>&1
@@ -387,7 +387,7 @@ ls "/Users/stefanodellapietra/My Drive (stefano@panoramagroup.it)/01_societario/
 
 Expected: `No such file or directory`. Se la cartella esiste, il ramo `whatsapp` sta scrivendo file e il Task 1 va corretto (viola D6 dello spec).
 
-- [ ] **Step 6: Concedi la scrittura alla SA di NanoClaw**
+- [x] **Step 6: Concedi la scrittura alla SA di NanoClaw**
 
 `hotelops-nanoclaw@` ha oggi solo `bigquery.dataViewer` + `bigquery.jobUser`: il digest fallirebbe scrivendo il checkpoint. Il grant è **sulla singola tabella**, non sul dataset — `dataEditor` a livello di dataset aprirebbe in scrittura tutto il pool `f_*` a un agente conversazionale.
 
@@ -398,7 +398,7 @@ bq add-iam-policy-binding \
   hotelops-suite:hotelops.f_pec_digest_runs
 ```
 
-- [ ] **Step 7: Verifica il grant**
+- [x] **Step 7: Verifica il grant**
 
 ```bash
 bq get-iam-policy --format=prettyjson hotelops-suite:hotelops.f_pec_digest_runs
@@ -422,7 +422,7 @@ Va **prima** del Task 4: con N5 il messaggio quotidiano lo scrive l'agente, e qu
 - Consuma: `dati["novita"]` — lista di dict con `entity_id`, `mittente`, `subject`, `allegati` (lista di stringhe, può essere vuota), `mittente_nuovo`, `oggetto_nuovo`, `allegati_nuovi` (bool) — e `dati["in_arrivo"]` (int). Le chiavi arrivano dal Task 3-bis; qui si testano con dati finti.
 - Produce: `_render_whatsapp(dati) -> str` sul contratto nuovo. `dati["importanti"]` non viene più letta da questa funzione (ma resta in `_raccogli`, la usa il markdown).
 
-- [ ] **Step 1: Sostituisci i sei test**
+- [x] **Step 1: Sostituisci i sei test**
 
 In `tests/test_pec_digest.py`, elimina `_dati_whatsapp` e i sei `test_whatsapp_*` esistenti e mettili questi:
 
@@ -482,12 +482,12 @@ def test_whatsapp_tronca_a_otto_e_conta_il_resto():
     assert "…e altre 2" in righe
 ```
 
-- [ ] **Step 2: Esegui e verifica che falliscano**
+- [x] **Step 2: Esegui e verifica che falliscano**
 
 Run: `pytest tests/test_pec_digest.py -v`
 Expected: i sei nuovi falliscono con `KeyError: 'novita'`; i quattro test del markdown continuano a passare.
 
-- [ ] **Step 3: Riscrivi `_render_whatsapp`**
+- [x] **Step 3: Riscrivi `_render_whatsapp`**
 
 In `ingest/pec/digest.py`, sostituisci la funzione (e tieni `MAX_RIGHE_WHATSAPP`):
 
@@ -525,16 +525,16 @@ def _render_whatsapp(dati: dict) -> str:
     return "\n".join(out)
 ```
 
-- [ ] **Step 4: Togli `totali_per_entity`**
+- [x] **Step 4: Togli `totali_per_entity`**
 
 Serviva solo alla riga di salute vecchia. In `ingest/pec/digest.py`, elimina il blocco `totali_entity = _q(...)` in `_raccogli` e la chiave `"totali_per_entity"` dal `return`. `totali_per_casella` **resta**: la legge il markdown.
 
-- [ ] **Step 5: Test e lint**
+- [x] **Step 5: Test e lint**
 
 Run: `pytest tests/test_pec_digest.py -v && ruff check .`
 Expected: 10 test PASS, lint pulito.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add ingest/pec/digest.py tests/test_pec_digest.py
@@ -557,7 +557,7 @@ query per giro che nessuno legge piu'."
 - Consuma: `f_pec_messages`, `f_pec_allegati`.
 - Produce: la vista `hotelops-suite.hotelops.v_pec_novita` con una riga per PEC in arrivo e le colonne `msgid, mittente, subject, entity_id, casella, data_evento, data_caricamento, forma_oggetto, forma_allegati, allegati, mittente_nuovo, oggetto_nuovo, allegati_nuovi`. `_raccogli` restituisce `novita` (lista di dict, formato del Task 1-bis) e `in_arrivo` (int).
 
-- [ ] **Step 1: Scrivi la vista**
+- [x] **Step 1: Scrivi la vista**
 
 Crea `core/bq/views/v_pec_novita.sql`:
 
@@ -615,14 +615,14 @@ FROM base b
 
 Il `b.forma_allegati IS NOT NULL AND` non è cosmetico: senza, ogni messaggio **senza allegati** risulterebbe `allegati_nuovi = TRUE`, perché `NULL = NULL` non è vero e il `NOT EXISTS` diventa sempre soddisfatto. Sarebbe un generatore di falsi positivi silenzioso.
 
-- [ ] **Step 2: Deploy in dry-run, poi vero**
+- [x] **Step 2: Deploy in dry-run, poi vero**
 
 ```bash
 python -m cli deploy-views --dry-run
 python -m cli deploy-views
 ```
 
-- [ ] **Step 3: Golden check sui due assi già misurati**
+- [x] **Step 3: Golden check sui due assi già misurati**
 
 ```bash
 bq query --project_id=hotelops-suite --use_legacy_sql=false --format=pretty '
@@ -649,7 +649,7 @@ WHERE data_caricamento > DATETIME("2026-08-01")
 
 Se sono ricevute Telemaco, l'asse allegati sta facendo danni e va rivisto prima di proseguire.
 
-- [ ] **Step 4: I due casi che definiscono il successo**
+- [x] **Step 4: I due casi che definiscono il successo**
 
 ```bash
 bq query --project_id=hotelops-suite --use_legacy_sql=false --format=pretty '
@@ -661,7 +661,7 @@ WHERE data_caricamento > DATETIME("2026-08-01")
 
 Expected: Oliva Coperture presente con `mittente_nuovo = true`; le righe Telemaco presenti ma con **tutti i flag false**.
 
-- [ ] **Step 5: Aggancia `_raccogli` alla vista**
+- [x] **Step 5: Aggancia `_raccogli` alla vista**
 
 In `ingest/pec/digest.py`, dentro `_raccogli`, dopo la query `totali`:
 
@@ -694,7 +694,7 @@ _V_NOVITA = f"{PROJECT}.hotelops.v_pec_novita"
 
 Nota: queste due query **non** usano `{filtro}`, che porta i filtri `casella`/`entity` costruiti su `m.` — la vista non ha l'alias `m`. I filtri opzionali `--casella`/`--entity` restano validi per le sezioni diagnostiche; sulle novità non si applicano.
 
-- [ ] **Step 6: Verifica end-to-end e commit**
+- [x] **Step 6: Verifica end-to-end e commit**
 
 ```bash
 python -m cli pec digest --da 2026-08-01 --format whatsapp --dry-run
