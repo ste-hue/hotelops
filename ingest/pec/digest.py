@@ -27,6 +27,7 @@ log = logging.getLogger("ingest.pec.digest")
 
 EPOCA_CORPUS = datetime(2018, 1, 1)
 _V_CORRENTE = f"{PROJECT}.hotelops.v_pec_classificazione_corrente"
+_V_NOVITA = f"{PROJECT}.hotelops.v_pec_novita"
 
 
 def _percorso_file(giorno: datetime) -> Path:
@@ -129,6 +130,20 @@ def _raccogli(client, da: datetime, a: datetime,
     totali = _q(client, f"""
         SELECT m.casella, COUNT(*) AS n FROM `{F_PEC_MESSAGES}` m
         WHERE TRUE {filtro} GROUP BY 1""", **base)
+    # Le novità NON usano {filtro}: i filtri --casella/--entity sono costruiti
+    # sull'alias m., e la vista porta già il filtro base N2 (solo posta in
+    # arrivo). Restano validi per le sezioni diagnostiche.
+    novita = _q(client, f"""
+        SELECT entity_id, mittente, subject, allegati,
+               mittente_nuovo, oggetto_nuovo, allegati_nuovi
+        FROM `{_V_NOVITA}`
+        WHERE data_caricamento > @da AND data_caricamento <= @a
+          AND (mittente_nuovo OR oggetto_nuovo OR allegati_nuovi)
+        ORDER BY mittente_nuovo DESC, oggetto_nuovo DESC, data_evento DESC""",
+        da=da, a=a)
+    in_arrivo = _q(client, f"""
+        SELECT COUNT(*) AS n FROM `{_V_NOVITA}`
+        WHERE data_caricamento > @da AND data_caricamento <= @a""", da=da, a=a)
 
     return {
         "finestra": (da, a), "importanti": importanti,
@@ -136,6 +151,8 @@ def _raccogli(client, da: datetime, a: datetime,
         "non_sincronizzati": non_sync, "ambigui": ambigui,
         "non_classificati": non_class, "risolti": risolti,
         "totali_per_casella": {r["casella"]: r["n"] for r in totali},
+        "novita": novita,
+        "in_arrivo": in_arrivo[0]["n"] if in_arrivo else 0,
     }
 
 
