@@ -15,6 +15,7 @@ dependencies = [
   "google-cloud-storage>=2.14",
   "pydantic>=2.0",
   "pdfplumber>=0.11",
+  "anthropic==0.89.0",
 ]
 
 [project.optional-dependencies]
@@ -26,7 +27,6 @@ dashboard = ["streamlit>=1.35", "starlette<1.0", "plotly>=5.0", "db-dtypes>=1.0"
 drive = ["google-api-python-client"]
 # Runtime deps dei job schedulati (Cloud Run Jobs). Versioni pinnate dalla venv funzionante.
 jobs = [
-  "anthropic==0.89.0",
   "apify-client==2.5.0",
   "google-api-python-client>=2.193.0",
   "google-auth>=2.49.0",
