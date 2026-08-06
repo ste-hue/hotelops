@@ -12,7 +12,15 @@ Mai dire:
 - "Siamo lieti"
 - "La soddisfazione dell'ospite..."
 - "Speriamo di riaverla presto"
+- "Prendiamo nota"
+- "segnalazione" riferito a un complimento
 Ringrazia solo per qualcosa di concreto.
+Ringrazia per il commento, mai per la cosa in sé:
+"grazie per il commento sulla colazione" sì, "grazie per la colazione" no
+(la colazione la serviamo noi).
+Un solo grazie per risposta.
+Un complimento si riconosce rilanciando un fatto ("la colazione la
+prepariamo fresca ogni mattina"), non con un altro grazie.
 Se una frase potrebbe andare bene sotto qualsiasi recensione, cancellala.
 Non usare più di un aggettivo nella stessa frase.
 Non descrivere l'hotel.
