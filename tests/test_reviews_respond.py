@@ -1,5 +1,8 @@
 """Tests for verticals/reviews/respond.py — bozze di risposta alle recensioni."""
 
+import argparse
+import io
+
 import pytest
 
 from verticals.reviews.respond import (
@@ -211,3 +214,66 @@ def test_generate_response_warning_oltre_100_parole(monkeypatch, capsys):
     assert len(bozza.split()) > 100
     err = capsys.readouterr().err
     assert "100 parole" in err
+
+
+# CLI --rispondi
+
+
+def _args(**kw):
+    base = dict(rispondi=True, bu=None, file=None, nota=None)
+    base.update(kw)
+    return argparse.Namespace(**base)
+
+
+def test_cmd_rispondi_stdin(monkeypatch, capsys):
+    from verticals.reviews import cli_commands
+
+    monkeypatch.setattr(
+        "verticals.reviews.respond.generate_response",
+        lambda testo, bu, nota=None: f"BOZZA[{bu}|{nota}]: {testo.strip()}",
+    )
+    monkeypatch.setattr("sys.stdin", io.StringIO("Camera sporca.\n"))
+    cli_commands._cmd_rispondi(_args(bu="HOTEL", nota="tono asciutto"))
+    out = capsys.readouterr().out
+    assert out.strip() == "BOZZA[HOTEL|tono asciutto]: Camera sporca."
+
+
+def test_cmd_rispondi_file(monkeypatch, tmp_path, capsys):
+    from verticals.reviews import cli_commands
+
+    monkeypatch.setattr(
+        "verticals.reviews.respond.generate_response",
+        lambda testo, bu, nota=None: f"BOZZA: {testo.strip()}",
+    )
+    f = tmp_path / "rec.txt"
+    f.write_text("Ottima posizione.", encoding="utf-8")
+    cli_commands._cmd_rispondi(_args(bu="CVM", file=str(f)))
+    assert capsys.readouterr().out.strip() == "BOZZA: Ottima posizione."
+
+
+def test_cmd_rispondi_senza_bu(monkeypatch):
+    from verticals.reviews import cli_commands
+
+    with pytest.raises(SystemExit, match="--bu"):
+        cli_commands._cmd_rispondi(_args(bu=None))
+
+
+def test_cmd_rispondi_errore_input_pulito(monkeypatch):
+    from verticals.reviews import cli_commands
+
+    monkeypatch.setattr("sys.stdin", io.StringIO("   "))
+    with pytest.raises(SystemExit, match="vuoto"):
+        cli_commands._cmd_rispondi(_args(bu="HOTEL"))
+
+
+def test_cli_end_to_end_parser_e_dispatch(monkeypatch):
+    """Parser + dispatch reali: stdin vuoto deve dare SystemExit 'vuoto'
+    PRIMA di qualsiasi chiamata API (nessuna key richiesta)."""
+    import cli
+
+    monkeypatch.setattr(
+        "sys.argv", ["hotelops", "reviews", "--rispondi", "--bu", "HOTEL"]
+    )
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    with pytest.raises(SystemExit, match="vuoto"):
+        cli.main()

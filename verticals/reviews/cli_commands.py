@@ -9,7 +9,9 @@ log = logging.getLogger(__name__)
 
 def cmd_reviews(args):
     """Main reviews CLI handler — dispatches to sub-actions."""
-    if args.scrape:
+    if getattr(args, "rispondi", False):
+        _cmd_rispondi(args)
+    elif args.scrape:
         _cmd_scrape(args)
     elif args.alert:
         _cmd_alert(args)
@@ -303,3 +305,28 @@ def _cmd_report(args):
         print("  Email inviata.")
     else:
         print("  [DRY RUN] Email non inviata.")
+
+
+def _cmd_rispondi(args):
+    """Genera una bozza di risposta (draft-only, stdout). Testo da stdin o --file."""
+    import sys
+    from pathlib import Path
+
+    from verticals.reviews import respond
+
+    if not args.bu:
+        raise SystemExit("--rispondi richiede --bu (HOTEL|RESIDENCE|CVM)")
+
+    if args.file:
+        testo = Path(args.file).read_text(encoding="utf-8")
+    else:
+        testo = sys.stdin.read()
+
+    try:
+        bozza = respond.generate_response(testo, args.bu, nota=args.nota)
+    except ValueError as e:
+        raise SystemExit(f"Errore: {e}")
+    except Exception as e:
+        raise SystemExit(f"Errore generazione bozza: {e}")
+
+    print(bozza)

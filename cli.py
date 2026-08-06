@@ -1174,6 +1174,20 @@ def main():
     p_reviews.add_argument(
         "--dry-run", action="store_true", help="Preview senza azioni"
     )
+    p_reviews.add_argument(
+        "--rispondi",
+        action="store_true",
+        help="Genera bozza di risposta a una recensione (testo da stdin o --file)",
+    )
+    p_reviews.add_argument(
+        "--bu", type=str, help="Business unit della recensione (HOTEL|RESIDENCE|CVM)"
+    )
+    p_reviews.add_argument(
+        "--file", type=str, help="File col testo della recensione (default: stdin)"
+    )
+    p_reviews.add_argument(
+        "--nota", type=str, help="Indicazione una-tantum per questa risposta"
+    )
 
     # pec
     p_pec = sub.add_parser("pec", help="PEC multi-casella: classify, pannello CEO, digest")
