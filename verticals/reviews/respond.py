@@ -57,6 +57,12 @@ def parse_playbooks(voice_text: str) -> dict[str, dict]:
                 if m.group(2)
                 else None
             )
+            if bu is not None and not bu.issubset(VALID_BU):
+                unknown = bu - VALID_BU
+                raise ValueError(
+                    f"BU sconosciuta nel playbook '{current}': {', '.join(sorted(unknown))} "
+                    f"(valide: {', '.join(sorted(VALID_BU))})"
+                )
             playbooks[current] = {"bu": bu, "testo": ""}
         elif current is not None:
             playbooks[current]["testo"] += line + "\n"
@@ -69,6 +75,7 @@ def build_response_prompt(
     testo: str, bu: str, voice_text: str, nota: str | None = None
 ) -> str:
     """Assembla il prompt a 3 fasi (temi -> bozza -> pulizia)."""
+    bu = bu.upper()
     sections = split_sections(voice_text)
     playbooks = parse_playbooks(voice_text)
     applicabili = {
@@ -91,7 +98,7 @@ def build_response_prompt(
         "",
         "FASE 2 — BOZZA: scrivi la risposta rispettando TUTTE queste regole:",
         "- Rispondi nella stessa lingua della recensione.",
-        "- Massimo 100 parole. Nessun minimo: non aggiungere testo per arrivare a una lunghezza.",
+        f"- Massimo {MAX_PAROLE} parole. Nessun minimo: non aggiungere testo per arrivare a una lunghezza.",
         "- Il ringraziamento deve citare almeno un dettaglio presente nella recensione.",
         "- Ogni frase deve fare almeno una di queste tre cose, altrimenti eliminala:",
         "  1. rispondere a qualcosa scritto dall'ospite;",
@@ -99,25 +106,30 @@ def build_response_prompt(
         "  3. descrivere un'azione concreta.",
     ]
 
-    # Always include the "Sulle critiche" guardrail rule
-    parts.append(
-        "- Sulle critiche: se e' credibile, cita un'azione concreta presa o pianificata,"
-    )
-
-    # Reference text depends on what sources are available
-    if applicabili and nota:
+    # "Sulle critiche" rule: wording depends on what citable sources are available.
+    if applicabili or nota:
         parts.append(
-            "  presa SOLO dai PLAYBOOK o dalla NOTA qui sotto. Se non puoi citarne una,"
+            "- Sulle critiche: se e' credibile, cita un'azione concreta presa o pianificata,"
         )
-    elif applicabili:
-        parts.append("  presa SOLO dai PLAYBOOK qui sotto. Se non puoi citarne una,")
-    elif nota:
-        parts.append("  presa SOLO dalla NOTA qui sotto. Se non puoi citarne una,")
-
-    # Fallback when no sources: always include this guardrail
-    parts.append(
-        "  riconosci il problema senza inventare interventi. Mai promesse non supportate da fatti."
-    )
+        if applicabili and nota:
+            parts.append(
+                "  presa SOLO dai PLAYBOOK o dalla NOTA qui sotto. Se non puoi citarne una,"
+            )
+        elif applicabili:
+            parts.append(
+                "  presa SOLO dai PLAYBOOK qui sotto. Se non puoi citarne una,"
+            )
+        else:
+            parts.append("  presa SOLO dalla NOTA qui sotto. Se non puoi citarne una,")
+        parts.append(
+            "  riconosci il problema senza inventare interventi. Mai promesse non supportate da fatti."
+        )
+    else:
+        parts.append(
+            "- Sulle critiche: riconosci il problema senza inventare interventi. "
+            "Non citare azioni o interventi specifici: non hai fatti a disposizione. "
+            "Mai promesse non supportate da fatti."
+        )
 
     # Only mention PLAYBOOK rule if playbooks are actually present
     if applicabili:
@@ -169,10 +181,13 @@ def generate_response(testo: str, bu: str, nota: str | None = None) -> str:
     client = anthropic.Anthropic()
     response = client.messages.create(
         model=RESPONDER_MODEL,
-        max_tokens=1024,
+        max_tokens=2048,
+        thinking={"type": "adaptive"},
         messages=[{"role": "user", "content": prompt}],
     )
-    bozza = response.content[0].text.strip()
+    bozza = next(b.text for b in response.content if b.type == "text").strip()
+    if response.stop_reason == "max_tokens":
+        print("ATTENZIONE: bozza troncata (max_tokens).", file=sys.stderr)
 
     n_parole = len(bozza.split())
     if n_parole > MAX_PAROLE:

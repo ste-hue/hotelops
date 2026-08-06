@@ -82,6 +82,28 @@ def test_repo_voice_has_strutturazione_playbook_hotel_only():
     assert "ristrutturazione" in playbooks["STRUTTURA"]["testo"].lower()
 
 
+def test_parse_playbooks_bu_sconosciuta_solleva_errore():
+    voice_bu_typo = """# Voce
+
+## Voce
+Scrivi come una persona della reception.
+
+## Temi
+STRUTTURA
+
+## Playbook
+
+### STRUTTURA (HOETL)
+L'hotel e' in fase di ristrutturazione.
+
+## Firma
+Panorama Team
+"""
+    with pytest.raises(ValueError, match="HOETL") as excinfo:
+        parse_playbooks(voice_bu_typo)
+    assert "STRUTTURA" in str(excinfo.value)
+
+
 def test_build_prompt_contiene_regole_verificabili():
     prompt = build_response_prompt("Camera sporca.", "HOTEL", VOICE_FIXTURE)
     # regole non negoziabili, formulate come nella spec
@@ -138,38 +160,71 @@ def test_build_prompt_guardrail_sempre_presente():
     assert "Applica i PLAYBOOK" not in prompt_senza_playbook
 
 
+def test_build_prompt_no_source_non_promette_azioni():
+    # Quando non ci sono ne' playbook applicabili ne' nota, il prompt non deve
+    # istruire a citare un'azione concreta (non ci sono fatti da cui prenderla).
+    prompt = build_response_prompt(
+        "Camera datata.", "RESIDENCE", VOICE_FIXTURE_HOTEL_ONLY
+    )
+    assert "cita un'azione concreta" not in prompt
+    assert "senza inventare interventi" in prompt
+
+
 # Fake client helpers for testing generate_response
 
 
 class _FakeContent:
     def __init__(self, text):
+        self.type = "text"
         self.text = text
 
 
+class _FakeThinkingBlock:
+    """Mimics a real ThinkingBlock: has .type but NO .text attribute."""
+
+    def __init__(self):
+        self.type = "thinking"
+
+
 class _FakeResponse:
-    def __init__(self, text):
-        self.content = [_FakeContent(text)]
+    def __init__(self, text, stop_reason="end_turn", leading_thinking=False):
+        content = []
+        if leading_thinking:
+            content.append(_FakeThinkingBlock())
+        content.append(_FakeContent(text))
+        self.content = content
+        self.stop_reason = stop_reason
 
 
 class _FakeMessages:
-    def __init__(self, reply):
+    def __init__(self, reply, stop_reason="end_turn", leading_thinking=False):
         self.reply = reply
+        self.stop_reason = stop_reason
+        self.leading_thinking = leading_thinking
         self.calls = []
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
-        return _FakeResponse(self.reply)
+        return _FakeResponse(
+            self.reply,
+            stop_reason=self.stop_reason,
+            leading_thinking=self.leading_thinking,
+        )
 
 
 class _FakeClient:
-    def __init__(self, reply):
-        self.messages = _FakeMessages(reply)
+    def __init__(self, reply, stop_reason="end_turn", leading_thinking=False):
+        self.messages = _FakeMessages(
+            reply, stop_reason=stop_reason, leading_thinking=leading_thinking
+        )
 
 
-def _patch_client(monkeypatch, reply):
+def _patch_client(monkeypatch, reply, stop_reason="end_turn", leading_thinking=False):
     import anthropic
 
-    fake = _FakeClient(reply)
+    fake = _FakeClient(
+        reply, stop_reason=stop_reason, leading_thinking=leading_thinking
+    )
     monkeypatch.setattr(anthropic, "Anthropic", lambda: fake)
     return fake
 
@@ -185,7 +240,28 @@ def test_generate_response_happy_path(monkeypatch):
     assert bozza == "Grazie per la nota sulla colazione.\nPanorama Team"
     (call,) = fake.messages.calls
     assert call["model"] == RESPONDER_MODEL
+    assert call["thinking"] == {"type": "adaptive"}
     assert "Colazione ottima." in call["messages"][0]["content"]
+
+
+def test_generate_response_gestisce_thinking_block_iniziale(monkeypatch):
+    """response.content[0] puo' essere un ThinkingBlock (senza .text): la bozza
+    va estratta dal primo blocco di tipo 'text', non da content[0]."""
+    from verticals.reviews.respond import generate_response
+
+    _patch_client(monkeypatch, "Grazie mille.\nPanorama Team", leading_thinking=True)
+    bozza = generate_response("Bello.", "HOTEL")
+    assert bozza == "Grazie mille.\nPanorama Team"
+
+
+def test_generate_response_warning_troncata_max_tokens(monkeypatch, capsys):
+    from verticals.reviews.respond import generate_response
+
+    _patch_client(monkeypatch, "bozza troncata a meta'", stop_reason="max_tokens")
+    generate_response("Bello.", "HOTEL")
+    err = capsys.readouterr().err
+    assert "troncata" in err
+    assert "max_tokens" in err
 
 
 def test_generate_response_testo_vuoto(monkeypatch):

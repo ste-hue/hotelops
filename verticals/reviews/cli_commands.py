@@ -318,7 +318,10 @@ def _cmd_rispondi(args):
         raise SystemExit("--rispondi richiede --bu (HOTEL|RESIDENCE|CVM)")
 
     if args.file:
-        testo = Path(args.file).read_text(encoding="utf-8")
+        try:
+            testo = Path(args.file).read_text(encoding="utf-8")
+        except OSError as e:
+            raise SystemExit(f"Errore lettura file: {e}")
     else:
         testo = sys.stdin.read()
 
