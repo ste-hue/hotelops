@@ -17,6 +17,7 @@ Se una frase potrebbe andare bene sotto qualsiasi recensione, cancellala.
 Non usare più di un aggettivo nella stessa frase.
 Non descrivere l'hotel.
 Rispondi all'ospite.
+Su recensioni lunghe non rispondere a tutto: scegli i 2-3 punti più gravi.
 
 ## Temi
 PULIZIA, COLAZIONE, PERSONALE, POSIZIONE, RUMORE, PARCHEGGIO, CAMERA, STRUTTURA, RISTORANTE, SPIAGGIA

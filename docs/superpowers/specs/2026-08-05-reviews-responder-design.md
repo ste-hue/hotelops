@@ -187,3 +187,18 @@ frasi duplicate cross-bozze).
 
 Prefill da `f_reviews`, tracking response rate, pagina hub, agent
 review-trends mensile, check automatici della checklist DoD.
+
+### Prossima (approvata da Stefano 2026-08-06): loop "esempi promossi"
+
+Quando Stefano pubblica una risposta (così com'è o editata), la promuove:
+la coppia recensione → risposta pubblicata viene archiviata (v1: file
+markdown accanto a `voice.md`, appeso via flag CLI) e il prompt include gli
+ultimi N esempi promossi come **ancore di stile**, con vincolo esplicito
+"imita registro e struttura, MAI riusare frasi" — il few-shot ingenuo
+farebbe l'opposto (omologazione); il check DoD anti-duplicati resta la rete.
+
+Nota dati: `f_reviews` **non ha alcun campo risposta** — le risposte
+pubblicate non sono mai state scrappate né memorizzate. A differenza delle
+bozze, la risposta *pubblicata* è un fatto osservabile (sta sulla OTA):
+un'eventuale `f_review_risposte` in BQ sarebbe legittima e darebbe anche il
+response rate. V1 comunque zero-infra (markdown + CLI).
