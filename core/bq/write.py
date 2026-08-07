@@ -237,6 +237,10 @@ def _append(client, table: str, rows_dict: list[dict]) -> None:
     job_config = bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
         source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+        # CREATE_NEVER: le tabelle nascono con DDL esplicito, mai autodetect
+        # (schema monco al primo NULL); e CREATE_IF_NEEDED richiede
+        # bigquery.tables.create sul dataset, che i grant table-level non hanno.
+        create_disposition=bigquery.CreateDisposition.CREATE_NEVER,
     )
     job = client.load_table_from_json(rows_dict, table, job_config=job_config)
     try:
@@ -294,6 +298,10 @@ def _snapshot(
     job_config = bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
         source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+        # CREATE_NEVER: le tabelle nascono con DDL esplicito, mai autodetect
+        # (schema monco al primo NULL); e CREATE_IF_NEEDED richiede
+        # bigquery.tables.create sul dataset, che i grant table-level non hanno.
+        create_disposition=bigquery.CreateDisposition.CREATE_NEVER,
     )
     job = client.load_table_from_json(rows_dict, table, job_config=job_config)
     try:

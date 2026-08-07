@@ -110,6 +110,7 @@ def test_append_calls_load_table_from_json_with_write_append(mock_get_client):
     job_config = kwargs["job_config"]
     assert job_config.write_disposition == bigquery.WriteDisposition.WRITE_APPEND
     assert job_config.source_format == bigquery.SourceFormat.NEWLINE_DELIMITED_JSON
+    assert job_config.create_disposition == bigquery.CreateDisposition.CREATE_NEVER
 
 
 @patch("core.bq.write.get_client")
