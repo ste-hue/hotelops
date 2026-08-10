@@ -9,6 +9,9 @@ from verticals.condges.pf_rotate.excel_model import (
     is_formula_with_refs,
     resolve_sheet_name,
     find_total_row_and_sum_range,
+    periodo,
+    periodo_anno_mese,
+    require_periodo,
 )
 
 
@@ -158,22 +161,16 @@ def test_find_layout_intur_style_fixture():
 
 
 def test_periodo_roundtrip():
-    from verticals.condges.pf_rotate.excel_model import periodo, periodo_anno_mese
-
     p = periodo(2026, 6)
     assert p == 2026 * 12 + 5
     assert periodo_anno_mese(p) == (2026, 6)
 
 
 def test_periodo_successivo_attraversa_l_anno():
-    from verticals.condges.pf_rotate.excel_model import periodo
-
     assert periodo(2026, 12) + 1 == periodo(2027, 1)
 
 
 def test_require_periodo_rifiuta_mese_nudo():
-    from verticals.condges.pf_rotate.excel_model import require_periodo, periodo
-
     with pytest.raises(ValueError, match="mese nudo"):
         require_periodo(6)
     with pytest.raises(ValueError, match="mese nudo"):
