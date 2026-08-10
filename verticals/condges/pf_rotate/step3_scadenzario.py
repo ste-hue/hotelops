@@ -133,6 +133,21 @@ def apply_scadenzario(
     # (la loro migrazione a periodo è Task 6).
     for rows in (unmapped_rows, esclusi_rows):
         for r in rows:
+            # DA MAPPARE/ESCLUSI hanno 12 colonne mese-nudo (no anno): due
+            # periodi diversi sullo stesso mese calendario (es. dic 2026 +
+            # dic 2027) collasserebbero in silenzio sulla stessa colonna —
+            # fail loud invece di perdere un importo.
+            bare_mesi = {periodo_anno_mese(m)[1] for m in r["mesi"]}
+            if len(bare_mesi) < len(r["mesi"]):
+                raise ValueError(
+                    f"Collisione multi-anno in DA MAPPARE/ESCLUSI per il "
+                    f"fornitore {r.get('codice')!r} ({r.get('nome')!r}): i "
+                    f"periodi {sorted(r['mesi'])} cadono sullo stesso mese "
+                    "calendario (il foglio ha 12 colonne mese-nudo, non "
+                    "anno-aware) — scriverli scambierebbe/perderebbe un "
+                    "importo in silenzio. Serve la migrazione a periodo di "
+                    "scrivi_da_mappare/scrivi_esclusi (Task 6)."
+                )
             r["mesi"] = {periodo_anno_mese(m)[1]: v for m, v in r["mesi"].items()}
     wb = openpyxl.load_workbook(BytesIO(updated_bytes))
     scrivi_da_mappare(wb, unmapped_rows)

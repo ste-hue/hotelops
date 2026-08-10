@@ -142,3 +142,32 @@ def test_write_pf_scadenza_oltre_orizzonte_va_nel_secchio(minimal_pf_orti_bytes)
         excluded=set(), scaduto_periodo=periodo(2026, 5), clear_codici={18},
     )
     assert summary["oltre_orizzonte"] == {18: -500.0}
+
+
+def test_apply_scadenzario_raises_su_collisione_multi_anno_da_mappare(
+    minimal_pf_orti_bytes, tmp_fornitori_csv
+):
+    """DA MAPPARE ha 12 colonne mese-nudo: due periodi diversi che cadono sullo
+    stesso mese calendario (dic 2026 + dic 2027) andrebbero a collidere in
+    silenzio sulla stessa colonna — deve fallire forte, non perdere l'importo."""
+    scad_df = pd.DataFrame(
+        [
+            {
+                "codice_fornitore": 999,  # non mappato -> DA MAPPARE
+                "nome": "Forn999",
+                "totale": -1000.0,
+                "scaduto": 0.0,
+                f"mese_{P(12)}": -500.0,
+                f"mese_{periodo(2027, 12)}": -500.0,
+            }
+        ]
+    )
+    with pytest.raises(ValueError, match="[Cc]ollisione"):
+        apply_scadenzario(
+            pf_bytes=minimal_pf_orti_bytes,
+            scad_df=scad_df,
+            bucket_months=[P(12), periodo(2027, 12)],
+            societa="ORTI",
+            fornitori_csv=tmp_fornitori_csv,
+            policy=UnmappedPolicy.SKIP,
+        )
