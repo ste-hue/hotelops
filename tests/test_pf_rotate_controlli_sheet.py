@@ -8,6 +8,9 @@ mostrano ERRORE finti sulla colonna appena chiusa.
 from openpyxl import Workbook
 
 from verticals.condges.pf_rotate.controlli_sheet import advance_controlli
+from verticals.condges.pf_rotate.excel_model import periodo
+
+P = lambda m: periodo(2026, m)  # noqa: E731
 
 MESI = [
     "APRILE",
@@ -47,7 +50,7 @@ def _wb_stale_aprile() -> Workbook:
 
 def test_advance_sposta_il_confine_al_mese_chiuso():
     wb = _wb_stale_aprile()
-    changed = advance_controlli(wb, mese_chiuso=5)
+    changed = advance_controlli(wb, periodo_chiuso=P(5))
 
     ct = wb["Controlli"]
     # Check hardcoded: ora copre C4 E D4 (aprile + maggio chiusi)
@@ -70,11 +73,11 @@ def test_advance_sposta_il_confine_al_mese_chiuso():
 
 def test_advance_idempotente():
     wb = _wb_stale_aprile()
-    advance_controlli(wb, mese_chiuso=5)
+    advance_controlli(wb, periodo_chiuso=P(5))
     snapshot = [
         wb["Controlli"][ref].value for ref in ("A4", "B4", "A5", "B5", "A6", "B6")
     ]
-    advance_controlli(wb, mese_chiuso=5)
+    advance_controlli(wb, periodo_chiuso=P(5))
     assert snapshot == [
         wb["Controlli"][ref].value for ref in ("A4", "B4", "A5", "B5", "A6", "B6")
     ]
@@ -86,4 +89,4 @@ def test_advance_noop_senza_foglio_controlli():
     pf = wb.create_sheet("Piano Finanziario")
     for i, m in enumerate(MESI):
         pf.cell(2, 3 + i, m)
-    assert advance_controlli(wb, mese_chiuso=5) == []
+    assert advance_controlli(wb, periodo_chiuso=P(5)) == []

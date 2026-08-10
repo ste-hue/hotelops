@@ -7,7 +7,12 @@ from datetime import date
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
-from verticals.condges.pf_rotate.excel_model import find_layout, find_month_columns
+from verticals.condges.pf_rotate.excel_model import (
+    find_layout,
+    find_month_periods,
+    periodo_anno_mese,
+    require_periodo,
+)
 from verticals.condges.pf_rotate.saldi_registry import banche_richieste
 
 
@@ -72,7 +77,7 @@ def _match_bank(label_col_a: str, saldi: dict[str, float]) -> float | None:
 def write_saldi_banca(
     wb: Workbook,
     *,
-    mese_chiuso: int,
+    periodo_chiuso: int,
     data_saldo: date,
     saldi: dict[str, float],
 ) -> dict[str, object]:
@@ -81,13 +86,15 @@ def write_saldi_banca(
     saldi: {nome_banca: importo}. Le banche mancanti non sono toccate.
     Ritorna dict con cellule effettivamente scritte + nuovo totale.
     """
+    require_periodo(periodo_chiuso, "periodo_chiuso")
     if "Piano Finanziario" not in wb.sheetnames:
         raise ValueError("Foglio 'Piano Finanziario' assente.")
     pf = wb["Piano Finanziario"]
-    cols = find_month_columns(pf, header_row=2)
-    if mese_chiuso not in cols:
-        raise ValueError(f"Mese chiuso {mese_chiuso} non trovato nel master.")
-    col_mese_chiuso = cols[mese_chiuso]
+    cols = find_month_periods(pf, header_row=2)
+    if periodo_chiuso not in cols:
+        anno, mese = periodo_anno_mese(periodo_chiuso)
+        raise ValueError(f"Periodo chiuso {anno}-{mese:02d} non trovato nel master.")
+    col_mese_chiuso = cols[periodo_chiuso]
     col_mese_chiuso_letter = get_column_letter(col_mese_chiuso)
 
     layout = find_layout(wb)
