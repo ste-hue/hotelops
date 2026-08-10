@@ -20,6 +20,7 @@ def _build_orti_real_geometry() -> openpyxl.Workbook:
     wb.remove(wb.active)
     pf = wb.create_sheet("Piano Finanziario")
     pf["A1"] = "ORTI"  # C1 None → month-closed
+    pf["B1"] = 2026
     mesi = [
         "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO", "GIUGNO",
         "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE",

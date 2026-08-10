@@ -27,6 +27,7 @@ def _wb_stale_aprile() -> Workbook:
     wb = Workbook()
     wb.remove(wb.active)
     pf = wb.create_sheet("Piano Finanziario")
+    pf["A1"] = 2026
     for i, m in enumerate(MESI):
         pf.cell(2, 3 + i, m)  # C..K
 

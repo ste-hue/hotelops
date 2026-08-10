@@ -61,6 +61,7 @@ def _build_fixed_snapshot_wb() -> openpyxl.Workbook:
     wb.remove(wb.active)
     pf = wb.create_sheet("Piano Finanziario")
     pf["A1"] = "INTUR"
+    pf["B1"] = 2026
     pf["C1"] = "DATA RILEVAZ"
     # row 2: month headers in D..M (E = APRILE)
     pf["C2"] = None
@@ -191,6 +192,7 @@ def _build_month_closed_wb_with_kross() -> openpyxl.Workbook:
     wb.remove(wb.active)
     pf = wb.create_sheet("Piano Finanziario")
     pf["A1"] = "ORTI"
+    pf["B1"] = 2026
     # C1 lasciato None → month-closed; APRILE in col C (mese_chiuso=4)
     pf.cell(2, 3, "APRILE")
     pf["A4"] = "SALDO MESE PRECEDENTE"
