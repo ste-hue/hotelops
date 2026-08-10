@@ -17,6 +17,11 @@ import openpyxl
 import pandas as pd
 
 from verticals.condges.pf_generator.blocchi import cascata_nc
+from verticals.condges.pf_rotate.excel_model import (
+    find_month_periods,
+    periodo,
+    require_periodo,
+)
 from verticals.condges.pf_rotate.fornitori_map import VOCE_LABELS
 
 log = logging.getLogger(__name__)
@@ -45,21 +50,6 @@ VOCE_TO_SHEET_CANDIDATES = {
     "USCITE_CANONI": ["Canoni e servizi"],  # condivide il foglio con SERVIZI_PRODUZIONE
 }
 
-MONTH_NAMES_IT = {
-    "GENNAIO": 1,
-    "FEBBRAIO": 2,
-    "MARZO": 3,
-    "APRILE": 4,
-    "MAGGIO": 5,
-    "GIUGNO": 6,
-    "LUGLIO": 7,
-    "AGOSTO": 8,
-    "SETTEMBRE": 9,
-    "OTTOBRE": 10,
-    "NOVEMBRE": 11,
-    "DICEMBRE": 12,
-}
-
 MESI_NOMI = [
     "Gen",
     "Feb",
@@ -74,6 +64,21 @@ MESI_NOMI = [
     "Nov",
     "Dic",
 ]
+
+MONTH_NAMES_IT = {
+    "GENNAIO": 1,
+    "FEBBRAIO": 2,
+    "MARZO": 3,
+    "APRILE": 4,
+    "MAGGIO": 5,
+    "GIUGNO": 6,
+    "LUGLIO": 7,
+    "AGOSTO": 8,
+    "SETTEMBRE": 9,
+    "OTTOBRE": 10,
+    "NOVEMBRE": 11,
+    "DICEMBRE": 12,
+}
 
 
 # -- Fornitori map -------------------------------------------------------------
@@ -104,7 +109,13 @@ def resolve_sheet_name(voce_id: str, available_sheets: list[str]) -> str | None:
 
 
 def _build_month_col_map(ws) -> dict[int, int]:
-    """Scan row 2 of a detail sheet, return {calendar_month: column}."""
+    """Scan row 2 of a detail sheet, return {calendar_month: column}.
+
+    Anno-agnostica (a differenza di ``find_month_periods``): usata dal
+    generatore full-rebuild (``pf_generator/previsioni.py``, ``valida.py`` e
+    relativi test) che produce fogli senza anno dichiarato in riga 1 — non è
+    un caller di ``write_pf``, resta fuori dalla migrazione a chiave periodo.
+    """
     col_map: dict[int, int] = {}
     for col in range(1, ws.max_column + 1):
         val = ws.cell(row=2, column=col).value
@@ -229,9 +240,9 @@ def read_pf_sheet(
     ws = wb_values[sheet_name]
     ws_cod = wb_formulas[sheet_name]
 
-    month_col = _build_month_col_map(ws)
+    month_col = find_month_periods(ws, header_row=2)
     prev_row = _find_previsionale_row(ws)
-    month_col_form = _build_month_col_map(ws_cod)
+    month_col_form = find_month_periods(ws_cod, header_row=2)
     total_row, sum_start, sum_end = _find_total_row_and_range(ws_cod, month_col_form)
 
     prev_in_sum = False
@@ -266,33 +277,49 @@ def read_pf_sheet(
 def write_pf(
     pf_bytes: bytes,
     scad_df: pd.DataFrame,
-    bucket_months: list[int],
+    bucket_periodi: list[int],
     fornitori_map: dict[int, dict],
     excluded: set[int] | None = None,
-    scaduto_month: int | None = None,
+    scaduto_periodo: int | None = None,
     clear_codici: set[int] | None = None,
-) -> tuple[bytes, dict[str, list]]:
+) -> tuple[bytes, dict]:
     """Write scadenze into ALL PF detail sheets, return (bytes, summary).
 
-    ``scaduto_month``: mese in cui scrivere il bucket 'scaduto'. Per la
-    rotation passare il primo mese aperto (mese_chiuso+1), così il risultato
-    non dipende dal giorno del run. Default: mese di oggi (path app legacy).
+    ``scaduto_periodo``: periodo (chiave ordinale anno*12+(mese-1)) in cui
+    scrivere il bucket 'scaduto'. Per la rotation passare il primo periodo
+    aperto (mese_chiuso+1), così il risultato non dipende dal giorno del run.
+    Default: mese di oggi (path app legacy).
 
-    ``clear_codici``: codici fornitore le cui righe vengono ripulite nei mesi
-    aperti (>= scaduto_month) PRIMA di riscrivere — rende il run idempotente
-    e rimuove scritture stantie di run precedenti. Tocca solo righe con
-    codice fornitore in col A; righe manuali (codici conto PF) restano intatte.
+    ``clear_codici``: codici fornitore le cui righe vengono ripulite nei
+    periodi aperti (>= scaduto_periodo) PRIMA di riscrivere — rende il run
+    idempotente e rimuove scritture stantie di run precedenti. Tocca solo
+    righe con codice fornitore in col A; righe manuali (codici conto PF)
+    restano intatte.
+
+    Periodi senza colonna nel foglio (oltre l'orizzonte del PF) non vengono
+    scritti né sommati altrove: finiscono nel summary sotto
+    ``"oltre_orizzonte": {codice_fornitore: importo}``.
 
     Handles the PREVISIONALE adjustment: if the PREVISIONALE row is inside
     the SUM range of the total row, reduce it by the scadenzario total so
     the overall SUM stays correct (= MAX(previsionale, scadenzario)).
     """
+    if scaduto_periodo is not None:
+        require_periodo(scaduto_periodo, "scaduto_periodo")
+    for _p in bucket_periodi:
+        require_periodo(_p, "bucket_periodi[]")
+
     wb = openpyxl.load_workbook(BytesIO(pf_bytes))
     wb_values = openpyxl.load_workbook(BytesIO(pf_bytes), data_only=True)
     wb_formulas = openpyxl.load_workbook(BytesIO(pf_bytes), data_only=False)
 
-    current_month = scaduto_month if scaduto_month is not None else date.today().month
-    summary: dict[str, list] = {}
+    current_month = (
+        scaduto_periodo
+        if scaduto_periodo is not None
+        else periodo(date.today().year, date.today().month)
+    )
+    summary: dict = {}
+    oltre_orizzonte: dict[int, float] = {}
 
     # Group scadenzario suppliers by voce_id
     excluded = excluded or set()
@@ -314,7 +341,7 @@ def write_pf(
                 "scaduto": float(row.get("scaduto", 0) or 0),
                 **{
                     f"mese_{m}": float(row.get(f"mese_{m}", 0) or 0)
-                    for m in bucket_months
+                    for m in bucket_periodi
                 },
             }
         )
@@ -329,7 +356,7 @@ def write_pf(
                 continue
             ws_c = wb[sheet_name]
             ws_cv = wb_values[sheet_name]
-            mc = _build_month_col_map(ws_cv)
+            mc = find_month_periods(ws_cv, header_row=2)
             open_cols = [c for m, c in mc.items() if m >= current_month]
             if not open_cols:
                 continue
@@ -354,9 +381,9 @@ def write_pf(
         ws_vals = wb_values[sheet_name]
         ws_form = wb_formulas[sheet_name]
 
-        month_col = _build_month_col_map(ws_vals)
+        month_col = find_month_periods(ws_vals, header_row=2)
         prev_row = _find_previsionale_row(ws_vals)
-        month_col_form = _build_month_col_map(ws_form)
+        month_col_form = find_month_periods(ws_form, header_row=2)
         total_row, sum_start, sum_end = _find_total_row_and_range(
             ws_form, month_col_form
         )
@@ -425,7 +452,7 @@ def write_pf(
             if scaduto:
                 amounts[current_month] = amounts.get(current_month, 0) + scaduto
 
-            for month in bucket_months:
+            for month in bucket_periodi:
                 val = s[f"mese_{month}"]
                 if val:
                     amounts[month] = amounts.get(month, 0) + val
@@ -437,11 +464,17 @@ def write_pf(
             months_written: dict[int, float] = {}
             for month, amount in netted.items():
                 col = month_col.get(month)
-                if col:
-                    pf_val = round(abs(amount), 2)
-                    ws.cell(row=pf_row, column=col, value=pf_val)
-                    months_written[month] = pf_val
-                    scad_totals[month] = scad_totals.get(month, 0) + pf_val
+                if col is None:
+                    # Periodo oltre l'orizzonte del PF: non scrivibile, non
+                    # sommato altrove — riportato nel secchio del summary.
+                    oltre_orizzonte[s["codice_fornitore"]] = (
+                        oltre_orizzonte.get(s["codice_fornitore"], 0.0) + amount
+                    )
+                    continue
+                pf_val = round(abs(amount), 2)
+                ws.cell(row=pf_row, column=col, value=pf_val)
+                months_written[month] = pf_val
+                scad_totals[month] = scad_totals.get(month, 0) + pf_val
 
             if months_written:
                 written.append(
@@ -479,6 +512,8 @@ def write_pf(
 
         if written:
             summary[voce_label] = written
+
+    summary["oltre_orizzonte"] = oltre_orizzonte
 
     buf = BytesIO()
     wb.save(buf)

@@ -17,6 +17,7 @@ import pandas as pd
 from verticals.condges.pf_rotate.pf_writer import write_pf
 from verticals.condges.pf_generator.blocchi import blocco_a_per_voce
 from verticals.condges.pf_generator.template import scrivi_da_mappare, scrivi_esclusi
+from verticals.condges.pf_rotate.excel_model import periodo_anno_mese
 from verticals.condges.pf_rotate.fornitori_map import load_fornitori
 from verticals.condges.skeleton_shift import hide_past_columns_rotation
 
@@ -103,10 +104,10 @@ def apply_scadenzario(
     updated_bytes, write_summary = write_pf(
         pf_bytes=pf_bytes,
         scad_df=scad_df,
-        bucket_months=bucket_months,
+        bucket_periodi=bucket_months,
         fornitori_map=legacy_map,
         excluded=excluded_set,
-        scaduto_month=scaduto_month,
+        scaduto_periodo=scaduto_month,
         clear_codici=set(legacy_map.keys()),
     )
 
@@ -126,12 +127,19 @@ def apply_scadenzario(
     _per_voce, unmapped_rows, esclusi_rows = blocco_a_per_voce(
         scad_df, bucket_months, fornitori_full, primo_mese_aperto=primo
     )
+    # bucket_months/primo sono periodi qui (write_pf sopra li ha già validati
+    # con require_periodo): scrivi_da_mappare/scrivi_esclusi/hide_past_columns
+    # indirizzano colonne per mese-nudo — bridge minimo verso quei renderer
+    # (la loro migrazione a periodo è Task 6).
+    for rows in (unmapped_rows, esclusi_rows):
+        for r in rows:
+            r["mesi"] = {periodo_anno_mese(m)[1]: v for m, v in r["mesi"].items()}
     wb = openpyxl.load_workbook(BytesIO(updated_bytes))
     scrivi_da_mappare(wb, unmapped_rows)
     scrivi_esclusi(wb, esclusi_rows)
     # Nasconde i mesi passati (vuoti) così il file parte visivamente dal mese
     # aperto, senza perdere dati/formule/bussola.
-    hide_past_columns_rotation(wb, primo)
+    hide_past_columns_rotation(wb, periodo_anno_mese(primo)[1])
     buf = BytesIO()
     wb.save(buf)
     updated_bytes = buf.getvalue()
