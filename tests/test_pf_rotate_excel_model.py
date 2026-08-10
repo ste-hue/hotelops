@@ -1,5 +1,6 @@
 from io import BytesIO
 import openpyxl
+import pytest
 
 from verticals.condges.pf_rotate.excel_model import (
     find_layout,
@@ -154,3 +155,27 @@ def test_find_layout_intur_style_fixture():
     assert layout.saldo_proiettato_row == 38
     assert layout.saldi_banca_rows == [31, 32, 33]
     assert layout.entrate_rows == [5, 6, 7]
+
+
+def test_periodo_roundtrip():
+    from verticals.condges.pf_rotate.excel_model import periodo, periodo_anno_mese
+
+    p = periodo(2026, 6)
+    assert p == 2026 * 12 + 5
+    assert periodo_anno_mese(p) == (2026, 6)
+
+
+def test_periodo_successivo_attraversa_l_anno():
+    from verticals.condges.pf_rotate.excel_model import periodo
+
+    assert periodo(2026, 12) + 1 == periodo(2027, 1)
+
+
+def test_require_periodo_rifiuta_mese_nudo():
+    from verticals.condges.pf_rotate.excel_model import require_periodo, periodo
+
+    with pytest.raises(ValueError, match="mese nudo"):
+        require_periodo(6)
+    with pytest.raises(ValueError, match="mese nudo"):
+        require_periodo(2026)  # anche un anno nudo è sospetto
+    require_periodo(periodo(2026, 6))  # non solleva

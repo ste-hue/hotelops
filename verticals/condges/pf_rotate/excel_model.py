@@ -26,6 +26,27 @@ MESI_IT = {
     "DICEMBRE": 12,
 }
 
+PERIODO_MIN = 2000 * 12  # nessun periodo reale è sotto il 2000
+
+
+def periodo(anno: int, mese: int) -> int:
+    """Chiave periodo ordinale: gen 2026 e gen 2027 sono chiavi diverse."""
+    return anno * 12 + (mese - 1)
+
+
+def periodo_anno_mese(p: int) -> tuple[int, int]:
+    anno, m0 = divmod(p, 12)
+    return anno, m0 + 1
+
+
+def require_periodo(p: int, nome: str = "periodo") -> None:
+    """Guardia: periodo e mese nudo sono entrambi int — qui si separano."""
+    if p < PERIODO_MIN:
+        raise ValueError(
+            f"{nome}={p} sembra un mese nudo (1-12) o un anno: serve un periodo "
+            f"ordinale anno*12+(mese-1), es. periodo(2026, 6) = {2026 * 12 + 5}"
+        )
+
 
 def find_month_columns(ws: Worksheet, header_row: int = 2) -> dict[int, int]:
     """Scan header_row for month names ITA. Return {mese_num: col_idx}.
