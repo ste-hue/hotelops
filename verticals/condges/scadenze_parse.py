@@ -17,6 +17,7 @@ import openpyxl
 import pandas as pd
 
 from verticals.condges.parse_pf import ScadenzarioData
+from verticals.condges.pf_rotate.excel_model import periodo
 
 
 def parse_scadenze(
@@ -36,8 +37,10 @@ def parse_scadenze(
     Layout dettagliata (one row per partita; codice/nome same columns):
       col 34: data_scadenza, col 37: saldo scadenza in UDC (residuo aperto).
 
-    Returns (df, bucket_months) where df has one row per supplier with columns:
-      codice_fornitore, nome, totale, scaduto, mese_4, mese_5, ...
+    Returns (df, bucket_periodi) where df has one row per supplier with columns:
+      codice_fornitore, nome, totale, scaduto, mese_<periodo>, ... (periodo =
+      chiave ordinale anno*12+(mese-1), vedi ``excel_model.periodo`` — separa
+      lo stesso mese calendario in anni diversi, es. giugno 2026 vs giugno 2027).
     Invoices with scadenza before ``primo_mese_aperto`` (anno, mese) are
     aggregated into 'scaduto'. Default: il mese corrente di oggi — per la
     rotation passare SEMPRE il primo mese aperto, così il risultato non
@@ -103,7 +106,7 @@ def parse_scadenze(
         return pd.DataFrame(columns=["codice_fornitore", "nome", "totale", "scaduto"]), []
 
     supplier_data: dict[int, dict] = {}
-    all_months: set[int] = set()
+    all_periods: set[int] = set()
 
     for inv in invoices:
         cod = inv["codice"]
@@ -117,9 +120,9 @@ def parse_scadenze(
         ):
             supplier_data[cod]["scaduto"] += amt
         else:
-            m = inv["scad_month"]
-            all_months.add(m)
-            key = f"mese_{m}"
+            p = periodo(inv["scad_year"], inv["scad_month"])
+            all_periods.add(p)
+            key = f"mese_{p}"
             supplier_data[cod][key] = supplier_data[cod].get(key, 0.0) + amt
 
     rows = []
@@ -130,23 +133,27 @@ def parse_scadenze(
             "totale": data["totale"],
             "scaduto": data["scaduto"],
         }
-        for m in all_months:
-            row[f"mese_{m}"] = data.get(f"mese_{m}", 0.0)
+        for p in all_periods:
+            row[f"mese_{p}"] = data.get(f"mese_{p}", 0.0)
         rows.append(row)
 
     df = pd.DataFrame(rows)
-    bucket_months = sorted(all_months)
-    return df, bucket_months
+    bucket_periodi = sorted(all_periods)
+    return df, bucket_periodi
 
 
 def partite_df_to_scadenzario_data(
-    df: pd.DataFrame, bucket_months: list[int]
+    df: pd.DataFrame, bucket_periodi: list[int]
 ) -> ScadenzarioData:
-    """Convert ``parse_scadenze`` output to :class:`ScadenzarioData` for tesoreria."""
+    """Convert ``parse_scadenze`` output to :class:`ScadenzarioData` for tesoreria.
+
+    ``bucket_periodi`` sono periodi ordinali (vedi ``excel_model.periodo``),
+    non mesi nudi 1-12.
+    """
     if df.empty:
         return ScadenzarioData(fornitori=[], totale_per_mese={}, scaduto_totale=0.0)
 
-    totale_per_mese: dict[int, float] = {m: 0.0 for m in bucket_months}
+    totale_per_mese: dict[int, float] = {p: 0.0 for p in bucket_periodi}
     scaduto_totale = 0.0
     fornitori: list[dict] = []
 
@@ -159,12 +166,12 @@ def partite_df_to_scadenzario_data(
             "scaduto": float(row.get("scaduto", 0) or 0),
         }
         scaduto_totale += entry["scaduto"]
-        for m in bucket_months:
-            col = f"mese_{m}"
+        for p in bucket_periodi:
+            col = f"mese_{p}"
             if col in row.index and pd.notna(row[col]):
                 v = float(row[col] or 0)
                 entry[col] = v
-                totale_per_mese[m] = totale_per_mese.get(m, 0.0) + v
+                totale_per_mese[p] = totale_per_mese.get(p, 0.0) + v
         fornitori.append(entry)
 
     return ScadenzarioData(
@@ -175,10 +182,14 @@ def partite_df_to_scadenzario_data(
 
 
 def sintetica_list_to_scadenzario_data(
-    suppliers: list[dict], bucket_months: list[int]
+    suppliers: list[dict], bucket_periodi: list[int]
 ) -> ScadenzarioData:
-    """Convert output of :func:`condges.scadenzario_excel.parse_sintetica_scadenze`."""
-    totale_per_mese: dict[int, float] = {m: 0.0 for m in bucket_months}
+    """Convert output of :func:`condges.scadenzario_excel.parse_sintetica_scadenze`.
+
+    ``bucket_periodi`` sono periodi ordinali (vedi ``excel_model.periodo``),
+    non mesi nudi 1-12.
+    """
+    totale_per_mese: dict[int, float] = {p: 0.0 for p in bucket_periodi}
     scaduto_totale = 0.0
     fornitori: list[dict] = []
 
@@ -189,10 +200,10 @@ def sintetica_list_to_scadenzario_data(
             "scaduto": float(s.get("scaduto", 0) or 0),
         }
         scaduto_totale += entry["scaduto"]
-        for m, amt in s.get("buckets", {}).items():
-            key = f"mese_{m}"
+        for p, amt in s.get("buckets", {}).items():
+            key = f"mese_{p}"
             entry[key] = float(amt)
-            totale_per_mese[m] = totale_per_mese.get(m, 0.0) + float(amt)
+            totale_per_mese[p] = totale_per_mese.get(p, 0.0) + float(amt)
         fornitori.append(entry)
 
     return ScadenzarioData(

@@ -7,6 +7,7 @@ from io import BytesIO
 
 import openpyxl
 
+from verticals.condges.pf_rotate.excel_model import periodo
 from verticals.condges.scadenze_parse import parse_scadenze
 
 FUTURE = date.today() + timedelta(days=40)
@@ -40,7 +41,7 @@ def test_sintetica_layout():
     assert row["codice_fornitore"] == 42
     assert row["totale"] == -150.0
     assert row["scaduto"] == -50.0
-    assert buckets == [FUTURE.month]
+    assert buckets == [periodo(FUTURE.year, FUTURE.month)]
 
 
 def test_sintetica_usa_saldo_scadenza_non_apertura():
@@ -56,13 +57,14 @@ def test_sintetica_usa_saldo_scadenza_non_apertura():
     )
     df, _ = parse_scadenze(buf)
     row = df.iloc[0]
-    assert row[f"mese_{FUTURE.month}"] == -3619.13  # col 26, non -10857.37
+    p = periodo(FUTURE.year, FUTURE.month)
+    assert row[f"mese_{p}"] == -3619.13  # col 26, non -10857.37
     assert row["totale"] == -3619.13
 
 
 def test_due_rate_stesso_mese_sommate():
     """Due scadenze della stessa voce nello stesso mese → sommate (caso Miele lug)."""
-    m = FUTURE.month
+    p = periodo(FUTURE.year, FUTURE.month)
     buf = _wb_bytes(
         [
             {11: 1008, 12: "MIELE", 26: -3619.12, 23: FUTURE},
@@ -70,7 +72,7 @@ def test_due_rate_stesso_mese_sommate():
         ]
     )
     df, _ = parse_scadenze(buf)
-    assert round(df.iloc[0][f"mese_{m}"], 2) == -4058.86
+    assert round(df.iloc[0][f"mese_{p}"], 2) == -4058.86
 
 
 def test_dettagliata_layout():
@@ -86,7 +88,7 @@ def test_dettagliata_layout():
     row = df.iloc[0]
     assert row["totale"] == -280.0  # usa col 37 (residuo), non col 30/20
     assert row["scaduto"] == -80.0
-    assert buckets == [FUTURE.month]
+    assert buckets == [periodo(FUTURE.year, FUTURE.month)]
 
 
 def test_dettagliata_riga_senza_scadenza_skippata():
@@ -115,10 +117,11 @@ def test_cutoff_esplicito_decide_scaduto():
     )
     df, buckets = parse_scadenze(buf, primo_mese_aperto=(2026, 5))
     row = df.iloc[0]
+    p5, p6 = periodo(2026, 5), periodo(2026, 6)
     assert row["scaduto"] == -100.0
-    assert row["mese_5"] == -200.0
-    assert row["mese_6"] == -300.0
-    assert buckets == [5, 6]
+    assert row[f"mese_{p5}"] == -200.0
+    assert row[f"mese_{p6}"] == -300.0
+    assert buckets == [p5, p6]
 
 
 def test_nome_completo_da_due_colonne():
@@ -130,3 +133,35 @@ def test_nome_completo_da_due_colonne():
     )
     df, _ = parse_scadenze(buf)
     assert df.iloc[0]["nome"] == "CIMINI FILOMENA"
+
+
+def test_parse_scadenze_separa_gli_anni(tmp_path):
+    """Giugno 2026 e giugno 2027 NON si sommano nello stesso bucket."""
+    import openpyxl
+    from datetime import datetime
+
+    from verticals.condges.pf_rotate.excel_model import periodo
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    # layout sintetica: col 11 codice, col 12 nome, col 23 scadenza, col 26 saldo
+    for r, (scad, imp) in enumerate(
+        [(datetime(2026, 6, 15), -100.0), (datetime(2027, 6, 15), -900.0)], start=2
+    ):
+        ws.cell(r, 11, 5555)
+        ws.cell(r, 12, "FORNITORE BIENNALE")
+        ws.cell(r, 23, scad)
+        ws.cell(r, 26, imp)
+    p = tmp_path / "scad.xlsx"
+    wb.save(p)
+
+    from verticals.condges.scadenze_parse import parse_scadenze
+
+    df, bucket_periodi = parse_scadenze(open(p, "rb"), primo_mese_aperto=(2026, 5))
+
+    p26, p27 = periodo(2026, 6), periodo(2027, 6)
+    assert set(bucket_periodi) == {p26, p27}
+    row = df.iloc[0]
+    assert row[f"mese_{p26}"] == -100.0
+    assert row[f"mese_{p27}"] == -900.0  # oggi finirebbe sommato in giugno 2026
+    assert row["scaduto"] == 0.0
