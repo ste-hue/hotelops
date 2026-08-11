@@ -89,17 +89,6 @@ def find_month_periods(
     return result
 
 
-def find_month_columns(ws: Worksheet, header_row: int = 2) -> dict[int, int]:
-    """DEPRECATA (compat transitoria): mese nudo → col. Latest col wins.
-
-    Cancellare quando tutti i caller usano find_month_periods (Task 6).
-    """
-    out: dict[int, int] = {}
-    for p, col in find_month_periods(ws, header_row=header_row).items():
-        out[periodo_anno_mese(p)[1]] = col  # latest wins per costruzione (ordine col)
-    return out
-
-
 # Matches an A1-style reference (e.g. A1, $B$5, 'Sheet Name'!D3, Utenze!D3).
 # Avoid matching function names by requiring a digit somewhere in the token.
 _A1_REF_RE = re.compile(

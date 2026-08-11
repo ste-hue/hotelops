@@ -18,6 +18,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from verticals.condges.pf_rotate.excel_model import periodo, periodo_anno_mese
 from verticals.condges.pf_rotate.fornitori_map import (
     VOCE_LABELS,
     export_fornitori_to_csv,
@@ -132,13 +133,16 @@ def render() -> None:
     data_saldo = date(anno, mese_chiuso, monthrange(anno, mese_chiuso)[1])
     primo_aperto = (anno + 1, 1) if mese_chiuso == 12 else (anno, mese_chiuso + 1)
 
-    scad_df, bucket_months = parse_scadenze(
+    scad_df, bucket_periodi = parse_scadenze(
         BytesIO(up_scad.getvalue()), primo_mese_aperto=primo_aperto
     )
     st.subheader("Scadenziario")
     st.write(
         f"{len(scad_df)} fornitori · mesi forward: "
-        f"{', '.join(MESI[m] for m in bucket_months)}"
+        + ", ".join(
+            f"{MESI[periodo_anno_mese(p)[1]]} {periodo_anno_mese(p)[0]}"
+            for p in bucket_periodi
+        )
     )
 
     # Fornitori non mappati → mappali qui (persiste su BQ d_fornitori: ricordato i mesi dopo)
@@ -291,9 +295,9 @@ def render() -> None:
             result = rotate(
                 pf_path=pf_path,
                 scad_df=scad_df,
-                bucket_months=bucket_months,
+                bucket_periodi=bucket_periodi,
                 societa=societa,
-                mese_chiuso=mese_chiuso,
+                periodo_chiuso=periodo(anno, mese_chiuso),
                 data_saldo=data_saldo,
                 saldi={k: v for k, v in saldi.items() if v != 0} or None,
                 fornitori_csv=forn_csv,
@@ -319,13 +323,26 @@ def render() -> None:
             f"{result.n_controlli_indet} INDET"
         )
 
-    summ = scad_summary(scad_df, bucket_months)
+    oltre = (result.scadenzario_summary or {}).get("oltre_orizzonte") or {}
+    if oltre:
+        tot_oltre = sum(oltre.values())
+        st.warning(
+            f"⚠️ Oltre orizzonte (senza colonna nel PF): {len(oltre)} fornitori, "
+            f"{tot_oltre:,.2f} € NON scritti"
+        )
+
+    summ = scad_summary(scad_df, bucket_periodi)
     st.metric("Scaduto (roll-forward)", f"€ {summ['scaduto_totale']:,.2f}")
     st.metric("Totale partite aperte", f"€ {summ['totale_partite_aperte']:,.2f}")
     forward = summ["forward_buckets"]
     if forward:
         st.write("Progressivo forward:")
-        st.table({MESI[m]: f"€ {v:,.2f}" for m, v in sorted(forward.items())})
+        st.table(
+            {
+                f"{MESI[periodo_anno_mese(p)[1]]} {periodo_anno_mese(p)[0]}": f"€ {v:,.2f}"
+                for p, v in sorted(forward.items())
+            }
+        )
 
     # Nome canonico dell'engine: <societa>_PF_<YYYY-MM>_post-rotate_<timestamp>.xlsx
     # — ha il mese (primo proiettato) + il timestamp. Mostrato nel bottone per verifica.

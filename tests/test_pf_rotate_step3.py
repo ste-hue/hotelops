@@ -47,7 +47,7 @@ def test_policy_fail_raises_on_unmapped(minimal_pf_orti_bytes, tmp_fornitori_csv
         apply_scadenzario(
             pf_bytes=minimal_pf_orti_bytes,
             scad_df=scad_df,
-            bucket_months=buckets,
+            bucket_periodi=buckets,
             societa="ORTI",
             fornitori_csv=tmp_fornitori_csv,
             policy=UnmappedPolicy.FAIL,
@@ -76,11 +76,11 @@ def test_skip_writes_da_mappare_and_esclusi(minimal_pf_orti_bytes, tmp_path):
     out_bytes, summary = apply_scadenzario(
         pf_bytes=minimal_pf_orti_bytes,
         scad_df=scad_df,
-        bucket_months=buckets,
+        bucket_periodi=buckets,
         societa="ORTI",
         fornitori_csv=csv,
         policy=UnmappedPolicy.SKIP,
-        scaduto_month=P(5),
+        scaduto_periodo=P(5),
     )
     assert summary["da_mappare"] == [999]
     assert summary["esclusi"] == [264]
@@ -108,7 +108,7 @@ def test_policy_skip_writes_known_only(minimal_pf_orti_bytes, tmp_fornitori_csv)
     out_bytes, summary = apply_scadenzario(
         pf_bytes=minimal_pf_orti_bytes,
         scad_df=scad_df,
-        bucket_months=buckets,
+        bucket_periodi=buckets,
         societa="ORTI",
         fornitori_csv=tmp_fornitori_csv,
         policy=UnmappedPolicy.SKIP,
@@ -166,7 +166,7 @@ def test_apply_scadenzario_raises_su_collisione_multi_anno_da_mappare(
         apply_scadenzario(
             pf_bytes=minimal_pf_orti_bytes,
             scad_df=scad_df,
-            bucket_months=[P(12), periodo(2027, 12)],
+            bucket_periodi=[P(12), periodo(2027, 12)],
             societa="ORTI",
             fornitori_csv=tmp_fornitori_csv,
             policy=UnmappedPolicy.SKIP,

@@ -4,7 +4,7 @@ import pytest
 
 from verticals.condges.pf_rotate.excel_model import (
     find_layout,
-    find_month_columns,
+    find_month_periods,
     is_value_cell,
     is_formula_with_refs,
     resolve_sheet_name,
@@ -15,20 +15,20 @@ from verticals.condges.pf_rotate.excel_model import (
 )
 
 
-def test_find_month_columns_returns_mese_to_col_map(minimal_pf_orti_bytes):
+def test_find_month_periods_returns_periodo_to_col_map(minimal_pf_orti_bytes):
     wb = openpyxl.load_workbook(BytesIO(minimal_pf_orti_bytes), data_only=False)
     ws = wb["Utenze"]
-    cols = find_month_columns(ws, header_row=2)
+    cols = find_month_periods(ws, header_row=2)
     assert cols == {
-        4: 4,  # APRILE -> col D (4)
-        5: 5,
-        6: 6,
-        7: 7,
-        8: 8,
-        9: 9,
-        10: 10,
-        11: 11,
-        12: 12,
+        periodo(2026, 4): 4,  # APRILE -> col D (4)
+        periodo(2026, 5): 5,
+        periodo(2026, 6): 6,
+        periodo(2026, 7): 7,
+        periodo(2026, 8): 8,
+        periodo(2026, 9): 9,
+        periodo(2026, 10): 10,
+        periodo(2026, 11): 11,
+        periodo(2026, 12): 12,
     }
 
 
@@ -209,11 +209,3 @@ def test_find_month_periods_senza_anno_esplode():
     ws.cell(2, 3, "APRILE")  # nessun anno in riga 1
     with pytest.raises(ValueError, match="[Aa]nno non dichiarato"):
         find_month_periods(ws)
-
-
-def test_find_month_columns_compat_su_file_mono_anno():
-    """La vecchia API resta identica sui file a un anno (i caller non migrati)."""
-    from verticals.condges.pf_rotate.excel_model import find_month_columns
-    ws = _ws_multi_anno()  # multi-anno: latest wins (comportamento storico)
-    cols = find_month_columns(ws)
-    assert cols[4] == 15  # APRILE: l'ultima colonna vince (storico documentato)

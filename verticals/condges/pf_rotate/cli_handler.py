@@ -8,6 +8,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
+from verticals.condges.pf_rotate.excel_model import periodo
 from verticals.condges.pf_rotate.rotate import rotate
 from verticals.condges.pf_rotate.step3_scadenzario import UnmappedPolicy
 
@@ -147,7 +148,7 @@ def _handle(args: argparse.Namespace) -> int:
     else:
         cutoff = (anno_cutoff, args.mese_chiuso + 1)
     with args.scad.open("rb") as f:
-        scad_df, bucket_months = parse_scadenze(
+        scad_df, bucket_periodi = parse_scadenze(
             BytesIO(f.read()), primo_mese_aperto=cutoff
         )
 
@@ -160,6 +161,7 @@ def _handle(args: argparse.Namespace) -> int:
     anno = args.anno or date.today().year
     data_saldo = _resolve_data_saldo(args.data_saldo, anno, args.mese_chiuso)
     extra_excluded = _parse_exclude(args.exclude)
+    periodo_chiuso = periodo(anno, args.mese_chiuso)
 
     if policy == UnmappedPolicy.INTERACTIVE:
         from verticals.condges.pf_rotate.interactive_map import (
@@ -178,9 +180,9 @@ def _handle(args: argparse.Namespace) -> int:
         result = rotate(
             pf_path=args.pf,
             scad_df=scad_df,
-            bucket_months=bucket_months,
+            bucket_periodi=bucket_periodi,
             societa=args.societa,
-            mese_chiuso=args.mese_chiuso,
+            periodo_chiuso=periodo_chiuso,
             data_saldo=data_saldo,
             saldi=overrides or None,
             fornitori_csv=args.fornitori_csv,
@@ -204,6 +206,12 @@ def _handle(args: argparse.Namespace) -> int:
     if result.scadenzario_summary:
         print(
             f"\nFornitori scritti: {result.scadenzario_summary['totale_fornitori_scritti']}"
+        )
+    oltre = (result.scadenzario_summary or {}).get("oltre_orizzonte") or {}
+    if oltre:
+        tot = sum(oltre.values())
+        print(
+            f"\n⚠️ Oltre orizzonte (senza colonna nel PF): {len(oltre)} fornitori, {tot:,.2f} € NON scritti"
         )
     return 1 if result.failed else 0
 

@@ -6,9 +6,12 @@ import openpyxl
 import pandas as pd
 import pytest
 
+from verticals.condges.pf_rotate.excel_model import periodo
 from verticals.condges.pf_rotate.rotate import ScadenzarioVuotoError, rotate
 from verticals.condges.pf_rotate.step1_saldi import SaldiIncompletiError
 from verticals.condges.pf_rotate.step3_scadenzario import UnmappedPolicy
+
+P = lambda m: periodo(2026, m)  # noqa: E731 - l'anno dei fixture (minimal_pf_orti_bytes) è 2026
 
 
 def _minimal_scad_df() -> pd.DataFrame:
@@ -20,8 +23,8 @@ def _minimal_scad_df() -> pd.DataFrame:
                 # convenzione parse_scadenze: debiti negativi (avere)
                 "totale": -500.0,
                 "scaduto": 0.0,
-                "mese_5": -500.0,
-                "mese_6": 0.0,
+                f"mese_{P(5)}": -500.0,
+                f"mese_{P(6)}": 0.0,
             },
         ]
     )
@@ -56,8 +59,8 @@ def test_rotate_end_to_end_orti(
                 # convenzione parse_scadenze: debiti negativi (avere)
                 "totale": -500.0,
                 "scaduto": 0.0,
-                "mese_5": -500.0,
-                "mese_6": 0.0,
+                f"mese_{P(5)}": -500.0,
+                f"mese_{P(6)}": 0.0,
             },
         ]
     )
@@ -65,9 +68,9 @@ def test_rotate_end_to_end_orti(
     result = rotate(
         pf_path=pf_path,
         scad_df=scad_df,
-        bucket_months=[5, 6],
+        bucket_periodi=[P(5), P(6)],
         societa="ORTI",
-        mese_chiuso=4,
+        periodo_chiuso=P(4),
         data_saldo=date(2026, 4, 30),
         saldi={"MPS": 251897.54, "Intesa": 87439.92},
         fornitori_csv=fornitori_csv_orti,
@@ -95,9 +98,9 @@ def test_rotate_hard_fail_missing_required_saldo(
         rotate(
             pf_path=pf_path,
             scad_df=_minimal_scad_df(),
-            bucket_months=[5, 6],
+            bucket_periodi=[P(5), P(6)],
             societa="ORTI",
-            mese_chiuso=4,
+            periodo_chiuso=P(4),
             data_saldo=date(2026, 4, 30),
             saldi={"MPS": 251897.54},  # manca INTESA (obbligatorio)
             fornitori_csv=fornitori_csv_orti,
@@ -121,9 +124,9 @@ def test_rotate_allow_partial_writes_failed_checks(
     result = rotate(
         pf_path=pf_path,
         scad_df=_minimal_scad_df(),
-        bucket_months=[5, 6],
+        bucket_periodi=[P(5), P(6)],
         societa="ORTI",
-        mese_chiuso=4,
+        periodo_chiuso=P(4),
         data_saldo=date(2026, 4, 30),
         saldi={"MPS": 251897.54},  # manca INTESA
         fornitori_csv=fornitori_csv_orti,
@@ -148,9 +151,9 @@ def test_rotate_exclude_flag_drops_fornitore(
     result = rotate(
         pf_path=pf_path,
         scad_df=_minimal_scad_df(),
-        bucket_months=[5, 6],
+        bucket_periodi=[P(5), P(6)],
         societa="ORTI",
-        mese_chiuso=4,
+        periodo_chiuso=P(4),
         data_saldo=date(2026, 4, 30),
         saldi={"MPS": 251897.54, "Intesa": 87439.92},
         fornitori_csv=fornitori_csv_orti,
@@ -179,9 +182,9 @@ def test_rotate_writes_failed_suffix_on_check_failure(
     result = rotate(
         pf_path=pf_path,
         scad_df=_minimal_scad_df(),
-        bucket_months=[5, 6],
+        bucket_periodi=[P(5), P(6)],
         societa="ORTI",
-        mese_chiuso=4,
+        periodo_chiuso=P(4),
         data_saldo=date(2026, 4, 30),
         saldi={"MPS": 250000.0, "Intesa": 90000.0},
         fornitori_csv=fornitori_csv_orti,
@@ -217,9 +220,9 @@ def test_rotate_hard_fail_su_scadenzario_vuoto(
             scad_df=pd.DataFrame(
                 columns=["codice_fornitore", "nome", "totale", "scaduto"]
             ),
-            bucket_months=[],
+            bucket_periodi=[],
             societa="ORTI",
-            mese_chiuso=4,
+            periodo_chiuso=P(4),
             data_saldo=date(2026, 4, 30),
             saldi={"MPS": 250000.0, "Intesa": 90000.0},
             fornitori_csv=fornitori_csv_orti,

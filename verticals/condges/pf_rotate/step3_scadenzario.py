@@ -49,18 +49,18 @@ def apply_scadenzario(
     *,
     pf_bytes: bytes,
     scad_df: pd.DataFrame,
-    bucket_months: list[int],
+    bucket_periodi: list[int],
     societa: str,
     fornitori_csv: Path,
     policy: UnmappedPolicy,
     extra_excluded: set[int] | None = None,
-    scaduto_month: int | None = None,
+    scaduto_periodo: int | None = None,
 ) -> tuple[bytes, dict]:
     """Applica lo scadenzario al PF, ritorna (xlsx bytes, summary dict).
 
-    ``scaduto_month``: primo mese aperto della rotation — il bucket 'scaduto'
+    ``scaduto_periodo``: primo periodo aperto della rotation — il bucket 'scaduto'
     finisce lì (non nel mese di oggi) e le righe dei fornitori mappati vengono
-    ripulite nei mesi >= scaduto_month prima della riscrittura (idempotenza).
+    ripulite nei periodi >= scaduto_periodo prima della riscrittura (idempotenza).
     """
     fornitori = load_fornitori(fornitori_csv, societa=societa)
     known_codici = set(fornitori.keys())
@@ -104,12 +104,16 @@ def apply_scadenzario(
     updated_bytes, write_summary = write_pf(
         pf_bytes=pf_bytes,
         scad_df=scad_df,
-        bucket_periodi=bucket_months,
+        bucket_periodi=bucket_periodi,
         fornitori_map=legacy_map,
         excluded=excluded_set,
-        scaduto_periodo=scaduto_month,
+        scaduto_periodo=scaduto_periodo,
         clear_codici=set(legacy_map.keys()),
     )
+    # write_pf mette "oltre_orizzonte" nello stesso dict delle voci scritte
+    # (chiave riservata, non è una voce_label): estraila prima di usare le
+    # chiavi restanti come "voci_aggiornate"/conteggio scritti.
+    oltre_orizzonte = write_summary.pop("oltre_orizzonte", {})
 
     # Niente perso in silenzio: i non-mappati vanno nel foglio DA MAPPARE, gli
     # esclusi (is_excluded) nel foglio ESCLUSI. Riusa il motore del generatore
@@ -123,14 +127,14 @@ def apply_scadenzario(
         }
         for cod, r in fornitori.items()
     }
-    primo = scaduto_month or min(bucket_months)
+    primo = scaduto_periodo or min(bucket_periodi)
     _per_voce, unmapped_rows, esclusi_rows = blocco_a_per_voce(
-        scad_df, bucket_months, fornitori_full, primo_mese_aperto=primo
+        scad_df, bucket_periodi, fornitori_full, primo_mese_aperto=primo
     )
-    # bucket_months/primo sono periodi qui (write_pf sopra li ha già validati
-    # con require_periodo): scrivi_da_mappare/scrivi_esclusi/hide_past_columns
-    # indirizzano colonne per mese-nudo — bridge minimo verso quei renderer
-    # (la loro migrazione a periodo è Task 6).
+    # bucket_periodi/primo sono periodi (write_pf sopra li ha già validati con
+    # require_periodo): scrivi_da_mappare/scrivi_esclusi/hide_past_columns_rotation
+    # indirizzano colonne per mese-nudo (12 colonne calendario, no anno) — il
+    # confine periodo→mese-calendario è qui sotto, con guard anti-collisione.
     for rows in (unmapped_rows, esclusi_rows):
         for r in rows:
             # DA MAPPARE/ESCLUSI hanno 12 colonne mese-nudo (no anno): due
@@ -154,7 +158,7 @@ def apply_scadenzario(
     scrivi_esclusi(wb, esclusi_rows)
     # Nasconde i mesi passati (vuoti) così il file parte visivamente dal mese
     # aperto, senza perdere dati/formule/bussola.
-    hide_past_columns_rotation(wb, periodo_anno_mese(primo)[1])
+    hide_past_columns_rotation(wb, primo)
     buf = BytesIO()
     wb.save(buf)
     updated_bytes = buf.getvalue()
@@ -167,5 +171,6 @@ def apply_scadenzario(
         "excluded_adhoc": sorted(adhoc_excluded),
         "voci_aggiornate": list(write_summary.keys()),
         "totale_fornitori_scritti": sum(len(v) for v in write_summary.values()),
+        "oltre_orizzonte": oltre_orizzonte,
     }
     return updated_bytes, summary
