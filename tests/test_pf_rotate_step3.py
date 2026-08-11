@@ -144,6 +144,40 @@ def test_write_pf_scadenza_oltre_orizzonte_va_nel_secchio(minimal_pf_orti_bytes)
     assert summary["oltre_orizzonte"] == {18: -500.0}
 
 
+def test_apply_scadenzario_oltre_orizzonte_non_inquina_summary(
+    minimal_pf_orti_bytes, tmp_fornitori_csv
+):
+    """Regression: write_pf mette "oltre_orizzonte" nello stesso dict delle
+    voci scritte (chiave riservata, non una voce_label) — apply_scadenzario
+    deve estrarlo PRIMA di calcolare voci_aggiornate/totale_fornitori_scritti,
+    altrimenti quella chiave si spaccia per una voce e gonfia il conteggio di
+    'fornitori scritti' con importi che in realtà non sono finiti da nessuna
+    parte nel foglio."""
+    p_fuori = periodo(2027, 7)  # il fixture (minimal_pf_orti_bytes) arriva a dicembre 2026
+    scad_df = pd.DataFrame(
+        [
+            {
+                "codice_fornitore": 100,
+                "nome": "Known Spa",
+                "totale": -500.0,
+                "scaduto": 0.0,
+                f"mese_{p_fuori}": -500.0,
+            }
+        ]
+    )
+    out_bytes, summary = apply_scadenzario(
+        pf_bytes=minimal_pf_orti_bytes,
+        scad_df=scad_df,
+        bucket_periodi=[p_fuori],
+        societa="ORTI",
+        fornitori_csv=tmp_fornitori_csv,
+        policy=UnmappedPolicy.FAIL,
+    )
+    assert summary["oltre_orizzonte"] == {100: -500.0}
+    assert "oltre_orizzonte" not in summary["voci_aggiornate"]
+    assert summary["totale_fornitori_scritti"] == 0
+
+
 def test_apply_scadenzario_raises_su_collisione_multi_anno_da_mappare(
     minimal_pf_orti_bytes, tmp_fornitori_csv
 ):
