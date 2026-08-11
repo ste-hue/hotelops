@@ -6,12 +6,23 @@ import openpyxl
 import pandas as pd
 import pytest
 
-from verticals.condges.pf_rotate.excel_model import periodo
+from verticals.condges.pf_rotate.excel_model import find_month_periods, periodo
 from verticals.condges.pf_rotate.rotate import ScadenzarioVuotoError, rotate
 from verticals.condges.pf_rotate.step1_saldi import SaldiIncompletiError
 from verticals.condges.pf_rotate.step3_scadenzario import UnmappedPolicy
 
 P = lambda m: periodo(2026, m)  # noqa: E731 - l'anno dei fixture (minimal_pf_orti_bytes) è 2026
+
+
+def _find_row(ws, nome_fragment: str, max_row: int = 200) -> int:
+    """Scansiona la colonna B del foglio per il nome fornitore (pattern da
+    ``_find_supplier_row_by_name`` in pf_writer.py)."""
+    target = nome_fragment.strip().lower()
+    for r in range(3, min(ws.max_row + 1, max_row)):
+        val = ws.cell(row=r, column=2).value
+        if val and target in str(val).strip().lower():
+            return r
+    raise AssertionError(f"riga con nome contenente {nome_fragment!r} non trovata")
 
 
 def _minimal_scad_df() -> pd.DataFrame:
@@ -231,3 +242,50 @@ def test_rotate_hard_fail_su_scadenzario_vuoto(
         )
 
     assert not out_dir.exists(), "nessun file deve essere scritto su scadenzario vuoto"
+
+
+def test_rotate_15col_giugno26_e_giugno27_in_colonne_diverse(
+    minimal_pf_orti_15col_bytes,
+    fornitori_csv_orti,
+    tmp_path,
+):
+    """Regressione della collisione anno-agnostica: GIUGNO 2026 e GIUGNO 2027
+
+    devono finire in due colonne distinte del foglio Utenze, ciascuna con il
+    proprio importo — non sommate/sovrascritte sulla stessa colonna "GIUGNO".
+    """
+    p26, p27 = periodo(2026, 6), periodo(2027, 6)
+    pf_path = tmp_path / "in.xlsx"
+    pf_path.write_bytes(minimal_pf_orti_15col_bytes)
+    scad_df = pd.DataFrame(
+        [
+            {
+                "codice_fornitore": 18,
+                "nome": "Acqua Ausino",
+                "totale": -300.0,
+                "scaduto": 0.0,
+                f"mese_{p26}": -100.0,
+                f"mese_{p27}": -200.0,
+            },
+        ]
+    )
+    result = rotate(
+        pf_path=pf_path,
+        scad_df=scad_df,
+        bucket_periodi=[p26, p27],
+        societa="ORTI",
+        periodo_chiuso=periodo(2026, 5),
+        data_saldo=date(2026, 5, 31),
+        saldi={"MPS": 100.0, "Intesa": 50.0},
+        fornitori_csv=fornitori_csv_orti,
+        out_dir=tmp_path,
+        unmapped_policy=UnmappedPolicy.FAIL,
+    )
+    wb = openpyxl.load_workbook(result.out_path)
+    ut = wb["Utenze"]
+    cols = find_month_periods(ut)
+    assert cols[p26] != cols[p27]
+    row = _find_row(ut, "Acqua")
+    v26 = ut.cell(row, cols[p26]).value
+    v27 = ut.cell(row, cols[p27]).value
+    assert (v26, v27) == (100.0, 200.0)  # write_pf scrive positivi sul PF
