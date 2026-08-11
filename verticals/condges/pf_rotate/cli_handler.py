@@ -39,9 +39,7 @@ def _parse_data(s: str) -> date:
     return datetime.strptime(s, "%Y-%m-%d").date()
 
 
-def _resolve_data_saldo(
-    data_saldo: date | None, anno: int, mese_chiuso: int
-) -> date:
+def _resolve_data_saldo(data_saldo: date | None, anno: int, mese_chiuso: int) -> date:
     """O-D: --data-saldo esplicito è override; altrimenti ultimo giorno di (anno, mese)."""
     if data_saldo is not None:
         return data_saldo
@@ -78,6 +76,7 @@ def _default_policy() -> UnmappedPolicy:
 
 def add_subparser(subparsers: argparse._SubParsersAction):
     _add_normalize_intur_subparser(subparsers)
+    _add_pf_extend_subparser(subparsers)
     p = subparsers.add_parser(
         "pf-rotate", help="Rotation mensile del Piano Finanziario."
     )
@@ -214,6 +213,49 @@ def _handle(args: argparse.Namespace) -> int:
             f"\n⚠️ Oltre orizzonte (senza colonna nel PF): {len(oltre)} fornitori, {tot:,.2f} € NON scritti"
         )
     return 1 if result.failed else 0
+
+
+def _parse_anno_mese(s: str) -> tuple[int, int]:
+    try:
+        anno_s, mese_s = s.split("-", 1)
+        return int(anno_s), int(mese_s)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"--to atteso 'YYYY-MM', avuto '{s}'") from e
+
+
+def _add_pf_extend_subparser(subparsers: argparse._SubParsersAction):
+    p = subparsers.add_parser(
+        "pf-extend",
+        help="Allunga l'orizzonte del template PF fino al periodo target.",
+    )
+    p.add_argument("--pf", type=Path, required=True)
+    p.add_argument("--to", type=str, required=True, help="Periodo target YYYY-MM.")
+    p.add_argument("--out", type=Path, default=Path.cwd() / "pianfin-out")
+    p.set_defaults(func=_handle_extend)
+    return p
+
+
+def _handle_extend(args: argparse.Namespace) -> int:
+    import openpyxl
+
+    from verticals.condges.pf_rotate.extend import extend_to
+
+    anno, mese = _parse_anno_mese(args.to)
+    wb = openpyxl.load_workbook(
+        args.pf
+    )  # copia in-memory: l'input su disco non si tocca
+    changed = extend_to(wb, periodo(anno, mese))
+    if not changed:
+        print("Già coperto: nessuna colonna da aggiungere.")
+        return 0
+    args.out.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y-%m-%dT%H-%M")
+    out = args.out / f"{args.pf.stem}_extended_{args.to}_{ts}.xlsx"
+    wb.save(out)
+    print(f"Output: {out}\nColonne aggiunte/aggiornate: {len(changed)}")
+    for c in changed[:20]:
+        print(f"  + {c}")
+    return 0
 
 
 def _add_normalize_intur_subparser(subparsers: argparse._SubParsersAction):
