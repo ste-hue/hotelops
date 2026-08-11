@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 
 from openpyxl import Workbook
+from openpyxl.cell.cell import MergedCell
 from openpyxl.formula.translate import Translator
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
@@ -25,6 +26,13 @@ from verticals.condges.pf_rotate.excel_model import (
 _NOME_MESE = {v: k for k, v in MESI_IT.items()}
 _HEADER_ROW = 2
 _YEAR_ROW = 1
+
+# Fogli-report generati da pf_generator.template (scrivi_da_mappare/scrivi_esclusi):
+# 12 colonne mese-NUDO (no anno dichiarato in riga 1) — non sono griglie PF,
+# find_month_periods ci solleverebbe sempre "Anno non dichiarato". Match per
+# prefisso di titolo (case-sensitive, come i nomi reali): copre anche i
+# duplicati auto-rinominati da openpyxl ("DA MAPPARE1", "ESCLUSI1").
+_SERVICE_SHEET_PREFIXES = ("DA MAPPARE", "ESCLUSI")
 
 # Riferimento cella A1-style, con eventuali $ (no supporto sheet-qualified: le
 # formule della colonna TOTALI osservate nel template sono sempre same-sheet).
@@ -52,6 +60,9 @@ def _shift_totali_formula(formula: str, cols_to_shift: set[int], n_new: int) -> 
 
 
 def _extend_sheet(ws: Worksheet, target_periodo: int) -> list[str]:
+    titolo = ws.title.strip()
+    if titolo.startswith(_SERVICE_SHEET_PREFIXES):
+        return [f"skip: {ws.title} (foglio di servizio)"]
     cols = find_month_periods(ws, header_row=_HEADER_ROW)
     if not cols:
         return []
@@ -79,9 +90,16 @@ def _extend_sheet(ws: Worksheet, target_periodo: int) -> list[str]:
         anno, mese = periodo_anno_mese(p)
         ws.cell(_HEADER_ROW, dst_col, _NOME_MESE[mese])
         if mese == 1:
-            ws.cell(
-                _YEAR_ROW, dst_col, anno
-            )  # marker anno sul primo mese dell'anno nuovo
+            # marker anno sul primo mese dell'anno nuovo — decorativo (find_month_periods
+            # deriva l'anno dal wrap, non da questa cella): se la riga 1 è merged in quel
+            # punto (es. ORTI ' Varie ed Eventuali', I1:O1) la cella target è una
+            # MergedCell read-only — salta il marker, non l'estensione delle colonne.
+            if isinstance(ws.cell(_YEAR_ROW, dst_col), MergedCell):
+                changed.append(
+                    f"warn: marker anno saltato su '{ws.title}' (riga 1 merged)"
+                )
+            else:
+                ws.cell(_YEAR_ROW, dst_col, anno)
         for r in range(1, ws.max_row + 1):
             v = ws.cell(r, src_col).value
             if isinstance(v, str) and v.startswith("="):

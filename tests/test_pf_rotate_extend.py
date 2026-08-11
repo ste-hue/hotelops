@@ -1,8 +1,12 @@
 import openpyxl
+import pytest
 from io import BytesIO
+from openpyxl.utils import get_column_letter
 
-from verticals.condges.pf_rotate.excel_model import find_month_periods, periodo
+from verticals.condges.pf_rotate.excel_model import MESI_IT, find_month_periods, periodo
 from verticals.condges.pf_rotate.extend import extend_to
+
+_MESI_ORDINATI = list(MESI_IT.keys())  # GENNAIO..DICEMBRE, ordine dict
 
 
 def _wb(bytes_):
@@ -65,3 +69,78 @@ def test_extend_ripunta_le_formule_totali(minimal_pf_orti_bytes):
     # seguirla al nuovo indirizzo, non restare puntato alla colonna diventata
     # un mese qualsiasi dell'orizzonte esteso.
     assert pf.cell(29, totali_col).value == "=R12-R27"
+
+
+def test_extend_salta_fogli_di_servizio_senza_anno(minimal_pf_orti_bytes):
+    """DA MAPPARE/ESCLUSI (generati da pf_generator.template) hanno 12 colonne
+    mese-nudo in riga 2 ma NESSUN anno in riga 1: non sono griglie PF da
+    estendere, sono report. find_month_periods ci solleverebbe 'Anno non
+    dichiarato' — extend_to deve saltarli per titolo, PRIMA di chiamare
+    find_month_periods, non farli esplodere."""
+    wb = _wb(minimal_pf_orti_bytes)
+    da_mappare = wb.create_sheet("DA MAPPARE")
+    da_mappare.cell(1, 1, "Fornitori NON mappati in d_fornitori.csv")
+    da_mappare.cell(2, 1, "Cod")
+    da_mappare.cell(2, 2, "Nome")
+    for i, m in enumerate(_MESI_ORDINATI):
+        da_mappare.cell(2, 3 + i, m)  # 12 colonne mese-nudo, nessun anno
+
+    esclusi = wb.create_sheet("ESCLUSI1")
+    esclusi.cell(1, 1, "Fornitori ESCLUSI dalla cassa")
+    for i, m in enumerate(_MESI_ORDINATI):
+        esclusi.cell(2, 3 + i, m)
+
+    changed = extend_to(wb, periodo(2027, 6))  # non deve sollevare
+
+    assert any("skip" in c and "DA MAPPARE" in c for c in changed)
+    assert any("skip" in c and "ESCLUSI1" in c for c in changed)
+    # fogli non toccati: 12 colonne mese, ancora senza anno dichiarato
+    assert da_mappare.max_column == 14  # A,B + 12 mesi (C..N)
+    with pytest.raises(ValueError, match="Anno non dichiarato"):
+        find_month_periods(da_mappare)
+
+
+def test_extend_altro_foglio_senza_anno_continua_a_esplodere(minimal_pf_orti_bytes):
+    """Guardia anti-regressione: lo skip è per titolo (DA MAPPARE/ESCLUSI), non
+    generico. Un vero foglio-mese senza anno deve continuare a fallire loud."""
+    wb = _wb(minimal_pf_orti_bytes)
+    rotto = wb.create_sheet("Un Foglio Qualunque")
+    for i, m in enumerate(_MESI_ORDINATI):
+        rotto.cell(2, 3 + i, m)  # mesi ma nessun anno in riga 1
+
+    with pytest.raises(ValueError, match="Anno non dichiarato"):
+        extend_to(wb, periodo(2027, 6))
+
+
+def test_extend_salta_marker_anno_su_cella_merged(minimal_pf_orti_bytes):
+    """ORTI ' Varie ed Eventuali': merge su riga 1 (es. I1:O1) copre la colonna
+    dove andrebbe scritto il marker anno del nuovo GENNAIO. Scrivere lì
+    solleverebbe AttributeError su MergedCell — extend_to deve rilevarlo,
+    saltare SOLO il marker (decorativo) e loggare un warning, senza fermare
+    l'estensione delle colonne."""
+    wb = _wb(minimal_pf_orti_bytes)
+    ve = wb.create_sheet(" Varie ed Eventuali")
+    ve["D1"] = 2026
+    ve["A2"] = "CODICE"
+    mesi = _MESI_ORDINATI[3:12]  # APRILE..DICEMBRE
+    for i, m in enumerate(mesi):
+        ve.cell(2, 4 + i, m)
+    ve["B3"] = "Voce"
+    ve["C3"] = "=SUM(D3:L3)"
+    for i in range(9):
+        col = 4 + i
+        cl = get_column_letter(col)
+        ve.cell(3, col, f"=SUM({cl}4:{cl}50)")
+    # Il nuovo GENNAIO 2027 finirebbe in col M (13): il merge lo copre, ma
+    # NON è l'anchor (I=9) quindi è una MergedCell read-only.
+    ve.merge_cells("I1:O1")
+
+    changed = extend_to(wb, periodo(2027, 6))  # non deve sollevare
+
+    cols = find_month_periods(ve)
+    assert max(cols) == periodo(2027, 6)  # colonne comunque aggiunte
+    assert ve.cell(1, cols[periodo(2027, 1)]).value is None  # marker NON scritto
+    assert any(
+        "warn" in c.lower() and "Varie ed Eventuali" in c and "merged" in c.lower()
+        for c in changed
+    )
