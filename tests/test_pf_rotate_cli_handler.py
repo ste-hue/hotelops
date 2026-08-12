@@ -2,6 +2,7 @@ import argparse
 from datetime import date
 
 import openpyxl
+import pytest
 
 from verticals.condges.pf_rotate.cli_handler import (
     _parse_exclude,
@@ -57,6 +58,76 @@ def test_pf_extend_cli_scrive_file_esteso(tmp_path, minimal_pf_orti_bytes):
     wb = openpyxl.load_workbook(outputs[0])
     cols = find_month_periods(wb["Piano Finanziario"])
     assert max(cols) == periodo(2027, 6)
+
+
+def test_pf_extend_cli_trim_before_wiring_no_op(tmp_path, minimal_pf_orti_bytes):
+    """--trim-before con cutoff = primo mese già esistente: nessuna colonna da
+    eliminare, trim_before torna [] senza toccare i valori cached (nessuna
+    freeze necessaria) — verifica solo che l'argomento sia collegato a
+    trim_before DOPO extend_to, senza esercitare il path di congelamento."""
+    pf_path = tmp_path / "ORTI_PF.xlsx"
+    pf_path.write_bytes(minimal_pf_orti_bytes)
+    out_dir = tmp_path / "out"
+
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command")
+    add_subparser(sub)
+    args = parser.parse_args(
+        [
+            "pf-extend",
+            "--pf",
+            str(pf_path),
+            "--to",
+            "2027-06",
+            "--trim-before",
+            "2026-04",  # = primo mese del fixture: no-op
+            "--out",
+            str(out_dir),
+        ]
+    )
+
+    rc = args.func(args)
+    assert rc == 0
+
+    outputs = list(out_dir.glob("*_extended_2027-06_*.xlsx"))
+    assert len(outputs) == 1
+    wb = openpyxl.load_workbook(outputs[0])
+    cols = find_month_periods(wb["Piano Finanziario"])
+    assert min(cols) == periodo(2026, 4)  # nulla eliminato
+    assert max(cols) == periodo(2027, 6)
+
+
+def test_pf_extend_cli_trim_before_fail_loud_senza_cache(
+    tmp_path, minimal_pf_orti_bytes
+):
+    """Il fixture è puro-openpyxl (mai aperto in Excel): estendere e potare
+    nella STESSA invocazione, senza un giro per Excel in mezzo, non ha un
+    valore calcolato da congelare per la cascata della nuova prima colonna —
+    la CLI deve fallire rumorosamente (ValueError), mai scrivere un file
+    silenziosamente rotto."""
+    pf_path = tmp_path / "ORTI_PF.xlsx"
+    pf_path.write_bytes(minimal_pf_orti_bytes)
+    out_dir = tmp_path / "out"
+
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command")
+    add_subparser(sub)
+    args = parser.parse_args(
+        [
+            "pf-extend",
+            "--pf",
+            str(pf_path),
+            "--to",
+            "2027-06",
+            "--trim-before",
+            "2027-01",  # elimina il vecchio storico -> serve un cached value
+            "--out",
+            str(out_dir),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="apri e salva il file in Excel"):
+        args.func(args)
 
     # l'input su disco non è mai stato toccato
     wb_in = openpyxl.load_workbook(pf_path)
