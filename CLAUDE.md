@@ -164,6 +164,8 @@ Regole per le rotation mensili del Piano Finanziario (`hotelops pf-rotate`).
 
 **File output nuovo, mai mutare l'input.** Naming `<societa>_PF_<YYYY-MM>_post-rotate_<ts>.xlsx`, dove `YYYY-MM` è il **primo mese aperto** (data_saldo + 1 mese). Se step 5 trova ERR → suffisso `_FAILED_CHECKS` (scritto comunque). Attesi smoke: ORTI 13/0/7, INTUR 12/0/8.
 
+**Chiave periodo (2026-08-12).** Il motore ragiona in **periodi ordinali** (`anno*12 + mese-1`, helpers in `excel_model`: `periodo`/`periodo_anno_mese`/`require_periodo`/`find_month_periods`) — i mesi nudi 1-12 vivono solo ai bordi CLI/app. L'anno di ogni colonna si deduce dalla riga-1 del foglio + wrap dic→gen: un foglio-mese SENZA anno in riga 1 esplode (fail-loud; i fogli di servizio `DA MAPPARE*`/`ESCLUSI*` sono esenti). Orizzonte del PF = **giugno anno+1** (concept vault `ORIZZONTE_DI_TRAVERSATA`): `hotelops pf-extend --pf F --to YYYY-MM [--trim-before YYYY-MM]` estende il template (formule tradotte, TOTALI ripuntato) e, al rito annuale, pota il passato ri-ancorando la prima colonna superstite (serve il file salvato da Excel: senza cached values il trim esplode con istruzioni). Le scadenze oltre l'orizzonte del foglio NON vengono scritte: finiscono nel secchio `oltre_orizzonte` riportato da CLI e app.
+
 ## Git Conventions
 
 In aggiunta a `~/.claude/CLAUDE.md`:
