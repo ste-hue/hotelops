@@ -6,7 +6,12 @@ import pytest
 from io import BytesIO
 from openpyxl.utils import get_column_letter
 
-from verticals.condges.pf_rotate.excel_model import MESI_IT, find_month_periods, periodo
+from verticals.condges.pf_rotate.excel_model import (
+    MESI_IT,
+    find_month_periods,
+    periodo,
+    periodo_anno_mese,
+)
 from verticals.condges.pf_rotate.extend import extend_to, trim_before
 from verticals.condges.pf_rotate.rotate import rotate
 from verticals.condges.pf_rotate.step3_scadenzario import UnmappedPolicy
@@ -240,6 +245,46 @@ def test_trim_cascata_e_totali_traslano_correttamente(minimal_pf_orti_bytes, tmp
     last_col_l = get_column_letter(c_giu)
     assert pf.cell(37, totali_col).value == f"={last_col_l}37"  # ultimo mese, shiftato
     assert pf.cell(29, totali_col).value == "=I12-I27"  # self-ref, shiftato
+
+
+def test_trim_righe_15_16_cross_sheet_seguono_lo_shift(minimal_pf_orti_bytes, tmp_path):
+    """Passata 4 (Translator post-delete) si applica anche ai riferimenti
+    cross-sheet di riga 15/16 (Utenze!<col>3, 'Materie Prime-Consumo '!<col>3)
+    — non solo alle formule same-sheet (r4/r12/r27/r29/r37, già coperte da
+    test_trim_cascata_e_totali_traslano_correttamente). Verifica per PIU' di
+    una colonna 2027 superstite, con la lettera attesa CALCOLATA (non
+    hardcoded) dal mapping periodo->colonna del master dopo il trim.
+
+    Nota sull'invariante scelta: extend_to costruisce questi riferimenti
+    riusando la STESSA lettera della colonna master per il ref a Utenze (mai
+    la colonna del periodo corrispondente nel foglio dettaglio) — verificato
+    anche sul fixture NON esteso/NON trimmato: master APRILE (col C, prima
+    colonna in assoluto) referenzia già "Utenze!C3", che in Utenze non è
+    nemmeno un mese (è la colonna C='Utenze!C3'=SUM(D3:L3), il totale di
+    riga — i mesi di Utenze iniziano a D, un offset di 1 colonna rispetto al
+    master). È un artefatto di costruzione del fixture condiviso
+    (`_build_minimal_pf_orti` in conftest.py, preesistente da prima di
+    questo task, mai asserito da nessun test finora) — NON qualcosa che
+    trim_before introduce o deve correggere: l'unica garanzia che
+    extend_to offre (e che trim_before deve preservare) è "stessa lettera
+    del master", non "stesso periodo nel foglio dettaglio". Per questo
+    l'assert qui sotto confronta col mapping periodo->colonna del MASTER
+    (non di Utenze/Materie Prime), calcolato dopo il trim."""
+    wb, wbv = _extend_and_reload(minimal_pf_orti_bytes, tmp_path)
+    pf = wb["Piano Finanziario"]
+    cols = find_month_periods(pf)
+    _inject_cached_freeze_values(wbv, cols)
+
+    trim_before(wb, wbv, periodo(2027, 1))
+
+    cols = find_month_periods(pf)
+    for per in (periodo(2027, 1), periodo(2027, 3), periodo(2027, 6)):
+        c = cols[per]
+        cl = get_column_letter(c)
+        assert pf.cell(15, c).value == f"=Utenze!{cl}3", periodo_anno_mese(per)
+        assert pf.cell(16, c).value == f"='Materie Prime-Consumo '!{cl}3", (
+            periodo_anno_mese(per)
+        )
 
 
 def test_trim_fail_loud_senza_valore_cached(minimal_pf_orti_bytes, tmp_path):
