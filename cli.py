@@ -1138,7 +1138,7 @@ def main():
         "app_name",
         nargs="?",
         default=None,
-        help="App da lanciare: pf (default), scadenzario, accodamenti, reviews",
+        help="App da lanciare: pf (default), accodamenti, reviews",
     )
 
     # tesoreria

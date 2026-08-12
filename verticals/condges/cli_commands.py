@@ -755,98 +755,6 @@ def cmd_saldo(args):
     print("  Scad. = uscite certe da scadenzario fornitori (non entra nel saldo)")
 
 
-# ── Scadenzario ──────────────────────────────────────────────────────────
-
-
-def cmd_scadenzario(args):
-    """Scadenzario fornitori → aggiorna PF Excel."""
-    from datetime import date
-    from io import BytesIO
-    from verticals.condges.pf_rotate.pf_writer import (
-        load_fornitori_map,
-        write_pf,
-        MESI_NOMI,
-    )
-    from verticals.condges.scadenze_parse import parse_scadenze
-
-    if not args.pf:
-        print("  Uso: hotelops scad --pf <PF.xlsx> --file <scadenzario.xlsx>")
-        return
-    if not args.file:
-        print("  Uso: hotelops scad --pf <PF.xlsx> --file <scadenzario.xlsx>")
-        return
-
-    # Detect società from PF
-    import openpyxl
-
-    wb_peek = openpyxl.load_workbook(args.pf, data_only=True, read_only=True)
-    societa = ""
-    if "Piano Finanziario" in wb_peek.sheetnames:
-        a1 = wb_peek["Piano Finanziario"].cell(row=1, column=1).value
-        if a1:
-            societa = (
-                str(a1).strip().replace(" S.R.L.", "").replace(" s.r.l.", "").upper()
-            )
-    wb_peek.close()
-
-    print(f"\n{'═' * 60}")
-    print(f"  SCADENZARIO → PIANO FINANZIARIO {societa}")
-    print(f"{'═' * 60}\n")
-    print(f"  PF:          {args.pf}")
-    print(f"  Scadenzario: {args.file}")
-
-    # Parse
-    with open(args.file, "rb") as f:
-        scad_df, bucket_months = parse_scadenze(BytesIO(f.read()))
-    print(f"  Fornitori trovati: {len(scad_df)}")
-
-    fornitori_map = load_fornitori_map()
-    mapped = scad_df[scad_df["codice_fornitore"].isin(fornitori_map.keys())]
-    unmapped = scad_df[~scad_df["codice_fornitore"].isin(fornitori_map.keys())]
-    print(f"  Mappati: {len(mapped)} | Non mappati: {len(unmapped)}")
-
-    # Write
-    with open(args.pf, "rb") as f:
-        pf_bytes = f.read()
-    updated_bytes, summary = write_pf(pf_bytes, scad_df, bucket_months, fornitori_map)
-
-    # Output path
-    out_name = f"{societa + ' ' if societa else ''}PF Scadenzario {date.today().strftime('%b %-d %Y')}.xlsx"
-    if args.output:
-        out_path = args.output / out_name
-    else:
-        out_path = args.pf.parent / out_name
-    with open(out_path, "wb") as f:
-        f.write(updated_bytes)
-
-    # Print results
-    print(f"\n  {'─' * 56}")
-    total_written = 0
-    for voce_label, entries in sorted(summary.items()):
-        voce_total = sum(sum(e["months"].values()) for e in entries)
-        total_written += voce_total
-        print(f"  {voce_label}: {len(entries)} fornitori, €{voce_total:,.0f}")
-        for e in entries:
-            month_detail = ", ".join(
-                f"{MESI_NOMI[m - 1]}=€{v:,.0f}" for m, v in sorted(e["months"].items())
-            )
-            print(f"    {e['nome']}: {month_detail}")
-    print(f"  {'─' * 56}")
-    print(f"  Totale scritto: €{total_written:,.0f}")
-
-    print(f"\n  ✅ {out_path}")
-    if len(unmapped) > 0:
-        print(f"  ⚠️  {len(unmapped)} fornitori non mappati (non scritti):")
-        for _, u in unmapped.head(5).iterrows():
-            print(
-                f"     - {int(u['codice_fornitore'])} {u['nome']}: €{u['totale']:,.0f}"
-            )
-        if len(unmapped) > 5:
-            print(f"     ... e altri {len(unmapped) - 5}")
-
-    print(f"{'═' * 60}\n")
-
-
 # ── Accodamenti: cassa giornaliera HotelCube → Excel ────────────────────────
 
 
@@ -959,7 +867,6 @@ def cmd_help(args):
  ───
   app             App Streamlit
                     hotelops app                         Piano Finanziario
-                    hotelops app scadenzario             Scadenzario → PF
 
   reconcile       Riconciliazione banca vs libro
                     hotelops reconcile --societa INTUR --conto SELLA \\
@@ -979,11 +886,6 @@ def cmd_help(args):
   drop            Stesso flusso in un comando: smista + ingest + audit JSONL
                     hotelops drop ~/Desktop/export.xls
                     hotelops drop *.csv --locale --dry-run
-
-  scadenzario     Excel ponte: scadenzario fornitori → voci PF
-    (alias: scad)   hotelops scad --file sintetica.xlsx
-                    hotelops scad --file sintetica.xlsx --pf PF_aprile.xlsx
-                    hotelops scad --output ~/Desktop/
 
   manifest        Catalogo tabelle BigQuery
                     hotelops manifest

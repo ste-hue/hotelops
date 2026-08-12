@@ -6,12 +6,10 @@ Spostate verbatim da verticals/condges/app_scadenzario.py (deprecato).
 
 from __future__ import annotations
 
-import csv
 import logging
 import re
 from datetime import date
 from io import BytesIO
-from pathlib import Path
 
 import openpyxl
 import pandas as pd
@@ -27,14 +25,6 @@ from verticals.condges.pf_rotate.fornitori_map import VOCE_LABELS
 log = logging.getLogger(__name__)
 
 # -- Config --------------------------------------------------------------------
-
-FORNITORI_CSV = (
-    Path(__file__).resolve().parents[3]
-    / "core"
-    / "bq"
-    / "dimensioni"
-    / "d_fornitori.csv"
-)
 
 VOCE_TO_SHEET_CANDIDATES = {
     "USCITE_MATERIE_PRIME": ["Materie Prime-Consumo ", "Materie Prime-Conumo "],
@@ -82,18 +72,6 @@ MONTH_NAMES_IT = {
 
 
 # -- Fornitori map -------------------------------------------------------------
-
-
-def load_fornitori_map() -> dict[int, dict]:
-    """Load d_fornitori CSV -> {codice_fornitore: {voce_id, nome_pf}}."""
-    result = {}
-    with open(FORNITORI_CSV, newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            result[int(row["codice_fornitore"])] = {
-                "voce_id": row["voce_id"],
-                "nome_pf": row.get("nome_pf", "").strip(),
-            }
-    return result
 
 
 # -- Engine functions ----------------------------------------------------------
