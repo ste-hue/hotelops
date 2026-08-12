@@ -17,7 +17,7 @@ import openpyxl
 import pandas as pd
 
 from verticals.condges.parse_pf import ScadenzarioData
-from verticals.condges.pf_rotate.excel_model import periodo
+from verticals.condges.pf_rotate.excel_model import periodo, periodo_anno_mese
 
 
 def parse_scadenze(
@@ -147,13 +147,31 @@ def partite_df_to_scadenzario_data(
 ) -> ScadenzarioData:
     """Convert ``parse_scadenze`` output to :class:`ScadenzarioData` for tesoreria.
 
-    ``bucket_periodi`` sono periodi ordinali (vedi ``excel_model.periodo``),
-    non mesi nudi 1-12.
+    ``bucket_periodi`` (l'input) sono periodi ordinali (vedi
+    ``excel_model.periodo``). ``ScadenzarioData`` usa invece MESI CALENDARIO
+    NUDI 1-12 (stessa convenzione dei layout riepilogo/sintetica, vedi
+    ``sintetica_list_to_scadenzario_data``): qui la funzione converte.
+    Multi-anno non è rappresentabile in ``ScadenzarioData`` (12 colonne
+    mese-nudo, no anno): se due periodi diversi cadono sullo stesso mese
+    calendario (es. giugno 2026 + giugno 2027) collasserebbero in silenzio
+    sulla stessa colonna — solleva ValueError invece di perdere un importo.
     """
     if df.empty:
         return ScadenzarioData(fornitori=[], totale_per_mese={}, scaduto_totale=0.0)
 
-    totale_per_mese: dict[int, float] = {p: 0.0 for p in bucket_periodi}
+    seen_mesi: dict[int, int] = {}
+    for p in bucket_periodi:
+        m = periodo_anno_mese(p)[1]
+        if m in seen_mesi:
+            raise ValueError(
+                f"partite_df_to_scadenzario_data: i periodi {seen_mesi[m]} e {p} "
+                f"cadono sullo stesso mese calendario ({m}): ScadenzarioData ha "
+                "12 colonne mese-nudo (no anno), sommarli collasserebbe/perderebbe "
+                "un importo in silenzio."
+            )
+        seen_mesi[m] = p
+
+    totale_per_mese: dict[int, float] = {m: 0.0 for m in seen_mesi}
     scaduto_totale = 0.0
     fornitori: list[dict] = []
 
@@ -170,8 +188,9 @@ def partite_df_to_scadenzario_data(
             col = f"mese_{p}"
             if col in row.index and pd.notna(row[col]):
                 v = float(row[col] or 0)
-                entry[col] = v
-                totale_per_mese[p] = totale_per_mese.get(p, 0.0) + v
+                m = periodo_anno_mese(p)[1]
+                entry[f"mese_{m}"] = v
+                totale_per_mese[m] = totale_per_mese.get(m, 0.0) + v
         fornitori.append(entry)
 
     return ScadenzarioData(

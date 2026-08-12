@@ -6,9 +6,13 @@ from datetime import date, timedelta
 from io import BytesIO
 
 import openpyxl
+import pytest
 
 from verticals.condges.pf_rotate.excel_model import periodo
-from verticals.condges.scadenze_parse import parse_scadenze
+from verticals.condges.scadenze_parse import (
+    parse_scadenze,
+    partite_df_to_scadenzario_data,
+)
 
 FUTURE = date.today() + timedelta(days=40)
 PAST = date.today() - timedelta(days=40)
@@ -165,3 +169,88 @@ def test_parse_scadenze_separa_gli_anni(tmp_path):
     assert row[f"mese_{p26}"] == -100.0
     assert row[f"mese_{p27}"] == -900.0  # oggi finirebbe sommato in giugno 2026
     assert row["scaduto"] == 0.0
+
+
+# ── partite_df_to_scadenzario_data: chiavi PERIODO → mesi calendario nudi ──
+#
+# ScadenzarioData.totale_per_mese usa la stessa convenzione dei layout
+# riepilogo/sintetica (mese calendario 1-12, vedi parse_pf.parse_scadenzario
+# e scadenzario_excel.parse_sintetica_scadenze): i consumer (tesoreria.py,
+# gen_tesoreria_xlsx.py::project_cashflow) indicizzano per mese 1-12, non per
+# periodo ordinale. parse_scadenze produce periodi (anno-aware); qui si
+# converte, con guardia anti-collisione multi-anno (stile step3_scadenzario).
+
+
+def test_partite_df_to_scadenzario_data_usa_mesi_calendario_nudi():
+    """totale_per_mese e le colonne per-fornitore usano mese 1-12, non periodo
+    (chiave a 5 cifre tipo 24317): un consumer che indicizza per mese nudo
+    (project_cashflow, tesoreria.py) deve trovare l'uscita, non zero."""
+    buf = _wb_bytes(
+        [
+            {11: 18, 12: "ACQUA AUSINO", 26: -500.0, 23: date(2026, 6, 15)},
+        ]
+    )
+    df, bucket_periodi = parse_scadenze(buf, primo_mese_aperto=(2026, 5))
+    p_giugno = periodo(2026, 6)
+    # pre-condizione: parse_scadenze e' periodo-keyed
+    assert bucket_periodi == [p_giugno]
+
+    data = partite_df_to_scadenzario_data(df, bucket_periodi)
+
+    assert set(data.totale_per_mese.keys()) == {6}  # mese nudo, non periodo(2026,6)
+    assert data.totale_per_mese[6] == -500.0
+    entry = data.fornitori[0]
+    assert entry["mese_6"] == -500.0
+    assert "mese_%d" % p_giugno not in entry  # niente chiave periodo residua
+
+
+def test_partite_df_to_scadenzario_data_collisione_multianno_esplode():
+    """Giugno 2026 e giugno 2027 sono periodi diversi (parse_scadenze li tiene
+    separati) ma collassano sullo stesso mese calendario nudo: ScadenzarioData
+    ha 12 colonne mese, non anno-aware — sommarli in silenzio nella stessa
+    colonna perderebbe la separazione. Deve fallire rumorosamente."""
+    buf = _wb_bytes(
+        [
+            {11: 5555, 12: "FORNITORE BIENNALE", 26: -100.0, 23: date(2026, 6, 15)},
+            {11: 5555, 12: "FORNITORE BIENNALE", 26: -900.0, 23: date(2027, 6, 15)},
+        ]
+    )
+    df, bucket_periodi = parse_scadenze(buf, primo_mese_aperto=(2026, 5))
+    p26, p27 = periodo(2026, 6), periodo(2027, 6)
+    assert set(bucket_periodi) == {p26, p27}
+
+    with pytest.raises(ValueError, match=f"{p26}|{p27}"):
+        partite_df_to_scadenzario_data(df, bucket_periodi)
+
+
+def test_seam_parse_scadenze_a_project_cashflow_uscita_fornitori_non_zero():
+    """Test di cucitura: parse_scadenze (xlsx sintetico con date reali) →
+    partite_df_to_scadenzario_data → tesoreria.project_cashflow. Prima del
+    fix, totale_per_mese era periodo-keyed e project_cashflow (che cerca
+    fornitori_per_mese.get(mese, 0.0) con mese 1-12) zerava sempre l'uscita
+    fornitori in silenzio — questo test cattura la cucitura end-to-end, non
+    solo il singolo modulo."""
+    from verticals.condges.cashflow import project_cashflow
+
+    buf = _wb_bytes(
+        [
+            {11: 18, 12: "ACQUA AUSINO", 26: -500.0, 23: date(2026, 6, 15)},
+        ]
+    )
+    df, bucket_periodi = parse_scadenze(buf, primo_mese_aperto=(2026, 5))
+    scad_data = partite_df_to_scadenzario_data(df, bucket_periodi)
+
+    rows = project_cashflow(
+        saldo_iniziale=10_000.0,
+        mese_inizio=6,
+        entrate_per_mese={},
+        uscite_per_mese={},
+        fornitori_per_mese=scad_data.totale_per_mese,
+        mese_fine=6,
+    )
+
+    assert len(rows) == 1
+    # convenzione parse_scadenze: debiti negativi (col 26 "Saldo scadenza in
+    # UDC") — il punto del test e' che NON e' 0.0 (lo zeroing silenzioso
+    # pre-fix, chiavi periodo cercate come chiavi mese 1-12).
+    assert rows[0].uscite_fornitori == -500.0
