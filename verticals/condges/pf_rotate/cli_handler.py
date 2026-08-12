@@ -243,8 +243,6 @@ def _add_pf_extend_subparser(subparsers: argparse._SubParsersAction):
 
 
 def _handle_extend(args: argparse.Namespace) -> int:
-    from io import BytesIO
-
     import openpyxl
 
     from verticals.condges.pf_rotate.extend import extend_to, trim_before
@@ -254,31 +252,40 @@ def _handle_extend(args: argparse.Namespace) -> int:
         args.pf
     )  # copia in-memory: l'input su disco non si tocca
     changed = extend_to(wb, periodo(anno, mese))
+    # "skip:"/"warn:" sono annotazioni informative (foglio di servizio saltato,
+    # marker anno non scrivibile): non contano come colonne aggiunte per il
+    # rilevamento no-op né per il conteggio stampato — solo le entry REALI lo
+    # fanno (extend_to le emette senza prefisso, una per colonna aggiunta).
+    real_changed = [c for c in changed if not c.startswith(("skip:", "warn:"))]
+    info_changed = [c for c in changed if c.startswith(("skip:", "warn:"))]
 
     trimmed: list[str] = []
     if args.trim_before:
         anno_t, mese_t = _parse_anno_mese(args.trim_before)
-        # trim_before congela formule a valore usando un gemello data_only=True
-        # DELLO STESSO salvataggio post-extend: bisogna ri-salvare/ricaricare,
-        # l'input su disco (pre-extend) non ha le colonne appena aggiunte.
-        buf = BytesIO()
-        wb.save(buf)
-        buf.seek(0)
-        wb = openpyxl.load_workbook(buf)
-        buf.seek(0)
-        wb_values = openpyxl.load_workbook(buf, data_only=True)
+        # trim_before congela formule a valore usando un gemello data_only=True:
+        # i valori congelati servono per le colonne VECCHIE (quelle già
+        # presenti in --pf, non quelle appena aggiunte da extend_to sopra) —
+        # si carica quindi direttamente dal file su disco, non da un re-save
+        # in-memory di `wb` (che spoglierebbe SEMPRE i cached value: openpyxl
+        # non calcola formule, quindi un giro save/reload azzera ogni <v>
+        # anche per le colonne mai toccate da extend_to).
+        wb_values = openpyxl.load_workbook(args.pf, data_only=True)
         trimmed = trim_before(wb, wb_values, periodo(anno_t, mese_t))
 
-    if not changed and not trimmed:
+    if not real_changed and not trimmed:
         print("Già coperto: nessuna colonna da aggiungere.")
+        for c in info_changed:
+            print(f"  {c}")
         return 0
     args.out.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y-%m-%dT%H-%M")
     out = args.out / f"{args.pf.stem}_extended_{args.to}_{ts}.xlsx"
     wb.save(out)
-    print(f"Output: {out}\nColonne aggiunte/aggiornate: {len(changed)}")
-    for c in changed[:20]:
+    print(f"Output: {out}\nColonne aggiunte/aggiornate: {len(real_changed)}")
+    for c in real_changed[:20]:
         print(f"  + {c}")
+    for c in info_changed[:20]:
+        print(f"  {c}")
     if args.trim_before:
         print(f"Colonne potate/ricostruite: {len(trimmed)}")
         for c in trimmed[:20]:
