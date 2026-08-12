@@ -325,7 +325,9 @@ def render() -> None:
 
     oltre = (result.scadenzario_summary or {}).get("oltre_orizzonte") or {}
     if oltre:
-        tot_oltre = sum(oltre.values())
+        # oltre_orizzonte porta il segno Esolver (debiti negativi): solo il
+        # display va in valore assoluto, il dict resta signed per chi lo consuma.
+        tot_oltre = abs(sum(oltre.values()))
         st.warning(
             f"⚠️ Oltre orizzonte (senza colonna nel PF): {len(oltre)} fornitori, "
             f"{tot_oltre:,.2f} € NON scritti"

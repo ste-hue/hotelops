@@ -208,7 +208,9 @@ def _handle(args: argparse.Namespace) -> int:
         )
     oltre = (result.scadenzario_summary or {}).get("oltre_orizzonte") or {}
     if oltre:
-        tot = sum(oltre.values())
+        # oltre_orizzonte porta il segno Esolver (debiti negativi): solo il
+        # display va in valore assoluto, il dict resta signed per chi lo consuma.
+        tot = abs(sum(oltre.values()))
         print(
             f"\n⚠️ Oltre orizzonte (senza colonna nel PF): {len(oltre)} fornitori, {tot:,.2f} € NON scritti"
         )
