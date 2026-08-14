@@ -34,7 +34,10 @@ def _inject_cached_xml_values(
         assert m, f"cella {addr} non trovata in {sheet_xml}"
         inner = m.group(2)
         assert "<f>" in inner, f"cella {addr} non ha una formula: {inner}"
-        inner = re.sub(r"<v>.*?</v>", "", inner) + f"<v>{val}</v>"
+        # <v/> self-closing (Python <=3.13) o <v></v> (3.14+): entrambe le forme
+        # vanno rimosse, altrimenti resta un <v> vuoto PRIMA del nostro e openpyxl
+        # legge quello — il cached value risulta assente solo su certe versioni.
+        inner = re.sub(r"<v\s*/>|<v>.*?</v>", "", inner) + f"<v>{val}</v>"
         xml = xml[: m.start()] + m.group(1) + inner + m.group(3) + xml[m.end() :]
     contents[sheet_xml] = xml.encode()
     out = BytesIO()
