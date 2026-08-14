@@ -113,7 +113,12 @@ budget_costi AS (
 
 -- ── Input manuale (prospettivo) da f_piano_finanziario_input ──────────────────
 -- Priority: CLI > APP > PARTITE > SCADENZIARIO > BVA_2026 > PIANO_FINANZIARIO
--- Per ogni (societa_id, voce_id, anno, mese) tieni solo la fonte a priorità più alta
+-- Per ogni (societa_id, voce_id, anno, mese) tieni solo la fonte a priorità più
+-- alta, ma TUTTE le sue righe: una voce può avere più righe legittime nello
+-- stesso mese (INTUR ha 3 mutui in USCITE_MUTUI — issue #122, ROW_NUMBER ne
+-- teneva una sola e il PF nascondeva 4.599 €/mese). DENSE_RANK dà rn=1 a ogni
+-- riga della fonte vincente; `fonte` come tiebreaker evita che due fonti
+-- diverse a pari priorità (ELSE) vengano sommate insieme.
 input_ranked AS (
   SELECT
     societa_id,
@@ -122,7 +127,7 @@ input_ranked AS (
     mese,
     importo,
     fonte,
-    ROW_NUMBER() OVER (
+    DENSE_RANK() OVER (
       PARTITION BY societa_id, voce_id, anno, mese
       ORDER BY CASE fonte
         WHEN 'CLI' THEN 1
@@ -132,7 +137,8 @@ input_ranked AS (
         WHEN 'BVA_2026' THEN 5
         WHEN 'PIANO_FINANZIARIO' THEN 6
         ELSE 7
-      END
+      END,
+      fonte
     ) AS rn
   FROM `hotelops-suite.hotelops.f_piano_finanziario_input`
 ),

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from core.bq.write import (
     BigQueryInsertError,
+    HashCollisionError,
     SchemaViolationError,
     SerializationBoundaryError,
     bq_write_validated,
@@ -47,6 +48,55 @@ def test_bigquery_insert_error_carries_table_and_errors():
 class FakeRow(BaseModel):
     societa_id: str
     n: int
+
+
+class FakeHashedRow(BaseModel):
+    hash_riga: str
+    societa_id: str
+    importo: float
+
+
+# --- Hash collision gate -----------------------------------------------------
+# Una chiave di dedup che collide non duplica: CANCELLA. `filter_new_rows_by_hash`
+# vede l'hash come "già presente" e scarta righe genuine. Il caso reale che ha
+# motivato il gate: 3 mutui INTUR distinti collassati su un hash solo in
+# f_piano_finanziario_input (audit 2026-08-09).
+
+
+@patch("core.bq.write.get_client")
+def test_duplicate_hash_riga_in_batch_is_rejected(mock_get_client):
+    mock_get_client.return_value = MagicMock()
+    rows = [
+        FakeHashedRow(hash_riga="abc", societa_id="INTUR", importo=8500.0),
+        FakeHashedRow(hash_riga="abc", societa_id="INTUR", importo=3210.53),
+    ]
+    with pytest.raises(HashCollisionError) as exc:
+        bq_write_validated("hotelops.f_x", rows, mode="append")
+    assert "abc" in str(exc.value)
+    mock_get_client.return_value.load_table_from_json.assert_not_called()
+
+
+@patch("core.bq.write.get_client")
+def test_unique_hash_riga_passes(mock_get_client):
+    mock_client = MagicMock()
+    mock_client.load_table_from_json.return_value.result.return_value = None
+    mock_get_client.return_value = mock_client
+    rows = [
+        FakeHashedRow(hash_riga="a", societa_id="INTUR", importo=1.0),
+        FakeHashedRow(hash_riga="b", societa_id="INTUR", importo=2.0),
+    ]
+    bq_write_validated("hotelops.f_x", rows, mode="append")
+    mock_client.load_table_from_json.assert_called_once()
+
+
+@patch("core.bq.write.get_client")
+def test_schema_without_hash_riga_is_unaffected(mock_get_client):
+    mock_client = MagicMock()
+    mock_client.load_table_from_json.return_value.result.return_value = None
+    mock_get_client.return_value = mock_client
+    rows = [FakeRow(societa_id="ORTI", n=1), FakeRow(societa_id="ORTI", n=1)]
+    bq_write_validated("hotelops.f_x", rows, mode="append")
+    mock_client.load_table_from_json.assert_called_once()
 
 
 def test_empty_batch_is_noop(caplog):
