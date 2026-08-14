@@ -1,30 +1,34 @@
 from io import BytesIO
 import openpyxl
+import pytest
 
 from verticals.condges.pf_rotate.excel_model import (
     find_layout,
-    find_month_columns,
+    find_month_periods,
     is_value_cell,
     is_formula_with_refs,
     resolve_sheet_name,
     find_total_row_and_sum_range,
+    periodo,
+    periodo_anno_mese,
+    require_periodo,
 )
 
 
-def test_find_month_columns_returns_mese_to_col_map(minimal_pf_orti_bytes):
+def test_find_month_periods_returns_periodo_to_col_map(minimal_pf_orti_bytes):
     wb = openpyxl.load_workbook(BytesIO(minimal_pf_orti_bytes), data_only=False)
     ws = wb["Utenze"]
-    cols = find_month_columns(ws, header_row=2)
+    cols = find_month_periods(ws, header_row=2)
     assert cols == {
-        4: 4,  # APRILE -> col D (4)
-        5: 5,
-        6: 6,
-        7: 7,
-        8: 8,
-        9: 9,
-        10: 10,
-        11: 11,
-        12: 12,
+        periodo(2026, 4): 4,  # APRILE -> col D (4)
+        periodo(2026, 5): 5,
+        periodo(2026, 6): 6,
+        periodo(2026, 7): 7,
+        periodo(2026, 8): 8,
+        periodo(2026, 9): 9,
+        periodo(2026, 10): 10,
+        periodo(2026, 11): 11,
+        periodo(2026, 12): 12,
     }
 
 
@@ -154,3 +158,54 @@ def test_find_layout_intur_style_fixture():
     assert layout.saldo_proiettato_row == 38
     assert layout.saldi_banca_rows == [31, 32, 33]
     assert layout.entrate_rows == [5, 6, 7]
+
+
+def test_periodo_roundtrip():
+    p = periodo(2026, 6)
+    assert p == 2026 * 12 + 5
+    assert periodo_anno_mese(p) == (2026, 6)
+
+
+def test_periodo_successivo_attraversa_l_anno():
+    assert periodo(2026, 12) + 1 == periodo(2027, 1)
+
+
+def test_require_periodo_rifiuta_mese_nudo():
+    with pytest.raises(ValueError, match="mese nudo"):
+        require_periodo(6)
+    with pytest.raises(ValueError, match="mese nudo"):
+        require_periodo(2026)  # anche un anno nudo è sospetto
+    require_periodo(periodo(2026, 6))  # non solleva
+
+
+def _ws_multi_anno():
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws["C1"] = 2026
+    for i, nome in enumerate(
+        ["APRILE", "MAGGIO", "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE",
+         "OTTOBRE", "NOVEMBRE", "DICEMBRE", "GENNAIO", "FEBBRAIO", "MARZO",
+         "APRILE", "MAGGIO", "GIUGNO"]
+    ):
+        ws.cell(2, 3 + i, nome)
+    return ws
+
+
+def test_find_month_periods_wrap_dic_gen():
+    from verticals.condges.pf_rotate.excel_model import find_month_periods, periodo
+    cols = find_month_periods(_ws_multi_anno())
+    assert cols[periodo(2026, 4)] == 3
+    assert cols[periodo(2026, 12)] == 11
+    assert cols[periodo(2027, 1)] == 12   # wrap: DIC→GEN incrementa l'anno
+    assert cols[periodo(2027, 4)] == 15   # APRILE 2027 ≠ APRILE 2026
+    assert cols[periodo(2026, 4)] == 3    # ...che resta al suo posto
+    assert len(cols) == 15
+
+
+def test_find_month_periods_senza_anno_esplode():
+    from verticals.condges.pf_rotate.excel_model import find_month_periods
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.cell(2, 3, "APRILE")  # nessun anno in riga 1
+    with pytest.raises(ValueError, match="[Aa]nno non dichiarato"):
+        find_month_periods(ws)

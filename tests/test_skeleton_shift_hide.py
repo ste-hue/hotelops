@@ -1,58 +1,58 @@
-"""Test hide_past_months: nasconde i mesi passati senza perdere dati/formule."""
-
-from __future__ import annotations
+"""Test hide_past_columns_rotation: nasconde colonne-mese passate, year-aware."""
 
 import openpyxl
 
-from verticals.condges.skeleton_shift import hide_past_months
+from verticals.condges.pf_rotate.excel_model import periodo
+from verticals.condges.skeleton_shift import hide_past_columns_rotation
+
+P = lambda m: periodo(2026, m)  # noqa: E731
 
 
-def _ws_con_mesi(first_col: int):
-    """ws con header mesi riga 2 a partire da first_col: SET..DIC (18 mesi rolling)."""
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    labels = [
+def _ws_con_anno(wb, nome: str):
+    """Foglio dettaglio-style: D1=anno, mesi APRILE..DICEMBRE in D2..L2."""
+    ws = wb.create_sheet(nome)
+    ws["D1"] = 2026
+    mesi = [
+        "APRILE", "MAGGIO", "GIUGNO", "LUGLIO", "AGOSTO",
         "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE",
+    ]
+    for i, m in enumerate(mesi):
+        ws.cell(2, 4 + i, m)
+    return ws
+
+
+def test_nasconde_periodi_passati_mostra_aperti():
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    ws = _ws_con_anno(wb, "Utenze")
+
+    hide_past_columns_rotation(wb, P(6))  # GIUGNO 2026 = primo periodo aperto
+
+    # APRILE(D=4)/MAGGIO(E=5) < GIUGNO → nascoste
+    assert ws.column_dimensions["D"].hidden is True
+    assert ws.column_dimensions["E"].hidden is True
+    # GIUGNO(F=6)..DICEMBRE(L=12) >= GIUGNO → visibili
+    for col_letter in ["F", "G", "H", "I", "J", "K", "L"]:
+        assert ws.column_dimensions[col_letter].hidden is not True
+
+
+def test_foglio_senza_anno_non_solleva_e_resta_intoccato():
+    """Un foglio con colonne-mese ma SENZA anno dichiarato (es. i residui
+    "DA MAPPARE1"/"ESCLUSI1" osservati sui file reali) non è databile: deve
+    essere un no-op silenzioso, non un crash."""
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    ws = wb.create_sheet("DA MAPPARE1")  # titolo NON nella skip-list esatta
+    mesi = [
         "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO", "GIUGNO",
         "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE",
     ]
-    for i, lab in enumerate(labels):
-        ws.cell(row=2, column=first_col + i, value=lab)
-        ws.cell(row=6, column=first_col + i, value=1000)  # dati, non devono sparire
-    return wb, ws
+    for i, m in enumerate(mesi):
+        ws.cell(2, 3 + i, m)
+    # nessun anno numerico in riga 1
 
+    hide_past_columns_rotation(wb, P(6))  # non deve sollevare ValueError
 
-def test_hide_past_months_master():
-    wb, ws = _ws_con_mesi(first_col=3)  # C..R
-    # primo mese aperto = MAGGIO (5). MAGGIO è la colonna K (3+8=11).
-    hide_past_months(ws, 3, 18, primo_mese_aperto=5)
-    # C..J (3..10) nascoste, K (11=MAGGIO) e oltre visibili
-    assert ws.column_dimensions["C"].hidden is True
-    assert ws.column_dimensions["J"].hidden is True
-    assert ws.column_dimensions["K"].hidden is False
-    # i dati restano (solo nascosti, mai cancellati)
-    assert ws.cell(row=6, column=3).value == 1000
-
-
-def test_hide_past_months_preserva_colonna_snapshot():
-    """Layout INTUR fixed-snapshot: C è lo snapshot (DATA RILEVAZ, non un mese),
-    i mesi partono da D. La colonna snapshot NON va nascosta."""
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.cell(row=2, column=3, value="30/04/2026")  # C = snapshot, non un mese
-    for i, lab in enumerate(["MARZO", "APRILE", "MAGGIO", "GIUGNO"]):
-        ws.cell(row=2, column=4 + i, value=lab)  # D=MARZO ... F=MAGGIO
-    hide_past_months(ws, 3, 18, primo_mese_aperto=5)
-    assert ws.column_dimensions["C"].hidden is False  # snapshot preservato
-    assert ws.column_dimensions["D"].hidden is True  # MARZO passato
-    assert ws.column_dimensions["E"].hidden is True  # APRILE passato
-    assert ws.column_dimensions["F"].hidden is False  # MAGGIO aperto
-
-
-def test_hide_past_months_no_target_noop():
-    # nessun header MAGGIO → no-op, niente nascosto
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.cell(row=2, column=3, value="GENNAIO")
-    hide_past_months(ws, 3, 18, primo_mese_aperto=5)
-    assert ws.column_dimensions["C"].hidden is False
+    for c in range(3, 15):
+        letter = openpyxl.utils.get_column_letter(c)
+        assert ws.column_dimensions[letter].hidden is not True

@@ -66,11 +66,32 @@ def bq_client():
     return bigquery.Client(project=PROJECT)
 
 
-def _build_minimal_pf_orti(mese_chiuso_col: int = 3) -> BytesIO:
+MESI_2027 = [
+    "GENNAIO",
+    "FEBBRAIO",
+    "MARZO",
+    "APRILE",
+    "MAGGIO",
+    "GIUGNO",
+    "LUGLIO",
+    "AGOSTO",
+    "SETTEMBRE",
+    "OTTOBRE",
+    "NOVEMBRE",
+    "DICEMBRE",
+]
+
+
+def _build_minimal_pf_orti(
+    mese_chiuso_col: int = 3, mesi_extra_2027: int = 0
+) -> BytesIO:
     """Construct a minimal ORTI PF xlsx in-memory.
 
     Layout = osservato su 05_ORTIFinancialPlan2026.xlsx (post-witness 2026-05-19).
     mese_chiuso_col = 3 means APRILE is in col C (the closed/cutover column).
+    mesi_extra_2027: numero di colonne GENNAIO 2027.. da appendere dopo DICEMBRE
+    2026, per esercitare l'anno-awareness di find_month_periods (default 0 =
+    comportamento identico a prima, colonne APR-DIC 2026 soltanto).
     """
     wb = Workbook()
     wb.remove(wb.active)
@@ -197,6 +218,34 @@ def _build_minimal_pf_orti(mese_chiuso_col: int = 3) -> BytesIO:
     mp["D4"] = 357.86
     mp["E4"] = 357.86
 
+    if mesi_extra_2027:
+        extra_mesi = MESI_2027[:mesi_extra_2027]
+
+        # ── Master: colonne dopo DICEMBRE 2026 (K=11) → 12.. ────────────
+        master_start = 12
+        pf.cell(1, master_start, 2027)  # marker anno su GENNAIO
+        for i, m in enumerate(extra_mesi):
+            c = master_start + i
+            cl = get_column_letter(c)
+            pf.cell(2, c, m)
+            pf.cell(4, c, f"={get_column_letter(c - 1)}37")
+            pf.cell(12, c, f"=SUM({cl}6:{cl}11)")
+            pf.cell(15, c, f"=Utenze!{cl}3")
+            pf.cell(16, c, f"='Materie Prime-Consumo '!{cl}3")
+            pf.cell(27, c, f"=SUM({cl}14:{cl}26)")
+            pf.cell(29, c, f"={cl}12-{cl}27")
+            pf.cell(37, c, f"={cl}4+{cl}29")
+
+        # ── Fogli dettaglio: colonne dopo DICEMBRE 2026 (L=12) → 13.. ───
+        for det in (ut, mp):
+            det_start = 13
+            det.cell(1, det_start, 2027)  # marker anno su GENNAIO
+            for i, m in enumerate(extra_mesi):
+                c = det_start + i
+                cl = get_column_letter(c)
+                det.cell(2, c, m)
+                det.cell(3, c, f"=SUM({cl}4:{cl}50)")
+
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -207,6 +256,13 @@ def _build_minimal_pf_orti(mese_chiuso_col: int = 3) -> BytesIO:
 def minimal_pf_orti_bytes() -> bytes:
     """ORTI PF minimal: APRILE chiuso, 2 fogli dettaglio (Utenze, Materie Prime)."""
     return _build_minimal_pf_orti().getvalue()
+
+
+@pytest.fixture
+def minimal_pf_orti_15col_bytes() -> bytes:
+    """ORTI PF esteso: APR 2026..GIU 2027 (15 colonne mese), per esercitare
+    l'anno-awareness di ``find_month_periods`` (collisione GIUGNO 2026/2027)."""
+    return _build_minimal_pf_orti(mesi_extra_2027=6).getvalue()
 
 
 def _build_minimal_pf_intur() -> BytesIO:

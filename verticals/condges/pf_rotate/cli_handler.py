@@ -8,6 +8,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
+from verticals.condges.pf_rotate.excel_model import periodo
 from verticals.condges.pf_rotate.rotate import rotate
 from verticals.condges.pf_rotate.step3_scadenzario import UnmappedPolicy
 
@@ -38,9 +39,7 @@ def _parse_data(s: str) -> date:
     return datetime.strptime(s, "%Y-%m-%d").date()
 
 
-def _resolve_data_saldo(
-    data_saldo: date | None, anno: int, mese_chiuso: int
-) -> date:
+def _resolve_data_saldo(data_saldo: date | None, anno: int, mese_chiuso: int) -> date:
     """O-D: --data-saldo esplicito è override; altrimenti ultimo giorno di (anno, mese)."""
     if data_saldo is not None:
         return data_saldo
@@ -77,6 +76,7 @@ def _default_policy() -> UnmappedPolicy:
 
 def add_subparser(subparsers: argparse._SubParsersAction):
     _add_normalize_intur_subparser(subparsers)
+    _add_pf_extend_subparser(subparsers)
     p = subparsers.add_parser(
         "pf-rotate", help="Rotation mensile del Piano Finanziario."
     )
@@ -147,7 +147,7 @@ def _handle(args: argparse.Namespace) -> int:
     else:
         cutoff = (anno_cutoff, args.mese_chiuso + 1)
     with args.scad.open("rb") as f:
-        scad_df, bucket_months = parse_scadenze(
+        scad_df, bucket_periodi = parse_scadenze(
             BytesIO(f.read()), primo_mese_aperto=cutoff
         )
 
@@ -160,6 +160,7 @@ def _handle(args: argparse.Namespace) -> int:
     anno = args.anno or date.today().year
     data_saldo = _resolve_data_saldo(args.data_saldo, anno, args.mese_chiuso)
     extra_excluded = _parse_exclude(args.exclude)
+    periodo_chiuso = periodo(anno, args.mese_chiuso)
 
     if policy == UnmappedPolicy.INTERACTIVE:
         from verticals.condges.pf_rotate.interactive_map import (
@@ -178,9 +179,9 @@ def _handle(args: argparse.Namespace) -> int:
         result = rotate(
             pf_path=args.pf,
             scad_df=scad_df,
-            bucket_months=bucket_months,
+            bucket_periodi=bucket_periodi,
             societa=args.societa,
-            mese_chiuso=args.mese_chiuso,
+            periodo_chiuso=periodo_chiuso,
             data_saldo=data_saldo,
             saldi=overrides or None,
             fornitori_csv=args.fornitori_csv,
@@ -205,7 +206,93 @@ def _handle(args: argparse.Namespace) -> int:
         print(
             f"\nFornitori scritti: {result.scadenzario_summary['totale_fornitori_scritti']}"
         )
+    oltre = (result.scadenzario_summary or {}).get("oltre_orizzonte") or {}
+    if oltre:
+        # oltre_orizzonte porta il segno Esolver (debiti negativi): solo il
+        # display va in valore assoluto, il dict resta signed per chi lo consuma.
+        tot = abs(sum(oltre.values()))
+        print(
+            f"\n⚠️ Oltre orizzonte (senza colonna nel PF): {len(oltre)} fornitori, {tot:,.2f} € NON scritti"
+        )
     return 1 if result.failed else 0
+
+
+def _parse_anno_mese(s: str) -> tuple[int, int]:
+    try:
+        anno_s, mese_s = s.split("-", 1)
+        return int(anno_s), int(mese_s)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"--to atteso 'YYYY-MM', avuto '{s}'") from e
+
+
+def _add_pf_extend_subparser(subparsers: argparse._SubParsersAction):
+    p = subparsers.add_parser(
+        "pf-extend",
+        help="Allunga l'orizzonte del template PF fino al periodo target.",
+    )
+    p.add_argument("--pf", type=Path, required=True)
+    p.add_argument("--to", type=str, required=True, help="Periodo target YYYY-MM.")
+    p.add_argument(
+        "--trim-before",
+        type=str,
+        default=None,
+        help="Periodo YYYY-MM: elimina le colonne-mese precedenti (potatura "
+        "annuale), applicata DOPO l'estensione a --to.",
+    )
+    p.add_argument("--out", type=Path, default=Path.cwd() / "pianfin-out")
+    p.set_defaults(func=_handle_extend)
+    return p
+
+
+def _handle_extend(args: argparse.Namespace) -> int:
+    import openpyxl
+
+    from verticals.condges.pf_rotate.extend import extend_to, trim_before
+
+    anno, mese = _parse_anno_mese(args.to)
+    wb = openpyxl.load_workbook(
+        args.pf
+    )  # copia in-memory: l'input su disco non si tocca
+    changed = extend_to(wb, periodo(anno, mese))
+    # "skip:"/"warn:" sono annotazioni informative (foglio di servizio saltato,
+    # marker anno non scrivibile): non contano come colonne aggiunte per il
+    # rilevamento no-op né per il conteggio stampato — solo le entry REALI lo
+    # fanno (extend_to le emette senza prefisso, una per colonna aggiunta).
+    real_changed = [c for c in changed if not c.startswith(("skip:", "warn:"))]
+    info_changed = [c for c in changed if c.startswith(("skip:", "warn:"))]
+
+    trimmed: list[str] = []
+    if args.trim_before:
+        anno_t, mese_t = _parse_anno_mese(args.trim_before)
+        # trim_before congela formule a valore usando un gemello data_only=True:
+        # i valori congelati servono per le colonne VECCHIE (quelle già
+        # presenti in --pf, non quelle appena aggiunte da extend_to sopra) —
+        # si carica quindi direttamente dal file su disco, non da un re-save
+        # in-memory di `wb` (che spoglierebbe SEMPRE i cached value: openpyxl
+        # non calcola formule, quindi un giro save/reload azzera ogni <v>
+        # anche per le colonne mai toccate da extend_to).
+        wb_values = openpyxl.load_workbook(args.pf, data_only=True)
+        trimmed = trim_before(wb, wb_values, periodo(anno_t, mese_t))
+
+    if not real_changed and not trimmed:
+        print("Già coperto: nessuna colonna da aggiungere.")
+        for c in info_changed:
+            print(f"  {c}")
+        return 0
+    args.out.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y-%m-%dT%H-%M")
+    out = args.out / f"{args.pf.stem}_extended_{args.to}_{ts}.xlsx"
+    wb.save(out)
+    print(f"Output: {out}\nColonne aggiunte/aggiornate: {len(real_changed)}")
+    for c in real_changed[:20]:
+        print(f"  + {c}")
+    for c in info_changed[:20]:
+        print(f"  {c}")
+    if args.trim_before:
+        print(f"Colonne potate/ricostruite: {len(trimmed)}")
+        for c in trimmed[:20]:
+            print(f"  - {c}")
+    return 0
 
 
 def _add_normalize_intur_subparser(subparsers: argparse._SubParsersAction):
