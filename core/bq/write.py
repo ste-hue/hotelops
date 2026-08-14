@@ -77,6 +77,40 @@ class SerializationBoundaryError(Exception):
         )
 
 
+class HashCollisionError(Exception):
+    """Raised when two rows in the same batch share a ``hash_riga``.
+
+    A colliding dedup key does not duplicate data — it DELETES it. The append
+    pipelines filter incoming rows with ``filter_new_rows_by_hash``: if two
+    distinct facts hash to the same value, the second one is discarded as
+    "already seen" and is lost silently, with no error and no gap to notice.
+
+    The failure mode is not theoretical. Audit 2026-08-09 found three distinct
+    INTUR mortgages of the same month collapsed onto a single hash in
+    f_piano_finanziario_input: a re-ingest would have dropped two of them.
+
+    The rule this gate enforces: ``hash_riga`` must be built from the IDENTITY
+    of the source record (protocol, progressive, date), never from its
+    INTERPRETATION (account code, department, category) nor from its amounts.
+    A collision here means the key is missing a discriminating field.
+    """
+
+    def __init__(self, table_id: str, collisions: dict[str, list[dict]]):
+        self.table_id = table_id
+        self.collisions = collisions
+        n = len(collisions)
+        head = "\n".join(
+            f"  {h}: {len(rows)} rows, e.g. {rows[0]}"
+            for h, rows in list(collisions.items())[:3]
+        )
+        tail = f"\n  ... and {n - 3} more colliding hashes" if n > 3 else ""
+        super().__init__(
+            f"{n} colliding hash_riga in batch for {table_id} — the dedup key is "
+            f"not a natural key, these rows would be silently dropped on "
+            f"re-ingest\n{head}{tail}"
+        )
+
+
 WriteMode = Literal["append", "snapshot"]
 
 
@@ -179,6 +213,19 @@ def bq_write_validated(
             serialization_failures.append((idx, row_dict, str(e)))
     if serialization_failures:
         raise SerializationBoundaryError(table, serialization_failures)
+
+    # 3.6. Dedup-key gate. Two rows sharing a hash_riga is never benign: the
+    # append path filters on that hash, so the collision does not duplicate —
+    # it drops one of the two facts, silently, at the next ingest. We fail
+    # closed here, before any BQ side-effect, because a lost row leaves no
+    # trace to notice later. No-op for schemas without hash_riga.
+    if rows_dict and "hash_riga" in rows_dict[0]:
+        by_hash: dict[str, list[dict]] = {}
+        for row_dict in rows_dict:
+            by_hash.setdefault(row_dict["hash_riga"], []).append(row_dict)
+        collisions = {h: rs for h, rs in by_hash.items() if len(rs) > 1}
+        if collisions:
+            raise HashCollisionError(table, collisions)
 
     # 4. Lineage discovery (ambient via ContextVar — log-only fallback).
     from core.pipeline_run import PipelineRun
