@@ -189,10 +189,35 @@ def fetch_gsheet(sheet_id: str) -> Path:
     tmp = Path(tempfile.mkdtemp(prefix="hotelops_coperti_")) / "coperti_gsheet.xlsx"
     xlsx_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     log.info("Drive export: scarico Google Sheet %s …", sheet_id)
-    data = _drive_service().files().export(fileId=sheet_id, mimeType=xlsx_mime).execute()
+    data = (
+        _drive_service().files().export(fileId=sheet_id, mimeType=xlsx_mime).execute()
+    )
     tmp.write_bytes(data)
     log.info("Scaricato: %s (%d KB)", tmp.name, tmp.stat().st_size // 1024)
+    _snapshot_to_gcs(data)
     return tmp
+
+
+def _snapshot_to_gcs(data: bytes) -> None:
+    """Copia di sicurezza giornaliera dell'export su GCS (best-effort).
+
+    Nata dall'incidente 2026-08: il Google Sheet sorgente è stato cestinato e
+    distrutto dal purge dei 30 giorni — senza copie. Una copia/giorno su
+    gs://hotelops-raw garantisce che esista sempre l'export di ieri.
+    Il fallimento dello snapshot NON blocca l'ingest.
+    """
+    try:
+        from google.cloud import storage
+
+        blob_name = f"snapshots/coperti/coperti_gsheet_{date.today().isoformat()}.xlsx"
+        bucket = storage.Client(project=PROJECT).bucket("hotelops-raw")
+        bucket.blob(blob_name).upload_from_string(
+            data,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        log.info("Snapshot GCS: gs://hotelops-raw/%s", blob_name)
+    except Exception as e:
+        log.warning("Snapshot GCS fallito (ingest prosegue): %s", e)
 
 
 # ── Parsing ────────────────────────────────────────────────────────────────────
@@ -377,10 +402,11 @@ def parse_xlsx_file(path: Path, societa_id: str, ts_now: datetime) -> list[dict]
     mensa_sheet = None
     for s in wb.sheetnames:
         sl = s.lower().strip()
-        if sl.startswith("scarico") or detect_tipo_pasto(sl):
-            pasto_sheets.append(s)
-        elif "mensa" in sl or "dipendenti" in sl:
+        # mensa prima: "Scarico Mensa Dipendenti" inizia per "scarico" ma è mensa
+        if "mensa" in sl or "dipendenti" in sl:
             mensa_sheet = s
+        elif sl.startswith("scarico") or detect_tipo_pasto(sl):
+            pasto_sheets.append(s)
 
     if not pasto_sheets and not mensa_sheet:
         log.info("  Nessun foglio coperti riconosciuto in %s — skip", path.name)
@@ -523,7 +549,35 @@ def ensure_table(client):
         log.info("Tabella %s creata.", BQ_TABLE_FULL)
 
 
-def load_to_bq(rows: list[dict], dry_run: bool, replace: bool = False) -> None:
+def replace_guard(n_new: int, n_existing: int, allow_shrink: bool) -> None:
+    """Blocca il wipe-reload se il foglio ha meno righe di BQ.
+
+    Un foglio dimezzato (tab cancellato, foglio rimpiazzato, export parziale)
+    non deve mai distruggere lo storico in silenzio. Override: --allow-shrink.
+    """
+    if n_new >= n_existing or allow_shrink:
+        return
+    log.error(
+        "GUARD: il foglio produce %d righe ma BQ ne ha %d — "
+        "wipe-reload ABORTITO per evitare perdita di storico. "
+        "Se lo shrink è voluto, rilancia con --allow-shrink.",
+        n_new,
+        n_existing,
+    )
+    sys.exit(1)
+
+
+def count_existing_rows(client) -> int:
+    try:
+        q = f"SELECT COUNT(*) AS n FROM `{BQ_TABLE_FULL}`"
+        return next(iter(client.query(q).result())).n
+    except Exception:
+        return 0  # tabella assente/nuova: nessun guard
+
+
+def load_to_bq(
+    rows: list[dict], dry_run: bool, replace: bool = False, allow_shrink: bool = False
+) -> None:
     if not HAS_BQ:
         log.error("google-cloud-bigquery non installato")
         sys.exit(1)
@@ -538,6 +592,7 @@ def load_to_bq(rows: list[dict], dry_run: bool, replace: bool = False) -> None:
                 len(rows),
             )
             return
+        replace_guard(len(rows), count_existing_rows(client), allow_shrink)
         # Full wipe + reload — bypass the gate, the pipeline owns this case.
         # WRITE_TRUNCATE is intentionally out of bq_write_validated's scope.
         delete_q = f"DELETE FROM `{BQ_TABLE_FULL}` WHERE TRUE"
@@ -640,6 +695,11 @@ def main():
         help=f"Scarica da Google Sheet via API Drive (default ID: {GSHEET_ID_DEFAULT})",
     )
     parser.add_argument(
+        "--allow-shrink",
+        action="store_true",
+        help="Consenti un reload con MENO righe di quelle in BQ (bypassa il guard)",
+    )
+    parser.add_argument(
         "--replace",
         action="store_true",
         help="DELETE-INSERT: cancella tutti i dati esistenti e ricarica",
@@ -711,7 +771,12 @@ def main():
         for r in rows:
             r["raw_object_id"] = args.raw_object_id
 
-        load_to_bq(rows, dry_run=args.dry_run, replace=args.replace)
+        load_to_bq(
+            rows,
+            dry_run=args.dry_run,
+            replace=args.replace,
+            allow_shrink=args.allow_shrink,
+        )
         quality_summary(rows)
 
 
