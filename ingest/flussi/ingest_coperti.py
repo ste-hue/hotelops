@@ -38,7 +38,7 @@ import hashlib
 import logging
 import sys
 import tempfile
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
@@ -127,18 +127,39 @@ def detect_tipo_pasto(text: str) -> str | None:
     return None
 
 
+SOGLIA_MEZZANOTTE = 6  # submission prima delle 06:00 = servizio del giorno prima
+
+
+def _service_date(dt: datetime) -> date:
+    """Data di servizio da un timestamp di submission.
+
+    Il personale inserisce i coperti a fine serata: una submission dopo la
+    mezzanotte (es. 00:33) è la cena del giorno PRIMA, non del giorno nuovo.
+    Vale solo per timestamp con orario; le date pure non vengono mai spostate.
+    """
+    d = dt.date()
+    if dt.hour < SOGLIA_MEZZANOTTE:
+        d -= timedelta(days=1)
+    return d
+
+
 def parse_timestamp(val) -> date | None:
-    """Convert various timestamp formats to a date."""
+    """Convert various timestamp formats to a service date (regola mezzanotte)."""
     if val is None:
         return None
     if isinstance(val, (datetime,)):
-        return val.date()
+        return _service_date(val)
     if isinstance(val, date):
         return val
     if isinstance(val, str):
         val = val.strip()
         # try common formats
-        for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        for fmt in ("%d/%m/%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+            try:
+                return _service_date(datetime.strptime(val, fmt))
+            except ValueError:
+                pass
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
             try:
                 return datetime.strptime(val, fmt).date()
             except ValueError:

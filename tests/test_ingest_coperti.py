@@ -1,4 +1,4 @@
-"""Test ingest_coperti: riconoscimento fogli, guard anti-shrink."""
+"""Test ingest_coperti: riconoscimento fogli, guard anti-shrink, regola mezzanotte."""
 
 from datetime import date, datetime, timezone
 
@@ -6,6 +6,7 @@ import openpyxl
 import pytest
 
 from ingest.flussi.ingest_coperti import (
+    parse_timestamp,
     parse_xlsx_file,
     replace_guard,
 )
@@ -93,3 +94,30 @@ def test_replace_guard_passa_se_cresce_o_pari():
 
 def test_replace_guard_override():
     replace_guard(n_new=100, n_existing=2274, allow_shrink=True)
+
+
+# ── Regola mezzanotte: submission prima delle 06:00 = servizio del giorno prima ──
+
+
+def test_mezzanotte_submission_dopo_le_00_va_al_giorno_prima():
+    # cena dell'8 inserita alle 00:33 del 9 (caso reale incidente 2026-08)
+    assert parse_timestamp(datetime(2026, 8, 9, 0, 33)) == date(2026, 8, 8)
+
+
+def test_mezzanotte_soglia_06_esclusa():
+    assert parse_timestamp(datetime(2026, 8, 9, 6, 0)) == date(2026, 8, 9)
+
+
+def test_mezzanotte_orari_normali_invariati():
+    assert parse_timestamp(datetime(2026, 8, 9, 11, 0)) == date(2026, 8, 9)  # breakfast
+    assert parse_timestamp(datetime(2026, 8, 9, 22, 51)) == date(2026, 8, 9)  # dinner
+
+
+def test_mezzanotte_stringa_con_orario():
+    assert parse_timestamp("09/08/2026 00:33:25") == date(2026, 8, 8)
+
+
+def test_data_pura_invariata():
+    # righe ricostruite/manuali con sola data (niente orario): mai spostate
+    assert parse_timestamp(date(2026, 8, 9)) == date(2026, 8, 9)
+    assert parse_timestamp("09/08/2026") == date(2026, 8, 9)
