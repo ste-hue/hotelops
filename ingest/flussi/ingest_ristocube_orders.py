@@ -23,6 +23,7 @@ Usage:
     python -m ingest.flussi.ingest_ristocube_orders --file <xlsx> --raw-object-id <id>
     python -m ingest.flussi.ingest_ristocube_orders --file <xlsx> --dry-run
 """
+
 from __future__ import annotations
 
 import argparse
@@ -94,6 +95,8 @@ def parse_xlsx(path: Path, raw_object_id: str | None = None) -> list[dict]:
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
     wb.close()
+    # Conteggio occorrenze per hash base (item identici → suffisso, vedi loop)
+    hash_occurrences: dict[str, int] = {}
 
     now = datetime.now(timezone.utc)
     items: list[dict] = []
@@ -171,6 +174,17 @@ def parse_xlsx(path: Path, raw_object_id: str | None = None) -> list[dict]:
             if len(ir) < 10 or ir[3] is None or ir[4] is None:
                 j += 1
                 continue
+            # Header ripetuti a metà comanda (salto pagina del report): né
+            # l'items-header "Menu | Articolo POS | …" né il sub-header
+            # "Modalità Chiusura Comanda | …" sono item (bug storico: 204
+            # righe junk in tabella prima di questo skip, 2026-08-16).
+            if (
+                ir[2] == "Menu"
+                or ir[3] == "Articolo POS"
+                or ir[1] == "Modalità Chiusura Comanda"
+            ):
+                j += 1
+                continue
 
             item_codice = _safe_str(ir[3]) or ""
             item_quantita = _safe_float(ir[5])
@@ -184,40 +198,51 @@ def parse_xlsx(path: Path, raw_object_id: str | None = None) -> list[dict]:
                 str(item_quantita),
                 str(item_importo_finale),
             )
+            # Item identici nella stessa comanda (2× stesso drink): la chiave
+            # content satura (famiglia #120) e il gate #121 blocca il batch.
+            # Suffisso di occorrenza: la 1ª tiene l'hash legacy (dedup con lo
+            # storico intatto), le successive derivano da esso — deterministico
+            # finché l'ordine degli item nel report è stabile (lo è).
+            occ = hash_occurrences.get(hash_riga, 0)
+            hash_occurrences[hash_riga] = occ + 1
+            if occ:
+                hash_riga = make_hash(hash_riga, f"occ{occ}")
 
-            items.append({
-                "hash_riga": hash_riga,
-                "societa_id": SOCIETA_ID,
-                "business_unit_id": bu,
-                "data": d,
-                "anno": d.year,
-                "mese": d.month,
-                "giorno": d.day,
-                "orario_apertura": comanda["orario_apertura"],
-                "orario_chiusura": comanda["orario_chiusura"],
-                "tavolo": comanda["tavolo"],
-                "sala": sala_raw,
-                "comanda_id": comanda_id,
-                "coperti_comanda": comanda["coperti_comanda"],
-                "totale_comanda": comanda["totale_comanda"],
-                "operatore_apertura": comanda["operatore_apertura"],
-                "modalita_chiusura": comanda["modalita_chiusura"],
-                "segmento_cliente": comanda["segmento_cliente"],
-                "importo_pagamento": comanda["importo_pagamento"],
-                "mp": comanda["mp"],
-                "note_direzione": comanda["note_direzione"],
-                "item_menu": _safe_str(ir[2]),
-                "item_codice_pos": item_codice,
-                "item_descrizione": _safe_str(ir[4]),
-                "item_quantita": item_quantita,
-                "item_importo_originale": _safe_float(ir[6]),
-                "item_sconto_tipo": _safe_str(ir[7]),
-                "item_importo_sconto": _safe_float(ir[8]),
-                "item_importo_finale": item_importo_finale,
-                "file_sorgente": path.name,
-                "raw_object_id": raw_object_id,
-                "data_caricamento": now,
-            })
+            items.append(
+                {
+                    "hash_riga": hash_riga,
+                    "societa_id": SOCIETA_ID,
+                    "business_unit_id": bu,
+                    "data": d,
+                    "anno": d.year,
+                    "mese": d.month,
+                    "giorno": d.day,
+                    "orario_apertura": comanda["orario_apertura"],
+                    "orario_chiusura": comanda["orario_chiusura"],
+                    "tavolo": comanda["tavolo"],
+                    "sala": sala_raw,
+                    "comanda_id": comanda_id,
+                    "coperti_comanda": comanda["coperti_comanda"],
+                    "totale_comanda": comanda["totale_comanda"],
+                    "operatore_apertura": comanda["operatore_apertura"],
+                    "modalita_chiusura": comanda["modalita_chiusura"],
+                    "segmento_cliente": comanda["segmento_cliente"],
+                    "importo_pagamento": comanda["importo_pagamento"],
+                    "mp": comanda["mp"],
+                    "note_direzione": comanda["note_direzione"],
+                    "item_menu": _safe_str(ir[2]),
+                    "item_codice_pos": item_codice,
+                    "item_descrizione": _safe_str(ir[4]),
+                    "item_quantita": item_quantita,
+                    "item_importo_originale": _safe_float(ir[6]),
+                    "item_sconto_tipo": _safe_str(ir[7]),
+                    "item_importo_sconto": _safe_float(ir[8]),
+                    "item_importo_finale": item_importo_finale,
+                    "file_sorgente": path.name,
+                    "raw_object_id": raw_object_id,
+                    "data_caricamento": now,
+                }
+            )
             j += 1
 
         i = j
@@ -246,13 +271,22 @@ def ingest_file(
 
     pydantic_rows = [RistocubeOrderRow(**r) for r in new_rows]
     bq_write_validated(F_RISTOCUBE_ORDERS, pydantic_rows, mode="append")
-    log.info("OK %s : %d righe nuove scritte (su %d totali)", path.name, len(new_rows), len(rows))
+    log.info(
+        "OK %s : %d righe nuove scritte (su %d totali)",
+        path.name,
+        len(new_rows),
+        len(rows),
+    )
     return len(new_rows)
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Ingest RistoCube Orders Report → f_ristocube_orders")
-    ap.add_argument("--file", required=True, type=Path, help="xlsx Orders Report RISTOCUBE")
+    ap = argparse.ArgumentParser(
+        description="Ingest RistoCube Orders Report → f_ristocube_orders"
+    )
+    ap.add_argument(
+        "--file", required=True, type=Path, help="xlsx Orders Report RISTOCUBE"
+    )
     ap.add_argument(
         "--raw-object-id",
         default=None,
@@ -275,7 +309,9 @@ def main() -> None:
         societa_id=SOCIETA_ID,
         file_sorgente=args.file.name,
     ):
-        n = ingest_file(args.file, raw_object_id=args.raw_object_id, dry_run=args.dry_run)
+        n = ingest_file(
+            args.file, raw_object_id=args.raw_object_id, dry_run=args.dry_run
+        )
         log.info("Totale: %d righe", n)
 
 
