@@ -147,7 +147,7 @@ Stabilimento balneare (Lido, INTUR). **Ricavo TOTALE/giorno = banco INTUR + allo
 
 ### Banks & Esolver mapping (Cc#/partitario → banca_id)
 - **ORTI:** Cc1=INTESA (c/c 100000010919), Cc2=MPS (000001194052), Cc3=MPS_KROSS (000001205058), Cc4=UNICREDIT (000107433941, non mappato — aggiungere a `ESOLVER_CC_MAP` se compare)
-- **INTUR:** Cc1=SELLA (052425024130), Cc2=MPS (000000134795), Cc3=INTESA (100000011966), Cc4=BCP (CC1471072999)
+- **INTUR:** Cc1=SELLA (052425024130), Cc2=MPS (000000134795), Cc3=INTESA (100000011966), Cc4=BCP (CC1471072999 — **dormiente**, deciso 2026-08-16: conto non usato, zero flussi attesi; non è un buco di ingest)
 - **Protocollo export (deciso 2026-07-04):** flussi bancari = export homebanking per banca; lato Esolver = **scheda/mastrino RAGGRUPPATO** (tutte le banche in un file), la banca si risolve dalla colonna Partitario via `ESOLVER_CC_MAP` (`ingest/flussi/ingest_scheda_contabile.py`). Non serve export banca-per-banca.
 
 ## Financial Data / Cashflow
