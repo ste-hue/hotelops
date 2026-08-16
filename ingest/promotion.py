@@ -117,6 +117,43 @@ def _invoke_parser(
                 log.warning("Cleanup of temp %s failed: %s", cleanup_path, e)
 
 
+def _count_canonical_rows(canonical_table: str, raw_object_id: str) -> Optional[int]:
+    """Righe atterrate in canonical con questa FK. None = non verificabile.
+
+    Issue #125: il parser via subprocess non riporta le righe scritte, quindi
+    l'unica verifica onesta è contare in canonical. None (tabella assente,
+    colonna FK mancante, errore BQ) NON deve mai bloccare la promozione — il
+    gate scatta solo su uno zero certo.
+    """
+    if not canonical_table:
+        return None
+    try:
+        from google.cloud import bigquery
+
+        from core.bq.client import get_client
+        from core.config import DATASET, PROJECT
+
+        client = get_client()
+        sql = (
+            f"SELECT COUNT(*) AS n FROM `{PROJECT}.{DATASET}.{canonical_table}` "
+            "WHERE raw_object_id = @id"
+        )
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("id", "STRING", raw_object_id)
+            ]
+        )
+        row = next(iter(client.query(sql, job_config=job_config).result()))
+        return int(row.n)
+    except Exception as e:
+        log.warning(
+            "Conteggio FK su %s non disponibile (%s) — gate EMPTY_PARSE saltato",
+            canonical_table,
+            str(e)[:200],
+        )
+        return None
+
+
 def promote_raw_object(raw_object_id: str, actor: str = "cli") -> PromotionResult:
     """Promote a single raw_object to canonical.
 
@@ -126,8 +163,9 @@ def promote_raw_object(raw_object_id: str, actor: str = "cli") -> PromotionResul
       3. Hard gate (NO_LOOP_TARGET if RAW_ONLY)
       4. Emit PROMOTION_REQUESTED
       5. Invoke parser via subprocess
-      6. On parser ok: emit VALIDATED_OK + PROMOTED
-      7. On parser fail: emit VALIDATED_FAIL + REJECTED(VALIDATE_FAIL)
+      6. Count canonical rows by FK (issue #125): 0 rows → REJECTED(EMPTY_PARSE)
+      7. On parser ok + rows landed: emit VALIDATED_OK + PROMOTED
+      8. On parser fail: emit VALIDATED_FAIL + REJECTED(VALIDATE_FAIL)
     """
     raw = _fetch_raw_object(raw_object_id)
 
@@ -207,6 +245,35 @@ def promote_raw_object(raw_object_id: str, actor: str = "cli") -> PromotionResul
                 raw_object_id, status="REJECTED", reason="VALIDATE_FAIL"
             )
 
+        # Gate anti verde-fabbricato (issue #125): il parser è uscito 0, ma le
+        # righe sono davvero atterrate in canonical? Zero certo = REJECTED.
+        counted = _count_canonical_rows(source_def.canonical_table, raw_object_id)
+        if counted == 0:
+            emit_event(
+                raw_object_id=raw_object_id,
+                event_type="VALIDATED_FAIL",
+                actor=actor,
+                from_status=current,
+                payload={
+                    "error": "parser exit 0 ma 0 righe in canonical con questa FK",
+                    "canonical_table": source_def.canonical_table,
+                },
+            )
+            emit_event(
+                raw_object_id=raw_object_id,
+                event_type="REJECTED",
+                actor=actor,
+                from_status=current,
+                to_status="REJECTED",
+                reason="EMPTY_PARSE",
+                payload={"canonical_table": source_def.canonical_table},
+            )
+            return PromotionResult(
+                raw_object_id, status="REJECTED", reason="EMPTY_PARSE"
+            )
+        if counted is not None:
+            parser_result = {**parser_result, "rows_written": counted}
+
         emit_event(
             raw_object_id=raw_object_id,
             event_type="VALIDATED_OK",
@@ -228,7 +295,7 @@ def promote_raw_object(raw_object_id: str, actor: str = "cli") -> PromotionResul
         return PromotionResult(
             raw_object_id,
             status="PROMOTED",
-            rows_written=parser_result.get("rows_written", 0),
+            rows_written=parser_result.get("rows_written", -1),
         )
 
 

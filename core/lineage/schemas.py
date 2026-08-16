@@ -65,7 +65,11 @@ LineageEventType = Literal[
 ]
 
 RejectionReason = Literal[
-    "NO_LOOP_TARGET", "DETECT_FAIL", "VALIDATE_FAIL", "WRITE_FAIL"
+    "NO_LOOP_TARGET",
+    "DETECT_FAIL",
+    "VALIDATE_FAIL",
+    "WRITE_FAIL",
+    "EMPTY_PARSE",  # issue #125: parser exit 0 ma 0 righe atterrate in canonical
 ]
 PromotionPolicy = Literal["AUTO", "MANUAL", "RAW_ONLY"]
 RawBackend = Literal["drive", "gcs", "local"]
@@ -147,9 +151,7 @@ class SourceDefinition(BaseModel):
     # Sorgenti PEC (system == "PEC"): identità della casella. La policy di
     # visibilità sul pannello NON sta qui: vive in PANEL_ENTITIES (whitelist).
     casella: Optional[str] = None
-    entity_id: Optional[
-        Literal["INTUR", "ORTI", "VIGNA", "STEFANO_PERSONALE"]
-    ] = None
+    entity_id: Optional[Literal["INTUR", "ORTI", "VIGNA", "STEFANO_PERSONALE"]] = None
     input_formats: list[Literal["mbox", "eml"]] = Field(
         default_factory=lambda: ["mbox"]
     )

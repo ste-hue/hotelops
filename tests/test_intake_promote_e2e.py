@@ -87,6 +87,8 @@ def test_intake_then_promote_does_not_raise_invalid_transition(
     fake_proc.returncode = 0
     fake_proc.stderr = ""
     monkeypatch.setattr("ingest.promotion.subprocess.run", lambda cmd, **kw: fake_proc)
+    # gate #125: neutralizza il contatore FK (qui si testa la state machine, non il gate)
+    monkeypatch.setattr("ingest.promotion._count_canonical_rows", lambda t, r: None)
 
     fake_raw = MagicMock()
     fake_raw.source_name = "MPS_BANCA_ORTI_APPEND"
@@ -100,6 +102,7 @@ def test_intake_then_promote_does_not_raise_invalid_transition(
 
     # Skip pipeline_run side effects.
     import contextlib
+
     monkeypatch.setattr(
         "ingest.promotion.PipelineRun",
         lambda *a, **kw: contextlib.nullcontext(),
@@ -147,14 +150,10 @@ def test_intake_then_promote_with_real_state_machine(
     # Since we mocked bq_write_validated, the v_raw_objects_current view
     # wouldn't be updated by the SOURCE_RESOLVED emit. Simulate the post-
     # intake state directly: CLASSIFIED.
-    monkeypatch.setattr(
-        "ingest.promotion.latest_status", lambda _id: "CLASSIFIED"
-    )
+    monkeypatch.setattr("ingest.promotion.latest_status", lambda _id: "CLASSIFIED")
 
     # ── Mock the storage backend (avoid touching disk for upload) ──────────
-    fake_upload_result = MagicMock(
-        raw_uri=f"file://{fixture_file}", generation=None
-    )
+    fake_upload_result = MagicMock(raw_uri=f"file://{fixture_file}", generation=None)
     fake_local = MagicMock(upload=lambda **kw: fake_upload_result)
     monkeypatch.setattr("ingest.intake.LocalBackend", lambda: fake_local)
 
@@ -171,9 +170,7 @@ def test_intake_then_promote_with_real_state_machine(
     fake_source.canonical_table = "f_banche_movimenti"
 
     fake_reg = MagicMock()
-    fake_reg.get = (
-        lambda name: fake_source if name == fake_source.source_name else None
-    )
+    fake_reg.get = lambda name: fake_source if name == fake_source.source_name else None
     monkeypatch.setattr("ingest.intake.load_registry", lambda: fake_reg)
     monkeypatch.setattr("ingest.promotion.load_registry", lambda: fake_reg)
 
@@ -187,9 +184,9 @@ def test_intake_then_promote_with_real_state_machine(
 
     # ── Mock subprocess (parser run) ───────────────────────────────────────
     fake_proc = MagicMock(returncode=0, stderr="")
-    monkeypatch.setattr(
-        "ingest.promotion.subprocess.run", lambda cmd, **kw: fake_proc
-    )
+    monkeypatch.setattr("ingest.promotion.subprocess.run", lambda cmd, **kw: fake_proc)
+    # gate #125: neutralizza il contatore FK (qui si testa la state machine, non il gate)
+    monkeypatch.setattr("ingest.promotion._count_canonical_rows", lambda t, r: None)
 
     # ── Skip PipelineRun side effects ──────────────────────────────────────
     monkeypatch.setattr(
