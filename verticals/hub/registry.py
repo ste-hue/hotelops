@@ -14,7 +14,6 @@ from verticals.hub.pages_ import (
     accodamenti,
     bilancini,
     cashflow,
-    cassa_consuntivo,
     fb,
     mutui,
     revenue,
@@ -55,7 +54,8 @@ class HubApp:
 APPS: list[HubApp] = [
     # ── Finanza ──────────────────────────────────────────────────────────────
     HubApp("cashflow", "Cashflow", "💸", "Finanza", "page", cashflow.render, "PF & proiezione cassa", sensitive=True),
-    HubApp("cassa-consuntivo", "Cassa consuntivo", "💰", "Finanza", "page", cassa_consuntivo.render, "Il vero cashflow: banca vs certificati", sensitive=True),
+    # cassa-consuntivo smontata 2026-08-18 (mai usata); pages_/cassa_consuntivo.py
+    # resta nel codice — rimontarla = ri-aggiungere la riga qui.
     HubApp("bilancini", "Bilancini", "📗", "Finanza", "page", bilancini.render, "bilancio di verifica: YTD, progressione, navigatore", sensitive=True),
     HubApp("accodamenti", "Accodamenti", "📒", "Finanza", "page", accodamenti.render, "raccolta cassa → Gaia", sensitive=True),
     HubApp("banche", "Banche", "🏛", "Finanza", "bind", _BANCHE_LOOKER, "movimenti & saldi (Looker)"),
