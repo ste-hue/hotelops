@@ -6,7 +6,9 @@
 L'upload riscrive sempre lo stesso fileID: il link non cambia mai, niente _v2.
 Non lanciarlo mentre il file è aperto in Excel.
 """
-import io, os, sys
+import io
+import os
+import sys
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -103,11 +105,15 @@ def sec(row, testo):
     ws.row_dimensions[row].height = 20
 
 def kv(row, k, v, nf=None, nota=None, bold=False, fill=None):
-    ck = ws.cell(row=row, column=2, value=k); ck.font = Font(bold=bold, size=10)
-    cv = ws.cell(row=row, column=3, value=v); cv.font = Font(bold=bold, size=10)
-    if nf: cv.number_format = nf
+    ck = ws.cell(row=row, column=2, value=k)
+    ck.font = Font(bold=bold, size=10)
+    cv = ws.cell(row=row, column=3, value=v)
+    cv.font = Font(bold=bold, size=10)
+    if nf:
+        cv.number_format = nf
     if fill:
-        for col in (2, 3, 4): ws.cell(row=row, column=col).fill = PatternFill("solid", fgColor=fill)
+        for col in (2, 3, 4):
+            ws.cell(row=row, column=col).fill = PatternFill("solid", fgColor=fill)
     if nota:
         cn = ws.cell(row=row, column=5, value=nota)
         cn.font = Font(size=9, color="595959", italic=True)
@@ -374,25 +380,32 @@ for src, ambito in BUD_ROWS:
         c.border = BOX
         c.font = Font(size=10)
         c.alignment = Alignment(vertical="center", wrap_text=(i in (3, 11)))
-        if i in (7, 8): c.number_format = EUR
-        if i == 10: c.fill = PatternFill("solid", fgColor=GRIGIO)
+        if i in (7, 8):
+            c.number_format = EUR
+        if i == 10:
+            c.fill = PatternFill("solid", fgColor=GRIGIO)
     ws.row_dimensions[out].height = 26
     out += 1
 
 tr = out + 1
 ws.cell(row=tr, column=3, value="TOTALE PERIMETRO").font = Font(bold=True, size=10)
 tc = ws.cell(row=tr, column=8, value=f"=SUM(H3:H{out-1})")
-tc.font = Font(bold=True, size=10); tc.number_format = EUR
+tc.font = Font(bold=True, size=10)
+tc.number_format = EUR
 tc.fill = PatternFill("solid", fgColor=GIALLO)
 ws.cell(row=tr + 1, column=3, value="Imprevisti 5% (non allocati a un fornitore)").font = Font(size=10, italic=True)
-ic = ws.cell(row=tr + 1, column=8, value=125632.75); ic.number_format = EUR; ic.font = Font(size=10, italic=True)
+ic = ws.cell(row=tr + 1, column=8, value=125632.75)
+ic.number_format = EUR
+ic.font = Font(size=10, italic=True)
 ws.cell(row=tr + 2, column=3, value="BUDGET TOTALE").font = Font(bold=True, size=11)
 gc = ws.cell(row=tr + 2, column=8, value=f"=H{tr}+H{tr+1}")
-gc.font = Font(bold=True, size=11); gc.number_format = EUR
+gc.font = Font(bold=True, size=11)
+gc.number_format = EUR
 gc.fill = PatternFill("solid", fgColor=GIALLO)
 
 dv = DataValidation(type="list", formula1='"SCOPERTO,PREVENTIVI IN CORSO,SOLO IMPEGNO,IN CORSO,COMPLETO"', allow_blank=True)
-ws.add_data_validation(dv); dv.add(f"J3:J{out-1}")
+ws.add_data_validation(dv)
+dv.add(f"J3:J{out-1}")
 
 # ══════════════════════════════ 4. Scelte ══════════════════════════════
 ws = wb.create_sheet("Scelte")
@@ -433,11 +446,15 @@ for src in range(6, 59):
             forn, stato, "", None, "", ric, doc, ""]
     for i, v in enumerate(vals, 1):
         c = ws.cell(row=out, column=i, value=v)
-        c.border = BOX; c.font = Font(size=10)
+        c.border = BOX
+        c.font = Font(size=10)
         c.alignment = Alignment(vertical="center", wrap_text=(i in (3, 11, 14, 15, 16)))
-        if i in (6, 7, 8): c.number_format = EUR
-        if i == 12: c.number_format = "dd/mm/yyyy"
-        if i in (11, 12, 13, 16): c.fill = PatternFill("solid", fgColor=GIALLO)
+        if i in (6, 7, 8):
+            c.number_format = EUR
+        if i == 12:
+            c.number_format = "dd/mm/yyyy"
+        if i in (11, 12, 13, 16):
+            c.fill = PatternFill("solid", fgColor=GIALLO)
         if i == 10:
             c.fill = PatternFill("solid", fgColor=("FCE4D6" if stato == "DA DECIDERE" else GRIGIO))
     ws.row_dimensions[out].height = 26
@@ -445,13 +462,18 @@ for src in range(6, 59):
 
 tr = out + 1
 ws.cell(row=tr, column=3, value="TOTALE CAMERA TIPO").font = Font(bold=True, size=10)
-c = ws.cell(row=tr, column=7, value=f"=SUM(G3:G{out-1})"); c.number_format = EUR; c.font = Font(bold=True, size=10)
+c = ws.cell(row=tr, column=7, value=f"=SUM(G3:G{out-1})")
+c.number_format = EUR
+c.font = Font(bold=True, size=10)
 c.fill = PatternFill("solid", fgColor=GIALLO)
-c = ws.cell(row=tr, column=8, value=f"=SUM(H3:H{out-1})"); c.number_format = EUR; c.font = Font(bold=True, size=10)
+c = ws.cell(row=tr, column=8, value=f"=SUM(H3:H{out-1})")
+c.number_format = EUR
+c.font = Font(bold=True, size=10)
 c.fill = PatternFill("solid", fgColor=GIALLO)
 
 dv = DataValidation(type="list", formula1='"DA DECIDERE,CANDIDATO,SCELTO,ORDINATO,CONSEGNATO"', allow_blank=True)
-ws.add_data_validation(dv); dv.add(f"J3:J{out-1}")
+ws.add_data_validation(dv)
+dv.add(f"J3:J{out-1}")
 
 # ══════════════════════════════ 5. Tracking_Fornitori ══════════════════════════════
 ws = wb.create_sheet("Tracking_Fornitori")
@@ -465,7 +487,8 @@ for rr in range(3, 60):
     for cc in (6, 8, 10):
         ws.cell(row=rr, column=cc).number_format = EUR
 dv = DataValidation(type="list", formula1='"SCOPERTO,SOLO IMPEGNO,SOLO COMPETENZA,COMPLETO"', allow_blank=True)
-ws.add_data_validation(dv); dv.add("L3:L400")
+ws.add_data_validation(dv)
+dv.add("L3:L400")
 n = ws.cell(row=4, column=2, value="→ le righe nascono quando arriva il primo documento di quel fornitore. "
                                    "I fornitori del budget sono candidati, non ancora ingaggiati.")
 n.font = Font(size=10, italic=True, color="808080")
@@ -480,7 +503,8 @@ for rr in range(3, 400):
     ws.cell(row=rr, column=5).number_format = "dd/mm/yyyy"
     ws.cell(row=rr, column=6).number_format = EUR
 dv = DataValidation(type="list", formula1='"Preventivo,Ordine,Contratto,Fattura,Nota di credito,SAL,Proforma"', allow_blank=True)
-ws.add_data_validation(dv); dv.add("C3:C400")
+ws.add_data_validation(dv)
+dv.add("C3:C400")
 n = ws.cell(row=4, column=2, value="→ «Sostituisce» serve per le revisioni: un preventivo Rev02 sostituisce il Rev01, "
                                    "e solo il più recente entra nei totali.   "
                                    "→ «N° documento» si copia ESATTAMENTE come sta sul documento (589 / 00, 1/29, "
@@ -507,9 +531,11 @@ for rr in range(3, 60):
 dv = DataValidation(type="list",
                     formula1='"SCOPERTO,SOLO IMPEGNO,DA FATTURARE,DA PAGARE,LAVORI IN CORSO,CHIUSO,DUBBIO"',
                     allow_blank=True)
-ws.add_data_validation(dv); dv.add("K3:K400")
+ws.add_data_validation(dv)
+dv.add("K3:K400")
 dv2 = DataValidation(type="list", formula1='"SI,NO,PARZIALE"', allow_blank=True)
-ws.add_data_validation(dv2); dv2.add("L3:L400")
+ws.add_data_validation(dv2)
+dv2.add("L3:L400")
 n = ws.cell(row=4, column=2, value="→ «€ Pagato» e «€ Da Pagare» arrivano dalle partite Esolver di Intur Srl. "
                                    "«€ Maturato» si copia dal SAL o dal consuntivo del fornitore: è lavoro eseguito, "
                                    "non ancora fatturato. Le colonne gialle le riempie una persona, non lo script.")
