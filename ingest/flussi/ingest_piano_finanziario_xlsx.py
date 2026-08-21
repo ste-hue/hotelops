@@ -186,23 +186,28 @@ def _detect_societa(ws) -> str | None:
     return None
 
 
-def _detect_year_and_month_block(ws) -> tuple[int | None, list[tuple[int, int]]]:
-    """Detect year and build (col, mese) list — layout-aware ORTI + INTUR.
+def _detect_year_and_month_block(ws) -> list[tuple[int, int, int]]:
+    """Data ogni colonna-mese: return [(col, anno, mese), ...].
 
     I mesi si leggono scansionando la riga 2 per nomi-mese italiani *ovunque*
-    siano: questo copre sia ORTI (riga 1 = anno, mesi da col 3) sia INTUR
-    (riga 1 = "DATA RILEVAZIONE", col 3 = data snapshot, mesi spostati a destra).
-    Mappare il mese dal nome (non da una posizione fissa) evita lo shift che la
-    vecchia fallback introduceva quando i mesi non erano 12.
+    siano: copre sia ORTI (mesi da col 3) sia INTUR (col 3 = data snapshot,
+    mesi spostati a destra).
 
-    L'anno: marker in riga 1 (ORTI); in mancanza, una data in riga 2 (INTUR);
-    altrimenti default 2026.
+    L'anno è PER COLONNA — il nuovo standard dei master (orizzonte a giugno
+    anno+1) porta 16 mesi su due anni. Semantica identica al motore canonico
+    ``pf_rotate/excel_model.find_month_periods`` (non importabile da ingest/:
+    verticals consuma ingest, non viceversa): anno base = ultimo marker
+    numerico in riga 1 fino alla prima colonna-mese inclusa, +1 a ogni wrap
+    del numero di mese (DIC→GEN). Il vecchio detector restituiva un anno solo
+    — l'ultimo marker trovato — e stampava 2027 su tutto il foglio.
 
-    Returns (anno, [(col, mese), ...])
+    Fallback layout INTUR storico: nessun marker in riga 1, una data in riga 2
+    ("DATA RILEVAZ"). Senza anno dichiarato: ValueError, mai default silenziosi
+    (CLAUDE.md §Chiave periodo: fail-loud).
     """
     # Mesi: ogni cella di riga 2 il cui testo è un nome-mese italiano.
     months: list[tuple[int, int]] = []
-    for col in range(1, 20):
+    for col in range(1, ws.max_column + 1):
         v = ws.cell(2, col).value
         if isinstance(v, str):
             mese = MESI_IT.get(v.strip().upper())
@@ -210,12 +215,12 @@ def _detect_year_and_month_block(ws) -> tuple[int | None, list[tuple[int, int]]]
                 months.append((col, mese))
 
     if not months:
-        return None, []
+        return []
 
-    # Anno: marker in riga 1 (layout ORTI). Il più a destra = anno budget
+    # Anno base: marker in riga 1 fino alla prima colonna-mese inclusa
     # (i file possono avere una colonna 2025 di confronto prima del 2026).
     anno = None
-    for col in range(1, 20):
+    for col in range(1, months[0][0] + 1):
         val = ws.cell(1, col).value
         try:
             y = int(float(val))
@@ -226,7 +231,7 @@ def _detect_year_and_month_block(ws) -> tuple[int | None, list[tuple[int, int]]]
 
     # Fallback anno: una data in riga 2 (cella "DATA RILEVAZIONE" INTUR).
     if anno is None:
-        for col in range(1, 20):
+        for col in range(1, ws.max_column + 1):
             v = ws.cell(2, col).value
             if hasattr(v, "year") and 2025 <= getattr(v, "year", 0) <= 2030:
                 anno = v.year
@@ -241,9 +246,19 @@ def _detect_year_and_month_block(ws) -> tuple[int | None, list[tuple[int, int]]]
                     break
 
     if anno is None:
-        anno = 2026
+        raise ValueError(
+            f"Anno non dichiarato nel foglio '{ws.title}': impossibile datare "
+            "le colonne-mese (niente default — fail-loud)."
+        )
 
-    return anno, months
+    dated: list[tuple[int, int, int]] = []
+    prev_mese: int | None = None
+    for col, mese in months:
+        if prev_mese is not None and mese < prev_mese:
+            anno += 1
+        prev_mese = mese
+        dated.append((col, anno, mese))
+    return dated
 
 
 def setup_logger() -> logging.Logger:
@@ -292,11 +307,8 @@ def parse_piano_finanziario(
             wb.close()
             return []
 
-    # Detect year and month columns
-    anno, month_cols = _detect_year_and_month_block(ws)
-    if not anno:
-        logger.warning("  Anno non rilevato — default 2026")
-        anno = 2026
+    # Detect month columns, each dated with its own year (multi-anno).
+    month_cols = _detect_year_and_month_block(ws)
     if not month_cols:
         logger.error(f"  Colonne mesi non rilevate in {filepath.name}")
         wb.close()
@@ -321,14 +333,14 @@ def parse_piano_finanziario(
         voce_id = _match_voce(label)
         if not voce_id:
             # Check if row has any data
-            has_data = any(_v(ws.cell(r, c).value) != 0 for c, _ in month_cols)
+            has_data = any(_v(ws.cell(r, c).value) != 0 for c, _, _ in month_cols)
             if has_data:
                 logger.warning(f'  UNMAPPED row {r}: "{label}" — riga saltata')
                 voci_skipped += 1
             continue
 
         voci_found += 1
-        for col, mese in month_cols:
+        for col, anno, mese in month_cols:
             val = _v(ws.cell(r, col).value)
             if val == 0:
                 continue
@@ -352,7 +364,7 @@ def parse_piano_finanziario(
     wb.close()
 
     logger.info(
-        f"  {societa_id} {anno}: {voci_found} voci, "
+        f"  {societa_id} {min(a for _, a, _ in month_cols)}-{max(a for _, a, _ in month_cols)}: {voci_found} voci, "
         f"{len(records)} righe mensili"
         + (f" ({voci_skipped} voci non mappate)" if voci_skipped else "")
     )
