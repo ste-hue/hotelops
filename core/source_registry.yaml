@@ -342,6 +342,23 @@ sources:
       bucket: hotelops-raw
       path_template: "piani_finanziari/ORTI"
 
+  ESOLVER_PF_INTUR_SNAPSHOT:
+    system: ESOLVER
+    dataset: PF
+    dataset_label: "Piano Finanziario (cash flow voci)"
+    societa: INTUR
+    lifecycle: SNAPSHOT
+    canonical_table: f_piano_finanziario_input
+    parser_module: ingest.flussi.ingest_piano_finanziario_xlsx
+    natural_key: [societa_id, voce_id, anno, mese, fonte]
+    loop_targets: [cash_control, budget_canonical]
+    promotion_policy: AUTO
+    detector_category: piano_finanziario
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "piani_finanziari/INTUR"
+
   # ── HotelCube accodamenti — APPEND, BU per-file ───────────────────────────
   HOTELCUBE_ACCODAMENTI_ORTI_APPEND:
     system: HOTELCUBE

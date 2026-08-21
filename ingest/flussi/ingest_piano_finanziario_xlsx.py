@@ -57,14 +57,15 @@ except ImportError:
     HAS_OPENPYXL = False
 
 try:
-    from google.cloud import bigquery
+    import importlib.util
 
-    HAS_BQ = True
+    HAS_BQ = importlib.util.find_spec("google.cloud.bigquery") is not None
 except ImportError:
     HAS_BQ = False
 
-from core.bq.client import get_client
+from core.bq.write import bq_write_validated
 from core.config import PROJECT
+from core.schemas import PianoFinanziarioInputRow
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -134,9 +135,29 @@ def _v(x) -> float:
     return 0.0
 
 
-def make_hash(societa_id: str, voce_id: str, anno: int, mese: int, fonte: str) -> str:
-    key = f"{societa_id}|{voce_id}|{anno}|{mese}|{fonte}"
+def make_hash(
+    societa_id: str, voce_id: str, anno: int, mese: int, fonte: str, occorrenza: int = 1
+) -> str:
+    key = f"{societa_id}|{voce_id}|{anno}|{mese}|{fonte}|{occorrenza}"
     return hashlib.md5(key.encode()).hexdigest()
+
+
+def assegna_occorrenze(rows: list[dict]) -> list[dict]:
+    """Give each row sharing (societa, voce, anno, mese, fonte) its own hash.
+
+    The plan legitimately carries more than one row per voce and month — INTUR
+    affitti 2027-07 holds 488.000 and 60.000 — and the old key could not tell
+    them apart, so the batch dedup dropped one. Ranking them 1..N keeps both and
+    keeps the batch free of hash collisions (the write gate refuses those).
+    Order comes from the sheet, so re-parsing the same file yields the same
+    hashes and the snapshot does not churn identities.
+    """
+    occorrenze: dict[tuple, int] = {}
+    for r in rows:
+        chiave = (r["societa_id"], r["voce_id"], r["anno"], r["mese"], r["fonte"])
+        occorrenze[chiave] = occorrenze.get(chiave, 0) + 1
+        r["hash_riga"] = make_hash(*chiave, occorrenze[chiave])
+    return rows
 
 
 def _match_voce(label: str) -> str | None:
@@ -165,23 +186,28 @@ def _detect_societa(ws) -> str | None:
     return None
 
 
-def _detect_year_and_month_block(ws) -> tuple[int | None, list[tuple[int, int]]]:
-    """Detect year and build (col, mese) list — layout-aware ORTI + INTUR.
+def _detect_year_and_month_block(ws) -> list[tuple[int, int, int]]:
+    """Data ogni colonna-mese: return [(col, anno, mese), ...].
 
     I mesi si leggono scansionando la riga 2 per nomi-mese italiani *ovunque*
-    siano: questo copre sia ORTI (riga 1 = anno, mesi da col 3) sia INTUR
-    (riga 1 = "DATA RILEVAZIONE", col 3 = data snapshot, mesi spostati a destra).
-    Mappare il mese dal nome (non da una posizione fissa) evita lo shift che la
-    vecchia fallback introduceva quando i mesi non erano 12.
+    siano: copre sia ORTI (mesi da col 3) sia INTUR (col 3 = data snapshot,
+    mesi spostati a destra).
 
-    L'anno: marker in riga 1 (ORTI); in mancanza, una data in riga 2 (INTUR);
-    altrimenti default 2026.
+    L'anno è PER COLONNA — il nuovo standard dei master (orizzonte a giugno
+    anno+1) porta 16 mesi su due anni. Semantica identica al motore canonico
+    ``pf_rotate/excel_model.find_month_periods`` (non importabile da ingest/:
+    verticals consuma ingest, non viceversa): anno base = ultimo marker
+    numerico in riga 1 fino alla prima colonna-mese inclusa, +1 a ogni wrap
+    del numero di mese (DIC→GEN). Il vecchio detector restituiva un anno solo
+    — l'ultimo marker trovato — e stampava 2027 su tutto il foglio.
 
-    Returns (anno, [(col, mese), ...])
+    Fallback layout INTUR storico: nessun marker in riga 1, una data in riga 2
+    ("DATA RILEVAZ"). Senza anno dichiarato: ValueError, mai default silenziosi
+    (CLAUDE.md §Chiave periodo: fail-loud).
     """
     # Mesi: ogni cella di riga 2 il cui testo è un nome-mese italiano.
     months: list[tuple[int, int]] = []
-    for col in range(1, 20):
+    for col in range(1, ws.max_column + 1):
         v = ws.cell(2, col).value
         if isinstance(v, str):
             mese = MESI_IT.get(v.strip().upper())
@@ -189,12 +215,12 @@ def _detect_year_and_month_block(ws) -> tuple[int | None, list[tuple[int, int]]]
                 months.append((col, mese))
 
     if not months:
-        return None, []
+        return []
 
-    # Anno: marker in riga 1 (layout ORTI). Il più a destra = anno budget
+    # Anno base: marker in riga 1 fino alla prima colonna-mese inclusa
     # (i file possono avere una colonna 2025 di confronto prima del 2026).
     anno = None
-    for col in range(1, 20):
+    for col in range(1, months[0][0] + 1):
         val = ws.cell(1, col).value
         try:
             y = int(float(val))
@@ -205,7 +231,7 @@ def _detect_year_and_month_block(ws) -> tuple[int | None, list[tuple[int, int]]]
 
     # Fallback anno: una data in riga 2 (cella "DATA RILEVAZIONE" INTUR).
     if anno is None:
-        for col in range(1, 20):
+        for col in range(1, ws.max_column + 1):
             v = ws.cell(2, col).value
             if hasattr(v, "year") and 2025 <= getattr(v, "year", 0) <= 2030:
                 anno = v.year
@@ -220,9 +246,19 @@ def _detect_year_and_month_block(ws) -> tuple[int | None, list[tuple[int, int]]]
                     break
 
     if anno is None:
-        anno = 2026
+        raise ValueError(
+            f"Anno non dichiarato nel foglio '{ws.title}': impossibile datare "
+            "le colonne-mese (niente default — fail-loud)."
+        )
 
-    return anno, months
+    dated: list[tuple[int, int, int]] = []
+    prev_mese: int | None = None
+    for col, mese in months:
+        if prev_mese is not None and mese < prev_mese:
+            anno += 1
+        prev_mese = mese
+        dated.append((col, anno, mese))
+    return dated
 
 
 def setup_logger() -> logging.Logger:
@@ -271,11 +307,8 @@ def parse_piano_finanziario(
             wb.close()
             return []
 
-    # Detect year and month columns
-    anno, month_cols = _detect_year_and_month_block(ws)
-    if not anno:
-        logger.warning("  Anno non rilevato — default 2026")
-        anno = 2026
+    # Detect month columns, each dated with its own year (multi-anno).
+    month_cols = _detect_year_and_month_block(ws)
     if not month_cols:
         logger.error(f"  Colonne mesi non rilevate in {filepath.name}")
         wb.close()
@@ -300,14 +333,14 @@ def parse_piano_finanziario(
         voce_id = _match_voce(label)
         if not voce_id:
             # Check if row has any data
-            has_data = any(_v(ws.cell(r, c).value) != 0 for c, _ in month_cols)
+            has_data = any(_v(ws.cell(r, c).value) != 0 for c, _, _ in month_cols)
             if has_data:
                 logger.warning(f'  UNMAPPED row {r}: "{label}" — riga saltata')
                 voci_skipped += 1
             continue
 
         voci_found += 1
-        for col, mese in month_cols:
+        for col, anno, mese in month_cols:
             val = _v(ws.cell(r, col).value)
             if val == 0:
                 continue
@@ -315,6 +348,7 @@ def parse_piano_finanziario(
             records.append(
                 {
                     "hash_riga": make_hash(societa_id, voce_id, anno, mese, FONTE),
+                    # refined by assegna_occorrenze() once the batch is complete
                     "societa_id": societa_id,
                     "voce_id": voce_id,
                     "anno": anno,
@@ -330,7 +364,7 @@ def parse_piano_finanziario(
     wb.close()
 
     logger.info(
-        f"  {societa_id} {anno}: {voci_found} voci, "
+        f"  {societa_id} {min(a for _, a, _ in month_cols)}-{max(a for _, a, _ in month_cols)}: {voci_found} voci, "
         f"{len(records)} righe mensili"
         + (f" ({voci_skipped} voci non mappate)" if voci_skipped else "")
     )
@@ -385,60 +419,32 @@ def quality_summary(rows: list[dict], logger: logging.Logger) -> None:
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
 
-BQ_SCHEMA = (
-    [
-        bigquery.SchemaField("hash_riga", "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("societa_id", "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("voce_id", "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("anno", "INTEGER", mode="REQUIRED"),
-        bigquery.SchemaField("mese", "INTEGER", mode="REQUIRED"),
-        bigquery.SchemaField("importo", "FLOAT64"),
-        bigquery.SchemaField("fonte", "STRING"),
-        bigquery.SchemaField("note", "STRING"),
-        bigquery.SchemaField("file_sorgente", "STRING"),
-        bigquery.SchemaField("data_caricamento", "TIMESTAMP"),
-        bigquery.SchemaField("raw_object_id", "STRING"),
-    ]
-    if HAS_BQ
-    else []
-)
+NATURAL_KEY = ["societa_id", "fonte", "anno", "mese", "voce_id"]
 
 
-def load_to_bq(rows: list[dict], bq_client, logger: logging.Logger) -> None:
+def scrivi_su_bq(rows: list[dict]) -> None:
+    """Write the plan as a SNAPSHOT of its own perimeter.
+
+    The registry has always declared this source SNAPSHOT; the code appended
+    with a hash filter, which meant a revised amount on an existing key was
+    silently skipped — the plan in BigQuery could never move. DELETE+INSERT
+    scoped to (societa, fonte, anno, mese, voce) makes a re-ingest supersede
+    its perimeter instead, which is what the view expects: since #124 it SUMs
+    the rows of the winning fonte, so appending a revision would inflate the
+    plan rather than replace it.
+
+    ``fonte`` is in the key on purpose: SCADENZIARIO (no pipeline in the repo,
+    not regenerable) and BVA_2026 live in the same table and must not be
+    touched by a Piano Finanziario ingest.
+    """
     if not rows:
         return
-
-    # Dedup: check existing hashes
-    hashes_new = {r["hash_riga"] for r in rows}
-    try:
-        hashes_str = ", ".join(f"'{h}'" for h in hashes_new)
-        result = bq_client.query(
-            f"SELECT hash_riga FROM `{BQ_TABLE}` WHERE hash_riga IN ({hashes_str})"
-        ).result()
-        existing = {row.hash_riga for row in result}
-    except Exception:
-        existing = set()
-
-    new_rows = [r for r in rows if r["hash_riga"] not in existing]
-    logger.info(f"  Nuove: {len(new_rows)}, già presenti: {len(rows) - len(new_rows)}")
-
-    if not new_rows:
-        logger.info("  Nessuna nuova riga da caricare")
-        return
-
-    job = bq_client.load_table_from_json(
-        new_rows,
+    bq_write_validated(
         BQ_TABLE,
-        job_config=bigquery.LoadJobConfig(
-            schema=BQ_SCHEMA,
-            write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        ),
+        [PianoFinanziarioInputRow(**r) for r in rows],
+        mode="snapshot",
+        natural_key=NATURAL_KEY,
     )
-    job.result()
-    if job.errors:
-        logger.error(f"BQ errors: {job.errors}")
-    else:
-        logger.info(f"  {BQ_TABLE}: {len(new_rows)} righe inserite")
 
 
 # ── CSV dump ──────────────────────────────────────────────────────────────────
@@ -535,16 +541,9 @@ def main() -> None:
         logger.error("Nessuna riga estratta")
         sys.exit(1)
 
-    # Dedup within batch (same hash = same voce+mese+anno+fonte)
-    seen: dict[str, dict] = {}
-    for r in all_rows:
-        h = r["hash_riga"]
-        if h not in seen:
-            seen[h] = r
-        else:
-            # Keep the one from the more recent file
-            seen[h] = r  # Last file wins
-    all_rows = list(seen.values())
+    # Rows sharing (societa, voce, anno, mese, fonte) are distinct facts of the
+    # plan, not duplicates: rank them instead of collapsing them.
+    all_rows = assegna_occorrenze(all_rows)
 
     for r in all_rows:
         r["raw_object_id"] = args.raw_object_id
@@ -563,8 +562,8 @@ def main() -> None:
         logger.error("google-cloud-bigquery non installato")
         sys.exit(1)
 
-    bq_client = get_client()
-    load_to_bq(all_rows, bq_client, logger)
+    scrivi_su_bq(all_rows)
+    logger.info(f"  {BQ_TABLE}: {len(all_rows)} righe (snapshot su {NATURAL_KEY})")
     logger.info("✓ DONE")
 
 
