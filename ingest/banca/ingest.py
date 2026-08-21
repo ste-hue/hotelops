@@ -145,9 +145,7 @@ def _scan_xlsx_preamble_iban(filepath: Path, max_rows: int = 30) -> Optional[str
         wb = openpyxl.load_workbook(filepath, data_only=True)
         try:
             ws = wb.active
-            for row_idx, row in enumerate(
-                ws.iter_rows(values_only=True), start=1
-            ):
+            for row_idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
                 if row_idx > max_rows:
                     break
                 for cell in row:
@@ -281,6 +279,23 @@ def euro(val: str) -> float:
 
 def md5(*args) -> str:
     return hashlib.md5("|".join(str(a) for a in args).encode()).hexdigest()
+
+
+def hash_movimento(societa, banca, data_op: str, netto, occorrenza: int) -> str:
+    """Dedup key of a bank movement.
+
+    Identity is (account, day, amount, n-th movement of that trio). The free
+    text is out — it is unstable across export formats — and so is
+    ``data_valuta``: the bank restates it between exports, which used to turn
+    one movement into two rows. ``occorrenza`` is what keeps genuinely twin
+    movements apart (three SEPA transfers of the same amount on the same day
+    are three payments); it is stable under re-export because a given day/amount
+    always yields the same ordered set 1..N.
+
+    The amount is formatted to 2 decimals so that float noise from a re-export
+    (38.16 vs 38.160000000000004) cannot fork the hash — issue #120 family.
+    """
+    return md5(societa, banca, data_op, f"{float(netto):.2f}", occorrenza)
 
 
 def parse_date(s: str) -> datetime:
@@ -793,12 +808,25 @@ def apply_mapping(row: dict, mappings: dict, sorgente: str) -> dict:
 # -- Transform ----------------------------------------------------------------
 
 
-def transform(raw: dict, meta: dict, counter: int) -> dict:
+def transform(
+    raw: dict, meta: dict, counter: int, occorrenze: dict | None = None
+) -> dict:
+    """Build one fact row.
+
+    ``occorrenze`` accumulates, across the rows of one file, how many movements
+    already shared this (account, day, amount) — it is what makes twin
+    movements distinguishable. Pass the same dict for every row of a file.
+    """
     societa, banca = infer_ids(meta["societa_banca"])
     d_op = parse_date(raw["data_op"])
     d_val = parse_date(raw["data_val"])
     netto = raw["credito"] - abs(raw["debito"])
     ts = datetime.now().strftime("%Y%m%d%H%M%S")
+
+    if occorrenze is None:
+        occorrenze = {}
+    chiave = (societa, banca, d_op.strftime("%Y-%m-%d"), f"{netto:.2f}")
+    occorrenze[chiave] = occorrenze.get(chiave, 0) + 1
 
     return {
         "id_movimento": f"MOV_{societa}_{banca}_{d_op.strftime('%Y%m%d')}_{counter:06d}_{ts}",
@@ -826,9 +854,7 @@ def transform(raw: dict, meta: dict, counter: int) -> dict:
         "data_ingresso": meta["data_ingresso"],
         "file_sorgente": meta["filename"],
         "riga_sorgente": raw["riga"],
-        "hash_riga": md5(
-            societa, banca, d_op.strftime("%Y-%m-%d"), d_val.strftime("%Y-%m-%d"), netto
-        ),
+        "hash_riga": hash_movimento(*chiave, occorrenze[chiave]),
     }
 
 
@@ -838,26 +864,31 @@ def transform(raw: dict, meta: dict, counter: int) -> dict:
 def load_hashes(bq_client: bigquery.Client) -> set:
     """Load dedup hashes from BQ.
 
-    Computes both legacy (desc-based) hashes and current (date_val-based)
-    hashes so that cross-format duplicates are caught regardless of which
-    export format was ingested first.
+    Rebuilds the current key for every stored row — including its ``occorrenza``
+    rank, so that a day holding N movements of the same amount contributes the
+    hashes 1..N and an export carrying N+1 of them writes only the new one.
+    Stored ``hash_riga`` values are added as-is too: rows written under older
+    formulas keep being recognised without rewriting the table.
     """
     try:
         result = bq_client.query(
             f"""SELECT hash_riga, societa_id, banca_id,
                        FORMAT_DATE('%Y-%m-%d', data_operazione) AS d_op,
-                       FORMAT_DATE('%Y-%m-%d', data_valuta) AS d_val,
-                       importo_netto
+                       FORMAT('%.2f', importo_netto) AS netto,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY societa_id, banca_id, data_operazione,
+                                        FORMAT('%.2f', importo_netto)
+                           ORDER BY data_valuta, descrizione, hash_riga
+                       ) AS occorrenza
                 FROM `{BQ_TABLE}`"""
         ).result()
         hashes = set()
         for row in result:
             if row.hash_riga:
-                hashes.add(row.hash_riga)  # legacy hash
-            # current hash (format-agnostic)
+                hashes.add(row.hash_riga)  # legacy formulas
             hashes.add(
-                md5(
-                    row.societa_id, row.banca_id, row.d_op, row.d_val, row.importo_netto
+                hash_movimento(
+                    row.societa_id, row.banca_id, row.d_op, row.netto, row.occorrenza
                 )
             )
         return hashes
@@ -917,9 +948,11 @@ def process_file(
     stats["total"] = len(raw_rows)
     new_rows = []
 
+    occorrenze: dict[tuple, int] = {}
+
     for i, raw in enumerate(raw_rows, 1):
         raw = apply_mapping(raw, mappings, meta["societa_banca"])
-        fact = transform(raw, meta, i)
+        fact = transform(raw, meta, i, occorrenze)
         fact["raw_object_id"] = raw_object_id
 
         if fact["hash_riga"] in hashes:
@@ -1011,14 +1044,13 @@ def main():
         "--source", "-s", help="Staging folder from rclone sync (batch mode default)"
     )
     # Single-file mode (new — used by promote subprocess):
-    parser.add_argument(
-        "--file", help="Single file to ingest (used by promotion path)"
-    )
+    parser.add_argument("--file", help="Single file to ingest (used by promotion path)")
     parser.add_argument(
         "--raw-object-id", help="Raw object ID to stamp on rows (single-file mode)"
     )
     parser.add_argument(
-        "--societa", choices=["ORTI", "INTUR"],
+        "--societa",
+        choices=["ORTI", "INTUR"],
         help="Societa override for single-file mode when filename doesn't carry it",
     )
     parser.add_argument("--project", default=PROJECT, help="GCP project")
