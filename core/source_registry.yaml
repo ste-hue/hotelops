@@ -341,6 +341,13 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "piani_finanziari/ORTI"
+    notes: |
+      Master generazionali su Drive: cartella 1wGf0yL7RGrvumCKSVWFBlxC2zcAYT8u-
+      (un file per rotation, naming <SOC>_PF_<YYYY-MM>.xlsx = primo mese aperto;
+      l'ultima generazione è il master vivo). drive_file_id fisso NON adatto:
+      ogni rotation crea un file nuovo — si lista la cartella via SA drive-audit@
+      e si prende il piu' recente per societa. Dal 2026-07 (18/08) lo standard
+      ha orizzonte esteso a giugno anno+1.
 
   ESOLVER_PF_INTUR_SNAPSHOT:
     system: ESOLVER
@@ -358,6 +365,13 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "piani_finanziari/INTUR"
+    notes: |
+      Master generazionali su Drive: cartella 1wGf0yL7RGrvumCKSVWFBlxC2zcAYT8u-
+      (un file per rotation, naming <SOC>_PF_<YYYY-MM>.xlsx = primo mese aperto;
+      l'ultima generazione è il master vivo). drive_file_id fisso NON adatto:
+      ogni rotation crea un file nuovo — si lista la cartella via SA drive-audit@
+      e si prende il piu' recente per societa. Dal 2026-07 (18/08) lo standard
+      ha orizzonte esteso a giugno anno+1.
 
   # ── HotelCube accodamenti — APPEND, BU per-file ───────────────────────────
   HOTELCUBE_ACCODAMENTI_ORTI_APPEND:
