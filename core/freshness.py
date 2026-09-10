@@ -35,14 +35,15 @@ SEVERITY: dict[str, int] = {
     "NO_CONTRACT": 4,
 }
 ICON: dict[str, str] = {
-    "OK": "✓",
-    "DUE": "!",
+    "OK": "✓ ",
+    "DUE": "! ",
     "STALE": "🔴",
     "JOB_DOWN": "🔴",
     "DATA_STUCK": "🔴",
-    "DORMANT": "⏸",
-    "NO_CONTRACT": "?",
+    "DORMANT": "⏸ ",
+    "NO_CONTRACT": "? ",
 }
+ADHOC_ICON = "· "
 JOB_STALE_HOURS = 36
 ROME = ZoneInfo("Europe/Rome")
 
@@ -181,6 +182,7 @@ class SourceFreshness:
     dormant: Optional[str] = None
     grace_day: Optional[int] = None
     basis: Optional[str] = None
+    cadence: Optional[str] = None
 
 
 # ── compute ─────────────────────────────────────────────────────────────────
@@ -308,6 +310,7 @@ def compute(
                 dormant=fc.dormant if fc else None,
                 grace_day=fc.grace_day if fc else None,
                 basis=fc.basis if fc else None,
+                cadence=fc.cadence if fc else None,
             )
         )
 
@@ -355,8 +358,13 @@ def render_text(
     for it in items:
         if it.raw_only and not show_all:
             continue
-        out.append(f"  {ICON[it.status]} {it.source_name:<40} {_summary(it, today)}")
-        if len(it.per_dim) > 1:
+        icon = (
+            ADHOC_ICON
+            if it.cadence == "adhoc" and it.status == "OK"
+            else ICON[it.status]
+        )
+        out.append(f"  {icon} {it.source_name:<44} {_summary(it, today)}")
+        if len(it.per_dim) > 1 or (show_all and it.per_dim):
             out.append(
                 "       "
                 + " · ".join(
@@ -395,6 +403,8 @@ def to_json(items: list[SourceFreshness]) -> list[dict]:
             "job_last_ok": iso(it.job_last_ok),
             "job_age_hours": it.job_age_hours,
             "dormant": it.dormant,
+            "basis": it.basis,
+            "grace_day": it.grace_day,
         }
         for it in items
     ]

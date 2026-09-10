@@ -304,6 +304,100 @@ def test_render_text_e_to_json():
     assert js[0]["per_dim"] == [
         {"dims": {"banca_id": "MPS"}, "covered_through": "2026-06-30"}
     ]
+    assert js[0]["basis"] == "canonical"
+    assert js[0]["grace_day"] == 10
+
+
+def test_render_show_all_mostra_le_dims_anche_se_una_sola():
+    sella = _sd(
+        "SELLA_BANCA_INTUR_APPEND",
+        societa="INTUR",
+        freshness={
+            "tier": "E",
+            "cadence": "monthly",
+            "grain": "daily",
+            "coverage_column": "data_operazione",
+            "dims": ["banca_id"],
+            "dim_filter": {"banca_id": ["SELLA"]},
+        },
+    )
+    q = FakeQuery(
+        coverage={
+            "f_banche_movimenti": [
+                {
+                    "societa_id": "INTUR",
+                    "banca_id": "SELLA",
+                    "covered": date(2026, 8, 21),
+                },
+            ]
+        }
+    )
+    [it] = compute(_registry(sella), q, now=NOW)
+    assert "SELLA 21/08" not in render_text([it], today=NOW.date())
+    assert "SELLA 21/08" in render_text([it], today=NOW.date(), show_all=True)
+
+
+def test_render_show_all_mostra_le_raw_only():
+    raw_only = _sd(
+        "HOTELCUBE_STAMPACASSA_ORTI_APPEND",
+        promotion_policy="RAW_ONLY",
+        loop_targets=[],
+        canonical_table="f_stampa_cassa",
+        freshness={
+            "tier": "M",
+            "cadence": "adhoc",
+            "grain": "snapshot",
+            "basis": "raw",
+        },
+        acquisition={
+            "mode": "MANUAL",
+            "owner": "Stefano",
+            "location": "HotelCube",
+            "report": "Stampa Cassa",
+        },
+    )
+    q = FakeQuery(
+        raw=[
+            {
+                "source_name": "HOTELCUBE_STAMPACASSA_ORTI_APPEND",
+                "last_intake": date(2026, 7, 12),
+            }
+        ]
+    )
+    [it] = compute(_registry(raw_only), q, now=NOW)
+    assert "STAMPACASSA" not in render_text([it], today=NOW.date())
+    assert "STAMPACASSA" in render_text([it], today=NOW.date(), show_all=True)
+
+
+def test_render_adhoc_usa_il_punto():
+    vigna = _sd(
+        "PEC_MAILBOX_VIGNA_APPEND",
+        system="PEC",
+        societa="VIGNA",
+        canonical_table="f_pec_messages",
+        detector_category="pec_mbox",
+        casella="vineyardamalficoast@pec.it",
+        entity_id="VIGNA",
+        freshness={"tier": "R", "cadence": "adhoc", "grain": "daily", "basis": "raw"},
+        acquisition={
+            "mode": "AUTO",
+            "owner": "job",
+            "job": "pec_fetch",
+            "location": "PEC Aruba",
+            "report": "IMAP",
+        },
+    )
+    q = FakeQuery(
+        raw=[
+            {"source_name": "PEC_MAILBOX_VIGNA_APPEND", "last_intake": date(2026, 8, 3)}
+        ],
+        jobs=[{"pipeline_name": "pec_fetch", "last_ok": NOW - timedelta(hours=8)}],
+    )
+    [it] = compute(_registry(vigna), q, now=NOW)
+    assert it.status == "OK"
+    txt = render_text([it], today=NOW.date())
+    assert "  ·  PEC_MAILBOX_VIGNA_APPEND" in txt
+    assert "✓" not in txt
 
 
 def test_dim_senza_data_rende_la_source_stale():
