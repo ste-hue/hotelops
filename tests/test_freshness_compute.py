@@ -297,3 +297,99 @@ def test_render_text_e_to_json():
     assert js[0]["per_dim"] == [
         {"dims": {"banca_id": "MPS"}, "covered_through": "2026-06-30"}
     ]
+
+
+def test_dim_senza_data_rende_la_source_stale():
+    mps = _sd("MPS_BANCA_ORTI_APPEND")
+    q = FakeQuery(
+        coverage={
+            "f_banche_movimenti": [
+                {"societa_id": "ORTI", "banca_id": "MPS", "covered": date(2026, 8, 31)},
+                {"societa_id": "ORTI", "banca_id": "MPS_KROSS", "covered": None},
+            ]
+        }
+    )
+    [it] = compute(_registry(mps), q, now=NOW)
+    assert it.covered_through is None
+    assert it.status == "STALE"
+    assert it.per_dim == [
+        ({"banca_id": "MPS"}, date(2026, 8, 31)),
+        ({"banca_id": "MPS_KROSS"}, None),
+    ]
+
+
+def test_render_auto_stampa_le_ore_del_job_rispetto_a_now():
+    cop = _sd(
+        "ORTI_COPERTI_ORTI_APPEND",
+        canonical_table="f_coperti_giornalieri",
+        freshness={
+            "tier": "R",
+            "cadence": "daily",
+            "grain": "daily",
+            "coverage_column": "data_servizio",
+        },
+        acquisition={
+            "mode": "AUTO",
+            "owner": "job",
+            "job": "ingest_coperti",
+            "location": "Google Sheet Scarico Coperti",
+            "report": "form",
+        },
+    )
+    q = FakeQuery(
+        coverage={
+            "f_coperti_giornalieri": [
+                {"societa_id": "ORTI", "covered": date(2026, 9, 8)}
+            ]
+        },
+        jobs=[{"pipeline_name": "ingest_coperti", "last_ok": NOW - timedelta(hours=5)}],
+    )
+    [it] = compute(_registry(cop), q, now=NOW)
+    assert it.job_age_hours == 5
+    txt = render_text([it], today=NOW.date())
+    assert "job ingest_coperti OK 5h fa" in txt
+    js = to_json([it])
+    assert js[0]["job_age_hours"] == 5
+
+
+def test_societa_non_filtrabile_su_canonical_usa_solo_dim_filter():
+    vigna = _sd(
+        "PEC_MAILBOX_VIGNA_APPEND",
+        system="PEC",
+        societa="VIGNA",
+        canonical_table="f_pec_messages",
+        detector_category="pec_mbox",
+        casella="vineyardamalficoast@pec.it",
+        entity_id="VIGNA",
+        freshness={
+            "tier": "R",
+            "cadence": "daily",
+            "grain": "daily",
+            "coverage_column": "data_evento",
+            "dims": ["entity_id"],
+            "dim_filter": {"entity_id": ["VIGNA"]},
+        },
+        acquisition={
+            "mode": "AUTO",
+            "owner": "job",
+            "job": "pec_fetch",
+            "location": "PEC Aruba",
+            "report": "IMAP",
+        },
+    )
+    q = FakeQuery(
+        coverage={
+            "f_pec_messages": [
+                {"societa_id": None, "entity_id": "VIGNA", "covered": date(2026, 9, 8)},
+                {
+                    "societa_id": "INTUR",
+                    "entity_id": "INTUR",
+                    "covered": date(2026, 9, 9),
+                },
+            ]
+        },
+        jobs=[{"pipeline_name": "pec_fetch", "last_ok": NOW - timedelta(hours=2)}],
+    )
+    [it] = compute(_registry(vigna), q, now=NOW)
+    assert it.per_dim == [({"entity_id": "VIGNA"}, date(2026, 9, 8))]
+    assert it.status == "OK"
