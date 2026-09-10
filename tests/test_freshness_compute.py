@@ -306,6 +306,7 @@ def test_render_text_e_to_json():
     ]
     assert js[0]["basis"] == "canonical"
     assert js[0]["grace_day"] == 10
+    assert js[0]["cadence"] == "monthly"
 
 
 def test_render_show_all_mostra_le_dims_anche_se_una_sola():
