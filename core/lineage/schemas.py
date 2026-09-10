@@ -131,6 +131,62 @@ class ImapMailbox(BaseModel):
     folders: list[str] = Field(default_factory=lambda: ["INBOX"])
 
 
+class FreshnessContract(BaseModel):
+    """Come si misura la freschezza di una sorgente (spec 2026-09-09 §3-4).
+
+    `basis: canonical` legge MAX(coverage_column) dalla canonical_table, per
+    combinazione di `dims` (societa_id è sempre implicito). `basis: raw` legge
+    l'ultimo intake in f_raw_objects: serve alle sorgenti che condividono la
+    tabella senza una colonna che le distingua, e alle RAW_ONLY.
+    """
+
+    tier: Literal["R", "E", "M"]
+    cadence: Literal["daily", "weekly", "monthly", "quarterly", "adhoc"]
+    grace_day: int = 10
+    grain: Literal["daily", "monthly", "snapshot"]
+    basis: Literal["canonical", "raw"] = "canonical"
+    coverage_column: Optional[str] = None
+    dims: list[str] = Field(default_factory=list)
+    dim_filter: dict[str, list[str]] = Field(default_factory=dict)
+    dormant: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _coerenza(self):
+        if not 1 <= self.grace_day <= 28:
+            raise ValueError("grace_day deve stare tra 1 e 28")
+        if self.basis == "canonical" and not self.coverage_column:
+            raise ValueError("basis canonical richiede coverage_column")
+        if self.basis == "raw" and (self.coverage_column or self.dims or self.dim_filter):
+            raise ValueError("basis raw non ammette coverage_column, dims o dim_filter")
+        for dim in self.dim_filter:
+            if dim not in self.dims:
+                raise ValueError(f"dim_filter su {dim!r} che non è in dims")
+        return self
+
+
+class AcquisitionContract(BaseModel):
+    """Chi esporta cosa, da dove (spec 2026-09-09 §3, §5)."""
+
+    mode: Literal["AUTO", "SEMI", "MANUAL"]
+    owner: Literal["Stefano", "Rosa", "Antonio", "job"]
+    location: str
+    report: str
+    filters: Optional[str] = None
+    format: Optional[str] = None
+    job: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _coerenza(self):
+        if self.mode == "AUTO":
+            if not self.job:
+                raise ValueError("mode AUTO richiede job (pipeline_name in f_pipeline_runs)")
+            if self.owner != "job":
+                raise ValueError("mode AUTO richiede owner 'job'")
+        elif self.job:
+            raise ValueError("job è ammesso solo con mode AUTO")
+        return self
+
+
 class SourceDefinition(BaseModel):
     source_name: str
     system: str
@@ -158,6 +214,8 @@ class SourceDefinition(BaseModel):
     drive_file_id: Optional[str] = None
     imap: Optional[ImapMailbox] = None
     notes: Optional[str] = None
+    freshness: Optional[FreshnessContract] = None
+    acquisition: Optional[AcquisitionContract] = None
 
     @field_validator("source_name")
     @classmethod
@@ -170,6 +228,18 @@ class SourceDefinition(BaseModel):
         if self.system == "PEC" and (not self.casella or not self.entity_id):
             raise ValueError(
                 f"{self.source_name}: sorgente PEC richiede casella ed entity_id"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _raw_only_usa_basis_raw(self):
+        if (
+            self.promotion_policy == "RAW_ONLY"
+            and self.freshness is not None
+            and self.freshness.basis != "raw"
+        ):
+            raise ValueError(
+                f"{self.source_name}: sorgente RAW_ONLY con freshness deve avere basis raw"
             )
         return self
 
