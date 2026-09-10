@@ -112,12 +112,11 @@ def _print_subtotals(fmt_eur, ce, be, cu, bu):
 def cmd_health(args):
     """Health check: freshness dati, gap, alert."""
     import json as _json
-    from datetime import date as _date
 
     from cli import query, fmt_eur, bq
 
     # ── SORGENTI: freshness contract dal registry (core/freshness.py) ──────
-    from core.freshness import compute, render_text, to_json
+    from core.freshness import compute, render_text, to_json, today_rome
     from core.lineage.source_resolver import load_registry
 
     items = compute(load_registry(), query)
@@ -132,7 +131,7 @@ def cmd_health(args):
     print(
         render_text(
             items,
-            today=_date.today(),
+            today=today_rome(),
             show_all=bool(only or getattr(args, "all", False)),
         )
     )

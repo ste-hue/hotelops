@@ -47,6 +47,12 @@ JOB_STALE_HOURS = 36
 ROME = ZoneInfo("Europe/Rome")
 
 
+def today_rome(now: Optional[datetime] = None) -> date:
+    """Data odierna in Europe/Rome, derivata da un istante UTC (default: adesso)."""
+    now = now or datetime.now(timezone.utc)
+    return now.astimezone(ROME).date()
+
+
 # ── Date attese ─────────────────────────────────────────────────────────────
 
 
@@ -237,7 +243,7 @@ def compute(
     now: Optional[datetime] = None,
 ) -> list[SourceFreshness]:
     now = now or datetime.now(timezone.utc)
-    today = now.astimezone(ROME).date()
+    today = today_rome(now)
     sources: list[SourceDefinition] = list(registry.sources.values())
 
     raw_last = {r["source_name"]: _as_date(r["last_intake"]) for r in query(RAW_SQL)}

@@ -2,7 +2,7 @@
 
 from datetime import date, datetime, timedelta, timezone
 
-from core.freshness import compute, render_text, to_json
+from core.freshness import compute, render_text, to_json, today_rome
 from core.lineage.schemas import SourceDefinition
 from core.lineage.source_resolver import SourceRegistry
 
@@ -65,6 +65,13 @@ class FakeQuery:
             if f"hotelops.{table}" in sql:
                 return rows
         return []
+
+
+def test_today_rome_converte_da_utc():
+    """Rome è UTC+2 a settembre: 22:30 UTC del 9 diventa 00:30 del 10 a Roma."""
+    assert today_rome(datetime(2026, 9, 9, 22, 30, tzinfo=timezone.utc)) == date(
+        2026, 9, 10
+    )
 
 
 def test_una_query_per_gruppo_tabella_e_tre_in_tutto_con_due_banche():
