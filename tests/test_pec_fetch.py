@@ -719,3 +719,32 @@ def test_sigterm_rilascia_il_lock(monkeypatch, lock_libero) -> None:
         assert lock_libero == ["acquisito", "rilasciato"]
     finally:
         signal.signal(signal.SIGTERM, precedente)
+
+
+def test_main_apre_un_pipeline_run_pec_fetch(monkeypatch):
+    """Il giro notturno registra `pec_fetch` in f_pipeline_runs (spec 2026-09-09 §8)."""
+    import sys
+    from contextlib import nullcontext
+
+    import ingest.pec_fetch as pf
+
+    runs = []
+
+    class FakeRun:
+        def __init__(self, pipeline_name, societa_id=None, file_sorgente=None):
+            self.pipeline_name = pipeline_name
+
+        def __enter__(self):
+            runs.append(self)
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr("core.pipeline_run.PipelineRun", FakeRun)
+    monkeypatch.setattr(pf, "pec_lock_held", lambda: nullcontext())
+    monkeypatch.setattr(pf, "_giro", lambda names, since_days, promote: None)
+    monkeypatch.setattr(pf.signal, "signal", lambda *a, **k: None)
+    monkeypatch.setattr(sys, "argv", ["pec_fetch", "--source-name", "PEC_MAILBOX_INTUR_APPEND"])
+    pf.main()
+    assert [r.pipeline_name for r in runs] == ["pec_fetch"]

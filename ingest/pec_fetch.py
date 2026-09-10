@@ -239,7 +239,9 @@ def main() -> None:
     # Il lock si prende dopo la risoluzione dei nomi: un registry sbagliato
     # deve gridare senza nemmeno toccare GCS.
     try:
-        with pec_lock_held():
+        from core.pipeline_run import PipelineRun
+
+        with pec_lock_held(), PipelineRun("pec_fetch"):
             _giro(names, since_days=args.since_days, promote=not args.no_promote)
     except LockBusy as busy:
         # Un altro giro è vivo: non è un guasto. Exit 0, se no un'esecuzione
