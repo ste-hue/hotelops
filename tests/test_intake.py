@@ -12,6 +12,13 @@ from ingest.intake import IntakeResult, intake_file
 pytestmark = pytest.mark.bq
 
 
+@pytest.fixture(autouse=True)
+def _pipeline_run_senza_bq(monkeypatch):
+    monkeypatch.setattr(
+        "core.pipeline_run.PipelineRun._insert_final", lambda self: None
+    )
+
+
 def _fixture_xlsx(tmp_path: Path) -> Path:
     f = tmp_path / "ESOLVER_BILANCINO_ORTI_apr.xls"
     f.write_bytes(b"FAKE_XLS_CONTENT_FOR_HASH")

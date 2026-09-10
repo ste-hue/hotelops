@@ -7,6 +7,13 @@ from unittest.mock import MagicMock
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _pipeline_run_senza_bq(monkeypatch):
+    monkeypatch.setattr(
+        "core.pipeline_run.PipelineRun._insert_final", lambda self: None
+    )
+
+
 @pytest.fixture
 def fixture_file(tmp_path: Path) -> Path:
     f = tmp_path / "situazione_partite.xlsx"

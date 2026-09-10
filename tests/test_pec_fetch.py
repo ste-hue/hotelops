@@ -17,6 +17,13 @@ from ingest.pec_watermark import Watermark
 UV = 1000  # UIDVALIDITY finta, stabile in quasi tutti i test
 
 
+@pytest.fixture(autouse=True)
+def _pipeline_run_senza_bq(monkeypatch):
+    monkeypatch.setattr(
+        "core.pipeline_run.PipelineRun._insert_final", lambda self: None
+    )
+
+
 @pytest.fixture
 def lock_libero(monkeypatch):
     """main() prende il lock globale su GCS: qui lo si finge libero.
