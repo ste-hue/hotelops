@@ -76,7 +76,7 @@ hotelops pf [--mese N] [--societa INTUR]   # Piano Finanziario
 hotelops bva [--mese N]                     # Budget vs Consuntivo YTD
 hotelops chiudi [--mese N] [--dry-run]      # Chiusura mese (previsione vs consuntivo + saldo)
 hotelops saldo [--societa INTUR]            # Saldo banca + cash forward 12m
-hotelops health                             # Freshness, gaps, alerts
+hotelops health [--json] [--source X] [--all]   # SORGENTI dal registry (freshness contract) + gap, drift, alert
 hotelops previsione utenze 4-12 22000       # Update forecast
 hotelops pf-rotate ...                      # Rotation mensile PF (vedi §Financial Data)
 

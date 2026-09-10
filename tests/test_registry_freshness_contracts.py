@@ -12,8 +12,10 @@ def _reg():
 
 def test_ogni_sorgente_promuovibile_ha_il_contratto():
     mancanti = [
-        sd.source_name for sd in _reg().sources.values()
-        if sd.promotion_policy != "RAW_ONLY" and (sd.freshness is None or sd.acquisition is None)
+        sd.source_name
+        for sd in _reg().sources.values()
+        if sd.promotion_policy != "RAW_ONLY"
+        and (sd.freshness is None or sd.acquisition is None)
     ]
     assert mancanti == [], f"senza freshness/acquisition: {mancanti}"
 
@@ -21,8 +23,12 @@ def test_ogni_sorgente_promuovibile_ha_il_contratto():
 def test_le_raw_only_hanno_contratto_su_base_raw():
     for sd in _reg().sources.values():
         if sd.promotion_policy == "RAW_ONLY":
-            assert sd.freshness is not None and sd.freshness.basis == "raw", sd.source_name
-            assert sd.acquisition is not None and sd.acquisition.mode == "MANUAL", sd.source_name
+            assert sd.freshness is not None and sd.freshness.basis == "raw", (
+                sd.source_name
+            )
+            assert sd.acquisition is not None and sd.acquisition.mode == "MANUAL", (
+                sd.source_name
+            )
 
 
 def test_esolver_ha_grazia_20_tutti_gli_altri_mensili_10():
@@ -41,8 +47,11 @@ def test_auto_solo_dove_esiste_un_job():
         "PEC_MAILBOX_ORTI_APPEND": "pec_fetch",
         "PEC_MAILBOX_VIGNA_APPEND": "pec_fetch",
     }
-    auto = {sd.source_name: sd.acquisition.job for sd in _reg().sources.values()
-            if sd.acquisition and sd.acquisition.mode == "AUTO"}
+    auto = {
+        sd.source_name: sd.acquisition.job
+        for sd in _reg().sources.values()
+        if sd.acquisition and sd.acquisition.mode == "AUTO"
+    }
     assert auto == attesi
 
 
@@ -57,7 +66,9 @@ def test_sorgenti_che_condividono_tabella_e_societa_si_distinguono_con_dim_filte
     for key, sds in gruppi.items():
         if len(sds) > 1:
             for sd in sds:
-                assert sd.freshness.dim_filter, f"{sd.source_name} condivide {key} senza dim_filter"
+                assert sd.freshness.dim_filter, (
+                    f"{sd.source_name} condivide {key} senza dim_filter"
+                )
 
 
 def test_dormienti_dichiarate():
