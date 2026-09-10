@@ -94,7 +94,14 @@ def main() -> None:
             f"ERROR: source {args.source_name!r} has no drive_file_id in registry and --file-id not provided"
         )
 
-    with tempfile.TemporaryDirectory() as tmp:
+    from core.pipeline_run import PipelineRun
+
+    with (
+        PipelineRun(
+            f"drive_fetch:{args.source_name}", societa_id=source_def.societa
+        ) as run,
+        tempfile.TemporaryDirectory() as tmp,
+    ):
         tmp_path = Path(tmp)
         log.info("Fetching Drive file_id=%s for source %s", file_id, args.source_name)
         local_file = fetch_drive_file(file_id, dest_dir=tmp_path, key_path=args.key)
@@ -102,6 +109,7 @@ def main() -> None:
         from ingest.intake import intake_file
 
         result = intake_file(local_file, source_name=args.source_name, actor="drive_sync")
+        run.rows_new = 0 if result.deduped else 1
         print(f"raw_object_id={result.raw_object_id}")
         print(f"content_hash={result.content_hash}")
         print(f"deduped={result.deduped}")
