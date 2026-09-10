@@ -405,6 +405,7 @@ def to_json(items: list[SourceFreshness]) -> list[dict]:
             "dormant": it.dormant,
             "basis": it.basis,
             "grace_day": it.grace_day,
+            "cadence": it.cadence,
         }
         for it in items
     ]
