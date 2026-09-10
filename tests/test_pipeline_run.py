@@ -9,6 +9,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.cloud import bigquery as google_bigquery
 
 
 @pytest.fixture(autouse=True)
@@ -246,3 +247,31 @@ def test_get_current_handles_nested_contexts():
                 assert PipelineRun.get_current() is inner
             assert PipelineRun.get_current() is outer
         assert PipelineRun.get_current() is None
+
+
+def test_guardia_scatta_anche_con_client_vero_in_cache():
+    """La rete di sicurezza scatta anche se un test precedente ha lasciato
+    un client BigQuery VERO in cache in core.bq.client._client (regression:
+    tests/test_ingest_gasparotto.py lo fa e ordina prima di test_pec_fetch)."""
+    import core.bq.client as bq_client_mod
+    from core.pipeline_run import PipelineRun
+
+    bq_client_mod._client = google_bigquery.Client.__new__(google_bigquery.Client)
+    try:
+        with pytest.raises(AssertionError):
+            PipelineRun("x")._insert_final()
+    finally:
+        bq_client_mod._client = None
+
+
+def test_guardia_lascia_passare_il_client_finto():
+    import core.bq.client as bq_client_mod
+    from core.pipeline_run import PipelineRun
+
+    bq_client_mod._client = MagicMock()
+    try:
+        run = PipelineRun("x")
+        run._insert_final()
+        bq_client_mod._client.insert_rows_json.assert_called_once()
+    finally:
+        bq_client_mod._client = None

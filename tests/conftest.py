@@ -5,6 +5,7 @@ from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 from google.cloud import bigquery
+from google.cloud.bigquery import Client as _RealBQClient
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 import pytest
@@ -419,10 +420,10 @@ def _mai_scrivere_pipeline_runs_veri(monkeypatch):
     reale = PipelineRun._insert_final
 
     def guardia(self):
-        client_finto = bq_client_mod._client is not None or not isinstance(
-            bigquery.Client, type
+        reale_in_uso = isinstance(bq_client_mod._client, _RealBQClient) or (
+            bq_client_mod._client is None and bigquery.Client is _RealBQClient
         )
-        if not client_finto:
+        if reale_in_uso:
             raise AssertionError(
                 "questo test sta per scrivere una riga VERA in f_pipeline_runs: "
                 "patcha core.pipeline_run.PipelineRun._insert_final o inietta un client finto"
