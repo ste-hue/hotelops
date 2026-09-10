@@ -75,3 +75,15 @@ def test_dormienti_dichiarate():
     reg = _reg()
     for name in ("INTESA_BANCA_ORTI_APPEND", "INTESA_BANCA_INTUR_APPEND"):
         assert reg.get(name).freshness.dormant, name
+
+
+def test_dims_banca_id_hanno_sempre_dim_filter():
+    """I conti dormienti (es. INTESA) non devono pinnare la copertura di una
+    sorgente che li condivide con conti vivi (ruling controller 2026-09-10)."""
+    for sd in _reg().sources.values():
+        fc = sd.freshness
+        if fc is None or "banca_id" not in fc.dims:
+            continue
+        assert fc.dim_filter.get("banca_id"), (
+            f"{sd.source_name}: dims include banca_id senza dim_filter"
+        )

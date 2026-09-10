@@ -119,11 +119,27 @@ def cmd_health(args):
     from core.freshness import compute, render_text, to_json, today_rome
     from core.lineage.source_resolver import load_registry
 
-    items = compute(load_registry(), query)
+    json_mode = getattr(args, "json", False)
+    if json_mode:
+        items = compute(load_registry(), query)
+    else:
+        try:
+            items = compute(load_registry(), query)
+        except Exception as e:
+            print(f"  SORGENTI: errore — {e}")
+            items = []
+
     only = getattr(args, "source", None)
     if only:
         items = [i for i in items if i.source_name == only]
-    if getattr(args, "json", False):
+        if not items:
+            if json_mode:
+                print(_json.dumps([], ensure_ascii=False, indent=2))
+            else:
+                print(f"  sorgente sconosciuta: {only}")
+            return
+
+    if json_mode:
         print(_json.dumps(to_json(items), ensure_ascii=False, indent=2))
         return
 
