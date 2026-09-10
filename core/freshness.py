@@ -171,6 +171,7 @@ class SourceFreshness:
     raw_only: bool = False
     job: Optional[str] = None
     job_last_ok: Optional[datetime] = None
+    job_age_hours: Optional[int] = None
     dormant: Optional[str] = None
     grace_day: Optional[int] = None
     basis: Optional[str] = None
@@ -269,11 +270,14 @@ def compute(
 
         job_ok: Optional[bool] = None
         job_last = None
+        job_age_hours: Optional[int] = None
         if ac is not None and ac.mode == "AUTO":
             job_last = jobs_last.get(ac.job)
             job_ok = job_last is not None and (now - job_last) <= timedelta(
                 hours=JOB_STALE_HOURS
             )
+            if job_last is not None:
+                job_age_hours = int((now - job_last).total_seconds() // 3600)
 
         status = status_for(fc, ac, covered, today, job_ok)
         atteso = expected_through(fc.cadence, today) if fc else None
@@ -294,6 +298,7 @@ def compute(
                 raw_only=sd.promotion_policy == "RAW_ONLY",
                 job=ac.job if ac else None,
                 job_last_ok=job_last,
+                job_age_hours=job_age_hours,
                 dormant=fc.dormant if fc else None,
                 grace_day=fc.grace_day if fc else None,
                 basis=fc.basis if fc else None,
@@ -325,10 +330,7 @@ def _summary(it: SourceFreshness, now_date: date) -> str:
         if it.job_last_ok is None:
             job = f"job {it.job} mai OK"
         else:
-            ore = int(
-                (datetime.now(timezone.utc) - it.job_last_ok).total_seconds() // 3600
-            )
-            job = f"job {it.job} OK {ore}h fa"
+            job = f"job {it.job} OK {it.job_age_hours}h fa"
         return f"{cop} · {job}"
     if it.status == "OK":
         return cop
@@ -385,6 +387,7 @@ def to_json(items: list[SourceFreshness]) -> list[dict]:
             "raw_only": it.raw_only,
             "job": it.job,
             "job_last_ok": iso(it.job_last_ok),
+            "job_age_hours": it.job_age_hours,
             "dormant": it.dormant,
         }
         for it in items
