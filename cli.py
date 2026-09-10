@@ -1046,7 +1046,7 @@ def main():
     p_health.add_argument(
         "--json",
         action="store_true",
-        help="Solo il blocco SORGENTI, in JSON (per hub e nudge)",
+        help="Solo il blocco SORGENTI, in JSON (per hub e nudge); include anche le RAW_ONLY",
     )
     p_health.add_argument(
         "--source", default=None, help="Una sola sorgente, con tutte le dims"

@@ -5,6 +5,8 @@ from argparse import Namespace
 from datetime import date
 from unittest.mock import patch
 
+import pytest
+
 from core.freshness import SourceFreshness
 
 
@@ -60,3 +62,39 @@ def test_health_source_filtra_una_riga(capsys):
         cmd_health(Namespace(json=True, source="SELLA_BANCA_INTUR_APPEND", all=False))
     data = json.loads(capsys.readouterr().out)
     assert [d["source_name"] for d in data] == ["SELLA_BANCA_INTUR_APPEND"]
+
+
+def test_health_json_propaga_errore_del_motore():
+    """--json non deve mai far cadere un consumatore macchina su una lista
+    troncata: un errore del motore deve propagare, non essere inghiottito."""
+    from verticals.condges.cli_commands import cmd_health
+
+    with (
+        patch("core.freshness.compute", side_effect=RuntimeError("boom")),
+        patch("core.lineage.source_resolver.load_registry"),
+        patch("cli.query"),
+        pytest.raises(RuntimeError),
+    ):
+        cmd_health(Namespace(json=True, source=None, all=False))
+
+
+def test_health_source_sconosciuta(capsys):
+    from verticals.condges.cli_commands import cmd_health
+
+    items = [_item("MPS_BANCA_ORTI_APPEND", "STALE")]
+
+    with (
+        patch("core.freshness.compute", return_value=items),
+        patch("core.lineage.source_resolver.load_registry"),
+        patch("cli.query"),
+    ):
+        cmd_health(Namespace(json=True, source="NON_ESISTE", all=False))
+    assert json.loads(capsys.readouterr().out) == []
+
+    with (
+        patch("core.freshness.compute", return_value=items),
+        patch("core.lineage.source_resolver.load_registry"),
+        patch("cli.query"),
+    ):
+        cmd_health(Namespace(json=False, source="NON_ESISTE", all=False))
+    assert "sorgente sconosciuta: NON_ESISTE" in capsys.readouterr().out

@@ -251,6 +251,7 @@ sources:
       grain: snapshot
       coverage_column: data_snapshot
       dims: [banca_id]
+      dim_filter: {banca_id: [MPS, MPS_KROSS]}
     acquisition:
       mode: SEMI
       owner: Stefano
@@ -282,6 +283,7 @@ sources:
       grain: snapshot
       coverage_column: data_snapshot
       dims: [banca_id]
+      dim_filter: {banca_id: [MPS, SELLA]}
     acquisition:
       mode: SEMI
       owner: Stefano
