@@ -403,3 +403,30 @@ def _mai_il_lock_pec_vero(monkeypatch):
         return reale(bucket, client)
 
     monkeypatch.setattr(pec_lock, "_blob", guardia)
+
+
+@pytest.fixture(autouse=True)
+def _mai_scrivere_pipeline_runs_veri(monkeypatch):
+    """Rete di sicurezza: nessun test può scrivere una riga vera in
+    f_pipeline_runs. Il 2026-09-10 i test di pec_fetch.main() ne hanno
+    scritte 48 in produzione. Chi testa _insert_final finge il client
+    (patch di google.cloud.bigquery.Client o core.bq.client._client):
+    quelli continuano a funzionare.
+    """
+    import core.bq.client as bq_client_mod
+    from core.pipeline_run import PipelineRun
+
+    reale = PipelineRun._insert_final
+
+    def guardia(self):
+        client_finto = bq_client_mod._client is not None or not isinstance(
+            bigquery.Client, type
+        )
+        if not client_finto:
+            raise AssertionError(
+                "questo test sta per scrivere una riga VERA in f_pipeline_runs: "
+                "patcha core.pipeline_run.PipelineRun._insert_final o inietta un client finto"
+            )
+        return reale(self)
+
+    monkeypatch.setattr(PipelineRun, "_insert_final", guardia)

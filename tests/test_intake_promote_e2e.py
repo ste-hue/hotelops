@@ -21,6 +21,13 @@ import pytest
 pytestmark = pytest.mark.bq
 
 
+@pytest.fixture(autouse=True)
+def _pipeline_run_senza_bq(monkeypatch):
+    monkeypatch.setattr(
+        "core.pipeline_run.PipelineRun._insert_final", lambda self: None
+    )
+
+
 @pytest.fixture
 def fixture_file(tmp_path: Path) -> Path:
     f = tmp_path / "MPS_ORTI_HOMEBANKING_2026_05.csv"
@@ -141,8 +148,13 @@ def test_intake_then_promote_with_real_state_machine(
     )
 
     # ── Mock BQ-side reads ─────────────────────────────────────────────────
-    # _lookup_existing_by_hash is defined in raw_manifest and called there
-    # directly; ingest.intake re-exports it but the call site is raw_manifest.
+    # Two independent call sites need patching: ingest.intake imports
+    # _lookup_existing_by_hash by name (`from core.lineage.raw_manifest
+    # import _lookup_existing_by_hash`) for its own dedup-before-upload
+    # check, while register_raw_object (inside raw_manifest) calls its own
+    # module-global copy for the same check. Patching only one leaves the
+    # other's call site falling through to a real BQ client construction.
+    monkeypatch.setattr("ingest.intake._lookup_existing_by_hash", lambda h: None)
     monkeypatch.setattr(
         "core.lineage.raw_manifest._lookup_existing_by_hash", lambda h: None
     )
