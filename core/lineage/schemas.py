@@ -156,7 +156,9 @@ class FreshnessContract(BaseModel):
             raise ValueError("grace_day deve stare tra 1 e 28")
         if self.basis == "canonical" and not self.coverage_column:
             raise ValueError("basis canonical richiede coverage_column")
-        if self.basis == "raw" and (self.coverage_column or self.dims or self.dim_filter):
+        if self.basis == "raw" and (
+            self.coverage_column or self.dims or self.dim_filter
+        ):
             raise ValueError("basis raw non ammette coverage_column, dims o dim_filter")
         for dim in self.dim_filter:
             if dim not in self.dims:
@@ -179,7 +181,9 @@ class AcquisitionContract(BaseModel):
     def _coerenza(self):
         if self.mode == "AUTO":
             if not self.job:
-                raise ValueError("mode AUTO richiede job (pipeline_name in f_pipeline_runs)")
+                raise ValueError(
+                    "mode AUTO richiede job (pipeline_name in f_pipeline_runs)"
+                )
             if self.owner != "job":
                 raise ValueError("mode AUTO richiede owner 'job'")
         elif self.job:
