@@ -1019,7 +1019,16 @@ def main():
     p_saldo.add_argument("--anno", type=int, default=2026)
 
     # health
-    sub.add_parser("health", help="Health check dati")
+    p_health = sub.add_parser("health", help="Health check dati")
+    p_health.add_argument(
+        "--json",
+        action="store_true",
+        help="Solo il blocco SORGENTI, in JSON (per hub e nudge)",
+    )
+    p_health.add_argument(
+        "--source", default=None, help="Una sola sorgente, con tutte le dims"
+    )
+    p_health.add_argument("--all", action="store_true", help="Mostra anche le RAW_ONLY")
 
     # previsione
     p_prev = sub.add_parser(
