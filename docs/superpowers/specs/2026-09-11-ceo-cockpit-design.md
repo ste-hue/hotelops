@@ -111,7 +111,7 @@ Struttura come `bilancini`: `src/index.js` (routes `/` e `/data.json` da KV, 503
 
 L'HTML è generato dal builder (come bilancini): niente framework, niente fetch a runtime, CSS inline. Layout:
 
-1. **Testata**: "Ufficio CEO", `generato_il` in forma "aggiornato oggi 04:12" / "aggiornato 3 giorni fa" — se più vecchio di 36 ore la testata è in evidenza (staleness = segno in presentazione, ha la stessa dignità dei numeri).
+1. **Testata**: "Ufficio CEO", `generato_il` in forma "aggiornato oggi 04:12" / "aggiornato 3 giorni fa" — se più vecchio di 36 ore la testata è in evidenza (staleness = segno in presentazione, ha la stessa dignità dei numeri). La pagina è statica e renderizzata al push: la staleness la ricalcola uno script **inline** all'apertura (nessuna richiesta esterna), altrimenti "3 giorni fa" resterebbe fermo al momento del push.
 2. **Tre colonne** INTUR · ORTI · VIGNA (una sotto l'altra su telefono). In testa a ogni colonna: `N da vedere` e link "apri su Drive".
 3. In ogni colonna, le righe `da_vedere` ordinate per `data_evento` decrescente. Ogni riga: data, categoria come etichetta, oggetto, mittente, motivi (chip: ALTA / mittente nuovo / oggetto nuovo / allegati nuovi / non classificato), nomi allegati. Se `documenti_pannello` è vuoto, si vede che il documento non è ancora sul pannello.
 4. In fondo alla colonna: "+N di routine negli ultimi 30 giorni".
