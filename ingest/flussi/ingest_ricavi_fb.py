@@ -54,7 +54,19 @@ def parse_applied_filters(text: str) -> tuple[str, int, int]:
     mese_m = re.search(r"Mese is (\w+)", text)
     if not (hotel_m and anno_m and mese_m):
         raise ValueError(f"Applied filters incompleti: {text[:120]!r}")
-    codice_hotel = hotel_m.group(1)
+    # Filtro in NEGAZIONE ("CodiceHotel is not X or Y"): la BU è il complemento
+    # del set escluso; se non è univoco il file è ambiguo → errore, mai default.
+    neg = re.search(r"CodiceHotel is not ([^\n]+)", text)
+    if neg:
+        esclusi = {c for c in HOTEL_TO_BU if c in neg.group(1)}
+        inclusi = set(HOTEL_TO_BU) - esclusi
+        if len(inclusi) != 1:
+            raise ValueError(
+                f"BU ambigua dal footer in negazione (esclusi={sorted(esclusi)}): {text[:160]!r}"
+            )
+        codice_hotel = inclusi.pop()
+    else:
+        codice_hotel = hotel_m.group(1)
     if codice_hotel not in HOTEL_TO_BU:
         raise ValueError(f"CodiceHotel sconosciuto: {codice_hotel}")
     mese_nome = mese_m.group(1).lower()
