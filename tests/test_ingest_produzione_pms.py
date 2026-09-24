@@ -97,6 +97,19 @@ def test_parse_applied_filters_multi_anno():
     assert anni == {2025, 2026}
 
 
+def test_parse_applied_filters_negazione_complemento():
+    # Export Power BI 2026-09-24: "CodiceHotel is not X or Y" → BU = complemento
+    txt = FILTER_HOTEL.replace("CodiceHotel is PANORAMAHT", "CodiceHotel is not HOMEHOLIDAY or PANORAMAHT")
+    assert parse_applied_filters(txt) == ("RESIDENCE", {2026})
+
+
+def test_parse_applied_filters_negazione_ambigua_esplode():
+    # Esclusa una sola struttura su tre: complemento non univoco → errore, mai default
+    txt = FILTER_HOTEL.replace("CodiceHotel is PANORAMAHT", "CodiceHotel is not PANORAMAHT")
+    with pytest.raises(ValueError, match="ambigu"):
+        parse_applied_filters(txt)
+
+
 def test_parse_applied_filters_rejects_lordo():
     txt = FILTER_HOTEL.replace("Descrizione is Imponibile", "Descrizione is Lordo")
     with pytest.raises(ValueError, match="Imponibile"):

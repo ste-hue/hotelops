@@ -73,7 +73,19 @@ def parse_applied_filters(text: str) -> tuple[str, set[int]]:
     anno_m = re.search(r"Anno is (\d{4}(?: or \d{4})*)", text)
     if not (hotel_m and anno_m):
         raise ValueError(f"Applied filters incompleti: {text[:120]!r}")
-    codice = hotel_m.group(1)
+    # Filtro in NEGAZIONE ("CodiceHotel is not X or Y"): la BU è il complemento
+    # del set escluso; se non è univoco il file è ambiguo → errore, mai default.
+    neg = re.search(r"CodiceHotel is not ([^\n]+)", text)
+    if neg:
+        esclusi = {c for c in HOTEL_TO_BU if c in neg.group(1)}
+        inclusi = set(HOTEL_TO_BU) - esclusi
+        if len(inclusi) != 1:
+            raise ValueError(
+                f"BU ambigua dal footer in negazione (esclusi={sorted(esclusi)}): {text[:160]!r}"
+            )
+        codice = inclusi.pop()
+    else:
+        codice = hotel_m.group(1)
     if codice not in HOTEL_TO_BU:
         raise ValueError(f"CodiceHotel sconosciuto: {codice}")
     anni = {int(a) for a in re.findall(r"\d{4}", anno_m.group(1))}
