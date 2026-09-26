@@ -1040,6 +1040,45 @@ sources:
       bucket: hotelops-raw
       path_template: "moolty/fbspiaggia/INTUR"
 
+
+  # ── SDI / Agenzia Entrate — export massivo FatturaPA — RAW_ONLY ───────────
+  # Esito delle "richieste massive" del portale Fatture e Corrispettivi: un
+  # batch <id>_fileProdotto1 per richiesta, dentro una coppia di file per
+  # fattura: <nomefile>.xml (o .xml.p7m firmato CAdES) + <nomefile>_metaDato.xml
+  # (idfile SdI, hashfile, cedente/cessionario, date accoglienza/emissione).
+  SDI_FATTUREXML_ORTI_APPEND:
+    system: SDI
+    dataset: FATTUREXML
+    dataset_label: "Export massivo AdE FatturaPA (xml/p7m + metaDato) — fatture attive e passive ORTI"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_fatture_xml                    # nome TARGET — parser non scritto
+    parser_module: ingest.flussi.ingest_fatture_sdi   # nome TARGET — parser non scritto
+    hash_basis: idfile
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: fatture_sdi
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "fatture_sdi/ORTI"
+    notes: |
+      Unità di intake = il BATCH (zip <id>_fileProdotto1.zip), come la PEC:
+      un contenitore, il parser futuro esplode fatture + metaDato. Direzione
+      (attiva/passiva) SOLO dal contenuto: cedentepiva/cessionariopiva nel
+      metaDato vs P.IVA ORTI 04391390657 — il batch AdE è misto.
+      Chiave naturale della fattura = idfile SdI (metaDato): i batch di
+      richieste successive si SOVRAPPONGONO (2026-08 vs 2026-09: 67 idfile
+      doppi su 1.185) → dedup nel parser su idfile, mai sul nome file.
+      Sistema DIVERSO dal registro contabile Esolver (ESOLVER_FATTURE*):
+      l'XML dice cosa è stato fatturato, il registro come è stato
+      contabilizzato (cod_conto non esiste nell'XML; le estere non passano
+      da SdI). Decisione "sostituire o affiancare" APERTA (sessione
+      2026-08-08, workstream INGEST_CHIUSURE) → nasce RAW_ONLY.
+      Finestra consultazione AdE ~2 anni: l'intake è anche archiviazione.
+      Template richiesta massiva + procedura: docs/procedures/ade_download_massivo/.
+
 ESOLVER_PARTITE_APERTE_ORTI_APPEND:
   lifecycle: APPEND
   description: "Esolver situazione fornitori ORTI (partite aperte)"
