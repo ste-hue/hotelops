@@ -1,6 +1,6 @@
 # CEO Cockpit — ufficio CEO su AMM_CEO (design)
 
-**Data:** 2026-09-11 · **Stato:** approvato in chat, in attesa di review scritta
+**Data:** 2026-09-11 · **Stato:** SUPERATO 2026-09-24 — la domanda "cosa devo fare, firmare o rispondere" la possiede Regia (`mgmt-os`); worktree `feat/ceo-cockpit` (Task 1-2) eliminato, hotelops espone le viste PEC come fonte
 **Repo edge:** `panorama_apps/ceo/` (nuovo) · **Produttore:** hotelops
 **Precedenti:** spec `2026-07-17` (PEC multi-casella, pannello AMM_CEO), spec `2026-08-05-pec-novita-design.md`, decisione 2026-06-20 "front-door JS differito" (STATUS.md), `panorama_apps/bilancini` (pattern edge + push KV)
 
