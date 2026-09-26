@@ -376,6 +376,60 @@ def is_multibank(filepath: Path) -> bool:
     return False
 
 
+# ── Mastrino incollato in Excel (Esolver che fa i capricci) ─────────────────────
+
+
+def _fix_pasted_date_swap(rows: list[list]) -> list[list]:
+    """Inverte giorno/mese nelle celle datetime di un mastrino incollato in Excel.
+
+    Esolver scrive le date come testo GG/MM/AAAA. Incollando in Excel, quelle con
+    giorno <= 12 vengono lette come MM/GG (datetime con giorno e mese scambiati),
+    quelle con giorno >= 13 restano stringhe. Regola deterministica: colonna mista
+    E tutte le stringhe con giorno >= 13 E tutte le datetime con giorno <= 12
+    => ogni datetime va invertita. Un export nativo (solo stringhe, o solo date
+    vere) non entra nella regola.
+    """
+    str_days, dt_idx = [], []
+    for i, f in enumerate(rows):
+        v = f[0] if f else None
+        if isinstance(v, datetime):
+            dt_idx.append(i)
+        elif isinstance(v, str):
+            m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})", v.strip())
+            if m:
+                str_days.append(int(m.group(1)))
+    if not dt_idx or not str_days:
+        return rows
+    if min(str_days) < 13 or any(rows[i][0].day > 12 for i in dt_idx):
+        return rows
+    for i in dt_idx:
+        d = rows[i][0]
+        rows[i][0] = datetime(d.year, d.day, d.month)
+    log.info(f"Fixed {len(dt_idx)} GG/MM-swapped dates (mastrino incollato in Excel)")
+    return rows
+
+
+def _repair_dropped_cell(fields: list) -> list:
+    """Ripristina una riga a cui è sparita la cella vuota Dare/Avere (slittata a sx).
+
+    Riconoscimento: Partitario numerico in col 6 e la sua descrizione (stringa)
+    in col 7. L'importo in col 3 è Dare o Avere a seconda di quale colonna
+    "in valuta" (col 9 / col 10 dopo lo slittamento) è valorizzata.
+    """
+    if len(fields) < 11 or not isinstance(fields[7], str):
+        return fields
+    if _normalize_partitario(fields[6]) not in ("1", "2", "3", "4"):
+        return fields
+    dare_val, avere_val = fields[9], fields[10]
+    if avere_val is not None and dare_val is None:
+        dare, avere = None, fields[3]
+    elif dare_val is not None and avere_val is None:
+        dare, avere = fields[3], None
+    else:
+        return fields
+    return fields[:3] + [dare, avere] + fields[4:]
+
+
 def parse_mastrino_multibank(
     filepath: Path, societa_id: str
 ) -> list[dict]:
@@ -392,7 +446,8 @@ def parse_mastrino_multibank(
     """
     rows = []
     skipped_unmapped = 0
-    for fields in _iter_scheda_rows(filepath):
+    raw_rows = [_repair_dropped_cell(list(f)) for f in _iter_scheda_rows(filepath)]
+    for fields in _fix_pasted_date_swap(raw_rows):
         if len(fields) < 8:
             continue
         d = parse_date(fields[0])
