@@ -252,7 +252,9 @@ def render() -> None:
                 value=float(bq_saldi.get(banca, 0.0)),
                 step=1000.0,
                 format="%.2f",
-                key=f"saldo_{banca}",
+                # societa+data nella chiave: con chiave fissa Streamlit tiene il valore
+                # della prima selezione anche cambiando mese (31/08 mostrato per il 7).
+                key=f"saldo_{societa}_{banca}_{data_saldo.isoformat()}",
             )
         )
 
