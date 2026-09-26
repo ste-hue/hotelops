@@ -280,3 +280,5 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 1768,I.R.P.S. SRL,I.R.P.S. Srl,USCITE_VARIE_EXT,False,False,,ORTI
 1772,PROPAC S.R.L.,Propac S.R.L.,USCITE_VARIE_EXT,False,False,,ORTI
 1773,Gruppo Adam s.r.l.,Gruppo Adam s.r.l.,USCITE_VARIE_EXT,False,False,,ORTI
+1162,S.T.E. S.R.L. con socio unico,STE elettrico,USCITE_VARIE_EXT,False,False,,INTUR
+645,D'aiuto Daniele,D'Aiuto (legale),USCITE_CONSULENZE,False,False,,INTUR
