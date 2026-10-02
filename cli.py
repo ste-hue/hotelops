@@ -202,6 +202,13 @@ def cmd_voci(args):
 # ── Manifest: catalogo tabelle BQ ──────────────────────────────────────────
 
 
+def cmd_canone(args):
+    """Cruscotto canone: aggiorna gli osservati da BigQuery e rigenera la pagina."""
+    from verticals.condges.build_canone_artifact import run
+
+    run(aggiorna=True, push=args.push)
+
+
 def cmd_manifest(args):
     """Genera manifest.yaml — catalogo di tutte le tabelle BQ."""
     from core.bq.manifest import generate_manifest, TABLES
@@ -1056,6 +1063,14 @@ def main():
         "--dry-run", action="store_true", help="Mostra l'ordine senza eseguire"
     )
 
+    # canone
+    p_canone = sub.add_parser(
+        "canone", help="Cruscotto canone ORTI → INTUR: rilegge le fonti e rigenera la pagina"
+    )
+    p_canone.add_argument(
+        "--push", action="store_true", help="Pubblica su canone.panorama-host.com"
+    )
+
     # help
     sub.add_parser("help", help="Guida completa con esempi")
 
@@ -1432,6 +1447,7 @@ def main():
         "prev": cmd_previsione,
         "voci": cmd_voci,
         "manifest": cmd_manifest,
+        "canone": cmd_canone,
         "deploy-views": cmd_deploy_views,
         "classifica": cmd_classifica,
         "cls": cmd_classifica,

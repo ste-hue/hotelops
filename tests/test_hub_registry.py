@@ -37,6 +37,7 @@ def test_pages_solo_kind_page():
         "spiaggia",
         "reviews",
         "revenue",
+        "canone",
     }
 
 
@@ -75,7 +76,8 @@ def test_cashflow_accodamenti_sono_sensibili():
     # bilancini: sensibile dal 2026-07-14 (dati riservati: nessun write-path, solo lettura BQ).
     # spiaggia NON è sensibile: l'uploader Moolty è gated per-utente nel wrapper
     # (pages_/spiaggia._MOOLTY_UPLOADERS) — la pagina resta lettura per Operations.
-    assert sens == {"cashflow", "accodamenti", "revenue", "bilancini"}
+    # canone: sensibile dal 2026-10-01 (BP interno: dati riservati, nessun write-path BQ).
+    assert sens == {"cashflow", "accodamenti", "revenue", "bilancini", "canone"}
 
 
 def test_pages_for_filtra_su_allowed():

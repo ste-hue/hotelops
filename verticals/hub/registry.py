@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from verticals.hub.pages_ import (
     accodamenti,
     bilancini,
+    canone,
     cashflow,
     fb,
     mutui,
@@ -61,6 +62,8 @@ APPS: list[HubApp] = [
     HubApp("banche", "Banche", "🏛", "Finanza", "bind", _BANCHE_LOOKER, "movimenti & saldi (Looker)"),
     HubApp("mutui", "Mutui", "🏦", "Finanza", "page", mutui.render, "ammortamenti & simulatore"),
     HubApp("revenue", "Revenue", "📈", "Finanza", "page", revenue.render, "booking curve & pace", sensitive=True),
+    # canone: sensibile per dati riservati (BP interno, trattativa ORTI↔INTUR) — nessun write-path BQ.
+    HubApp("canone", "Canone", "🤝", "Finanza", "page", canone.render, "scaletta ORTI → INTUR & DSCR (edge app)", sensitive=True),
     # CdG spento 2026-07-05 (troppi dati, redesign "budget vs reale" in arrivo);
     # riaccendere = ripristinare kind=page + import (pages_/cdg.py resta nel codice).
     HubApp("cdg", "CdG", "📊", "Finanza", "soon", None, "controllo di gestione (in redesign)"),
