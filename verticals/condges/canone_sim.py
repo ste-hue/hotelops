@@ -58,6 +58,11 @@ def anni(inputs: dict) -> list[int]:
     return sorted(int(y) for y in inputs["years"] if 2027 <= int(y) <= 2031)
 
 
+def anni_scenario(inputs: dict) -> list[int]:
+    """Anni con leve modificabili: il 2026 è in corso (i pagamenti cadono a fine anno), poi 2027–2031."""
+    return [2026, *anni(inputs)]
+
+
 def fonte(inputs: dict) -> dict:
     return {
         "file": inputs.get("originalUploadedFilename") or inputs.get("source", ""),
@@ -74,9 +79,9 @@ def scenario_base(inputs: dict) -> dict:
     """
     draft = inputs.get("contractDraft") or {}
     piatto = inputs["prior2026"]["appliedRent"]
-    previous = inputs["prior2026"]["ortiRevenue"]
+    previous = inputs["prior2025"]["ortiRevenue"]
     per_anno = {}
-    for y in anni(inputs):
+    for y in anni_scenario(inputs):
         o = inputs["years"][str(y)]["orti"]
         per_anno[y] = {
             "crescita": o["revenue"] / previous - 1,
@@ -93,7 +98,7 @@ def calculate(inputs: dict, scenario: dict, canone_automatico: bool = False) -> 
     ``canone_automatico=True`` ignora la scaletta e applica la regola del foglio
     'Canone Motore' del BP: serve SOLO a verificare la replica dell'Excel.
     """
-    prec = riga_2026(inputs)
+    prec = riga_2026(inputs, scenario)
     out = []
     for y in anni(inputs):
         p = scenario["anni"][y]
@@ -106,13 +111,22 @@ def calculate(inputs: dict, scenario: dict, canone_automatico: bool = False) -> 
     return out
 
 
-def riga_2026(inputs: dict) -> dict:
-    """Anno base: canone fisso, nessun assorbimento di circolante (come nel BP)."""
+def riga_2026(inputs: dict, scenario: dict | None = None) -> dict:
+    """Anno in corso: leve dallo scenario (default = BP), nessun assorbimento di circolante (come nel BP)."""
     o = inputs["years"]["2026"]["orti"]
     p25 = inputs["prior2025"]
-    return _riga(inputs, 2026, o["revenue"] / p25["ortiRevenue"] - 1, o["operatingCostRate"],
-                 inputs["prior2026"]["appliedRent"], ANGELINA_INTUR,
+    p = (scenario or {}).get("anni", {}).get(2026) or {
+        "crescita": o["revenue"] / p25["ortiRevenue"] - 1,
+        "costi": o["operatingCostRate"],
+        "canone": inputs["prior2026"]["appliedRent"],
+    }
+    return _riga(inputs, 2026, p["crescita"], p["costi"], p["canone"], ANGELINA_INTUR,
                  p25["ortiRevenue"], p25["inturRevenue"], p25["inturClosingCash"], 0.0)
+
+
+def righe(inputs: dict, scenario: dict) -> list[dict]:
+    """2026 + 2027–2031: tutte le righe che la pagina mostra."""
+    return [riga_2026(inputs, scenario), *calculate(inputs, scenario)]
 
 
 def _riga(inputs: dict, y: int, crescita: float, costi: float, canone: float | None,
@@ -217,7 +231,7 @@ def canone_equilibrio(inputs: dict, scenario: dict, anno: int) -> float:
     for _ in range(60):
         medio = (lo + hi) / 2
         prova["anni"][anno]["canone"] = medio
-        r = next(x for x in calculate(inputs, prova) if x["anno"] == anno)
+        r = next(x for x in righe(inputs, prova) if x["anno"] == anno)
         if r["dscr_o"] > r["dscr_i"]:
             lo = medio
         else:
@@ -226,10 +240,10 @@ def canone_equilibrio(inputs: dict, scenario: dict, anno: int) -> float:
 
 
 def errori_scaletta(inputs: dict, scenario: dict) -> list[str]:
-    """La scaletta parte dal canone 2026 e non scende mai. Vuoto = valida."""
+    """La scaletta parte dal 2026 (libero) e da lì non scende mai. Vuoto = valida."""
     errori = []
-    precedente, anno_prec = inputs["prior2026"]["appliedRent"], 2026
-    for y in anni(inputs):
+    precedente, anno_prec = 0.0, 2025
+    for y in anni_scenario(inputs):
         canone = scenario["anni"][y]["canone"]
         if not 0 <= canone <= MAX_CANONE:
             errori.append(f"{y}: canone fuori dai limiti (0 – {MAX_CANONE:,.0f} €).".replace(",", "."))
@@ -248,7 +262,7 @@ def imposta_ricavi(inputs: dict, scenario: dict, anno: int, ricavi: float) -> No
 
     Gli anni successivi conservano la loro crescita %, quindi si spostano di conseguenza.
     """
-    riga = next(r for r in calculate(inputs, scenario) if r["anno"] == anno)
+    riga = next(r for r in righe(inputs, scenario) if r["anno"] == anno)
     scenario["anni"][anno]["crescita"] = ricavi / riga["ricavi_o_prec"] - 1
 
 
@@ -258,7 +272,7 @@ def modifiche(inputs: dict, scenario: dict) -> list[dict]:
     diff = []
     if scenario["angelina"] != base["angelina"]:
         diff.append({"anno": None, "campo": "angelina", "base": base["angelina"], "valore": scenario["angelina"]})
-    for y in anni(inputs):
+    for y in anni_scenario(inputs):
         for campo in ("canone", "crescita", "costi"):
             a, b = base["anni"][y][campo], scenario["anni"][y][campo]
             if abs(a - b) > 1e-9:
@@ -286,8 +300,10 @@ def scenario_from_json(inputs: dict, raw: str | bytes) -> tuple[dict, list[str]]
     if doc.get("angelina") not in (ANGELINA_INTUR, ANGELINA_TERZI):
         raise ValueError(f"angelina non valido: {doc.get('angelina')!r}")
     attesi = anni(inputs)
-    if sorted(int(y) for y in doc["anni"]) != attesi:
+    if sorted(int(y) for y in doc["anni"] if int(y) != 2026) != attesi:
         raise ValueError(f"anni dello scenario {sorted(doc['anni'])} ≠ anni del modello {attesi}")
+    if "2026" not in doc["anni"]:  # scenari salvati prima che il 2026 diventasse modificabile
+        doc["anni"]["2026"] = scenario_base(inputs)["anni"][2026]
     scenario = {
         "nome": str(doc["nome"]),
         "angelina": doc["angelina"],

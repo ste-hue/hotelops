@@ -3,13 +3,13 @@
 # Ogni giorno rilegge gli osservati da BigQuery (sola lettura), rigenera la pagina
 # e la pubblica nel KV del Worker `canone` (https://canone.panorama-host.com).
 # I dati del BP NON stanno nell'immagine: secret `canone-model-inputs` montato come file.
-# Uso: scripts/cloud/80_canone.sh [IMAGE_TAG]   (default: v6)
+# Uso: scripts/cloud/80_canone.sh [IMAGE_TAG]   (default: v7)
 # Nuova versione del BP: gcloud secrets versions add canone-model-inputs --data-file=<model-inputs.json>
 set -euo pipefail
 
 PROJECT=hotelops-suite
 REGION=europe-west1
-TAG="${1:-v6}"
+TAG="${1:-v7}"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/hotelops/jobs:${TAG}"
 JOBS_SA="hotelops-jobs@${PROJECT}.iam.gserviceaccount.com"
 ROOT="$(git rev-parse --show-toplevel)"

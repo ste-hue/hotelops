@@ -136,10 +136,9 @@ table{width:100%;border-collapse:collapse}
 .scaletta th{font-size:12px;font-weight:600;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
 .scaletta td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
 .scaletta tr:last-child td{border-bottom:0}
-.scaletta tr.base td{color:var(--muted);background:var(--soft)}
 .scaletta tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .scaletta tbody tr{cursor:pointer}
-td.anno{font-weight:650;width:64px}
+td.anno{font-weight:650;width:72px}
 input.n{width:118px;max-width:100%;font:inherit;font-variant-numeric:tabular-nums;text-align:right;color:var(--ink);
   background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
 input.n:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
@@ -221,7 +220,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:18px}
     <summary>Ipotesi <span>ricavi, crescita e costi di ORTI · fitto Angelina</span></summary>
     <div class="corpo">
       <div class="scroll"><table class="t" id="ipotesi"></table></div>
-      <p class="nota">Ricavi e crescita sono la stessa leva: cambi uno, l'altro segue, e gli anni dopo tengono la loro crescita. Il canone non si muove quando cambi queste ipotesi.</p>
+      <p class="nota">Il 2026 è in corso: i valori di partenza sono l'atterraggio del business plan, modificabili fino a chiusura d'anno. Ricavi e crescita sono la stessa leva: cambi uno, l'altro segue, e gli anni dopo tengono la loro crescita. Il canone non si muove quando cambi queste ipotesi.</p>
       <p class="nota">Fitto Angelina 2027–28 (pagato da ORTI):
         <select id="angelina"><option value="intur">a INTUR · ipotesi del file</option><option value="terzi">a terzi · ipotesi alternativa</option></select>
       </p>
@@ -272,7 +271,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:18px}
 <script id="motore">
 // Porting di verticals/condges/canone_sim.py — tenuto allineato dai test (pytest + node).
 const MOTORE = (() => {
-  const ANNI = [2027, 2028, 2029, 2030, 2031];
+  const ANNI = [2027, 2028, 2029, 2030, 2031], TUTTI = [2026, ...ANNI];
   const excelRound = x => Math.sign(x) * Math.floor(Math.abs(x) + 0.5);
   const ratio = (a, b) => (b ? a / b : null);
 
@@ -322,14 +321,14 @@ const MOTORE = (() => {
     };
   }
 
-  function riga2026(D) {
+  function riga2026(D, sc) {
     const o = D.years[2026].orti, p = D.prior2025;
-    return riga(D, 2026, o.revenue / p.ortiRevenue - 1, o.operatingCostRate, D.prior2026.appliedRent, 'intur',
-      p.ortiRevenue, p.inturRevenue, p.inturClosingCash, 0);
+    const l = (sc && sc.anni[2026]) || {crescita: o.revenue / p.ortiRevenue - 1, costi: o.operatingCostRate, canone: D.prior2026.appliedRent};
+    return riga(D, 2026, l.crescita, l.costi, l.canone, 'intur', p.ortiRevenue, p.inturRevenue, p.inturClosingCash, 0);
   }
 
   function calcola(D, sc, automatico) {
-    let prec = riga2026(D);
+    let prec = riga2026(D, sc);
     return ANNI.map(y => {
       const p = sc.anni[y];
       prec = riga(D, y, p.crescita, p.costi, automatico ? null : p.canone, sc.angelina,
@@ -346,32 +345,34 @@ const MOTORE = (() => {
     for (let k = 0; k < 60; k++) {
       const medio = (lo + hi) / 2;
       prova.anni[anno].canone = medio;
-      const r = calcola(D, prova).find(x => x.anno === anno);
+      const r = righe(D, prova).find(x => x.anno === anno);
       if (r.dscr_o > r.dscr_i) lo = medio; else hi = medio;
     }
     return (lo + hi) / 2;
   }
 
-  // Per ogni anno: [minimo, massimo] ammessi dalla scaletta non decrescente.
+  const righe = (D, sc) => [riga2026(D, sc), ...calcola(D, sc)];
+
+  // Per ogni anno: [minimo, massimo] ammessi dalla scaletta non decrescente (il 2026 parte libero).
   function limiti(D, sc, anno) {
-    const k = ANNI.indexOf(anno);
-    return [k === 0 ? D.prior2026.appliedRent : sc.anni[ANNI[k - 1]].canone,
-            k === ANNI.length - 1 ? 1e7 : sc.anni[ANNI[k + 1]].canone];
+    const k = TUTTI.indexOf(anno);
+    return [k === 0 ? 0 : sc.anni[TUTTI[k - 1]].canone,
+            k === TUTTI.length - 1 ? 1e7 : sc.anni[TUTTI[k + 1]].canone];
   }
 
   function imponiRicavi(D, sc, anno, ricavi) {
-    const r = calcola(D, sc).find(x => x.anno === anno);
+    const r = righe(D, sc).find(x => x.anno === anno);
     sc.anni[anno].crescita = ricavi / r.ricavi_o_prec - 1;
   }
 
-  return {ANNI, riga2026, calcola, equilibrio, limiti, imponiRicavi, copia};
+  return {ANNI, TUTTI, riga2026, calcola, righe, equilibrio, limiti, imponiRicavi, copia};
 })();
 if (typeof module !== 'undefined') module.exports = MOTORE;
 </script>
 <script>
 (() => {
   const D = JSON.parse(document.getElementById('dati').textContent);
-  const {ANNI, riga2026, calcola, equilibrio, limiti, imponiRicavi, copia} = MOTORE;
+  const {ANNI, TUTTI, righe: calcolaTutte, equilibrio, limiti, imponiRicavi, copia} = MOTORE;
   const $ = id => document.getElementById(id);
   const S = D.common.targetDSCR;
   const nf0 = new Intl.NumberFormat('it-IT', {maximumFractionDigits: 0});
@@ -391,7 +392,7 @@ if (typeof module !== 'undefined') module.exports = MOTORE;
   const scrivi = lista => { try { localStorage.setItem(CHIAVE, JSON.stringify(lista)); return true; } catch (e) { return false; } };
 
   const diverso = (y, campo) => Math.abs(sc.anni[y][campo] - D.base.anni[y][campo]) > 1e-9;
-  const modificato = () => sc.angelina !== D.base.angelina || ANNI.some(y => ['canone', 'crescita', 'costi'].some(c => diverso(y, c)));
+  const modificato = () => sc.angelina !== D.base.angelina || TUTTI.some(y => ['canone', 'crescita', 'costi'].some(c => diverso(y, c)));
 
   function cellaDscr(v, vCfr, tetto) {
     const k = classe(v);
@@ -400,8 +401,8 @@ if (typeof module !== 'undefined') module.exports = MOTORE;
   }
 
   function disegna() {
-    const r26 = riga2026(D), righe = calcola(D, sc), tutte = [r26, ...righe];
-    const cfr = confronto ? calcola(D, confronto) : null;
+    const tutte = calcolaTutte(D, sc), righe = tutte;
+    const cfr = confronto ? calcolaTutte(D, confronto) : null;
     const tetto = Math.max(2, ...tutte.flatMap(r => [r.dscr_o, r.dscr_i, r.dscr_g])) * 1.04;
 
     // verdetto
@@ -416,8 +417,8 @@ if (typeof module !== 'undefined') module.exports = MOTORE;
     else { v.className = 'verdetto'; v.innerHTML = `Regge: ORTI e INTUR sopra ${dtxt(S)} in ogni anno · punto più basso ${dtxt(peggio)}`; }
 
     // scaletta
-    $('righe').innerHTML = `<tr class="base"><td class="anno">2026</td><td class="num">${euro(r26.canone)}</td>${cellaDscr(r26.dscr_o, undefined, tetto)}${cellaDscr(r26.dscr_i, undefined, tetto)}${cellaDscr(r26.dscr_g, undefined, tetto)}</tr>` +
-      righe.map((r, k) => `<tr data-anno="${r.anno}" class="${r.anno === anno ? 'sel' : ''}"><td class="anno">${r.anno}</td>
+    $('righe').innerHTML =
+      righe.map((r, k) => `<tr data-anno="${r.anno}" class="${r.anno === anno ? 'sel' : ''}"><td class="anno">${r.anno}${r.anno === 2026 ? '<span class="cfr" style="white-space:nowrap">in corso</span>' : ''}</td>
         <td><input class="n ${diverso(r.anno, 'canone') ? 'mod' : ''}" inputmode="numeric" data-campo="canone" data-anno="${r.anno}" value="${euro(r.canone)}" aria-label="Canone ${r.anno} in euro">${cfr ? `<span class="cfr">${esc(confronto.nome)}: ${euro(cfr[k].canone)}</span>` : ''}</td>
         ${cellaDscr(r.dscr_o, cfr ? cfr[k].dscr_o : undefined, tetto)}${cellaDscr(r.dscr_i, cfr ? cfr[k].dscr_i : undefined, tetto)}${cellaDscr(r.dscr_g, cfr ? cfr[k].dscr_g : undefined, tetto)}</tr>`).join('');
     $('errore').textContent = errore;
@@ -425,16 +426,15 @@ if (typeof module !== 'undefined') module.exports = MOTORE;
     $('ripristina').hidden = !modificato() && !confronto && sc.nome === 'Base';
 
     // leva costi: un valore per tutti gli anni (il dettaglio per anno sta in Ipotesi)
-    const cs = ANNI.map(y => sc.anni[y].costi), uguali = cs.every(c => Math.abs(c - cs[0]) < 1e-9);
-    const cb = ANNI.map(y => D.base.anni[y].costi), baseTxt = [...new Set(cb.map(pct))].join(' / ');
+    const cs = TUTTI.map(y => sc.anni[y].costi), uguali = cs.every(c => Math.abs(c - cs[0]) < 1e-9);
+    const cb = TUTTI.map(y => D.base.anni[y].costi), baseTxt = [...new Set(cb.map(pct))].join(' / ');
     $('costi-tutti').value = uguali ? pct(cs[0]) : '';
     $('costi-tutti').placeholder = uguali ? '' : 'vari';
-    $('costi-tutti').classList.toggle('mod', ANNI.some(y => diverso(y, 'costi')));
-    $('costi-nota').textContent = (uguali ? 'tutti gli anni' : 'diversi per anno: ' + cs.map(pct).join(' / ')) + ' · nel BP ' + baseTxt;
+    $('costi-tutti').classList.toggle('mod', TUTTI.some(y => diverso(y, 'costi')));
+    $('costi-nota').textContent = (uguali ? 'tutti gli anni, 2026 incluso' : 'diversi per anno: ' + cs.map(pct).join(' / ')) + ' · nel BP ' + baseTxt;
 
     // ipotesi
     $('ipotesi').innerHTML = '<tr><th>Anno</th><th>Ricavi ORTI · €</th><th>Crescita · %</th><th>Costi / ricavi · %</th></tr>' +
-      `<tr><td>2026</td><td>${euro(r26.ricavi_o)}</td><td>${pct(r26.crescita)}</td><td>${pct(r26.incidenza_costi)}</td></tr>` +
       righe.map(r => `<tr><td>${r.anno}</td>
         <td><input class="n ${diverso(r.anno, 'crescita') ? 'mod' : ''}" inputmode="numeric" data-campo="ricavi" data-anno="${r.anno}" value="${euro(r.ricavi_o)}" aria-label="Ricavi ORTI ${r.anno}"></td>
         <td><input class="n pct ${diverso(r.anno, 'crescita') ? 'mod' : ''}" inputmode="decimal" data-campo="crescita" data-anno="${r.anno}" value="${pct(r.crescita)}" aria-label="Crescita ${r.anno}"></td>
@@ -460,8 +460,7 @@ if (typeof module !== 'undefined') module.exports = MOTORE;
       riga('Residuo annuale dopo le rate', flusso(r.residuo_o), flusso(r.residuo_i), flusso(r.residuo_o + r.residuo_i)),
       riga('Manca per arrivare a ' + dtxt(S), r.manca_o ? euro(r.manca_o) : '—', r.manca_i ? euro(r.manca_i) : '—', r.manca_g ? euro(r.manca_g) : '—'),
     ].join('');
-    if (anno === 2026) { $('banda').textContent = 'Il 2026 è l\'anno base: canone fisso, non modificabile.'; }
-    else {
+    {
       const lo = r.canone_min_intur, hi = r.canone_max_orti, eq = equilibrio(D, sc, anno);
       $('banda').textContent = (hi < 0 ? 'ORTI sotto la soglia anche a canone zero.'
         : lo > hi ? `Nessun canone porta entrambe a ${dtxt(S)}: a INTUR ne servono almeno ${euro(lo)}, ORTI ne regge al massimo ${euro(hi)} (divario ${euro(lo - hi)}, non è un ammanco di cassa).`
@@ -476,7 +475,7 @@ if (typeof module !== 'undefined') module.exports = MOTORE;
     // scenari
     const lista = salvati();
     $('salvati').innerHTML = lista.length ? '<tr><th>Scenario</th><th>Salvato</th><th>Scaletta</th><th></th></tr>' + lista.map((s, k) =>
-      `<tr><td>${esc(s.nome)}</td><td>${esc((s.salvato_il || '').replace('T', ' ').slice(0, 16))}</td><td class="num">${ANNI.map(y => nf0.format(s.anni[y].canone / 1000)).join(' / ')}</td>
+      `<tr><td>${esc(s.nome)}</td><td>${esc((s.salvato_il || '').replace('T', ' ').slice(0, 16))}</td><td class="num">${TUTTI.filter(y => s.anni[y]).map(y => nf0.format(s.anni[y].canone / 1000)).join(' / ')}</td>
        <td><button data-apri="${k}">Apri</button> <button data-cfr="${k}">Confronta</button> <button data-via="${k}">Elimina</button></td></tr>`).join('')
       : '<tr><td style="color:var(--muted)">Nessuno scenario salvato: la base è l\'unico.</td></tr>';
   }
@@ -503,7 +502,7 @@ if (typeof module !== 'undefined') module.exports = MOTORE;
     if (!Number.isFinite(v)) { errore = 'Inserisci un numero.'; return disegna(); }
     if (campo === 'canone') {
       const [lo, hi] = limiti(D, sc, y);
-      if (v < lo || v > hi) { errore = `La scaletta non può scendere: per il ${y} scegli tra ${euro(lo)} e ${euro(hi)}. Per salire oltre, alza prima gli anni successivi.`; return disegna(); }
+      if (v < lo || v > hi) { errore = `La scaletta non può scendere: per il ${y} scegli tra ${euro(lo)} e ${euro(hi)}. Per uscire da questo intervallo, cambia prima l'anno accanto.`; return disegna(); }
       sc.anni[y].canone = v;
     } else if (campo === 'ricavi') {
       if (v <= 0) { errore = 'I ricavi devono essere positivi.'; return disegna(); }
@@ -522,15 +521,16 @@ if (typeof module !== 'undefined') module.exports = MOTORE;
   function valida(doc) {
     if (!doc || doc.schema !== D.schema) throw new Error('non è uno scenario del simulatore canone');
     if (!['intur', 'terzi'].includes(doc.angelina)) throw new Error('fitto Angelina non valido');
-    let prec = D.prior2026.appliedRent;
-    for (const y of ANNI) {
+    let prec = 0;
+    if (doc.anni && !doc.anni[2026]) doc.anni[2026] = D.base.anni[2026];  // scenari salvati prima del 2026 modificabile
+    for (const y of TUTTI) {
       const a = doc.anni && doc.anni[y];
       if (!a || ![a.canone, a.crescita, a.costi].every(Number.isFinite)) throw new Error('anno ' + y + ' mancante o non numerico');
       if (a.canone < prec) throw new Error('scaletta in discesa nel ' + y);
       prec = a.canone;
     }
     return {nome: String(doc.nome || 'Scenario'), salvato_il: doc.salvato_il || '', angelina: doc.angelina,
-      anni: Object.fromEntries(ANNI.map(y => [y, {crescita: doc.anni[y].crescita, costi: doc.anni[y].costi, canone: doc.anni[y].canone}])),
+      anni: Object.fromEntries(TUTTI.map(y => [y, {crescita: doc.anni[y].crescita, costi: doc.anni[y].costi, canone: doc.anni[y].canone}])),
       altraFonte: !doc.fonte || doc.fonte.sha256_inputs !== D.fonte.sha256_inputs};
   }
   const msg = t => { $('msg-scenari').textContent = t; };
@@ -539,7 +539,7 @@ if (typeof module !== 'undefined') module.exports = MOTORE;
     if (e.target.id === 'costi-tutti') {
       const v = leggi(e.target.value);
       if (!Number.isFinite(v) || v < 0 || v > 100) errore = 'L\'incidenza dei costi deve stare tra 0 e 100%.';
-      else { errore = ''; ANNI.forEach(y => { sc.anni[y].costi = v / 100; }); }
+      else { errore = ''; TUTTI.forEach(y => { sc.anni[y].costi = v / 100; }); }
       disegna();
     }
     else if (e.target.matches('input.n')) modifica(e.target);

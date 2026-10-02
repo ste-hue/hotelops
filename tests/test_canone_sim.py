@@ -271,9 +271,10 @@ def test_cruscotto_html_calcola_come_python(inputs, tmp_path):
     (tmp_path / "dati.json").write_text(dati.replace("<\\/", "</"), encoding="utf-8")
     (tmp_path / "run.js").write_text(
         "const M=require('./motore.js'),D=require('./dati.json');"
-        "const sc=M.copia(D.base);sc.anni[2028].crescita=-0.03;sc.anni[2029].costi=0.66;sc.angelina='terzi';"
-        "console.log(JSON.stringify({base:M.calcola(D,D.base),mod:M.calcola(D,sc),"
-        "r26:M.riga2026(D),eq:M.equilibrio(D,D.base,2028),lim:M.limiti(D,D.base,2029)}));",
+        "const sc=M.copia(D.base);sc.anni[2026].canone=700000;sc.anni[2028].crescita=-0.03;sc.anni[2029].costi=0.66;sc.angelina='terzi';"
+        "console.log(JSON.stringify({base:M.calcola(D,D.base),mod:M.righe(D,sc).slice(1),"
+        "r26:M.riga2026(D,sc),eq:M.equilibrio(D,D.base,2028),lim:M.limiti(D,D.base,2029),"
+        "lim26:M.limiti(D,D.base,2026)}));",
         encoding="utf-8",
     )
     out = json.loads(subprocess.run(["node", "run.js"], cwd=tmp_path, capture_output=True, text=True, check=True).stdout)
@@ -281,16 +282,18 @@ def test_cruscotto_html_calcola_come_python(inputs, tmp_path):
     s = cs.scenario_base(inputs)
     mod = cs.copia(s)
     mod["anni"][2028]["crescita"], mod["anni"][2029]["costi"], mod["angelina"] = -0.03, 0.66, cs.ANGELINA_TERZI
+    mod["anni"][2026]["canone"] = 700_000
     chiavi = ("canone", "ricavi_o", "cfads_o", "cfads_i", "dscr_o", "dscr_i", "dscr_g", "cassa_i",
               "canone_min_intur", "canone_max_orti", "manca_i", "tax_o", "ccn_i")
     for js, py in ((out["base"], cs.calculate(inputs, s)), (out["mod"], cs.calculate(inputs, mod)),
-                   ([out["r26"]], [cs.riga_2026(inputs)])):
+                   ([out["r26"]], [cs.riga_2026(inputs, mod)])):
         assert len(js) == len(py)
         for a, b in zip(js, py):
             for k in chiavi:
                 assert a[k] == pytest.approx(b[k], rel=1e-12, abs=1e-6), (b["anno"], k)
     assert out["eq"] == pytest.approx(cs.canone_equilibrio(inputs, s, 2028), abs=1e-3)
     assert out["lim"] == [s["anni"][2028]["canone"], s["anni"][2030]["canone"]]
+    assert out["lim26"] == [0, s["anni"][2027]["canone"]]
 
 
 def test_push_cruscotto_scrive_solo_la_chiave_html(monkeypatch):
@@ -321,3 +324,36 @@ def test_push_cruscotto_scrive_solo_la_chiave_html(monkeypatch):
     assert url.endswith(f"/accounts/acc/storage/kv/namespaces/{build.KV_NAMESPACE_ID}/bulk")
     assert corpo == [{"key": "html", "value": "<html>x</html>"}]
     assert headers == {"Authorization": "Bearer t"}
+
+
+# ── 2026 in corso: modificabile fino a chiusura d'anno ─────────────────────────
+
+
+def test_2026_modificabile_e_si_propaga_al_2027(inputs):
+    s = cs.scenario_base(inputs)
+    assert s["anni"][2026]["canone"] == inputs["prior2026"]["appliedRent"]
+    prima = cs.righe(inputs, s)
+    s["anni"][2026]["canone"] = 700_000
+    s["anni"][2026]["costi"] = 0.65
+    dopo = cs.righe(inputs, s)
+    assert dopo[0]["anno"] == 2026 and dopo[0]["canone"] == 700_000
+    assert dopo[0]["dscr_i"] < prima[0]["dscr_i"]  # meno canone → INTUR peggiora
+    assert dopo[0]["costi_o"] > prima[0]["costi_o"]
+    assert dopo[1]["canone"] == prima[1]["canone"]  # la scaletta 2027 non si muove
+    assert dopo[1]["ccn_i"] != pytest.approx(prima[1]["ccn_i"])  # ma il circolante INTUR 2027 sì
+    assert {d["anno"] for d in cs.modifiche(inputs, s)} == {2026}
+
+
+def test_2026_non_puo_superare_il_2027(inputs):
+    s = cs.scenario_base(inputs)
+    s["anni"][2026]["canone"] = 820_000  # 2027 è a 800.000
+    assert any("2027" in e for e in cs.errori_scaletta(inputs, s))
+    s["anni"][2026]["canone"] = 500_000  # scendere nel 2026 è ammesso: è il primo gradino
+    assert cs.errori_scaletta(inputs, s) == []
+
+
+def test_scenario_salvato_senza_2026_si_riapre_con_la_base(inputs):
+    doc = json.loads(cs.scenario_to_json(inputs, cs.scenario_base(inputs)))
+    del doc["anni"]["2026"]
+    scenario, _ = cs.scenario_from_json(inputs, json.dumps(doc))
+    assert scenario["anni"][2026] == cs.scenario_base(inputs)["anni"][2026]
