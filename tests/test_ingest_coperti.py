@@ -121,3 +121,58 @@ def test_data_pura_invariata():
     # righe ricostruite/manuali con sola data (niente orario): mai spostate
     assert parse_timestamp(date(2026, 8, 9)) == date(2026, 8, 9)
     assert parse_timestamp("09/08/2026") == date(2026, 8, 9)
+
+
+# ── Breakfast: submission notturne spurie (dal 2026-04-04, origine ignota) ──
+
+
+def test_breakfast_notturna_scartata_non_sovrascrive_il_giorno_prima(tmp_path):
+    # caso reale: la riga delle 03:17 del 28/09 (148, testo "00") finiva sul
+    # 27/09 e, più recente, sostituiva il dato vero del mattino (163).
+    path = _wb(
+        tmp_path,
+        {
+            "Breakfast": [
+                BRK_HEADER,
+                [datetime(2026, 9, 27, 10, 47), 163, 4],
+                [datetime(2026, 9, 28, 3, 17), 148, "00"],
+                [datetime(2026, 9, 28, 9, 38), 131, 0],
+            ]
+        },
+    )
+    rows = parse_xlsx_file(path, "ORTI", TS)
+    got = {(r["data_servizio"], r["tipo_ospite"], r["n_coperti"]) for r in rows}
+    assert got == {
+        ("2026-09-27", "HOTEL", 163),
+        ("2026-09-27", "ESTERNI", 4),
+        ("2026-09-28", "HOTEL", 131),
+    }
+
+
+def test_breakfast_soglia_08_esclusa_e_niente_regola_mezzanotte(tmp_path):
+    path = _wb(
+        tmp_path,
+        {
+            "Breakfast": [
+                BRK_HEADER,
+                [datetime(2026, 9, 26, 7, 59), 151, 0],
+                [datetime(2026, 9, 26, 8, 0), 153, 0],
+            ]
+        },
+    )
+    rows = parse_xlsx_file(path, "ORTI", TS)
+    assert [(r["data_servizio"], r["n_coperti"]) for r in rows] == [("2026-09-26", 153)]
+
+
+def test_dinner_mantiene_regola_mezzanotte(tmp_path):
+    path = _wb(
+        tmp_path,
+        {
+            "Dinner": [
+                ["Informazioni cronologiche", "Dinner Ospiti Hotel"],
+                [datetime(2026, 8, 9, 0, 33), 120],
+            ]
+        },
+    )
+    rows = parse_xlsx_file(path, "ORTI", TS)
+    assert [(r["data_servizio"], r["n_coperti"]) for r in rows] == [("2026-08-08", 120)]

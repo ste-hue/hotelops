@@ -87,10 +87,10 @@ Saldo INTUR a fine mese (migliaia di euro):
 
 ## 4. Investimenti
 
-- **Terzo piano, 20 camere**: budget realistico **1.732.298** netto IVA (01/09) contro **1.802.055** nel BP banca.
+- **Terzo piano, 20 camere**: budget realistico **1.732.298** netto IVA (01/09) (il budget interno del 04/09 vale 1.688.894,50); richiesta a MPS **2.016.260**, prezzi +10%.
   Cantiere: impresa dal **19/10**, fine lavori stimata tra **15/03** e aprile 2027.
 - **Soft restyling**: 34 camere (piano 2 + 101–114), tetto di 5.000 €/camera, rilievo di 446 voci, prezzi ancora da inserire.
-- **Finanziamento MPS**: SAL **1.458.742** (preammortamento 12 mesi + 15 anni) + MCC **557.518**. Giustificativi consegnati per ~1,09 M
+- **Finanziamento MPS**: SAL **1.458.742** (preammortamento 12 mesi + 15 anni) + MCC **557.518**. = 2.016.260, file b_ v2 «prezzi +10%» inviato a MPS; il budget interno vale 1.688.894,50: vedi § Aggiornamento 28/09. Giustificativi consegnati per ~1,09 M
   (computo Pisacane 518k, Santelia 198k, STE 198k, KONE 177k).
 - **Ascensori**: KONE 177.120 (validità fino all'**08/10**) contro OTIS 102.500. OTIS però esclude porte EI120, smaltimento e forse i ponteggi.
 - **Green Tour**: graduatorie al 30/09. Nodo aperto: gli ascensori compaiono sia nel mutuo MPS sia nel Green Tour.
@@ -123,3 +123,43 @@ Proposta (memo del 25/09):
 2. **Beni strumentali INTUR (103k)** e consulenze: vanno trattati come investimento nel controllo di gestione?
 3. **Lido, POS contro corrispettivi**: nel 2026 il POS incassa ~17k più del registro corrispettivi (lug–set). Perché?
 4. **Co.co.co. 61.03.01.01**: 2.270 € identici in ORTI e INTUR. È una doppia registrazione?
+
+## Aggiornamento 28/09 — pacchetto per Romita
+
+**Obiettivo:** dare a Romita gli input per aggiornare il suo budget 2025–2031, tenendo **ORTI e INTUR separate**. Il risultato principale richiesto è **l'utile e il fatturato di pareggio di ciascuna società**. Cassa e DSCR si calcolano a parte; le vecchie soglie (5,47 M, DSCR 1,07 / 0,90–1,08) vanno ricalcolate e non trascinate.
+
+**Pacchetto** (unica versione operativa): `~/Documents/Codex/2026-09-28/let-s-focus-on-bp-solo/outputs/Pacchetto_per_Romita_2026-09-28/`
+- `00_Leggimi.md`: indice, regole d'uso e link ai prospetti paga mensili ORTI/INTUR su Drive.
+- `01_Nota_per_Romita.pdf`: la richiesta di Stefano.
+- `02_Dati_e_verifiche_per_Romita.xlsx`: investimenti, ricavi, costi Romita e due società; il foglio "Da confermare" è da compilare a cura di Romita.
+- `03_Personale_per_competenza.xlsx`: nuovi export ORTI gen–ago per persona e 14a, con il raccordo alle fonti precedenti.
+- `Fonti/`: i tre modelli originali, l'estratto contabile BQ e i nove `ORT_PCSING_*`.
+
+**Fonti principali:**
+- [Budget Romita da aggiornare](https://docs.google.com/spreadsheets/d/1ypzOxD5QzAv0TqRBL_LsZVXpxW-MhUCc/edit)
+- [BP interno: spesa e crescita commerciale](https://docs.google.com/spreadsheets/d/17YwY36UPs7Xt2lhOpyMICtrGB6Vpr5PZ/edit)
+- [BP banca: richiesta a MPS, prezzi +10%](https://drive.google.com/file/d/1lxRtEN6Thoc89GpJqGZd_LL2YU79O3lR/view)
+- Elaborazione precedente, superata: `~/Desktop/ORTI_Romita_scenario_due_gambe_netto_IVA.xlsx` (foglio `invesitmneti`)
+
+**Numeri ancorati** (ricalcolati il 28/09 dalle formule dei file; versioni su Drive verificate):
+
+| Livello | File | SAL | MCC | Totale netto IVA |
+|---|---|---|---|---|
+| Budget interno | BP interno 04/09 (prezzi Amalfi Coast, niente contingency) | 1.182.060 | 506.835 | **1.688.894,50** |
+| **Richiesta a MPS** | `b_BP Solo Terzo (2026-09-04) v2 — prezzi +10%.xlsx` + PDF `BP_MPS_Terzo_Piano_settembre_A4_v2` | 1.458.742 | 557.518 | **2.016.260** |
+
+- **"b_" = versione per la banca**: prezzi worst case, cioè +10% e contingency al 7%. Per scelta di Stefano alla banca si chiede sempre un po' di più del budget interno.
+- **Margine tra richiesta e budget interno: 2.016.260 − 1.688.894,50 ≈ 327.366.** Copre prima gli **ascensori nuovi (due, prioritari: KONE 177.120 contro OTIS 102.500, con perimetri diversi)** e gli extra di cantiere. Quello che avanza va al **soft restyling** delle altre camere.
+- **Ricavi ORTI 2027:** 5.134.710 (BP interno) contro 4.652.238,94 (Romita), **entrambi netti**: la cella hotel 2025 del BP (3.031.340) coincide con la somma dei conti Esolver 47.91 del consuntivo 2025 nel budget Romita. Il divario è crescita attesa (+13% contro +6,4% l'anno), non IVA (verificato 29/09; il pacchetto del 28/09 diceva il contrario ed è stato corretto). Il PF invece è lordo perché è cassa.
+- **Personale ORTI gen–ago:** gli export valgono 822.698,21 + 7.566,70 (14a) = 830.264,91 di saldi economici. Non sono costo annuo né cassa pagata.
+- **Elaborazione precedente:** la formula `C106` ometteva `C72`+`C73` (capex manutenzione e ΔCCN). L'effetto è 24.679,20 nel 2027 e 37.648,05 cumulati 2026–27 (verificato sulle formule).
+
+**Dati ancora mancanti o in contraddizione:**
+1. **Ascensori:** scelta tra KONE 177.120 (offerta valida fino all'08/10) e OTIS 102.500 (senza porte EI120, smaltimento e forse ponteggi): il confronto va fatto sullo stesso perimetro.
+2. **Costo del terzo piano.** Il budget realistico del 01/09 è 1.732.298 (§ 4), il budget interno del 04/09 è 1.688.894,50: va confermato quale usare.
+3. **Costi 2026 ORTI (BQ 29/09):** bilancini gen–set ricavi 4,158 M (+14% su 2025), costi operativi senza canone/Angelina 2,20 M (+~130k stipendi di settembre non registrati) = 56%, come i primi 9 mesi 2025 (55%). Il Q4 2025 ha aggiunto 11 punti (750k di costi su 420k di ricavi): proiezione 2026 ≈ 2,95–3,1 M su 4,55–4,6 M = **64–67%**, sopra il 62% del BP. Personale 2026 ≈ 1,24 M (931k nel bilancio 2025). Analisi: https://claude.ai/artifact/XkjTBXBgJoC9CzAbZrWn3r
+4. **Personale:** mancano ORTI set–dic, INTUR lug–dic, costo validato per competenza, cassa pagata e natura del picco di novembre. Gli export ORTI gen–ago valgono 830k, contro 881k del bilancino ORTI (§ 2): lo scarto di circa 51k è da raccordare. Il budget Romita 2026 tiene il personale a 670k sull'intero anno.
+5. **Servizi 420k (Romita 2027):** manca il dettaglio.
+6. **Contratti di finanziamento:** mancano la definizione e la soglia DSCR (1,20 è un'ipotesi) e il calendario reale di SAL/MCC. Il tasso MCC è 4,2% prudenziale contro un TAEG 3,65% alle condizioni del 1,2 M.
+7. **Canoni CVM e Angelina:** vanno confermati beneficiario e periodo (Angelina a INTUR fino al 2028, poi a terzi) e l'eventuale inclusione nel dettaglio Romita.
+8. **Soft:** vanno definiti la quota capitalizzabile, la vita utile e la data di entrata in uso. Il premio ricavi non è quantificato.

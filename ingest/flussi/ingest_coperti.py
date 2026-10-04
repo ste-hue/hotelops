@@ -129,6 +129,13 @@ def detect_tipo_pasto(text: str) -> str | None:
 
 SOGLIA_MEZZANOTTE = 6  # submission prima delle 06:00 = servizio del giorno prima
 
+# Breakfast: dal 2026-04-04 il Form riceve ogni notte (01–07) una submission
+# anonima di origine ignota, con valori ≈ previsione della colazione del
+# mattino. Con la regola mezzanotte finiva sul giorno PRIMA e, essendo la più
+# recente, sovrascriveva il dato vero (latest-wins). Nessuno inserisce
+# colazioni di notte: prima delle 08:00 è spazzatura, si scarta.
+SOGLIA_NOTTE_BRK = 8
+
 
 def _service_date(dt: datetime) -> date:
     """Data di servizio da un timestamp di submission.
@@ -274,13 +281,21 @@ def parse_rows_from_header_data(
         )
         return
 
+    scartate_notte = 0
     for row in data_rows:
         if not any(row):
             continue
-        data_servizio = parse_timestamp(row[0])
+        submitted_at = row[0] if isinstance(row[0], datetime) else None
+        if tipo_pasto == "BRK" and submitted_at:
+            if submitted_at.hour < SOGLIA_NOTTE_BRK:
+                scartate_notte += 1
+                continue
+            # la colazione non scavalca mai la mezzanotte: niente regola 06:00
+            data_servizio = submitted_at.date()
+        else:
+            data_servizio = parse_timestamp(row[0])
         if data_servizio is None:
             continue
-        submitted_at = row[0] if isinstance(row[0], datetime) else None
 
         for i, (tipo_ospite, bu_id) in col_map.items():
             if i >= len(row):
@@ -311,6 +326,14 @@ def parse_rows_from_header_data(
                 "data_caricamento": ts_now.isoformat(),
                 "_submitted_at": submitted_at,
             }
+
+    if scartate_notte:
+        log.warning(
+            "  %s: scartate %d submission notturne (prima delle %02d:00)",
+            fonte,
+            scartate_notte,
+            SOGLIA_NOTTE_BRK,
+        )
 
 
 def parse_csv_file(path: Path, societa_id: str, ts_now: datetime) -> list[dict]:
