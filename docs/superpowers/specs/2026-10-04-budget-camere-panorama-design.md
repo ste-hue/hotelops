@@ -27,7 +27,8 @@ superficie», confermata il 2026-10-04).
 | Approvazione | Un gradino alla volta. Approva solo Stefano. |
 | Budget vecchio | Letture spente subito; nessuna riga cancellata; la previsione di cassa di Rosa non si tocca. |
 | Calendario 2027 | Prima notte venduta 20 aprile, ultima 20 ottobre: 184 giorni (11 + 153 + 20). Deciso il 2026-10-05. |
-| Come si decide il prezzo | Stefano scrive un **aumento %** per mese × categoria sul prezzo medio 2026 di quella categoria in quel mese. Il foglio calcola il prezzo 2027. |
+| Budget e strategia | Il **budget è l'obiettivo per mese**: ricavo camere 2026 sugli stessi giorni × (1 + crescita). Crescita di partenza 12%, modificabile per mese. I prezzi per categoria sono la **strategia** per arrivarci (revenue management), non il budget: il foglio mostra lo scarto tra i due. Il «perché» si legge a consuntivo, scomponendo il 2027 vero contro il 2026 vero nei quattro effetti. Deciso il 2026-10-05. |
+| Come si scrive la strategia | Stefano scrive il **prezzo 2027** per mese × categoria. La cella è precompilata col prezzo medio 2026 più un aumento di partenza (7%, un solo parametro); l'aumento % di ogni riga è calcolato. |
 | Base del prezzo | Gestionale (rapporto per tipologia venduta); il totale è riportato alla base `01ROOM` col rapporto mensile osservato, mostrato come riga di raccordo. |
 | Tabelle | `f_budget_driver` (le versioni si accumulano) + `f_budget_versioni` (stato e approvazione). |
 
@@ -101,9 +102,10 @@ NULL, mai zero; nessun bersaglio annuo diviso per dodici.
 
 1. `hotelops budget base` — calcola la base 2026 e genera il foglio (`.xlsx`),
    una riga per mese × categoria, con colonne: camere 2026 e 2027, notti e
-   prezzo medio 2026, notti 2027 (precompilate), aumento % (precompilato 0),
-   prezzo e ricavo 2027 (formule), prezzo base Lybra, ragione. Un secondo
-   foglio dà per mese i totali e i quattro effetti, con formule vive. Il
+   prezzo medio 2026, notti 2027 (precompilate), prezzo 2027 (precompilato,
+   da scrivere), aumento % e ricavo 2027 (formule), prezzo base Lybra, ragione.
+   Il foglio «Budget» dà per mese obiettivo, risultato dei prezzi scritti e
+   scarto; il foglio «Mesi» i quattro effetti, con formule vive. Il
    taglio per segmento si aggiunge quando arriva l'esportazione vera.
 2. Stefano modifica le celle e scrive le ragioni.
 3. `hotelops intake` del foglio → GCS (`gs://hotelops-raw`) + `f_raw_objects`.
