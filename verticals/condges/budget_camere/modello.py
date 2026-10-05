@@ -15,6 +15,9 @@ APERTURA_2027 = (4, 20)  # prima notte venduta (Stefano, 2026-10-05)
 CHIUSURA_2027 = (10, 20)  # ultima notte venduta
 PROGETTO_CSV = Path(__file__).with_name("hpan26piano3.csv")
 TUTTO_ANNO = ((1, 1), (12, 31))
+# Notti del file per tipologia / notti delle statistiche. Sotto la soglia il file
+# contiene le prenotazioni di quando fu esportato, non il consuntivo.
+COPERTURA_MINIMA = 0.97
 
 
 def in_calendario(
@@ -155,13 +158,15 @@ def costruisci(
     for mese in giorni_budget:
         fine = date(anno_base, mese, _ultimo_giorno(anno_base, mese, chiusura))
         c_mese, r_mese = cal.get(mese, vuoto), reale.get(mese, vuoto)
+        nb = {c: base[(mese, c)]["notti"] for c in categorie if (mese, c) in base}
+        completo_01room = c_mese["giorni"] == giorni_base[mese]
         osservato = (
             bool(caricati.get(mese))
             and min(caricati[mese]) > fine
-            and c_mese["giorni"] == giorni_base[mese]
+            and completo_01room
+            and sum(nb.values()) >= COPERTURA_MINIMA * c_mese["notti"]
         )
         stato = "osservato" if osservato else "stima"
-        nb = {c: base[(mese, c)]["notti"] for c in categorie if (mese, c) in base}
         n27 = notti_2027(nb, inv26, inv27)
         ricavo_cat = sum(base[(mese, c)]["ricavo"] for c in nb)
         for c in categorie:
@@ -185,9 +190,9 @@ def costruisci(
                 "giorni_2026": r_mese["venduti"],
                 "giorni_2027": giorni_budget[mese],
                 "notti_reali": r_mese["notti"],
-                "ricavo_reale": r_mese["ricavo"],
+                "ricavo_reale": r_mese["ricavo"] if completo_01room else None,
                 "notti_calendario": c_mese["notti"],
-                "ricavo_calendario": c_mese["ricavo"],
+                "ricavo_calendario": c_mese["ricavo"] if completo_01room else None,
                 "raccordo": c_mese["ricavo"] / ricavo_cat
                 if osservato and ricavo_cat
                 else None,

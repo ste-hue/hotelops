@@ -29,7 +29,12 @@ def leggi_camere(query=_query) -> list[dict]:
 
 
 def leggi_categorie(anno: int, query=_query) -> list[dict]:
-    """Venduto giornaliero per tipologia VENDUTA; `caricato` = giorno dell'esportazione."""
+    """Venduto giornaliero per tipologia VENDUTA.
+
+    `caricato` = giorno del promote in BigQuery: è solo un indizio della data di
+    esportazione (un file vecchio ricaricato oggi porta la data di oggi). Per questo
+    il modello controlla anche le notti contro le statistiche.
+    """
     righe = query(
         f"""
         SELECT data, tipologia AS codice, SUM(camere) AS notti,

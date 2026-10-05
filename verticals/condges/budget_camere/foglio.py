@@ -56,15 +56,18 @@ COL_MESI = [
     "Ricavo 2026 sul calendario 2027 (01ROOM)",
     "Effetto calendario",
     "Notti base",
-    "Ricavo base",
+    "Ricavo base (gestionale)",
     "Notti 2027",
-    "Ricavo 2027",
-    "Effetto occupazione",
-    "Effetto mix",
-    "Effetto prezzo",
+    "Ricavo 2027 (gestionale)",
+    "Effetto occupazione (gestionale)",
+    "Effetto mix (gestionale)",
+    "Effetto prezzo (gestionale)",
     "Raccordo 01ROOM",
     "Budget 2027 su base 01ROOM",
     "Occupazione 2027",
+    "Effetto occupazione (01ROOM)",
+    "Effetto mix (01ROOM)",
+    "Effetto prezzo (01ROOM)",
 ]
 
 
@@ -98,7 +101,8 @@ def _prezzi(ws, righe: list[dict]) -> None:
                 None,
             ]
         )
-        for col in "IJOP":
+        # senza prezzo 2026 non c'è nulla da aumentare: il prezzo si scrive in K
+        for col in "IJOP" if r["prezzo_base"] is not None else "IJKOP":
             ws[f"{col}{i}"].fill = INPUT
         for col in "HKO":
             ws[f"{col}{i}"].number_format = "#,##0.00"
@@ -127,7 +131,7 @@ def _mesi(ws, mesi: list[dict], ultima_prezzi: int) -> None:
                 x["notti_reali"],
                 x["ricavo_reale"],
                 x["ricavo_calendario"],
-                f"=H{i}-G{i}",
+                f'=IF(OR(G{i}="",H{i}=""),"n.d.",H{i}-G{i})',
                 f"={somma('G', i)}",
                 f"={somma('L', i)}",
                 f"={somma('I', i)}",
@@ -139,25 +143,36 @@ def _mesi(ws, mesi: list[dict], ultima_prezzi: int) -> None:
                 f'=IF(Q{i}="","n.d.",M{i}*Q{i})',
                 f"=L{i}/({x['camere']}*E{i})",
             ]
+            + [f'=IF(Q{i}="","n.d.",{col}{i}*Q{i})' for col in "NOP"]
         )
     fine = len(mesi) + 1
     t = fine + 1
     camere = mesi[0]["camere"]
+    # un totale con un mese mancante o in stima è "n.d.", mai una somma parziale
+    stima = f'COUNTIF(C2:C{fine},"stima")>0'
+    senza_raccordo = f"COUNTBLANK(Q2:Q{fine})>0"
     ws.append(
         ["Totale", None, None]
-        + [f"=SUM({col}2:{col}{fine})" for col in "DEFGHIJKLMNOP"]
+        + [f"=SUM({col}2:{col}{fine})" for col in "DEF"]
+        + [
+            f'=IF(COUNTBLANK({col}2:{col}{fine})>0,"n.d.",SUM({col}2:{col}{fine}))'
+            for col in "GH"
+        ]
+        + [f'=IF(COUNTBLANK(G2:H{fine})>0,"n.d.",SUM(I2:I{fine}))']
+        + [f'=IF({stima},"n.d.",SUM({col}2:{col}{fine}))' for col in "JKLMNOP"]
         + [
             None,
-            f'=IF(COUNTBLANK(Q2:Q{fine})>0,"n.d.",SUM(R2:R{fine}))',
-            f"=L{t}/({camere}*E{t})",
+            f'=IF({senza_raccordo},"n.d.",SUM(R2:R{fine}))',
+            f'=IF(ISNUMBER(L{t}),L{t}/({camere}*E{t}),"n.d.")',
         ]
+        + [f'=IF({senza_raccordo},"n.d.",SUM({col}2:{col}{fine}))' for col in "TUV"]
     )
     for cella in ws[t]:
         cella.font = GRASSETTO
     for riga in ws.iter_rows(min_row=2, max_row=t):
         for cella in riga:
             lettera = cella.column_letter
-            if lettera in "GHIKMNOPR":
+            if lettera in "GHIKMNOPRTUV":
                 cella.number_format = "#,##0"
             elif lettera == "Q":
                 cella.number_format = "0.0000"
@@ -177,15 +192,21 @@ def _leggimi(ws, dati: dict) -> None:
         f"Notti {budget} precompilate: le notti {base} di ogni categoria, scalate col "
         f"rapporto camere {budget}/{base}, a parità di notti totali del mese. "
         "Correggile se sai di più.",
+        "Categoria senza prezzo 2026 in un mese (nessuna vendita): la cella Prezzo 2027 "
+        "è gialla, scrivi lì il prezzo.",
         "Foglio Mesi: effetto calendario, occupazione, mix e prezzo si aggiornano da soli.",
-        "Prezzi su base gestionale (rapporto per tipologia venduta); la colonna Raccordo "
-        "riporta il totale alla base 01ROOM.",
+        "Prezzi ed effetti (gestionale) sono sulla base del rapporto per tipologia venduta. "
+        "Le colonne (01ROOM) li riportano al ricavo camere canonico col Raccordo: "
+        "ricavo 2026 reale + calendario + occupazione + mix + prezzo = budget 2027.",
+        f"Ricavi {base} vuoti = ricavo camere non caricato per tutti i giorni del mese.",
     ]
     if stime:
         righe.append(
-            "Mesi in stato stima (base non ancora osservata per intero, raccordo vuoto): "
+            "Mesi in stato stima ("
             + ", ".join(stime)
-            + "."
+            + "): notti e prezzi sono le prenotazioni alla data dell'esportazione, "
+            "quindi sottostimati. Raccordo e totali restano n.d. finché non arriva "
+            "l'esportazione nuova."
         )
     for testo in righe:
         ws.append([testo])

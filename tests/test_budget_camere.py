@@ -247,7 +247,6 @@ def test_foglio_mesi(libro):
     ws = libro["Mesi"]
     assert [ws["A2"].value, ws["A3"].value, ws["A4"].value] == [5, 6, "Totale"]
     assert ws["C2"].value == "osservato" and ws["C3"].value == "stima"
-    assert ws["I2"].value == "=H2-G2"
     assert ws["J2"].value == "=SUMIF(Prezzi!$A$2:$A$7,A2,Prezzi!$G$2:$G$7)"
     assert ws["N2"].value == "=IF(J2=0,0,(L2-J2)*K2/J2)"
     assert ws["O2"].value == (
@@ -259,7 +258,10 @@ def test_foglio_mesi(libro):
     assert ws["R2"].value == '=IF(Q2="","n.d.",M2*Q2)'
     assert ws["R4"].value == '=IF(COUNTBLANK(Q2:Q3)>0,"n.d.",SUM(R2:R3))'
     assert ws["S2"].value == "=L2/(5*E2)"
-    assert ws["M4"].value == "=SUM(M2:M3)"
+    # un mese in stima → i totali non si sommano in silenzio
+    assert ws["M4"].value == '=IF(COUNTIF(C2:C3,"stima")>0,"n.d.",SUM(M2:M3))'
+    assert ws["F4"].value == "=SUM(F2:F3)"
+    assert ws["S4"].value == '=IF(ISNUMBER(L4),L4/(5*E4),"n.d.")'
 
 
 def test_foglio_leggimi(libro):
@@ -300,3 +302,92 @@ def test_giorno():
     assert base.giorno("04-20") == (4, 20)
     with pytest.raises(ValueError):
         base.giorno("20 aprile")
+
+
+# ── Revisione finale: I1–I5 ──────────────────────────────────────────────────
+
+
+def test_file_per_tipologia_vecchio_resta_stima_anche_se_ricaricato_dopo():
+    # file ricaricato a luglio (caricato dopo fine giugno) ma con le notti di quando
+    # fu esportato: le statistiche dicono 6 notti al giorno, il file 4
+    pms = [{"data": d, "notti": 6, "ricavo": 780.0} for d in _giorni(5) + _giorni(6)]
+    dati = m.costruisci(
+        CAMERE, _categorie(date(2026, 7, 5)), pms, PROGETTO, 2026, *MAGGIO_GIUGNO
+    )
+    assert [x["stato"] for x in dati["mesi"]] == ["stima", "stima"]
+    assert all(x["raccordo"] is None for x in dati["mesi"])
+
+
+def test_01room_incompleto_non_mostra_ricavi_parziali():
+    dati = m.costruisci(CAMERE, _categorie(), _pms(), PROGETTO, 2026, *MAGGIO_GIUGNO)
+    giugno = next(x for x in dati["mesi"] if x["mese"] == 6)
+    assert giugno["ricavo_reale"] is None
+    assert giugno["ricavo_calendario"] is None
+    assert giugno["notti_reali"] == 120  # le notti vengono dalle statistiche: restano
+
+
+def test_foglio_mesi_ricavi_mancanti_e_effetto_calendario(libro):
+    ws = libro["Mesi"]
+    assert ws["G3"].value is None and ws["H3"].value is None
+    assert ws["I2"].value == '=IF(OR(G2="",H2=""),"n.d.",H2-G2)'
+    assert ws["G4"].value == '=IF(COUNTBLANK(G2:G3)>0,"n.d.",SUM(G2:G3))'
+    assert ws["I4"].value == '=IF(COUNTBLANK(G2:H3)>0,"n.d.",SUM(I2:I3))'
+
+
+def test_foglio_mesi_effetti_su_base_01room(libro):
+    ws = libro["Mesi"]
+    intestazioni = [c.value for c in ws[1]]
+    assert intestazioni[10] == "Ricavo base (gestionale)"
+    assert intestazioni[13:16] == [
+        "Effetto occupazione (gestionale)",
+        "Effetto mix (gestionale)",
+        "Effetto prezzo (gestionale)",
+    ]
+    assert intestazioni[19:22] == [
+        "Effetto occupazione (01ROOM)",
+        "Effetto mix (01ROOM)",
+        "Effetto prezzo (01ROOM)",
+    ]
+    assert ws["T2"].value == '=IF(Q2="","n.d.",N2*Q2)'
+    assert ws["V2"].value == '=IF(Q2="","n.d.",P2*Q2)'
+    assert ws["U4"].value == '=IF(COUNTBLANK(Q2:Q3)>0,"n.d.",SUM(U2:U3))'
+
+
+def test_quattro_effetti_sommano_allo_scostamento_su_base_01room():
+    # reale + calendario + raccordo × (occupazione + mix + prezzo) = budget su 01ROOM
+    dati = m.costruisci(CAMERE, _categorie(), _pms(), PROGETTO, 2026, (5, 10), (6, 30))
+    maggio = next(x for x in dati["mesi"] if x["mese"] == 5)
+    e = m.effetti(
+        [
+            {
+                "notti_base": r["notti_base"],
+                "prezzo_base": r["prezzo_base"],
+                "notti": r["notti_2027"] + 5,
+                "prezzo": (r["prezzo_base"] or 0) * 1.1,
+            }
+            for r in dati["righe"]
+            if r["mese"] == 5
+        ]
+    )
+    q = maggio["raccordo"]
+    calendario = maggio["ricavo_calendario"] - maggio["ricavo_reale"]
+    assert calendario == pytest.approx(-9 * 520.0)
+    assert maggio["ricavo_reale"] + calendario + q * (
+        e["occupazione"] + e["mix"] + e["prezzo"]
+    ) == pytest.approx(q * e["budget"])
+
+
+def test_categoria_senza_prezzo_base_ha_la_cella_prezzo_gialla(libro):
+    ws = libro["Prezzi"]
+    assert ws["H2"].value is None  # maggio, Deluxe: nessuna vendita nel 2026
+    assert ws["K2"].fill.fgColor.rgb.endswith("FFF2CC")
+    assert not ws["K3"].fill.fgColor.rgb.endswith("FFF2CC")
+
+
+def test_leggimi_spiega_stime_e_prezzi_mancanti(libro):
+    testo = " ".join(
+        str(r[0].value) for r in libro["Leggimi"].iter_rows() if r[0].value
+    )
+    assert "prenotazioni alla data dell'esportazione" in testo
+    assert "sottostimat" in testo
+    assert "senza prezzo 2026" in testo

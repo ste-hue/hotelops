@@ -57,6 +57,9 @@ def run(
         )
     stime = [foglio.MESI[x["mese"]] for x in dati["mesi"] if x["stato"] == "stima"]
     if stime:
-        print(f"\n  ⚠ base non osservata per intero: {', '.join(stime)}")
+        print(
+            f"\n  ⚠ {', '.join(stime)}: base = prenotazioni alla data dell'esportazione, "
+            "sottostimata; totali n.d. finché non arriva l'esportazione nuova"
+        )
     print(f"\n  ✓ {path}")
     return path
