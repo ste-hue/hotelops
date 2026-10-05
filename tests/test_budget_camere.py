@@ -206,3 +206,63 @@ def test_fonti_interrogano_le_tabelle_giuste():
 def test_leggi_categorie_senza_righe_esplode():
     with pytest.raises(ValueError, match="f_bookings_tipologia"):
         f.leggi_categorie(2026, lambda sql: [])
+
+
+from openpyxl import load_workbook  # noqa: E402
+
+from verticals.condges.budget_camere import foglio  # noqa: E402
+
+
+@pytest.fixture
+def libro(tmp_path):
+    dati = m.costruisci(CAMERE, _categorie(), _pms(), PROGETTO, 2026, *MAGGIO_GIUGNO)
+    return load_workbook(foglio.scrivi(dati, tmp_path / "budget.xlsx"))
+
+
+def test_foglio_prezzi(libro):
+    ws = libro["Prezzi"]
+    assert ws.max_row == 1 + 6
+    riga = {ws.cell(1, c).value: ws.cell(2, c).value for c in range(1, 17)}
+    # prima riga: maggio, Deluxe (categorie in ordine alfabetico), nessuna vendita
+    assert (riga["Mese"], riga["Categoria"]) == (5, "Deluxe")
+    assert riga["Prezzo medio 2026"] is None
+    assert riga["Prezzo 2027"] == '=IF(H2="","",H2*(1+J2))'
+    assert riga["Ricavo base"] == '=IF(H2="",0,G2*H2)'
+    assert riga["Ricavo 2027 a prezzi 2026"] == '=IF(H2="",0,I2*H2)'
+    assert riga["Ricavo 2027"] == '=IF(K2="",0,I2*K2)'
+    assert riga["Aumento %"] == 0
+    # seconda riga: maggio, Standard
+    assert ws["C3"].value == "Standard"
+    assert ws["G3"].value == 93
+    assert ws["H3"].value == pytest.approx(100.0)
+    assert ws["I3"].value == 83
+    # le celle di input sono colorate, quelle calcolate no
+    assert ws["J3"].fill.fgColor.rgb.endswith("FFF2CC")
+    assert not ws["K3"].fill.fgColor.rgb.endswith("FFF2CC")
+
+
+def test_foglio_mesi(libro):
+    ws = libro["Mesi"]
+    assert [ws["A2"].value, ws["A3"].value, ws["A4"].value] == [5, 6, "Totale"]
+    assert ws["C2"].value == "osservato" and ws["C3"].value == "stima"
+    assert ws["I2"].value == "=H2-G2"
+    assert ws["J2"].value == "=SUMIF(Prezzi!$A$2:$A$7,A2,Prezzi!$G$2:$G$7)"
+    assert ws["N2"].value == "=IF(J2=0,0,(L2-J2)*K2/J2)"
+    assert ws["O2"].value == (
+        "=SUMIF(Prezzi!$A$2:$A$7,A2,Prezzi!$M$2:$M$7)-IF(J2=0,0,L2*K2/J2)"
+    )
+    assert ws["P2"].value == "=M2-SUMIF(Prezzi!$A$2:$A$7,A2,Prezzi!$M$2:$M$7)"
+    assert ws["Q2"].value == pytest.approx(1.04)
+    assert ws["Q3"].value is None  # giugno è una stima: raccordo vuoto, non zero
+    assert ws["R2"].value == '=IF(Q2="","n.d.",M2*Q2)'
+    assert ws["R4"].value == '=IF(COUNTBLANK(Q2:Q3)>0,"n.d.",SUM(R2:R3))'
+    assert ws["S2"].value == "=L2/(5*E2)"
+    assert ws["M4"].value == "=SUM(M2:M3)"
+
+
+def test_foglio_leggimi(libro):
+    testo = " ".join(
+        str(r[0].value) for r in libro["Leggimi"].iter_rows() if r[0].value
+    )
+    assert "1 maggio" in testo and "30 giugno" in testo
+    assert "giugno" in testo and "stima" in testo
