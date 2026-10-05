@@ -179,3 +179,30 @@ def test_tipologia_sconosciuta_senza_notti_e_fuori_calendario_ignorate():
     ]
     dati = m.costruisci(CAMERE, cat, _pms(), PROGETTO, 2026, *MAGGIO_GIUGNO)
     assert sum(x["notti_base"] for x in dati["righe"]) == 4 * 61
+
+
+from verticals.condges.budget_camere import fonti as f  # noqa: E402
+
+
+def test_fonti_interrogano_le_tabelle_giuste():
+    viste = []
+
+    def finta(sql):
+        viste.append(sql)
+        return [{"ok": 1}]
+
+    assert f.leggi_camere(finta) == [{"ok": 1}]
+    assert f.leggi_categorie(2026, finta) == [{"ok": 1}]
+    assert f.leggi_pms(2026, finta) == [{"ok": 1}]
+    camere, categorie, pms = viste
+    assert "d_camere" in camere and "'HOTEL'" in camere
+    assert "f_bookings_tipologia" in categorie and "ricavo_camera" in categorie
+    assert "2026" in categorie
+    assert "f_pms_statistiche" in pms and "camere_vendute" in pms
+    assert "f_produzione_pms" in pms and "'01ROOM'" in pms
+    assert "revenue_room" not in pms
+
+
+def test_leggi_categorie_senza_righe_esplode():
+    with pytest.raises(ValueError, match="f_bookings_tipologia"):
+        f.leggi_categorie(2026, lambda sql: [])
