@@ -209,6 +209,22 @@ def cmd_canone(args):
     run(aggiorna=True, push=args.push)
 
 
+def cmd_budget(args):
+    """Budget per driver: genera il foglio della base camere."""
+    from pathlib import Path
+
+    from verticals.condges.budget_camere import base
+
+    if args.budget_cmd != "base":
+        print("uso: hotelops budget base [--out DIR] [--apertura MM-GG] [--chiusura MM-GG]")
+        sys.exit(1)
+    base.run(
+        Path(args.out).expanduser(),
+        apertura=base.giorno(args.apertura),
+        chiusura=base.giorno(args.chiusura),
+    )
+
+
 def cmd_manifest(args):
     """Genera manifest.yaml — catalogo di tutte le tabelle BQ."""
     from core.bq.manifest import generate_manifest, TABLES
@@ -1071,6 +1087,16 @@ def main():
         "--push", action="store_true", help="Pubblica su canone.panorama-host.com"
     )
 
+    # budget
+    p_budget = sub.add_parser("budget", help="Budget per driver (camere Hotel Panorama)")
+    budget_sub = p_budget.add_subparsers(dest="budget_cmd")
+    pb_base = budget_sub.add_parser(
+        "base", help="Genera il foglio: base 2026 per mese × categoria, aumenti da scrivere"
+    )
+    pb_base.add_argument("--out", default="~/Downloads", help="Cartella di uscita")
+    pb_base.add_argument("--apertura", default="04-20", help="Prima notte venduta, MM-GG")
+    pb_base.add_argument("--chiusura", default="10-20", help="Ultima notte venduta, MM-GG")
+
     # help
     sub.add_parser("help", help="Guida completa con esempi")
 
@@ -1448,6 +1474,7 @@ def main():
         "voci": cmd_voci,
         "manifest": cmd_manifest,
         "canone": cmd_canone,
+        "budget": cmd_budget,
         "deploy-views": cmd_deploy_views,
         "classifica": cmd_classifica,
         "cls": cmd_classifica,

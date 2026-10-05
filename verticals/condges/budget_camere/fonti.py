@@ -54,7 +54,7 @@ def leggi_pms(anno: int, query=_query) -> list[dict]:
           WHERE business_unit_id = '{BU}' AND EXTRACT(YEAR FROM data) = {anno}
           GROUP BY 1
         ), p AS (
-          SELECT data, SUM(importo_imponibile) AS ricavo
+          SELECT data, CAST(SUM(importo_imponibile) AS FLOAT64) AS ricavo
           FROM `{F_PRODUZIONE_PMS}`
           WHERE business_unit_id = '{BU}' AND classe = '01ROOM'
             AND EXTRACT(YEAR FROM data) = {anno}

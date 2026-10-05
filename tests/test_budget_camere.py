@@ -201,6 +201,8 @@ def test_fonti_interrogano_le_tabelle_giuste():
     assert "f_pms_statistiche" in pms and "camere_vendute" in pms
     assert "f_produzione_pms" in pms and "'01ROOM'" in pms
     assert "revenue_room" not in pms
+    # importo_imponibile è NUMERIC (Decimal in Python): il modello lavora in float
+    assert "CAST(SUM(importo_imponibile) AS FLOAT64)" in pms
 
 
 def test_leggi_categorie_senza_righe_esplode():
@@ -266,3 +268,35 @@ def test_foglio_leggimi(libro):
     )
     assert "1 maggio" in testo and "30 giugno" in testo
     assert "giugno" in testo and "stima" in testo
+
+
+from datetime import datetime  # noqa: E402
+
+from verticals.condges.budget_camere import base  # noqa: E402
+
+
+def _finta(sql):
+    if "d_camere" in sql:
+        return CAMERE
+    if "f_bookings_tipologia" in sql:
+        return _categorie()
+    return _pms()
+
+
+def test_run_scrive_il_foglio_e_riepiloga(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(m, "carica_progetto", lambda: PROGETTO)
+    path = base.run(
+        tmp_path, *MAGGIO_GIUGNO, query=_finta, adesso=datetime(2026, 10, 5, 9, 30)
+    )
+    assert path == tmp_path / "budget_camere_HOTEL_2027_base_20261005-0930.xlsx"
+    assert load_workbook(path).sheetnames == ["Leggimi", "Prezzi", "Mesi"]
+    out = capsys.readouterr().out
+    assert "maggio" in out and "osservato" in out
+    assert "giugno" in out and "stima" in out
+    assert str(path) in out
+
+
+def test_giorno():
+    assert base.giorno("04-20") == (4, 20)
+    with pytest.raises(ValueError):
+        base.giorno("20 aprile")
