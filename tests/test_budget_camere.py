@@ -228,19 +228,21 @@ def test_foglio_prezzi(libro):
     # prima riga: maggio, Deluxe (categorie in ordine alfabetico), nessuna vendita
     assert (riga["Mese"], riga["Categoria"]) == (5, "Deluxe")
     assert riga["Prezzo medio 2026"] is None
-    assert riga["Prezzo 2027"] == '=IF(H2="","",H2*(1+J2))'
+    assert riga["Prezzo 2027"] is None  # nessun prezzo 2026: si scrive a mano
     assert riga["Ricavo base"] == '=IF(H2="",0,G2*H2)'
     assert riga["Ricavo 2027 a prezzi 2026"] == '=IF(H2="",0,I2*H2)'
     assert riga["Ricavo 2027"] == '=IF(K2="",0,I2*K2)'
-    assert riga["Aumento %"] == 0
+    assert riga["Aumento %"] == '=IF(OR(H2="",K2=""),"",K2/H2-1)'
     # seconda riga: maggio, Standard
     assert ws["C3"].value == "Standard"
     assert ws["G3"].value == 93
     assert ws["H3"].value == pytest.approx(100.0)
     assert ws["I3"].value == 83
     # le celle di input sono colorate, quelle calcolate no
-    assert ws["J3"].fill.fgColor.rgb.endswith("FFF2CC")
-    assert not ws["K3"].fill.fgColor.rgb.endswith("FFF2CC")
+    # il prezzo è l'input (precompilato con l'aumento di partenza); l'aumento % è calcolato
+    assert ws["K3"].value == "=H3*(1+Budget!$I$2)"
+    assert ws["K3"].fill.fgColor.rgb.endswith("FFF2CC")
+    assert not ws["J3"].fill.fgColor.rgb.endswith("FFF2CC")
 
 
 def test_foglio_mesi(libro):
@@ -291,7 +293,7 @@ def test_run_scrive_il_foglio_e_riepiloga(tmp_path, capsys, monkeypatch):
         tmp_path, *MAGGIO_GIUGNO, query=_finta, adesso=datetime(2026, 10, 5, 9, 30)
     )
     assert path == tmp_path / "budget_camere_HOTEL_2027_base_20261005-0930.xlsx"
-    assert load_workbook(path).sheetnames == ["Leggimi", "Prezzi", "Mesi"]
+    assert load_workbook(path).sheetnames == ["Leggimi", "Budget", "Prezzi", "Mesi"]
     out = capsys.readouterr().out
     assert "maggio" in out and "osservato" in out
     assert "giugno" in out and "stima" in out
@@ -380,8 +382,8 @@ def test_quattro_effetti_sommano_allo_scostamento_su_base_01room():
 def test_categoria_senza_prezzo_base_ha_la_cella_prezzo_gialla(libro):
     ws = libro["Prezzi"]
     assert ws["H2"].value is None  # maggio, Deluxe: nessuna vendita nel 2026
+    assert ws["K2"].value is None
     assert ws["K2"].fill.fgColor.rgb.endswith("FFF2CC")
-    assert not ws["K3"].fill.fgColor.rgb.endswith("FFF2CC")
 
 
 def test_leggimi_spiega_stime_e_prezzi_mancanti(libro):
@@ -391,3 +393,43 @@ def test_leggimi_spiega_stime_e_prezzi_mancanti(libro):
     assert "prenotazioni alla data dell'esportazione" in testo
     assert "sottostimat" in testo
     assert "senza prezzo 2026" in testo
+
+
+# ── Budget = obiettivo per mese; i prezzi sono la strategia ──────────────────
+
+
+def test_foglio_budget(libro):
+    ws = libro["Budget"]
+    assert [c.value for c in ws[1]][:7] == [
+        "Mese",
+        "Nome mese",
+        "Ricavo camere 2026 (stessi giorni)",
+        "Crescita obiettivo %",
+        "Obiettivo 2027",
+        "Con i prezzi scritti",
+        "Scarto",
+    ]
+    # i due parametri: crescita obiettivo e aumento di partenza dei prezzi
+    assert (ws["H1"].value, ws["I1"].value) == ("Crescita obiettivo", 0.12)
+    assert (ws["H2"].value, ws["I2"].value) == ("Aumento prezzi di partenza", 0.07)
+    assert ws["I1"].fill.fgColor.rgb.endswith("FFF2CC")
+    assert ws["I2"].fill.fgColor.rgb.endswith("FFF2CC")
+    # righe: maggio, giugno, totale
+    assert [ws["A2"].value, ws["A3"].value, ws["A4"].value] == [5, 6, "Totale"]
+    assert ws["C2"].value == '=IF(Mesi!H2="","n.d.",Mesi!H2)'
+    assert ws["D2"].value == "=$I$1"
+    assert ws["D2"].fill.fgColor.rgb.endswith("FFF2CC")
+    assert ws["E2"].value == '=IF(ISNUMBER(C2),C2*(1+D2),"n.d.")'
+    assert ws["F2"].value == "=Mesi!R2"
+    assert ws["G2"].value == '=IF(AND(ISNUMBER(E2),ISNUMBER(F2)),F2-E2,"n.d.")'
+    # un totale con un mese senza dato è n.d., mai una somma parziale
+    assert ws["E4"].value == '=IF(COUNT(E2:E3)=2,SUM(E2:E3),"n.d.")'
+    assert ws["G4"].value == '=IF(AND(ISNUMBER(E4),ISNUMBER(F4)),F4-E4,"n.d.")'
+
+
+def test_leggimi_parte_dal_budget(libro):
+    righe = [r[0].value for r in libro["Leggimi"].iter_rows() if r[0].value]
+    assert any(r.startswith("Foglio Budget") for r in righe)
+    assert righe.index(
+        next(r for r in righe if r.startswith("Foglio Budget"))
+    ) < righe.index(next(r for r in righe if r.startswith("Foglio Prezzi")))

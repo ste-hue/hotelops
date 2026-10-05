@@ -13,6 +13,17 @@ from openpyxl.styles import Font, PatternFill
 
 INPUT = PatternFill("solid", fgColor="FFF2CC")
 GRASSETTO = Font(bold=True)
+CRESCITA_OBIETTIVO = 0.12  # Stefano, 2026-10-05: obiettivo sul 2026 a parità di giorni
+AUMENTO_PARTENZA = 0.07  # punto di partenza dei prezzi, da correggere riga per riga
+COL_BUDGET = [
+    "Mese",
+    "Nome mese",
+    "Ricavo camere 2026 (stessi giorni)",
+    "Crescita obiettivo %",
+    "Obiettivo 2027",
+    "Con i prezzi scritti",
+    "Scarto",
+]
 MESI = {
     1: "gennaio",
     2: "febbraio",
@@ -92,8 +103,8 @@ def _prezzi(ws, righe: list[dict]) -> None:
                 r["notti_base"],
                 r["prezzo_base"],
                 r["notti_2027"],
-                0,
-                f'=IF(H{i}="","",H{i}*(1+J{i}))',
+                f'=IF(OR(H{i}="",K{i}=""),"",K{i}/H{i}-1)',
+                f"=H{i}*(1+Budget!$I$2)" if r["prezzo_base"] is not None else None,
                 f'=IF(H{i}="",0,G{i}*H{i})',
                 f'=IF(H{i}="",0,I{i}*H{i})',
                 f'=IF(K{i}="",0,I{i}*K{i})',
@@ -101,14 +112,66 @@ def _prezzi(ws, righe: list[dict]) -> None:
                 None,
             ]
         )
-        # senza prezzo 2026 non c'è nulla da aumentare: il prezzo si scrive in K
-        for col in "IJOP" if r["prezzo_base"] is not None else "IJKOP":
+        # l'input è il prezzo (K); l'aumento % (J) è calcolato
+        for col in "IKOP":
             ws[f"{col}{i}"].fill = INPUT
         for col in "HKO":
             ws[f"{col}{i}"].number_format = "#,##0.00"
         for col in "LMN":
             ws[f"{col}{i}"].number_format = "#,##0"
         ws[f"J{i}"].number_format = "0.0%"
+
+
+def _budget(ws, mesi: list[dict]) -> None:
+    """Il budget: un obiettivo per mese. I prezzi (foglio Prezzi) sono il modo di arrivarci."""
+    _intesta(ws, COL_BUDGET)
+    for i, x in enumerate(mesi, start=2):
+        ws.append(
+            [
+                x["mese"],
+                MESI[x["mese"]],
+                f'=IF(Mesi!H{i}="","n.d.",Mesi!H{i})',
+                "=$I$1",
+                f'=IF(ISNUMBER(C{i}),C{i}*(1+D{i}),"n.d.")',
+                f"=Mesi!R{i}",
+                f'=IF(AND(ISNUMBER(E{i}),ISNUMBER(F{i})),F{i}-E{i},"n.d.")',
+            ]
+        )
+        ws[f"D{i}"].fill = INPUT
+    fine = len(mesi) + 1
+    t = fine + 1
+    ws.append(
+        ["Totale", None]
+        + [
+            f'=IF(COUNT({col}2:{col}{fine})={len(mesi)},SUM({col}2:{col}{fine}),"n.d.")'
+            if col != "D"
+            else None
+            for col in "CDEF"
+        ]
+        + [f'=IF(AND(ISNUMBER(E{t}),ISNUMBER(F{t})),F{t}-E{t},"n.d.")']
+    )
+    for cella in ws[t]:
+        cella.font = GRASSETTO
+    for riga in ws.iter_rows(min_row=2, max_row=t):
+        for cella in riga:
+            cella.number_format = "0.0%" if cella.column_letter == "D" else "#,##0"
+    for cella, etichetta, valore in (
+        ("1", "Crescita obiettivo", CRESCITA_OBIETTIVO),
+        ("2", "Aumento prezzi di partenza", AUMENTO_PARTENZA),
+    ):
+        ws[f"H{cella}"] = etichetta
+        ws[f"I{cella}"] = valore
+        ws[f"I{cella}"].fill = INPUT
+        ws[f"I{cella}"].number_format = "0.0%"
+    for col, larghezza in (
+        ("C", 34),
+        ("D", 22),
+        ("E", 16),
+        ("F", 22),
+        ("G", 12),
+        ("H", 28),
+    ):
+        ws.column_dimensions[col].width = larghezza
 
 
 def _mesi(ws, mesi: list[dict], ultima_prezzi: int) -> None:
@@ -187,8 +250,12 @@ def _leggimi(ws, dati: dict) -> None:
     righe = [
         f"Budget camere Hotel Panorama {budget} — base {base}",
         f"Calendario {budget}: dal {ag} {MESI[am]} al {cg} {MESI[cm]} (estremi inclusi).",
-        "Foglio Prezzi: scrivi solo nelle celle gialle. Aumento % sul prezzo medio "
-        f"{base} della categoria in quel mese; Ragione = perché.",
+        f"Foglio Budget: il budget è l'obiettivo per mese = ricavo camere {base} sugli "
+        "stessi giorni più la crescita che decidi (celle gialle). La colonna Scarto dice "
+        "se i prezzi che hai scritto ci arrivano.",
+        f"Foglio Prezzi: il modo di arrivarci. Scrivi il prezzo {budget} nelle celle gialle "
+        f"(precompilato: prezzo medio {base} più l'aumento di partenza del foglio Budget); "
+        "Ragione = perché.",
         f"Notti {budget} precompilate: le notti {base} di ogni categoria, scalate col "
         f"rapporto camere {budget}/{base}, a parità di notti totali del mese. "
         "Correggile se sai di più.",
@@ -218,6 +285,7 @@ def scrivi(dati: dict, path: Path) -> Path:
     wb = Workbook()
     _leggimi(wb.active, dati)
     wb.active.title = "Leggimi"
+    _budget(wb.create_sheet("Budget"), dati["mesi"])
     _prezzi(wb.create_sheet("Prezzi"), dati["righe"])
     _mesi(wb.create_sheet("Mesi"), dati["mesi"], ultima_prezzi=len(dati["righe"]) + 1)
     wb.save(path)
