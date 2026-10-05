@@ -1,0 +1,181 @@
+"""Budget camere per driver: modello, fonti, foglio. Dati SINTETICI."""
+
+import calendar
+from collections import Counter
+from datetime import date
+
+import pytest
+
+from verticals.condges.budget_camere import modello as m
+
+CAMERE = [
+    {"room_id": "H101", "cod_camera": "DSTA", "tipologia": "Standard"},
+    {"room_id": "H102", "cod_camera": "TSTA", "tipologia": "Standard"},
+    {"room_id": "H301", "cod_camera": "DSTA", "tipologia": "Standard"},
+    {"room_id": "H302", "cod_camera": "DSUP", "tipologia": "Superior"},
+    {"room_id": "H201", "cod_camera": "DDLX", "tipologia": "Deluxe"},
+]
+PROGETTO = {"H301": "Deluxe"}
+INV26 = {"Standard": 3, "Superior": 1, "Deluxe": 1}
+INV27 = {"Standard": 2, "Superior": 1, "Deluxe": 2}
+MAGGIO_GIUGNO = ((5, 1), (6, 30))
+
+
+def _giorni(mese):
+    return [
+        date(2026, mese, g) for g in range(1, calendar.monthrange(2026, mese)[1] + 1)
+    ]
+
+
+def _categorie(caricato=date(2026, 6, 10)):
+    return [
+        {"data": d, "codice": cod, "notti": n, "ricavo": n * p, "caricato": caricato}
+        for d in _giorni(5) + _giorni(6)
+        for cod, n, p in (("DSTA", 2, 100.0), ("TSTA", 1, 100.0), ("DSUP", 1, 200.0))
+    ]
+
+
+def _pms():
+    return (
+        [{"data": d, "notti": 4, "ricavo": 520.0} for d in _giorni(5)]
+        + [{"data": d, "notti": 4, "ricavo": 520.0} for d in _giorni(6)[:9]]
+        + [{"data": d, "notti": 4, "ricavo": None} for d in _giorni(6)[9:]]
+    )
+
+
+def test_giorni_apertura_2027():
+    g = m.giorni_apertura(2027, m.APERTURA_2027, m.CHIUSURA_2027)
+    assert g == {4: 11, 5: 31, 6: 30, 7: 31, 8: 31, 9: 30, 10: 20}
+    assert sum(g.values()) == 184
+
+
+def test_calendario_estremi_inclusi():
+    a, c = m.APERTURA_2027, m.CHIUSURA_2027
+    assert not m.in_calendario(date(2026, 4, 19), a, c)
+    assert m.in_calendario(date(2026, 4, 20), a, c)
+    assert m.in_calendario(date(2026, 10, 20), a, c)
+    assert not m.in_calendario(date(2026, 10, 21), a, c)
+
+
+def test_inventario_con_e_senza_progetto():
+    assert m.inventario(CAMERE) == INV26
+    assert m.inventario(CAMERE, PROGETTO) == INV27
+
+
+def test_inventario_rifiuta_camera_o_categoria_sconosciuta():
+    with pytest.raises(ValueError, match="H999"):
+        m.inventario(CAMERE, {"H999": "Deluxe"})
+    with pytest.raises(ValueError, match="Imperial"):
+        m.inventario(CAMERE, {"H301": "Imperial"})
+
+
+def test_progetto_terzo_piano():
+    p = m.carica_progetto()
+    assert len(p) == 20
+    assert Counter(p.values()) == {
+        "Deluxe": 9,
+        "Classic": 6,
+        "Executive": 3,
+        "Suite": 2,
+    }
+
+
+def test_notti_2027_conserva_il_totale():
+    base = {"Standard": 100, "Superior": 50, "Deluxe": 31}
+    out = m.notti_2027(base, INV26, INV27)
+    assert out == {"Standard": 67, "Superior": 51, "Deluxe": 63}
+    assert sum(out.values()) == sum(base.values())
+
+
+def test_effetti_somma_esatta():
+    e = m.effetti(
+        [
+            {"notti_base": 100, "prezzo_base": 100.0, "notti": 90, "prezzo": 110.0},
+            {"notti_base": 50, "prezzo_base": 200.0, "notti": 70, "prezzo": 200.0},
+        ]
+    )
+    assert e["base"] == pytest.approx(20000)
+    assert e["occupazione"] == pytest.approx(1333.3333, abs=1e-3)
+    assert e["mix"] == pytest.approx(1666.6667, abs=1e-3)
+    assert e["prezzo"] == pytest.approx(900)
+    assert e["base"] + e["occupazione"] + e["mix"] + e["prezzo"] == pytest.approx(
+        e["budget"]
+    )
+
+
+def test_effetti_categoria_senza_base():
+    e = m.effetti(
+        [{"notti_base": 0, "prezzo_base": None, "notti": 10, "prezzo": 300.0}]
+    )
+    assert e["base"] == 0
+    assert e["base"] + e["occupazione"] + e["mix"] + e["prezzo"] == pytest.approx(3000)
+
+
+def test_costruisci_righe_e_mesi():
+    dati = m.costruisci(CAMERE, _categorie(), _pms(), PROGETTO, 2026, *MAGGIO_GIUGNO)
+    assert len(dati["righe"]) == 2 * 3
+    r = {(x["mese"], x["categoria"]): x for x in dati["righe"]}
+    # DSTA + TSTA si fondono in Standard
+    assert r[(5, "Standard")]["notti_base"] == 93
+    assert r[(5, "Standard")]["prezzo_base"] == pytest.approx(100.0)
+    assert r[(5, "Standard")]["notti_2027"] == 83
+    assert r[(5, "Superior")]["notti_2027"] == 41
+    # categoria senza vendite: prezzo vuoto, non zero
+    assert r[(5, "Deluxe")]["notti_base"] == 0
+    assert r[(5, "Deluxe")]["prezzo_base"] is None
+    assert r[(5, "Deluxe")]["camere_2027"] == 2
+
+    mesi = {x["mese"]: x for x in dati["mesi"]}
+    assert mesi[5]["stato"] == "osservato"
+    assert mesi[5]["raccordo"] == pytest.approx(1.04)
+    assert mesi[5]["giorni_2027"] == 31
+    assert mesi[5]["notti_reali"] == 124
+    assert mesi[5]["ricavo_calendario"] == pytest.approx(31 * 520.0)
+    # giugno: file per tipologia del 10/6 → stima, raccordo vuoto
+    assert mesi[6]["stato"] == "stima"
+    assert mesi[6]["raccordo"] is None
+
+
+def test_raccordo_vuoto_se_01room_incompleto():
+    # file per tipologia esportato dopo fine giugno, ma 01ROOM caricato solo per 9 giorni
+    dati = m.costruisci(
+        CAMERE, _categorie(date(2026, 7, 5)), _pms(), PROGETTO, 2026, *MAGGIO_GIUGNO
+    )
+    giugno = next(x for x in dati["mesi"] if x["mese"] == 6)
+    assert giugno["stato"] == "stima"
+    assert giugno["raccordo"] is None
+
+
+def test_tipologia_sconosciuta_con_notti_esplode():
+    cat = _categorie() + [
+        {
+            "data": date(2026, 5, 3),
+            "codice": "XYZ",
+            "notti": 2,
+            "ricavo": 300.0,
+            "caricato": date(2026, 6, 10),
+        }
+    ]
+    with pytest.raises(ValueError, match="XYZ"):
+        m.costruisci(CAMERE, cat, _pms(), PROGETTO, 2026, *MAGGIO_GIUGNO)
+
+
+def test_tipologia_sconosciuta_senza_notti_e_fuori_calendario_ignorate():
+    cat = _categorie() + [
+        {
+            "data": date(2026, 5, 3),
+            "codice": "DEP",
+            "notti": 0,
+            "ricavo": 0.0,
+            "caricato": date(2026, 6, 10),
+        },
+        {
+            "data": date(2026, 7, 3),
+            "codice": "DSUP",
+            "notti": 9,
+            "ricavo": 900.0,
+            "caricato": date(2026, 6, 10),
+        },
+    ]
+    dati = m.costruisci(CAMERE, cat, _pms(), PROGETTO, 2026, *MAGGIO_GIUGNO)
+    assert sum(x["notti_base"] for x in dati["righe"]) == 4 * 61
