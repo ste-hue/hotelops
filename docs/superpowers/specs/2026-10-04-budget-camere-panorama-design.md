@@ -1,6 +1,6 @@
 # Budget per driver — primo pezzo: camere Hotel Panorama
 
-**Data:** 2026-10-04 · **Stato:** bozza, in attesa di rilettura di Stefano · **Vertical:** condges
+**Data:** 2026-10-04 · **Stato:** approvato da Stefano il 2026-10-05 (punti 1–3 chiusi) · **Vertical:** condges
 
 ## La domanda
 
@@ -12,7 +12,7 @@ Hotelops produce la risposta; il **Management OS** (repo `mgmt_os`, Quadro Unico
 pubblica una pagina propria per il budget (decisione 2026-09-24 «una sola
 superficie», confermata il 2026-10-04).
 
-## Decisioni già prese (Stefano, 2026-10-04)
+## Decisioni già prese (Stefano, 2026-10-04 e 2026-10-05)
 
 | Tema | Decisione |
 | --- | --- |
@@ -26,6 +26,11 @@ superficie», confermata il 2026-10-04).
 | Inserimento | Foglio generato dal sistema, già compilato con la base; ricaricato diventa una versione. |
 | Approvazione | Un gradino alla volta. Approva solo Stefano. |
 | Budget vecchio | Letture spente subito; nessuna riga cancellata; la previsione di cassa di Rosa non si tocca. |
+| Calendario 2027 | Prima notte venduta 20 aprile, ultima 20 ottobre: 184 giorni (11 + 153 + 20). Deciso il 2026-10-05. |
+| Budget e strategia | Il **budget è l'obiettivo per mese**: ricavo camere 2026 sugli stessi giorni × (1 + crescita). Crescita di partenza 12%, modificabile per mese. I prezzi per categoria sono la **strategia** per arrivarci (revenue management), non il budget: il foglio mostra lo scarto tra i due. Il «perché» si legge a consuntivo, scomponendo il 2027 vero contro il 2026 vero nei quattro effetti. Deciso il 2026-10-05. |
+| Come si scrive la strategia | Stefano scrive il **prezzo 2027** per mese × categoria. La cella è precompilata col prezzo medio 2026 più un aumento di partenza (7%, un solo parametro); l'aumento % di ogni riga è calcolato. |
+| Base del prezzo | Gestionale (rapporto per tipologia venduta); il totale è riportato alla base `01ROOM` col rapporto mensile osservato, mostrato come riga di raccordo. |
+| Tabelle | `f_budget_driver` (le versioni si accumulano) + `f_budget_versioni` (stato e approvazione). |
 
 ## Perimetro di questo pezzo
 
@@ -41,9 +46,9 @@ aggiornata in corso d'anno, anni 2028–2030.
 | Serve | Fonte | Stato |
 | --- | --- | --- |
 | Notti vendute, capacità | `f_pms_statistiche` (capacità = valore modale sui giorni con vendite) | c'è |
-| Ricavo camere netto | `f_produzione_pms`, classe `01ROOM` | c'è; settembre e ottobre da caricare |
-| Notti e prezzo per categoria | `f_bookings_tipologia` | c'è; base gestionale, scarto ~3% dal `01ROOM` |
-| Inventario per categoria | `d_camere` (2026) | c'è; il 2027 è una variante dichiarata dal progetto |
+| Ricavo camere netto | `f_produzione_pms`, classe `01ROOM` | c'è fino al 2 ottobre 2026 (verificato il 2026-10-05); ottobre da caricare a mese chiuso |
+| Notti e prezzo per categoria | `f_bookings_tipologia` (tipologia **venduta**) | osservato solo fino a luglio: l'unico file è del 2 agosto, da agosto in poi contiene prenotazioni e non consuntivo. **Serve un'esportazione nuova.** Scarto dal `01ROOM` non costante: aprile −6%, maggio −1%, giugno −7%, luglio −6% |
+| Inventario per categoria | `d_camere` (2026): 11 categorie, 86 camere | c'è; il 2027 è una variante dichiarata dal progetto. `d_camere` dà anche la mappa codice PMS → categoria (16 codici, es. `DDLX`/`TDLX` → Deluxe) |
 | Notti e presenze per segmento | nessuna | **fonte nuova**: serve un'esportazione vera del rapporto dietro le schermate HotelCube |
 | Prezzi base | nessuna | **fonte nuova**: serve un'esportazione vera da Lybra |
 | Prenotazioni in portafoglio (stima ottobre) | `f_prenotazioni_otb` | c'è; include gli extra, va riportata alla base camere |
@@ -63,16 +68,32 @@ Unità del budget, per mese:
 Vincolo: per ogni mese la somma delle notti per segmento è uguale alla somma
 delle notti per categoria. Il caricamento che non lo rispetta è rifiutato.
 
+Base, sul calendario 2027: per ogni mese × categoria, notti e prezzo medio
+del 2026 contati solo sui giorni tra il 20 aprile e il 20 ottobre. Un mese
+è `osservato` se il file per tipologia è stato esportato dopo il suo ultimo
+giorno; altrimenti è `stima` e il raccordo a `01ROOM` resta vuoto (mai zero).
+
+Notti 2027 precompilate: le notti 2026 di ogni categoria sono scalate col
+rapporto camere 2027 / camere 2026 di quella categoria, poi riportate al
+totale notti del mese (che resta uguale al 2026). Così il foglio non toccato
+mostra già l'effetto mix del terzo piano a prezzi 2026. La tipologia è quella
+venduta, l'inventario è quello fisico: la regola è un'approssimazione
+dichiarata, e Stefano può correggere le notti a mano.
+
+Prezzo 2027 = prezzo medio 2026 × (1 + aumento %). L'aumento è l'input di
+Stefano, per mese × categoria, con la sua ragione.
+
 Ricavo camere di budget = Σ categoria (notti × prezzo). Il ricavo per segmento
 (serve a HotelCube) si ottiene ripartendo il totale con l'indice di prezzo per
 segmento osservato nel 2026, dichiarato accanto al numero.
 
-Scostamento budget → consuntivo, in quest'ordine, con somma esatta:
+Quattro effetti, in quest'ordine, con somma esatta. Valgono sia per
+2026 → budget 2027 sia per budget → consuntivo:
 
-1. capacità (notti disponibili),
-2. occupazione (notti vendute a parità di capacità),
-3. mix (spostamento tra categorie a prezzi di budget),
-4. prezzo (a parità di mix).
+1. capacità: ricavo `01ROOM` 2026 sul calendario 2027 meno ricavo 2026 reale;
+2. occupazione: (notti − notti base) × prezzo medio base del mese;
+3. mix: Σ (notti × prezzo base di categoria) − notti × prezzo medio base;
+4. prezzo: Σ notti × (prezzo − prezzo base di categoria).
 
 Confrontabilità: solo mesi chiusi e caricati per intero; un mese mancante dà
 NULL, mai zero; nessun bersaglio annuo diviso per dodici.
@@ -80,8 +101,12 @@ NULL, mai zero; nessun bersaglio annuo diviso per dodici.
 ## Flusso
 
 1. `hotelops budget base` — calcola la base 2026 e genera il foglio (`.xlsx`),
-   una riga per mese × segmento e per mese × categoria, con colonne: base 2026,
-   budget 2027 (precompilato = base), ragione, prezzo base Lybra.
+   una riga per mese × categoria, con colonne: camere 2026 e 2027, notti e
+   prezzo medio 2026, notti 2027 (precompilate), prezzo 2027 (precompilato,
+   da scrivere), aumento % e ricavo 2027 (formule), prezzo base Lybra, ragione.
+   Il foglio «Budget» dà per mese obiettivo, risultato dei prezzi scritti e
+   scarto; il foglio «Mesi» i quattro effetti, con formule vive. Il
+   taglio per segmento si aggiunge quando arriva l'esportazione vera.
 2. Stefano modifica le celle e scrive le ragioni.
 3. `hotelops intake` del foglio → GCS (`gs://hotelops-raw`) + `f_raw_objects`.
    L'identità della versione è l'impronta del **contenuto delle celle**: un
@@ -120,19 +145,27 @@ cambio: Stefano avvisa Rosa e vede il render con dati veri (gate delle pagine hu
 - Mese non chiuso o non caricato → NULL in tutte le colonne di confronto.
 - Stefano vede il foglio generato con i dati veri prima del merge.
 
+## Due piani
+
+1. **Base e foglio** — `docs/superpowers/plans/2026-10-05-budget-camere-base-foglio.md`.
+   Solo lettura da BigQuery: nessuna tabella nuova. Stefano ottiene il foglio
+   e ci scrive gli aumenti.
+2. **Versioni, approvazione, scostamento** — si scrive quando esiste un foglio
+   compilato vero (regola del repo: il parser nasce dal file reale). Contiene
+   intake/promote, le due tabelle, l'approvazione e le tre viste per il
+   Management OS.
+
 ## Punti aperti (servono a Stefano)
 
-1. **Base del prezzo per categoria.** `f_bookings_tipologia` e `01ROOM` distano
-   ~3%. Proposta: budget e confronto per categoria sulla base gestionale; il
-   totale riportato alla base `01ROOM` col rapporto mensile osservato nel 2026,
-   mostrato come riga di raccordo.
-2. **Tabella del budget.** Proposta: `f_budget_driver` (le versioni si
-   accumulano, come le fotografie di `f_prenotazioni_otb`) + `f_budget_versioni`
-   per stato e approvazione. INVARIANTS (I2) elenca già il budget tra gli
-   SNAPSHOT; le *previsioni* restano fuori dal pool `f_*`.
-3. **Date di apertura e chiusura 2027.** Il foglio Budget Rooms assume
-   16 aprile – 15 ottobre; Pasqua 2027 è il 28 marzo.
+1. **Regola delle notti 2027 precompilate** (vedi Modello): da confermare
+   guardando il primo foglio generato.
+2. **Volume per segmento**: rinviato finché non c'è l'esportazione del
+   rapporto. Fino ad allora il volume si decide per categoria.
+3. **Scarto tra rapporto per tipologia e `01ROOM`**: 6–7% in tre mesi su
+   quattro, e a maggio il rapporto per tipologia ha 105 notti in più delle
+   statistiche. Da capire col direttore prima dell'approvazione.
 4. **Nome commerciale** delle due suite del terzo piano (Suite o Luxury Suite).
+   Nel foglio stanno in «Suite».
 5. **Allotment TUI** (oggi 10 Standard + 7 Superior): al terzo piano quelle
    categorie spariscono.
 6. «Budget dietro in hotelops» è stato confermato con un «forse»: si rivede dopo
@@ -140,8 +173,9 @@ cambio: Stefano avvisa Rosa e vede il render con dati veri (gate delle pagine hu
 
 ## Prerequisiti (di Stefano)
 
-- `gcloud auth login`.
-- Esportazioni PMS di settembre e ottobre.
+- Un'esportazione nuova di «Detailed Data for Bookings» del Panorama, anno
+  2026 (oggi ferma al 2 agosto); un'altra a stagione chiusa.
+- Esportazione PMS di ottobre, a mese chiuso.
 - Un'esportazione del rapporto per segmento (occupazione e produzione).
 - Un'esportazione da Lybra, anche del 2026.
 - Avvisare Rosa prima dello spegnimento del budget vecchio.
