@@ -202,7 +202,9 @@ Tre viste in `core/bq/views/`, nessuna logica da ricopiare a valle (I8).
 Colonne concordate con la sessione «Numeri» di `mgmt_os` il 2026-10-06.
 
 `v_camere_consuntivo_mensile` — `anno, business_unit_id, mese, giorni_calendario,
-giorni_caricati, notti, capacita, ricavo_camere, prezzo_medio, stato_mese`.
+giorni_caricati, notti, capacita, ricavo_camere, prezzo_medio, stato_mese, letto_il`
+(`letto_il` = ultimo `loaded_at` delle righe PMS lette: `mgmt_os` lo mostra come
+«aggiornato al»).
 Base: `f_pms_statistiche` (notti, capacità modale sui giorni con vendite) +
 `f_produzione_pms` classe `01ROOM` imponibile. `stato_mese = 'osservato'` se e
 solo se `giorni_caricati = giorni_calendario` (ogni giorno del mese nel
@@ -216,6 +218,14 @@ versione, stato, approvato_il, approvato_da, base, crescita_pct,
 calendario_giorni, stato_mese, ragione, fonte`. Solo le righe con
 `stato = 'approvato'`. `mgmt_os` legge `voce = 'ricavo_camere'` per la scheda
 Numeri e `voce IN ('prezzo', 'notti')` per la sezione revenue management.
+I nomi delle voci sono questi (italiani, di hotelops): la mappa verso i nomi
+interni di `mgmt_os` (`room_revenue`, `rooms_sold`, `adr`, …) e verso le BU
+(`HOTEL→hotel_panorama`, `RESIDENCE→angelina`, `CVM→cvm`) sta nel lettore di
+`mgmt_os`, non nella vista. L'**involucro annuo** del BP (ricavi per BU,
+obiettivo 5M — oggi `mgmt import-envelopes`) NON entra in questa vista: è piano
+industriale, non budget ([[concepts/TRE_MODULI_REGIA_CDG_PIANO]]); `mgmt_os` lo
+mostra come «involucro BP» separato, e la somma dei mesi approvati contro
+l'involucro è un controllo, non la stessa riga.
 
 `v_budget_camere_scostamento` — `anno, business_unit_id, mese, versione,
 budget, consuntivo, stato_mese, scarto, scarto_pct, base_anno_prima,
