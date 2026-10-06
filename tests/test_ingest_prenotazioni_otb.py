@@ -29,6 +29,9 @@ from ingest.flussi.ingest_bookings_tipologia import (
     build_rows as build_bkg_rows,
 )
 from ingest.flussi.ingest_bookings_tipologia import (
+    assegna_bu,
+)
+from ingest.flussi.ingest_bookings_tipologia import (
     detect_bu,
 )
 from ingest.flussi.ingest_bookings_tipologia import (
@@ -235,12 +238,28 @@ def test_bkg_detect_bu_fallback_footer(tmp_path):
     f = tmp_path / "Data from Power BI (14).xlsx"
     wb = Workbook()
     ws = wb.active
-    ws.append(["Giorno", "Tipologia Venduta", "Camere", "ARB", "Infant",
-               "ADR", "Appartamento", "Appartamento Extra", "Extra", "Totale"])
+    ws.append(
+        [
+            "Giorno",
+            "Tipologia Venduta",
+            "Camere",
+            "ARB",
+            "Infant",
+            "ADR",
+            "Appartamento",
+            "Appartamento Extra",
+            "Extra",
+            "Totale",
+        ]
+    )
     ws.append(["01/05/2026 ven", "BILO", 2, 4, 0, 100.0, 200.0, 0, 0, 200.0])
     ws.append(["Total", None, None])
-    ws.append(["Applied filters:\nCodiceHotel is not HOMEHOLIDAY or PANORAMAHT\n"
-               "Descrizione is Imponibile"])
+    ws.append(
+        [
+            "Applied filters:\nCodiceHotel is not HOMEHOLIDAY or PANORAMAHT\n"
+            "Descrizione is Imponibile"
+        ]
+    )
     wb.save(f)
     assert detect_bu(f.name, path=f) == "RESIDENCE"
     # senza path il comportamento resta l'errore esplicito
@@ -277,6 +296,95 @@ def test_bkg_parse_e_build(tmp_path):
     assert rows[0]["ricavo_camera"] == 781.46
     assert rows[0]["ricavo_totale"] == 931.45
     assert len({r["hash_riga"] for r in rows}) == 2
+
+
+def _bkg_misto(tmp_path, righe):
+    # export senza filtro struttura (caso reale 2026-10-06): niente prefisso nel
+    # nome, footer senza CodiceHotel → la BU si ricava dal codice tipologia
+    f = tmp_path / "Detailed Data for Bookings (4).xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.append(
+        [
+            "Giorno",
+            "Tipologia Venduta",
+            "Camere",
+            "ARB",
+            "Infant",
+            "ADR",
+            "Appartamento",
+            "Appartamento Extra",
+            "Extra",
+            "Totale",
+        ]
+    )
+    for r in righe:
+        ws.append(r)
+    ws.append(["Total", None, None])
+    ws.append(
+        [
+            "Applied filters:\nDescrizione is Imponibile\nAnno is 2026 or 2025\n"
+            "ParamDimPrenotazioni is Tipologia Venduta"
+        ]
+    )
+    wb.save(f)
+    return f
+
+
+def test_bkg_file_misto_bu_dal_codice(tmp_path):
+    f = _bkg_misto(
+        tmp_path,
+        [
+            ["01/05/2026 ven", "DCLA", 5, 9, 0, 156.0, 780.0, 0, 150.0, 930.0],
+            ["01/05/2026 ven", "BILO", 2, 4, 0, 100.0, 200.0, 0, 0, 200.0],
+            ["01/05/2026 ven", "GLD", 1, 2, 0, 120.0, 120.0, 0, 0, 120.0],
+            ["01/05/2026 ven", "DEP", 0, 0, 0, 0, 0, 0, 0, 0],  # dependance: hotel
+            ["01/05/2026 ven", "DLXA", 0, 0, 0, 0, 0, 0, 0, 0],  # codice morto, 0 notti
+        ],
+    )
+    righe = assegna_bu(parse_bkg(f), f.name, path=f)
+    assert [(r["tipologia"], r["business_unit_id"]) for r in righe] == [
+        ("DCLA", "HOTEL"),
+        ("BILO", "RESIDENCE"),
+        ("GLD", "CVM"),
+        ("DEP", "HOTEL"),
+    ]
+    rows = build_bkg_rows(righe, bu=None, raw_object_id=None)
+    assert {r["business_unit_id"] for r in rows} == {"HOTEL", "RESIDENCE", "CVM"}
+
+
+def test_bkg_file_misto_codice_sconosciuto_con_notti_esplode(tmp_path):
+    f = _bkg_misto(
+        tmp_path,
+        [
+            ["01/05/2026 ven", "DCLA", 5, 9, 0, 156.0, 780.0, 0, 150.0, 930.0],
+            ["01/05/2026 ven", "XYZ", 3, 6, 0, 100.0, 300.0, 0, 0, 300.0],
+        ],
+    )
+    with pytest.raises(ValueError, match="XYZ"):
+        assegna_bu(parse_bkg(f), f.name, path=f)
+
+
+def test_bkg_file_di_una_struttura_resta_come_prima(tmp_path):
+    f = _xlsx(
+        tmp_path / "PANORAMAData from Power BI (1).xlsx",
+        [
+            "Giorno",
+            "Tipologia Vendita",
+            "Camere",
+            "ARB",
+            "Infant",
+            "ADR",
+            "Appartamento",
+            "Appartamento Extra",
+            "Extra",
+            "Totale",
+        ],
+        [["01/05/2026 ven", "BILO", 2, 4, 0, 100.0, 200.0, 0, 0, 200.0]],
+    )
+    # il prefisso vince sul codice: un file PANORAMA resta HOTEL anche con un BILO dentro
+    righe = assegna_bu(parse_bkg(f), f.name, path=f)
+    assert righe[0]["business_unit_id"] == "HOTEL"
 
 
 # ── Consuntivo+Previsione mensile ─────────────────────────────────────────
@@ -375,9 +483,19 @@ def test_cp_build_rows_snapshot_e_hash(tmp_path):
 def _foto_xlsx(path, footer, header=None):
     wb = Workbook()
     ws = wb.active
-    ws.append(header or ["Giorno", "CodiceHotel", "Camere", "Presenze ARB",
-                         "Importo Lordo", "ADR Lordo", "Imponibile",
-                         "ADR Imponibile"])
+    ws.append(
+        header
+        or [
+            "Giorno",
+            "CodiceHotel",
+            "Camere",
+            "Presenze ARB",
+            "Importo Lordo",
+            "ADR Lordo",
+            "Imponibile",
+            "ADR Imponibile",
+        ]
+    )
     ws.append(["03/04/2026 ven", "PANORAMAHT", 1, 2, 178.9, 133.9, 162.64, 121.73])
     ws.append(["Total", None, 1])
     ws.append([footer])
@@ -386,35 +504,53 @@ def _foto_xlsx(path, footer, header=None):
 
 
 def test_valida_basi_export_ok(tmp_path):
-    f = _foto_xlsx(tmp_path / "foto.xlsx",
-                   "Applied filters:\nAnno is 2026 or 2025\nParamDimRange is Giorno\n"
-                   "Data is on or after 4/1/2026 and is before 10/30/2026\n"
-                   "DataPrenotazione is not blank")
+    f = _foto_xlsx(
+        tmp_path / "foto.xlsx",
+        "Applied filters:\nAnno is 2026 or 2025\nParamDimRange is Giorno\n"
+        "Data is on or after 4/1/2026 and is before 10/30/2026\n"
+        "DataPrenotazione is not blank",
+    )
     ok, motivo = valida_basi_export(f)
     assert ok, motivo
 
 
 def test_valida_basi_export_anno_singolo(tmp_path):
     # il caso reale del 13/7: 'Anno is 2026' esclude ~2.800 notti prenotate nel 2025
-    f = _foto_xlsx(tmp_path / "foto.xlsx",
-                   "Applied filters:\nAnno is 2026\nParamDimRange is Giorno\n"
-                   "DataPrenotazione is not blank")
+    f = _foto_xlsx(
+        tmp_path / "foto.xlsx",
+        "Applied filters:\nAnno is 2026\nParamDimRange is Giorno\n"
+        "DataPrenotazione is not blank",
+    )
     ok, motivo = valida_basi_export(f)
     assert not ok and "Anno" in motivo
 
 
 def test_valida_basi_export_manca_dataprenotazione(tmp_path):
-    f = _foto_xlsx(tmp_path / "foto.xlsx",
-                   "Applied filters:\nAnno is 2026 or 2025\nParamDimRange is Giorno")
+    f = _foto_xlsx(
+        tmp_path / "foto.xlsx",
+        "Applied filters:\nAnno is 2026 or 2025\nParamDimRange is Giorno",
+    )
     ok, motivo = valida_basi_export(f)
     assert not ok and "DataPrenotazione" in motivo
 
 
 def test_valida_basi_export_layout_sbagliato(tmp_path):
     # layout bookings-tipologia (senza CodiceHotel/Imponibile foto) = report sbagliato
-    f = _foto_xlsx(tmp_path / "foto.xlsx",
-                   "Applied filters:\nAnno is 2026 or 2025\nDataPrenotazione is not blank",
-                   header=["Giorno", "Tipologia Venduta", "Camere", "ARB", "Infant",
-                           "ADR", "Appartamento", "Appartamento Extra", "Extra", "Totale"])
+    f = _foto_xlsx(
+        tmp_path / "foto.xlsx",
+        "Applied filters:\nAnno is 2026 or 2025\nDataPrenotazione is not blank",
+        header=[
+            "Giorno",
+            "Tipologia Venduta",
+            "Camere",
+            "ARB",
+            "Infant",
+            "ADR",
+            "Appartamento",
+            "Appartamento Extra",
+            "Extra",
+            "Totale",
+        ],
+    )
     ok, motivo = valida_basi_export(f)
     assert not ok and "layout" in motivo.lower()
