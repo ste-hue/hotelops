@@ -17,6 +17,7 @@ from verticals.hub.pages_ import (
     cashflow,
     fb,
     mutui,
+    regia,
     revenue,
     reviews,
     spiaggia,
@@ -64,6 +65,8 @@ APPS: list[HubApp] = [
     HubApp("revenue", "Revenue", "📈", "Finanza", "page", revenue.render, "booking curve & pace", sensitive=True),
     # canone: sensibile per dati riservati (BP interno, trattativa ORTI↔INTUR) — nessun write-path BQ.
     HubApp("canone", "Canone", "🤝", "Finanza", "page", canone.render, "scaletta ORTI → INTUR & DSCR (edge app)", sensitive=True),
+    # regia: sensibile per dati riservati (priorità, numeri di direzione) — nessun write-path BQ.
+    HubApp("regia", "Management OS", "🧭", "Finanza", "page", regia.render, "priorità 2027, numeri, regia (app edge)", sensitive=True),
     # CdG spento 2026-07-05 (troppi dati, redesign "budget vs reale" in arrivo);
     # riaccendere = ripristinare kind=page + import (pages_/cdg.py resta nel codice).
     HubApp("cdg", "CdG", "📊", "Finanza", "soon", None, "controllo di gestione (in redesign)"),
