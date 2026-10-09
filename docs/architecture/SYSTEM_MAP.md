@@ -4,6 +4,19 @@ Purpose: give agents and humans a compact map of the system boundaries. This is
 not a catalog. BigQuery schemas, source definitions, and command surfaces remain
 source-of-truth in their owning files.
 
+## Product and repository boundaries
+
+[PRODUCT_OVERVIEW.md](PRODUCT_OVERVIEW.md) describes the current product direction.
+The sections below map this repository, not the entire HotelOPS ecosystem.
+
+`hotelops` owns shared acquisition, governed facts, controlling calculations
+and the Hub. `mgmt-os` owns Regia's management state and engine. `mutui-tracker`
+contains the industrial-plan investment/debt scenario; the Canone model remains
+in `verticals/condges`. Their complete model integration is still to be defined.
+The technical journal records development; the business journal supplies dated
+observations and proposed requirements. Neither silently updates current facts
+or management commitments.
+
 ## Core
 
 `core/` is the platform kernel.
