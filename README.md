@@ -2,6 +2,13 @@
 
 HotelOps is a company operating system for hospitality.
 
+For the current product direction, the three management modules and the role
+of the technical and business journals, start with
+[What we are building](docs/architecture/PRODUCT_OVERVIEW.md).
+This repo owns shared data infrastructure and several business verticals;
+Regia's management engine lives in `mgmt-os`, and the industrial-plan debt and
+investment module already exists in `mutui-tracker`.
+
 It transforms fragmented operational reality (PMS, ERP, banks, Drive, email, manual Excel workflows) into:
 
 - typed entities
