@@ -19,11 +19,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+from core.local_paths import resolve_drive_sa_key_path
+
 log = logging.getLogger(__name__)
 
-DEFAULT_KEY = os.path.expanduser(
-    os.environ.get("HOTELOPS_DRIVE_SA_KEY", "~/.config/hotelops/drive-audit-key.json")
-)
+DEFAULT_KEY = str(resolve_drive_sa_key_path())
 _SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
 

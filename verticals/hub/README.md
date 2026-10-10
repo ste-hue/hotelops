@@ -117,7 +117,6 @@ streamlit run verticals/hub/app.py            # admin completo
 HUB_DEV_ALLOW_ALL=1 streamlit run verticals/hub/app.py   # bypass grant (vedi tutto)
 ```
 
-**Venv canonico = `~/.virtualenvs/hotelops_core`** (Python 3.14, editable-install del repo).
-È quello che l'alias `hotelops` attiva e che tutti i cron `scripts/*-daily.sh` hardcodano.
-Un eventuale `.venv` nel repo è un **orfano** (gitignored, referenziato da nulla): non usarlo,
-si può rimuovere. Punta l'interprete dell'IDE a `hotelops_core` per evitare drift di dipendenze.
+Usa un ambiente Python locale qualsiasi purché punti a questo repo e abbia le dipendenze
+installate. Un vecchio virtualenv personale può restare una convenzione locale, ma non è
+un prerequisito del progetto.

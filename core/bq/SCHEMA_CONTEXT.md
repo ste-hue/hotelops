@@ -436,7 +436,7 @@ era il 403 che uccideva il digest PEC.
 | `run_banca.sh` | rclone + pipeline banca | f_banche_movimenti + f_accodamenti | Drive datahub |
 
 **Datahub Drive**: `mywork:00_hotelops_datahub/ingresso/`
-**Mount locale**: `/Users/stefanodellapietra/Library/CloudStorage/GoogleDrive-stefano@panoramagroup.it/My Drive/hotelops_datahub/`
+**Mount locale**: `HOTELOPS_DATAHUB_ROOT` (tipicamente `~/Library/CloudStorage/GoogleDrive-*/My Drive/00_hotelops_datahub/`)
 
 ---
 
