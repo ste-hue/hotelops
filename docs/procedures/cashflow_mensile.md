@@ -1,7 +1,7 @@
 ---
 subsystem: condges
 code_paths:
-  - verticals/condges/app_scadenzario.py
+  - verticals/condges/pf_rotate/pf_writer.py
   - verticals/condges/scadenze_parse.py
   - core/bq/dimensioni/d_fornitori.csv
 last_verified: 2026-05-13

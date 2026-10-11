@@ -1,14 +1,14 @@
 ---
 last_verified: 2026-04-28
 code_paths:
-  - reviews/scrape.py
-  - reviews/ingest.py
-  - reviews/classify.py
-  - reviews/alert.py
-  - reviews/email.py
-  - reviews/config.py
-  - reviews/cli_commands.py
-  - reviews/inspect_actors.py
+  - verticals/reviews/scrape.py
+  - verticals/reviews/ingest.py
+  - verticals/reviews/classify.py
+  - verticals/reviews/alert.py
+  - verticals/reviews/email.py
+  - verticals/reviews/config.py
+  - verticals/reviews/cli_commands.py
+  - verticals/reviews/inspect_actors.py
   - core/schemas.py
 subsystem: reviews
 owner: stefano

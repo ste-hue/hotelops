@@ -16,6 +16,11 @@ For any non-trivial work, read in this order:
 3. `docs/architecture/LE_3_DIMENSIONI.md` — CASSA / COMPETENZA / IMPEGNO.
 4. `STATUS.md` — live operational diary, open fronts, recent drift.
 5. This file — agent-facing repo mechanics.
+6. `docs/adr/0005-ai-native-operating-infrastructure.md` — accepted direction:
+   durable components (facts, reproducible calculations, explicit rules, tool
+   contracts, operational memory, decision rights) vs replaceable layers
+   (dashboards, frameworks, models). `docs/architecture/PRODUCT_OVERVIEW.md`
+   maps the three management modules across repos.
 
 If these disagree, prefer the canonical architecture docs for durable rules and
 `STATUS.md` for current operational state. Do not silently reconcile drift:
@@ -116,3 +121,10 @@ instead of restating the constitution.
 
 `.agents/` may contain local agent/source-command skill exports. Treat it as agent
 tooling, not product code, unless Stefano explicitly decides to version it.
+
+Vault Loop (Obsidian vault ↔ repo) has one specification:
+`.claude/commands/vault-loop.md`. `.agents/skills/source-command-vault-loop/` is an
+adapter that loads it. The deterministic, incremental lint is
+`python -m scripts.vault_loop.reconcile` (see `meta/vault-loop/README.md`); it is
+read-only and reports `CURRENT` / `DRIFT DETECTED` / `REVIEW REQUIRED` /
+`SOURCE UNAVAILABLE` / `NOT VERIFIED`. It never edits the vault.

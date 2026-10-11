@@ -1,0 +1,99 @@
+# Vault Loop — weekly read-only reconciliation.
+# Lives in the PRIVATE repo ste-hue/obsidian-vault (copy to .github/workflows/).
+# hotelops is public: never run this there, the report names vault files.
+#
+# Needs: secret MGMT_OS_READ_TOKEN (fine-grained PAT, contents:read on ste-hue/mgmt-os),
+#        or remove the mgmt-os checkout + export VAULT_LOOP_PATH_MGMT_OS to a missing path
+#        (the run then reports SOURCE UNAVAILABLE for it, honestly).
+name: vault-loop
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "0 6 * * 1"   # Mondays 06:00 UTC — enable only after Stefano's approval
+
+permissions:
+  contents: write   # to commit state on the vault-loop-state branch of THIS private repo
+
+concurrency: vault-loop
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout vault (this repo)
+        uses: actions/checkout@v4
+        with:
+          path: vault
+          fetch-depth: 0
+
+      - name: Checkout hotelops (public, code + config)
+        uses: actions/checkout@v4
+        with:
+          repository: ste-hue/hotelops
+          path: hotelops
+          fetch-depth: 0
+
+      - name: Checkout mgmt-os (private)
+        uses: actions/checkout@v4
+        with:
+          repository: ste-hue/mgmt-os
+          token: ${{ secrets.MGMT_OS_READ_TOKEN }}
+          path: mgmt_os
+          fetch-depth: 0
+
+      - name: Checkout state branch
+        uses: actions/checkout@v4
+        with:
+          ref: vault-loop-state
+          path: state
+        continue-on-error: true   # first run: branch does not exist yet
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install (pyyaml only)
+        run: pip install --quiet pyyaml
+
+      - name: Reconcile (read-only)
+        id: run
+        working-directory: hotelops
+        env:
+          VAULT_LOOP_PATH_HOTELOPS: ${{ github.workspace }}/hotelops
+          VAULT_LOOP_PATH_MGMT_OS: ${{ github.workspace }}/mgmt_os
+          VAULT_LOOP_PATH_VAULT: ${{ github.workspace }}/vault
+          PYTHONPATH: ${{ github.workspace }}/hotelops
+        run: |
+          mkdir -p "${{ github.workspace }}/state/vault_loop"
+          set +e
+          python -m scripts.vault_loop.reconcile \
+            --state "${{ github.workspace }}/state/vault_loop" \
+            --out "${{ github.workspace }}/state/vault_loop/last_report.md" --quiet
+          echo "exit=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          cat "${{ github.workspace }}/state/vault_loop/last_report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report (private repo artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: vault-loop-report
+          path: state/vault_loop/last_report.md
+          retention-days: 90
+
+      - name: Persist checkpoint + findings
+        working-directory: state
+        run: |
+          git init -q 2>/dev/null || true
+          git checkout -q -B vault-loop-state
+          git config user.name "vault-loop"
+          git config user.email "vault-loop@users.noreply.github.com"
+          git add vault_loop/checkpoint.json vault_loop/findings.json vault_loop/last_report.md
+          git commit -q -m "vault-loop: run $(date -u +%Y-%m-%dT%H:%MZ) (exit ${{ steps.run.outputs.exit }})" || echo "no change"
+          git push -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" vault-loop-state
+
+      - name: Fail the job if a source was unavailable
+        if: steps.run.outputs.exit == '2'
+        run: |
+          echo "A source was unavailable: reconciliation incomplete (see summary)."
+          exit 2
