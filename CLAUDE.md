@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last checkpoint:** 2026-07-30 | **Version:** 0.8.0
+**Last checkpoint:** 2026-08-06 | **Version:** 0.8.0
 
 > **CLAUDE.md = concetti + puntatori, NON catalogo.** Qui stanno solo le cose che NON si rigenerano: architettura, invarianti, dominio (INTUR/ORTI), regole operative. Lo **schema completo** è BigQuery stesso (`bq show <table>` / `INFORMATION_SCHEMA` — la source of truth). Dettagli curati: skill `hotelops-data-analyst` + `core/bq/SCHEMA_CONTEXT.md`; `hotelops manifest` → `core/bq/manifest.yaml` (snapshot parziale, subset di tabelle). Il **diario operativo vivo** è `STATUS.md` (leggilo prima di pianificare).
 
@@ -58,7 +58,7 @@ cli.py      <- `hotelops` CLI
 
 **verticals/** (concetti):
 - **#1 condges** — Controllo di Gestione: CE riclassificato, Budget vs Consuntivo, Tesoreria, indicatori, `hotelops pf-rotate` (rotation mensile Piano Finanziario, vedi §Financial Data). Streamlit `app_cdg.py`. **App Cashflow** (`app_cashflow.py`, montata nel hub) = guscio sul motore canonico `pf-rotate` per produrre il PF del mese successivo (mappatura fornitori→voce persistente su BQ). Write-path budget/previsione dietro `services/cash_pf_service.py` + gate I1. Motore `write_pf` in `pf_rotate/pf_writer.py` (D1 completato — `app_scadenzario.py` cancellato).
-- **#2 reviews** — Guest reviews: Apify scrape → Claude NLP (Haiku) → `f_reviews` → alert email + dashboard.
+- **#2 reviews** — Guest reviews: Apify scrape → Claude NLP (Haiku) → `f_reviews` → alert email + dashboard. **Responder** (`hotelops reviews --rispondi --bu <BU>`, PR #118): bozze di risposta draft-only (stdout → copia-incolla su OTA, mai pubblicazione automatica, niente BQ — le bozze non sono fatti); la personalità sta TUTTA in `verticals/reviews/voice.md` (vincoli anti-omologazione + blacklist viva + playbook per-tema con scope BU + firma) — un tic nelle bozze si corregge lì, non nel codice. Modello Sonnet (`RESPONDER_MODEL`), lingua = quella del testo della recensione (il tag `lingua` del dataset può mentire). `f_reviews` NON ha campo risposta; prossimo approvato: loop "esempi promossi" (vedi spec `docs/superpowers/specs/2026-08-05-reviews-responder-design.md`).
 - **#3 spiaggia** — stabilimento balneare (vedi §Vertical Spiaggia).
 - **hub** (`verticals/hub/`) — app-store: front-door unico = `app.py` su Cloud Run (`hotelops-hub`), gated IAP. Registry-driven (1 riga = 1 app), accessi a 2 livelli (IAP edge + grant per-email in `roles.py`). I vertical si montano via `render()`. **Dettagli/deploy/accessi: `verticals/hub/README.md`.** (Vetrina Cloudflare ritirata 2026-06-20.)
 
@@ -90,6 +90,7 @@ hotelops manifest [--table T]               # Snapshot catalogo BQ → core/bq/m
 
 # reviews
 hotelops reviews [--scrape] [--stats] [--alert] [--report]
+hotelops reviews --rispondi --bu HOTEL   # bozza risposta recensione (stdin/--file, draft-only)
 
 # test / lint
 pytest ; ruff check . ; ruff format .
@@ -146,7 +147,7 @@ Stabilimento balneare (Lido, INTUR). **Ricavo TOTALE/giorno = banco INTUR + allo
 
 ### Banks & Esolver mapping (Cc#/partitario → banca_id)
 - **ORTI:** Cc1=INTESA (c/c 100000010919), Cc2=MPS (000001194052), Cc3=MPS_KROSS (000001205058), Cc4=UNICREDIT (000107433941, non mappato — aggiungere a `ESOLVER_CC_MAP` se compare)
-- **INTUR:** Cc1=SELLA (052425024130), Cc2=MPS (000000134795), Cc3=INTESA (100000011966), Cc4=BCP (CC1471072999)
+- **INTUR:** Cc1=SELLA (052425024130), Cc2=MPS (000000134795), Cc3=INTESA (100000011966), Cc4=BCP (CC1471072999 — **dormiente**, deciso 2026-08-16: conto non usato, zero flussi attesi; non è un buco di ingest)
 - **Protocollo export (deciso 2026-07-04):** flussi bancari = export homebanking per banca; lato Esolver = **scheda/mastrino RAGGRUPPATO** (tutte le banche in un file), la banca si risolve dalla colonna Partitario via `ESOLVER_CC_MAP` (`ingest/flussi/ingest_scheda_contabile.py`). Non serve export banca-per-banca.
 
 ## Financial Data / Cashflow
@@ -162,6 +163,8 @@ Regole per le rotation mensili del Piano Finanziario (`hotelops pf-rotate`).
 **Mai azzerare formule.** Step 2 ("azzera mese chiuso") tocca solo `is_value_cell` (numero/stringa/formula-di-costanti). **Formule con riferimenti A1-style (`=Utenze!K3`, `=SUM(D5:D11)`, `=C37`) non vengono MAI sovrascritte** — protegge le cascate cross-sheet.
 
 **File output nuovo, mai mutare l'input.** Naming `<societa>_PF_<YYYY-MM>_post-rotate_<ts>.xlsx`, dove `YYYY-MM` è il **primo mese aperto** (data_saldo + 1 mese). Se step 5 trova ERR → suffisso `_FAILED_CHECKS` (scritto comunque). Attesi smoke: ORTI 13/0/7, INTUR 12/0/8.
+
+**Chiave periodo (2026-08-12).** Il motore ragiona in **periodi ordinali** (`anno*12 + mese-1`, helpers in `excel_model`: `periodo`/`periodo_anno_mese`/`require_periodo`/`find_month_periods`) — i mesi nudi 1-12 vivono solo ai bordi CLI/app. L'anno di ogni colonna si deduce dalla riga-1 del foglio + wrap dic→gen: un foglio-mese SENZA anno in riga 1 esplode (fail-loud; i fogli di servizio `DA MAPPARE*`/`ESCLUSI*` sono esenti). Orizzonte del PF = **giugno anno+1** (concept vault `ORIZZONTE_DI_TRAVERSATA`): `hotelops pf-extend --pf F --to YYYY-MM [--trim-before YYYY-MM]` estende il template (formule tradotte, TOTALI ripuntato) e, al rito annuale, pota il passato ri-ancorando la prima colonna superstite (serve il file salvato da Excel: senza cached values il trim esplode con istruzioni). Le scadenze oltre l'orizzonte del foglio NON vengono scritte: finiscono nel secchio `oltre_orizzonte` riportato da CLI e app.
 
 ## Git Conventions
 
@@ -185,5 +188,5 @@ NanoClaw (WhatsApp agent) è un canale query + ingest: usa `ingest/classify.py` 
 
 ## Tests & Dependencies
 Python ≥3.11. `pytest` / `ruff check .` / `ruff format .`. I test sono in `tests/` (un file per dominio/pipeline).
-Core: `pyyaml`, `openpyxl`, `pandas`, `google-cloud-bigquery`, `pydantic`.
+Core: `pyyaml`, `openpyxl`, `pandas`, `google-cloud-bigquery`, `pydantic`, `anthropic` (spostata da `[jobs]` a core 2026-08-06: la usa il path interattivo `--rispondi`).
 Optional: `[reconcile]` (bank-reconcile), `[dashboard]` (streamlit+plotly+db-dtypes), `[drive]` (google-api-python-client). Dev: `[dev]` (pytest, ruff).

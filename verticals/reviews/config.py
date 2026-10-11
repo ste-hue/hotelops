@@ -57,3 +57,6 @@ REPORT_RECIPIENTS = ["stefano@panoramagroup.it"]
 # Claude API model for NLP classification
 NLP_MODEL = "claude-haiku-4-5-20251001"
 NLP_BATCH_SIZE = 20  # reviews per API call
+
+# Claude API model for review response drafts (responder module)
+RESPONDER_MODEL = "claude-sonnet-5"

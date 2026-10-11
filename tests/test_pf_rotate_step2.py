@@ -2,7 +2,10 @@ from io import BytesIO
 
 import openpyxl
 
+from verticals.condges.pf_rotate.excel_model import periodo
 from verticals.condges.pf_rotate.step2_azzera import azzera_mese
+
+P = lambda m: periodo(2026, m)  # noqa: E731
 
 
 def test_azzera_master_entrate_to_none(minimal_pf_orti_bytes):
@@ -13,7 +16,7 @@ def test_azzera_master_entrate_to_none(minimal_pf_orti_bytes):
     pf["C6"] = 500.0  # entrata APR hardcoded
     pf["C7"] = 200.0
 
-    changes = azzera_mese(wb, mese_chiuso=4)
+    changes = azzera_mese(wb, periodo_chiuso=P(4))
 
     assert pf["C6"].value is None
     assert pf["C7"].value is None
@@ -35,7 +38,7 @@ def test_azzera_dettaglio_only_values(minimal_pf_orti_bytes):
     ut = wb["Utenze"]
     assert ut["D5"].value == 2264.12  # pre-condition
 
-    azzera_mese(wb, mese_chiuso=4)
+    azzera_mese(wb, periodo_chiuso=P(4))
 
     assert ut["D5"].value is None  # value cell azzerata
     # Formula totale riga r3 intatta
@@ -50,7 +53,7 @@ def test_azzera_does_not_touch_other_months(minimal_pf_orti_bytes):
     pre_e4 = ut["E4"].value
     pre_e5 = ut["E5"].value
 
-    azzera_mese(wb, mese_chiuso=4)
+    azzera_mese(wb, periodo_chiuso=P(4))
 
     assert ut["E4"].value == pre_e4
     assert ut["E5"].value == pre_e5
@@ -65,7 +68,7 @@ def test_azzera_dettaglio_riga3_costante_manuale(minimal_pf_orti_bytes):
     mp["D3"] = 40000.0  # costante manuale APRILE (mese che chiudiamo)
     mp["E3"] = 95000.0  # costante manuale MAGGIO (mese aperto: NON toccare)
 
-    azzera_mese(wb, mese_chiuso=4)
+    azzera_mese(wb, periodo_chiuso=P(4))
 
     assert mp["D3"].value is None  # costante del mese chiuso → azzerata
     assert mp["E3"].value == 95000.0  # mese aperto intatto

@@ -30,7 +30,6 @@ def test_pages_solo_kind_page():
     assert all(a.kind == "page" for a in pages())
     assert {a.id for a in pages()} == {
         "cashflow",
-        "cassa-consuntivo",
         "bilancini",
         "accodamenti",
         "mutui",
@@ -38,6 +37,8 @@ def test_pages_solo_kind_page():
         "spiaggia",
         "reviews",
         "revenue",
+        "canone",
+        "regia",
     }
 
 
@@ -73,11 +74,19 @@ def test_cashflow_accodamenti_sono_sensibili():
 
     sens = {a.id for a in APPS if a.sensitive}
     # revenue: sensibile dal 2026-07-13 (upload foto OTB = write-path via lineage).
-    # bilancini: sensibile dal 2026-07-14 (dati riservati, come cassa-consuntivo:
-    # nessun write-path, solo lettura BQ).
+    # bilancini: sensibile dal 2026-07-14 (dati riservati: nessun write-path, solo lettura BQ).
     # spiaggia NON è sensibile: l'uploader Moolty è gated per-utente nel wrapper
     # (pages_/spiaggia._MOOLTY_UPLOADERS) — la pagina resta lettura per Operations.
-    assert sens == {"cashflow", "cassa-consuntivo", "accodamenti", "revenue", "bilancini"}
+    # canone: sensibile dal 2026-10-01 (BP interno: dati riservati, nessun write-path BQ).
+    # regia: sensibile dal 2026-10-06 (Management OS: dati riservati, nessun write-path BQ).
+    assert sens == {
+        "cashflow",
+        "accodamenti",
+        "revenue",
+        "bilancini",
+        "canone",
+        "regia",
+    }
 
 
 def test_pages_for_filtra_su_allowed():

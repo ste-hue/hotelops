@@ -1,6 +1,10 @@
 """Tests for reviews NLP classification."""
 
-from verticals.reviews.classify import build_prompt, parse_batch_classification, parse_classification
+from verticals.reviews.classify import (
+    build_prompt,
+    parse_batch_classification,
+    parse_classification,
+)
 
 
 def test_parse_valid_json():
@@ -65,5 +69,40 @@ def test_parse_batch_classification_pads_missing_items():
     raw = '[{"categoria":"STAFF","sentiment":"POSITIVO","riassunto":"Gentili."}]'
     result = parse_batch_classification(raw, count=2)
     assert len(result) == 2
-    assert result[0]["categoria_nlp"] == "STAFF"
+    # A missing item could be anywhere in the batch: alignment is unknown.
+    assert result[0]["categoria_nlp"] is None
     assert result[1]["categoria_nlp"] is None
+
+
+def test_single_object_cannot_classify_multiple_reviews():
+    raw = '{"categoria":"STAFF","sentiment":"POSITIVO","riassunto":"One review."}'
+    result = parse_batch_classification(raw, count=3)
+    assert all(r["categoria_nlp"] is None for r in result)
+    result[0]["categoria_nlp"] = "WIFI"
+    assert result[1]["categoria_nlp"] is None
+
+
+def test_malformed_item_does_not_shift_or_drop_other_reviews():
+    result = parse_batch_classification(
+        '[null, {"categoria":"WIFI","sentiment":"NEGATIVO","riassunto":"Slow."}]',
+        2,
+    )
+    assert result[0]["categoria_nlp"] is None
+    assert result[1]["categoria_nlp"] == "WIFI"
+
+
+def test_invalid_field_types_do_not_raise_or_reach_storage():
+    for raw in [
+        "{}",
+        '{"categoria":"STAFF"}',
+        '{"categoria":null,"sentiment":"POSITIVO"}',
+        '{"categoria":["STAFF"],"sentiment":"POSITIVO"}',
+        '{"categoria":"STAFF","sentiment":{}}',
+        '{"categoria":"STAFF","sentiment":"POSITIVO","riassunto":[]}',
+    ]:
+        assert parse_classification(raw)["categoria_nlp"] is None
+
+
+def test_malformed_response_is_not_copied_to_logs(caplog):
+    parse_classification("PRIVATE_REVIEW_CONTENT not JSON")
+    assert "PRIVATE_REVIEW_CONTENT" not in caplog.text

@@ -249,6 +249,108 @@ def parse_file(filepath: Path, societa_id: str, logger: logging.Logger) -> list[
     return rows
 
 
+def parse_file_xlsx_query(
+    filepath: Path, societa_id: str, logger: logging.Logger
+) -> list[dict]:
+    """Parse del layout 'query' Esolver (colonne nominali) salvato come .xlsx.
+
+    È lo stesso layout dell'export .xls legacy gestito da parse_file — stesse
+    colonne, stesso mapping, stesso make_hash_content (dedup cross-formato
+    verificato: 1325/1650 hash coincidenti con lo storico, 2026-08-16).
+    Indici risolti dall'header per nome, non per posizione.
+    """
+    from datetime import date, datetime
+
+    import openpyxl
+
+    today = date.today().isoformat()
+    file_sorgente = filepath.name
+
+    def _s(v):
+        s = str(v).strip() if v is not None else ""
+        return s or None
+
+    def _i(v):
+        try:
+            return int(float(v)) if v not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    def _f(v):
+        try:
+            return float(v) if v not in (None, "") else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _d(v):
+        if isinstance(v, datetime):
+            return v.date().isoformat()
+        if isinstance(v, date):
+            return v.isoformat()
+        if isinstance(v, str) and len(v) >= 10:
+            return v[:10]
+        return None
+
+    wb = openpyxl.load_workbook(str(filepath), read_only=True, data_only=True)
+    ws = wb.active
+    all_rows = ws.iter_rows(values_only=True)
+    header = next(all_rows)
+    idx = {str(c): i for i, c in enumerate(header) if c is not None}
+
+    def col(row, name):
+        i = idx.get(name)
+        return row[i] if i is not None and i < len(row) else None
+
+    rows = []
+    for row in all_rows:
+        if not row:
+            continue
+        id_doc = _i(col(row, "IdDocumento"))
+        num_progr = _i(col(row, "NumProgrRiga"))
+        data_reg = _d(col(row, "DataRegistrazione"))
+        if id_doc is None or num_progr is None or data_reg is None:
+            continue
+
+        cod_conto = _s(col(row, "CodConto"))
+        causale = _s(col(row, "CausaleContabile"))
+        imp_dare = _f(col(row, "ImpDareUdc"))
+        imp_avere = _f(col(row, "ImpAvereUdc"))
+
+        rows.append(
+            {
+                "hash_riga": make_hash_content(
+                    societa_id, data_reg, cod_conto, imp_dare, imp_avere, causale
+                ),
+                "societa_id": societa_id,
+                "id_documento": id_doc,
+                "num_progr_riga": num_progr,
+                "gruppo_doc": _s(col(row, "GruppoDoc")),
+                "anno": _i(col(row, "AnnoRegistrazione")),
+                "mese": _i(col(row, "MeseRegistrazione")),
+                "data_registrazione": data_reg,
+                "sigla_doc": _s(col(row, "SiglaDoc")),
+                "rif_registrazione": _s(col(row, "RifRegistrazione")),
+                "num_doc_originale": _s(col(row, "NumDocOriginale")),
+                "data_originale": _d(col(row, "DataOriginale")),
+                "tipo_documento": _s(col(row, "TipoDocumento")),
+                "cod_conto": cod_conto,
+                "cod_partitario": _s(col(row, "CodPartitario")),
+                "rag_sociale": _s(col(row, "RagSociale1")),
+                "causale_contabile": causale,
+                "imp_dare": imp_dare,
+                "imp_avere": imp_avere,
+                "cod_divisione": _s(col(row, "CodDivisione")),
+                "file_sorgente": file_sorgente,
+                "data_ingresso": today,
+                "raw_object_id": None,
+            }
+        )
+
+    wb.close()
+    logger.info(f"  {file_sorgente}: layout query, {len(rows)} righe")
+    return rows
+
+
 def parse_file_xlsx(
     filepath: Path, societa_id: str, logger: logging.Logger
 ) -> list[dict]:
@@ -270,6 +372,13 @@ def parse_file_xlsx(
 
     wb = openpyxl.load_workbook(str(filepath), read_only=True)
     ws = wb.active
+
+    # Dispatch: header nominale "IdDocumento" = layout query (ex .xls) in veste xlsx
+    first_row = next(ws.iter_rows(values_only=True, max_row=1), None)
+    if first_row and "IdDocumento" in {str(c) for c in first_row if c is not None}:
+        wb.close()
+        return parse_file_xlsx_query(filepath, societa_id, logger)
+
     logger.info(f"  {file_sorgente}: {ws.max_row} righe (xlsx)")
 
     rows = []

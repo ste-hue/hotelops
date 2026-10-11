@@ -13,10 +13,11 @@ from dataclasses import dataclass
 from verticals.hub.pages_ import (
     accodamenti,
     bilancini,
+    canone,
     cashflow,
-    cassa_consuntivo,
     fb,
     mutui,
+    regia,
     revenue,
     reviews,
     spiaggia,
@@ -55,12 +56,17 @@ class HubApp:
 APPS: list[HubApp] = [
     # ── Finanza ──────────────────────────────────────────────────────────────
     HubApp("cashflow", "Cashflow", "💸", "Finanza", "page", cashflow.render, "PF & proiezione cassa", sensitive=True),
-    HubApp("cassa-consuntivo", "Cassa consuntivo", "💰", "Finanza", "page", cassa_consuntivo.render, "Il vero cashflow: banca vs certificati", sensitive=True),
+    # cassa-consuntivo smontata 2026-08-18 (mai usata); pages_/cassa_consuntivo.py
+    # resta nel codice — rimontarla = ri-aggiungere la riga qui.
     HubApp("bilancini", "Bilancini", "📗", "Finanza", "page", bilancini.render, "bilancio di verifica: YTD, progressione, navigatore", sensitive=True),
     HubApp("accodamenti", "Accodamenti", "📒", "Finanza", "page", accodamenti.render, "raccolta cassa → Gaia", sensitive=True),
     HubApp("banche", "Banche", "🏛", "Finanza", "bind", _BANCHE_LOOKER, "movimenti & saldi (Looker)"),
     HubApp("mutui", "Mutui", "🏦", "Finanza", "page", mutui.render, "ammortamenti & simulatore"),
     HubApp("revenue", "Revenue", "📈", "Finanza", "page", revenue.render, "booking curve & pace", sensitive=True),
+    # canone: sensibile per dati riservati (BP interno, trattativa ORTI↔INTUR) — nessun write-path BQ.
+    HubApp("canone", "Canone", "🤝", "Finanza", "page", canone.render, "scaletta ORTI → INTUR & DSCR (edge app)", sensitive=True),
+    # regia: sensibile per dati riservati (priorità, numeri di direzione) — nessun write-path BQ.
+    HubApp("regia", "Management OS", "🧭", "Finanza", "page", regia.render, "priorità 2027, numeri, regia (app edge)", sensitive=True),
     # CdG spento 2026-07-05 (troppi dati, redesign "budget vs reale" in arrivo);
     # riaccendere = ripristinare kind=page + import (pages_/cdg.py resta nel codice).
     HubApp("cdg", "CdG", "📊", "Finanza", "soon", None, "controllo di gestione (in redesign)"),

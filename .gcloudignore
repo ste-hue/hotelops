@@ -13,3 +13,5 @@ node_modules
 **/.wrangler
 integrations
 verticals/hub/publish
+# Stato locale e dati riservati (BP canone): mai nelle immagini.
+.hotelops_state

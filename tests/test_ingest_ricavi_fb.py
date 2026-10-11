@@ -78,6 +78,21 @@ def test_parse_applied_filters_unknown_hotel():
         parse_applied_filters(bad)
 
 
+def test_parse_applied_filters_negazione_complemento():
+    # Export Power BI 2026-09-24: "CodiceHotel is not X or Y" → la BU è il complemento
+    neg = _FILTER_TEXT.replace("CodiceHotel is PANORAMAHT", "CodiceHotel is not ANGELINARES or HOMEHOLIDAY")
+    assert parse_applied_filters(neg) == ("HOTEL", 2025, 8)
+    neg = _FILTER_TEXT.replace("CodiceHotel is PANORAMAHT", "CodiceHotel is not HOMEHOLIDAY or PANORAMAHT")
+    assert parse_applied_filters(neg) == ("RESIDENCE", 2025, 8)
+
+
+def test_parse_applied_filters_negazione_ambigua_esplode():
+    # Esclusa una sola struttura su tre: complemento non univoco → errore, mai default
+    neg = _FILTER_TEXT.replace("CodiceHotel is PANORAMAHT", "CodiceHotel is not PANORAMAHT")
+    with pytest.raises(ValueError, match="ambigu"):
+        parse_applied_filters(neg)
+
+
 _HEADER = [
     "Classe", "Codice", "Descrizione Addebito", "Netto", "Netto A.P.",
     "Diff A. - A.P.", "% A. vs A.P.", "Netto A.P.P.", "Diff A. - A.P.P.",

@@ -38,7 +38,7 @@ import hashlib
 import logging
 import sys
 import tempfile
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
@@ -127,18 +127,46 @@ def detect_tipo_pasto(text: str) -> str | None:
     return None
 
 
+SOGLIA_MEZZANOTTE = 6  # submission prima delle 06:00 = servizio del giorno prima
+
+# Breakfast: dal 2026-04-04 il Form riceve ogni notte (01–07) una submission
+# anonima di origine ignota, con valori ≈ previsione della colazione del
+# mattino. Con la regola mezzanotte finiva sul giorno PRIMA e, essendo la più
+# recente, sovrascriveva il dato vero (latest-wins). Nessuno inserisce
+# colazioni di notte: prima delle 08:00 è spazzatura, si scarta.
+SOGLIA_NOTTE_BRK = 8
+
+
+def _service_date(dt: datetime) -> date:
+    """Data di servizio da un timestamp di submission.
+
+    Il personale inserisce i coperti a fine serata: una submission dopo la
+    mezzanotte (es. 00:33) è la cena del giorno PRIMA, non del giorno nuovo.
+    Vale solo per timestamp con orario; le date pure non vengono mai spostate.
+    """
+    d = dt.date()
+    if dt.hour < SOGLIA_MEZZANOTTE:
+        d -= timedelta(days=1)
+    return d
+
+
 def parse_timestamp(val) -> date | None:
-    """Convert various timestamp formats to a date."""
+    """Convert various timestamp formats to a service date (regola mezzanotte)."""
     if val is None:
         return None
     if isinstance(val, (datetime,)):
-        return val.date()
+        return _service_date(val)
     if isinstance(val, date):
         return val
     if isinstance(val, str):
         val = val.strip()
         # try common formats
-        for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        for fmt in ("%d/%m/%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+            try:
+                return _service_date(datetime.strptime(val, fmt))
+            except ValueError:
+                pass
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
             try:
                 return datetime.strptime(val, fmt).date()
             except ValueError:
@@ -189,10 +217,35 @@ def fetch_gsheet(sheet_id: str) -> Path:
     tmp = Path(tempfile.mkdtemp(prefix="hotelops_coperti_")) / "coperti_gsheet.xlsx"
     xlsx_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     log.info("Drive export: scarico Google Sheet %s …", sheet_id)
-    data = _drive_service().files().export(fileId=sheet_id, mimeType=xlsx_mime).execute()
+    data = (
+        _drive_service().files().export(fileId=sheet_id, mimeType=xlsx_mime).execute()
+    )
     tmp.write_bytes(data)
     log.info("Scaricato: %s (%d KB)", tmp.name, tmp.stat().st_size // 1024)
+    _snapshot_to_gcs(data)
     return tmp
+
+
+def _snapshot_to_gcs(data: bytes) -> None:
+    """Copia di sicurezza giornaliera dell'export su GCS (best-effort).
+
+    Nata dall'incidente 2026-08: il Google Sheet sorgente è stato cestinato e
+    distrutto dal purge dei 30 giorni — senza copie. Una copia/giorno su
+    gs://hotelops-raw garantisce che esista sempre l'export di ieri.
+    Il fallimento dello snapshot NON blocca l'ingest.
+    """
+    try:
+        from google.cloud import storage
+
+        blob_name = f"snapshots/coperti/coperti_gsheet_{date.today().isoformat()}.xlsx"
+        bucket = storage.Client(project=PROJECT).bucket("hotelops-raw")
+        bucket.blob(blob_name).upload_from_string(
+            data,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        log.info("Snapshot GCS: gs://hotelops-raw/%s", blob_name)
+    except Exception as e:
+        log.warning("Snapshot GCS fallito (ingest prosegue): %s", e)
 
 
 # ── Parsing ────────────────────────────────────────────────────────────────────
@@ -228,13 +281,21 @@ def parse_rows_from_header_data(
         )
         return
 
+    scartate_notte = 0
     for row in data_rows:
         if not any(row):
             continue
-        data_servizio = parse_timestamp(row[0])
+        submitted_at = row[0] if isinstance(row[0], datetime) else None
+        if tipo_pasto == "BRK" and submitted_at:
+            if submitted_at.hour < SOGLIA_NOTTE_BRK:
+                scartate_notte += 1
+                continue
+            # la colazione non scavalca mai la mezzanotte: niente regola 06:00
+            data_servizio = submitted_at.date()
+        else:
+            data_servizio = parse_timestamp(row[0])
         if data_servizio is None:
             continue
-        submitted_at = row[0] if isinstance(row[0], datetime) else None
 
         for i, (tipo_ospite, bu_id) in col_map.items():
             if i >= len(row):
@@ -265,6 +326,14 @@ def parse_rows_from_header_data(
                 "data_caricamento": ts_now.isoformat(),
                 "_submitted_at": submitted_at,
             }
+
+    if scartate_notte:
+        log.warning(
+            "  %s: scartate %d submission notturne (prima delle %02d:00)",
+            fonte,
+            scartate_notte,
+            SOGLIA_NOTTE_BRK,
+        )
 
 
 def parse_csv_file(path: Path, societa_id: str, ts_now: datetime) -> list[dict]:
@@ -377,10 +446,11 @@ def parse_xlsx_file(path: Path, societa_id: str, ts_now: datetime) -> list[dict]
     mensa_sheet = None
     for s in wb.sheetnames:
         sl = s.lower().strip()
-        if sl.startswith("scarico") or detect_tipo_pasto(sl):
-            pasto_sheets.append(s)
-        elif "mensa" in sl or "dipendenti" in sl:
+        # mensa prima: "Scarico Mensa Dipendenti" inizia per "scarico" ma è mensa
+        if "mensa" in sl or "dipendenti" in sl:
             mensa_sheet = s
+        elif sl.startswith("scarico") or detect_tipo_pasto(sl):
+            pasto_sheets.append(s)
 
     if not pasto_sheets and not mensa_sheet:
         log.info("  Nessun foglio coperti riconosciuto in %s — skip", path.name)
@@ -523,7 +593,35 @@ def ensure_table(client):
         log.info("Tabella %s creata.", BQ_TABLE_FULL)
 
 
-def load_to_bq(rows: list[dict], dry_run: bool, replace: bool = False) -> None:
+def replace_guard(n_new: int, n_existing: int, allow_shrink: bool) -> None:
+    """Blocca il wipe-reload se il foglio ha meno righe di BQ.
+
+    Un foglio dimezzato (tab cancellato, foglio rimpiazzato, export parziale)
+    non deve mai distruggere lo storico in silenzio. Override: --allow-shrink.
+    """
+    if n_new >= n_existing or allow_shrink:
+        return
+    log.error(
+        "GUARD: il foglio produce %d righe ma BQ ne ha %d — "
+        "wipe-reload ABORTITO per evitare perdita di storico. "
+        "Se lo shrink è voluto, rilancia con --allow-shrink.",
+        n_new,
+        n_existing,
+    )
+    sys.exit(1)
+
+
+def count_existing_rows(client) -> int:
+    try:
+        q = f"SELECT COUNT(*) AS n FROM `{BQ_TABLE_FULL}`"
+        return next(iter(client.query(q).result())).n
+    except Exception:
+        return 0  # tabella assente/nuova: nessun guard
+
+
+def load_to_bq(
+    rows: list[dict], dry_run: bool, replace: bool = False, allow_shrink: bool = False
+) -> None:
     if not HAS_BQ:
         log.error("google-cloud-bigquery non installato")
         sys.exit(1)
@@ -538,6 +636,7 @@ def load_to_bq(rows: list[dict], dry_run: bool, replace: bool = False) -> None:
                 len(rows),
             )
             return
+        replace_guard(len(rows), count_existing_rows(client), allow_shrink)
         # Full wipe + reload — bypass the gate, the pipeline owns this case.
         # WRITE_TRUNCATE is intentionally out of bq_write_validated's scope.
         delete_q = f"DELETE FROM `{BQ_TABLE_FULL}` WHERE TRUE"
@@ -640,6 +739,11 @@ def main():
         help=f"Scarica da Google Sheet via API Drive (default ID: {GSHEET_ID_DEFAULT})",
     )
     parser.add_argument(
+        "--allow-shrink",
+        action="store_true",
+        help="Consenti un reload con MENO righe di quelle in BQ (bypassa il guard)",
+    )
+    parser.add_argument(
         "--replace",
         action="store_true",
         help="DELETE-INSERT: cancella tutti i dati esistenti e ricarica",
@@ -711,7 +815,12 @@ def main():
         for r in rows:
             r["raw_object_id"] = args.raw_object_id
 
-        load_to_bq(rows, dry_run=args.dry_run, replace=args.replace)
+        load_to_bq(
+            rows,
+            dry_run=args.dry_run,
+            replace=args.replace,
+            allow_shrink=args.allow_shrink,
+        )
         quality_summary(rows)
 
 

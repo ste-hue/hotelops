@@ -413,6 +413,14 @@ f_movimenti_contabili.cod_conto
 ### Dedup pattern
 Tutte le tabelle fatto usano `hash_riga` MD5 per idempotenza. Le pipeline fanno `WRITE_APPEND` filtrando gli hash già presenti, oppure `DELETE + INSERT` per snapshot (f_budget_mensile).
 
+### Write path (`bq_write_validated`)
+Unico writer del pool (gate I1/I9), load job via `load_table_from_json` — mai streaming
+insert. **`create_disposition=CREATE_NEVER`** (2026-08-07, PR #119): le tabelle nascono
+con DDL esplicito, mai per autodetect (la prima riga con un campo NULL non fa nascere la
+colonna); e `CREATE_IF_NEEDED` pretende `bigquery.tables.create` sul **dataset**, che i
+grant `dataEditor` table-level (es. SA NanoClaw su `f_pec_digest_runs`) non includono —
+era il 403 che uccideva il digest PEC.
+
 ---
 
 ## Pipeline di Ingestione

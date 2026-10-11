@@ -15,6 +15,8 @@ from __future__ import annotations
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
+from verticals.condges.pf_rotate.excel_model import find_month_periods, require_periodo
+
 MONTHS_IT = [
     "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO", "GIUGNO",
     "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE",
@@ -164,46 +166,31 @@ def _apply_headers(
         i = j + 1
 
 
-def hide_past_months(
-    ws: Worksheet, first_col: int, last_col: int, primo_mese_aperto: int
-) -> None:
-    """Nasconde (NON cancella) le colonne dei mesi prima del primo mese aperto.
-
-    Cerca nella riga 2 (header mesi) la prima colonna etichettata col primo mese
-    aperto e marca ``hidden=True`` tutte le colonne mese che la precedono. Dati e
-    formule restano intatti — la bussola non si perde, il file parte visivamente
-    dal mese aperto. No-op se l'etichetta non c'è.
+def hide_past_columns_rotation(wb, primo_periodo: int) -> None:
+    """Nasconde (NON cancella) le colonne-mese passate su tutti i fogli del PF
+    post-rotation. Year-aware: risolve le colonne via ``find_month_periods``
+    (stesso helper di step1/2/5) e nasconde quelle con periodo < primo_periodo
+    — un file multi-anno non rischia di nascondere/mostrare il mese sbagliato
+    per omonimia di nome-mese tra anni diversi (limite del vecchio match per
+    solo nome-mese). Fogli non-mensili (Controlli/DA MAPPARE/ESCLUSI) saltati;
+    fogli senza colonne-mese (find_month_periods vuoto) no-op. Fogli con
+    colonne-mese ma SENZA anno dichiarato (osservato su file reali: residui
+    "DA MAPPARE1"/"ESCLUSI1" di generazioni precedenti, stesso formato a 12
+    colonne nude del report canonico ma con nome diverso) non sono datebili:
+    l'hide è cosmetico, non un gate — meglio lasciarli visibili che
+    indovinare, quindi no-op invece di hard-fail.
     """
-    target = MONTHS_IT[(primo_mese_aperto - 1) % 12]
-    target_col = None
-    for c in range(first_col, last_col + 1):
-        v = ws.cell(row=2, column=c).value
-        if v and str(v).strip().upper() == target:
-            target_col = c
-            break
-    if target_col is None:
-        return
-    # Nasconde SOLO le colonne-mese passate; lascia visibili le colonne non-mese
-    # (es. lo snapshot INTUR 'DATA RILEVAZ' in C, che porta l'anchor).
-    for c in range(first_col, target_col):
-        v = ws.cell(row=2, column=c).value
-        if v and str(v).strip().upper() in MONTHS_IT:
-            ws.column_dimensions[get_column_letter(c)].hidden = True
-
-
-def hide_past_columns_rotation(wb, primo_mese_aperto: int) -> None:
-    """Applica hide_past_months a tutti i fogli del PF post-rotation.
-
-    Master 'Piano Finanziario': mesi in C..R. Fogli voce: mesi in D..S.
-    Fogli non-mensili (Controlli/DA MAPPARE/ESCLUSI) saltati.
-    """
+    require_periodo(primo_periodo, "primo_periodo")
     for ws in wb.worksheets:
         if ws.title in ("Controlli", "DA MAPPARE", "ESCLUSI"):
             continue
-        if ws.title.strip() == "Piano Finanziario":
-            hide_past_months(ws, 3, 18, primo_mese_aperto)
-        else:
-            hide_past_months(ws, 4, 19, primo_mese_aperto)
+        try:
+            cols = find_month_periods(ws, header_row=2)
+        except ValueError:
+            continue
+        for p, c in cols.items():
+            if p < primo_periodo:
+                ws.column_dimensions[get_column_letter(c)].hidden = True
 
 
 def shift_master_sheet(ws: Worksheet, current_year: int) -> None:

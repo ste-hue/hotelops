@@ -26,20 +26,66 @@ MESI_IT = {
     "DICEMBRE": 12,
 }
 
+PERIODO_MIN = 2000 * 12  # nessun periodo reale è sotto il 2000
 
-def find_month_columns(ws: Worksheet, header_row: int = 2) -> dict[int, int]:
-    """Scan header_row for month names ITA. Return {mese_num: col_idx}.
 
-    Latest col wins if a month appears twice (e.g. multi-year files).
+def periodo(anno: int, mese: int) -> int:
+    """Chiave periodo ordinale: gen 2026 e gen 2027 sono chiavi diverse."""
+    return anno * 12 + (mese - 1)
+
+
+def periodo_anno_mese(p: int) -> tuple[int, int]:
+    anno, m0 = divmod(p, 12)
+    return anno, m0 + 1
+
+
+def require_periodo(p: int, nome: str = "periodo") -> None:
+    """Guardia: periodo e mese nudo sono entrambi int — qui si separano."""
+    if p < PERIODO_MIN:
+        raise ValueError(
+            f"{nome}={p} sembra un mese nudo (1-12) o un anno: serve un periodo "
+            f"ordinale anno*12+(mese-1), es. periodo(2026, 6) = {2026 * 12 + 5}"
+        )
+
+
+def find_month_periods(
+    ws: Worksheet, header_row: int = 2, year_row: int = 1
+) -> dict[int, int]:
+    """Scan header_row per mesi ITA, datati per anno. Return {periodo: col_idx}.
+
+    L'anno base è l'ultima cella numerica 1900<v<2100 in year_row fino alla
+    prima colonna-mese inclusa (ORTI master: C1; fogli dettaglio: D1).
+    L'anno incrementa a ogni wrap (numero mese che scende, es. DIC→GEN).
+    Niente inferenze dall'orologio: senza anno dichiarato → ValueError.
     """
-    result: dict[int, int] = {}
+    months: list[tuple[int, int]] = []  # (col, mese 1-12) in ordine di colonna
+    first_month_col: int | None = None
     for c in range(1, ws.max_column + 1):
         v = ws.cell(header_row, c).value
-        if not isinstance(v, str):
-            continue
-        key = v.strip().upper()
-        if key in MESI_IT:
-            result[MESI_IT[key]] = c
+        if isinstance(v, str) and v.strip().upper() in MESI_IT:
+            if first_month_col is None:
+                first_month_col = c
+            months.append((c, MESI_IT[v.strip().upper()]))
+    if not months:
+        return {}
+    base_year: int | None = None
+    for c in range(1, first_month_col + 1):
+        v = ws.cell(year_row, c).value
+        if isinstance(v, (int, float)) and 1900 < int(v) < 2100:
+            base_year = int(v)
+    if base_year is None:
+        raise ValueError(
+            f"Anno non dichiarato in riga {year_row} del foglio '{ws.title}': "
+            "impossibile datare le colonne-mese."
+        )
+    result: dict[int, int] = {}
+    year = base_year
+    prev_mese: int | None = None
+    for col, mese in months:
+        if prev_mese is not None and mese < prev_mese:
+            year += 1
+        prev_mese = mese
+        result[periodo(year, mese)] = col
     return result
 
 

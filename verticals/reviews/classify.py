@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 
-from verticals.reviews.config import NLP_MODEL, NLP_BATCH_SIZE
+from core.ai_output import parse_json_batch
+from verticals.reviews.config import NLP_BATCH_SIZE, NLP_MODEL
 
 log = logging.getLogger(__name__)
 
@@ -37,20 +37,33 @@ def _empty_classification() -> dict:
     return {"categoria_nlp": None, "sentiment_nlp": None, "riassunto_nlp": None}
 
 
-def _normalize_classification_item(item: dict) -> dict:
+def _normalize_classification_item(item) -> dict:
     """Normalize a raw model item into canonical NLP classification fields."""
-    categoria = item.get("categoria", "").upper()
+    if not isinstance(item, dict):
+        return _empty_classification()
+    if "categoria" not in item or "sentiment" not in item:
+        return _empty_classification()
+    categoria = item.get("categoria", "")
+    sentiment = item.get("sentiment", "")
+    summary = item.get("riassunto")
+    if (
+        not isinstance(categoria, str)
+        or not isinstance(sentiment, str)
+        or (summary is not None and not isinstance(summary, str))
+    ):
+        return _empty_classification()
+    categoria = categoria.upper()
     if categoria not in VALID_CATEGORIE:
         categoria = "GENERICA"
 
-    sentiment = item.get("sentiment", "").upper()
+    sentiment = sentiment.upper()
     if sentiment not in VALID_SENTIMENTI:
         sentiment = None
 
     return {
         "categoria_nlp": categoria,
         "sentiment_nlp": sentiment,
-        "riassunto_nlp": item.get("riassunto"),
+        "riassunto_nlp": summary,
     }
 
 
@@ -98,50 +111,38 @@ def parse_classification(raw_text: str) -> dict:
     """
     text = raw_text.strip()
 
-    json_match = re.search(r"\{[^{}]*\}", text)
-    if not json_match:
-        log.warning("No JSON found in classification response: %s", text[:200])
+    start = text.find("{")
+    if start < 0:
+        log.warning("No JSON found in classification response")
         return _empty_classification()
 
     try:
-        data = json.loads(json_match.group())
+        data, _ = json.JSONDecoder().raw_decode(text, start)
     except json.JSONDecodeError:
-        log.warning("Invalid JSON in classification response: %s", text[:200])
+        log.warning("Invalid JSON in classification response")
         return _empty_classification()
 
     result = _normalize_classification_item(data)
-    if result["categoria_nlp"] == "GENERICA" and data.get("categoria", "").upper() not in {
+    if result["categoria_nlp"] == "GENERICA" and data.get(
+        "categoria", ""
+    ).upper() not in {
         "GENERICA",
         "",
     }:
         log.warning(
-            "Invalid categoria '%s', falling back to GENERICA",
-            data.get("categoria", "").upper(),
+            "Invalid category in classification response, falling back to GENERICA",
         )
     return result
 
 
 def parse_batch_classification(raw_text: str, count: int) -> list[dict]:
     """Parse Claude's batch response (JSON array) into list of classification dicts."""
-    text = raw_text.strip()
-
-    array_match = re.search(r"\[.*\]", text, re.DOTALL)
-    if not array_match:
-        log.warning("No JSON array in batch response, falling back to single parse")
-        return [parse_classification(text)] * count
-
-    try:
-        data = json.loads(array_match.group())
-    except json.JSONDecodeError:
-        log.warning("Invalid JSON array in batch response")
-        return [_empty_classification() for _ in range(count)]
-
-    results = [_normalize_classification_item(item) for item in data]
-
-    while len(results) < count:
-        results.append(_empty_classification())
-
-    return results[:count]
+    data = parse_json_batch(raw_text, count)
+    if any(item is None for item in data):
+        log.warning(
+            "Invalid or unaligned classification batch; rejected slots stay empty"
+        )
+    return [_normalize_classification_item(item) for item in data]
 
 
 def classify_reviews(rows: list[dict]) -> list[dict]:

@@ -31,9 +31,22 @@ def blocco_a_per_voce(
 ) -> tuple[dict[str, list[dict]], list[dict], list[dict]]:
     """Partite aperte raggruppate per voce: righe pronte per il foglio.
 
-    Ritorna (per_voce, unmapped, esclusi). Riga = {codice, nome, mesi: {mese:
+    Ritorna (per_voce, unmapped, esclusi). Riga = {codice, nome, mesi: {chiave:
     importo POSITIVO}}. scaduto -> primo_mese_aperto; cascata NC applicata; nome
     dal CSV (authority), MAI dall'export.
+
+    Agnostica su cosa sia la "chiave" mese: qui è solo una chiave di dict che
+    viene sommata/cascata, non c'è aritmetica calendariale. Due caller la usano
+    con semantiche diverse — entrambe valide, nessuna conversione qui dentro:
+    - ``pf_generator/assemble.py`` (genera_pf) passa mesi NUDI 1-12 (i fogli
+      generati da zero non hanno più anni in gioco all'interno di una singola
+      generazione).
+    - ``pf_rotate/step3_scadenzario.py`` (apply_scadenzario, rotation su master
+      esistente multi-anno) passa PERIODI ordinali (``excel_model.periodo``) e
+      converte le chiavi ``mesi`` del risultato in mese-calendario 1-12 al
+      confine coi fogli DA MAPPARE/ESCLUSI (12 colonne senza anno, limite di
+      display accettato) — con guard anti-collisione multi-anno (fail loud se
+      due periodi cadono sullo stesso mese calendario).
 
     - unmapped: fornitore non in d_fornitori.csv → foglio DA MAPPARE (worklist,
       nome dall'export, è l'unico che abbiamo). NON si perdono.

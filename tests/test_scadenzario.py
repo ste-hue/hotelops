@@ -3,6 +3,10 @@ from io import BytesIO
 
 import openpyxl
 
+from verticals.condges.pf_rotate.excel_model import periodo
+
+P = lambda m: periodo(2026, m)  # noqa: E731 - fixture di questo modulo = anno 2026
+
 
 def _make_sintetica_workbook(rows, header_dates=None):
     """Create a minimal sintetica-style workbook in memory."""
@@ -458,6 +462,7 @@ def _make_pf_fixture_con_codici(tmp_path):
     ws.title = "Piano Finanziario"
 
     ws_mp = wb.create_sheet("Materie Prime-Consumo ")
+    ws_mp.cell(row=1, column=8, value=2026)
     months_2026 = [
         "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
         "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
@@ -496,12 +501,12 @@ class TestWritePfRotation:
         from verticals.condges.pf_rotate.pf_writer import write_pf
 
         pf_path = _make_pf_fixture_con_codici(tmp_path)
-        scad_df = self._scad_df(mese_6=[-1122.76])
+        scad_df = self._scad_df(**{f"mese_{P(6)}": [-1122.76]})
         fornitori_map = {
             92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"}
         }
         out, _ = write_pf(
-            pf_path.read_bytes(), scad_df, [6], fornitori_map, scaduto_month=5
+            pf_path.read_bytes(), scad_df, [P(6)], fornitori_map, scaduto_periodo=P(5)
         )
         ws = openpyxl.load_workbook(BytesIO(out))["Materie Prime-Consumo "]
         # scaduto (100) -> MAGGIO (col 12), non nel mese di oggi
@@ -514,13 +519,13 @@ class TestWritePfRotation:
 
         pf_path = _make_pf_fixture_con_codici(tmp_path)
         # niente scaduto, solo giugno: la cella stantia di maggio deve sparire
-        scad_df = self._scad_df(scaduto=[0.0], mese_6=[-1122.76])
+        scad_df = self._scad_df(scaduto=[0.0], **{f"mese_{P(6)}": [-1122.76]})
         fornitori_map = {
             92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"}
         }
         out, _ = write_pf(
-            pf_path.read_bytes(), scad_df, [6], fornitori_map,
-            scaduto_month=5, clear_codici={92},
+            pf_path.read_bytes(), scad_df, [P(6)], fornitori_map,
+            scaduto_periodo=P(5), clear_codici={92},
         )
         ws = openpyxl.load_workbook(BytesIO(out))["Materie Prime-Consumo "]
         # MAGGIO stantio (74.61) pulito
@@ -542,6 +547,7 @@ class TestWritePfRotation:
                   "NOVEMBRE", "DICEMBRE"]
         for title in ("Materie Prime-Consumo ", " Varie ed Eventuali"):
             ws = wb.create_sheet(title)
+            ws.cell(row=1, column=8, value=2026)
             for i, m in enumerate(months):
                 ws.cell(row=2, column=8 + i, value=m)
             # ancora in fondo: righe 4..9 vuote disponibili per nuovi fornitori
@@ -557,15 +563,15 @@ class TestWritePfRotation:
         import pandas as pd
         scad_df = pd.DataFrame({
             "codice_fornitore": [123], "nome": ["PREGIS S.P.A."],
-            "totale": [-5907.99], "scaduto": [0.0], "mese_6": [-5907.99],
+            "totale": [-5907.99], "scaduto": [0.0], f"mese_{P(6)}": [-5907.99],
         })
         # rimappato a MATERIE_PRIME: il foglio Varie non riceve scritture
         fornitori_map = {
             123: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Pregis"}
         }
         out, _ = write_pf(
-            pf.read_bytes(), scad_df, [6], fornitori_map,
-            scaduto_month=5, clear_codici={123},
+            pf.read_bytes(), scad_df, [P(6)], fornitori_map,
+            scaduto_periodo=P(5), clear_codici={123},
         )
         wb2 = openpyxl.load_workbook(BytesIO(out))
         # vecchio foglio pulito
@@ -616,6 +622,7 @@ class TestWritePfRotation:
         wb = openpyxl.Workbook()
         wb.active.title = "Piano Finanziario"
         ws = wb.create_sheet("Materie Prime-Consumo ")
+        ws.cell(row=1, column=8, value=2026)
         months = ["GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
                   "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
                   "NOVEMBRE", "DICEMBRE"]
@@ -632,13 +639,13 @@ class TestWritePfRotation:
         import pandas as pd
         scad_df = pd.DataFrame({
             "codice_fornitore": [71], "nome": ["VICART S.R.L."],
-            "totale": [-500.0], "scaduto": [0.0], "mese_6": [-500.0],
+            "totale": [-500.0], "scaduto": [0.0], f"mese_{P(6)}": [-500.0],
         })
         fornitori_map = {
             71: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Vicart"}
         }
         out, _ = write_pf(
-            pf.read_bytes(), scad_df, [6], fornitori_map, scaduto_month=6
+            pf.read_bytes(), scad_df, [P(6)], fornitori_map, scaduto_periodo=P(6)
         )
         ws2 = openpyxl.load_workbook(BytesIO(out))["Materie Prime-Consumo "]
         # NON sulla riga di Valgarda (dove punta il codice shiftato)
@@ -657,6 +664,7 @@ class TestWritePfRotation:
         wb = openpyxl.Workbook()
         wb.active.title = "Piano Finanziario"
         ws = wb.create_sheet("Materie Prime-Consumo ")
+        ws.cell(row=1, column=8, value=2026)
         months = ["GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
                   "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
                   "NOVEMBRE", "DICEMBRE"]
@@ -671,13 +679,13 @@ class TestWritePfRotation:
         import pandas as pd
         scad_df = pd.DataFrame({
             "codice_fornitore": [1438], "nome": ["ROMANO CIRO S.R.L."],
-            "totale": [-122.0], "scaduto": [0.0], "mese_6": [-122.0],
+            "totale": [-122.0], "scaduto": [0.0], f"mese_{P(6)}": [-122.0],
         })
         fornitori_map = {
             1438: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Romano Ciro"}
         }
         out, _ = write_pf(
-            pf.read_bytes(), scad_df, [6], fornitori_map, scaduto_month=6
+            pf.read_bytes(), scad_df, [P(6)], fornitori_map, scaduto_periodo=P(6)
         )
         ws2 = openpyxl.load_workbook(BytesIO(out))["Materie Prime-Consumo "]
         # la riga "Musica totale" resta intatta
@@ -702,14 +710,14 @@ class TestWritePfRotation:
         scad_df = pd.DataFrame({
             "codice_fornitore": [92], "nome": ["VICART S.R.L."],
             "totale": [-1408.75], "scaduto": [90.28],
-            "mese_5": [-85.40], "mese_6": [-1413.63],
+            f"mese_{P(5)}": [-85.40], f"mese_{P(6)}": [-1413.63],
         })
         fornitori_map = {
             92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"}
         }
         out, _ = write_pf(
-            pf_path.read_bytes(), scad_df, [5, 6], fornitori_map,
-            scaduto_month=5, clear_codici={92},
+            pf_path.read_bytes(), scad_df, [P(5), P(6)], fornitori_map,
+            scaduto_periodo=P(5), clear_codici={92},
         )
         ws = openpyxl.load_workbook(BytesIO(out))["Materie Prime-Consumo "]
         # maggio: 85.40 coperto dalla NC -> niente uscita

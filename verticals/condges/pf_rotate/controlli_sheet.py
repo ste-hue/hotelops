@@ -17,7 +17,12 @@ import re
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
-from verticals.condges.pf_rotate.excel_model import MESI_IT, find_month_columns
+from verticals.condges.pf_rotate.excel_model import (
+    MESI_IT,
+    find_month_periods,
+    periodo_anno_mese,
+    require_periodo,
+)
 
 PF_SHEET = "Piano Finanziario"
 _SCAN_ROWS = 30
@@ -29,16 +34,17 @@ _EQ_RE = re.compile(
 _MESE_NOME = {v: k.lower() for k, v in MESI_IT.items()}
 
 
-def advance_controlli(wb: Workbook, mese_chiuso: int) -> list[str]:
+def advance_controlli(wb: Workbook, periodo_chiuso: int) -> list[str]:
     """Riscrive i check ancorati al mese nel foglio Controlli. Ritorna le celle toccate."""
+    require_periodo(periodo_chiuso, "periodo_chiuso")
     if "Controlli" not in wb.sheetnames or PF_SHEET not in wb.sheetnames:
         return []
     ct = wb["Controlli"]
-    cols = find_month_columns(wb[PF_SHEET], header_row=2)
-    if mese_chiuso not in cols:
+    cols = find_month_periods(wb[PF_SHEET], header_row=2)
+    if periodo_chiuso not in cols:
         return []
 
-    closed_col = cols[mese_chiuso]
+    closed_col = cols[periodo_chiuso]
     first_col = min(cols.values())
     last_col = max(cols.values())
     open_col = closed_col + 1
@@ -100,10 +106,11 @@ def advance_controlli(wb: Workbook, mese_chiuso: int) -> list[str]:
         return f"'Piano Finanziario'!{cl}{saldo_row}='Piano Finanziario'!{prev}{periodo_row}"
 
     if chain_start_row is not None:
-        mese_aperto = mese_chiuso % 12 + 1
+        _, mese_aperto = periodo_anno_mese(periodo_chiuso + 1)
+        _, mese_chiuso_cal = periodo_anno_mese(periodo_chiuso)
         ct.cell(chain_start_row, 1).value = (
             f"{open_l}{saldo_row} = {closed_l}{periodo_row} "
-            f"({_MESE_NOME[mese_aperto]} parte da saldo reale {_MESE_NOME[mese_chiuso]})?"
+            f"({_MESE_NOME[mese_aperto]} parte da saldo reale {_MESE_NOME[mese_chiuso_cal]})?"
         )
         ct.cell(chain_start_row, 2).value = f'=IF({_eq(open_col)},"OK","ERRORE")'
         changed.append(f"B{chain_start_row}")

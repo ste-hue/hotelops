@@ -17,6 +17,7 @@ import pandas as pd
 from verticals.condges.pf_rotate.pf_writer import write_pf
 from verticals.condges.pf_generator.blocchi import blocco_a_per_voce
 from verticals.condges.pf_generator.template import scrivi_da_mappare, scrivi_esclusi
+from verticals.condges.pf_rotate.excel_model import periodo_anno_mese
 from verticals.condges.pf_rotate.fornitori_map import load_fornitori
 from verticals.condges.skeleton_shift import hide_past_columns_rotation
 
@@ -48,18 +49,18 @@ def apply_scadenzario(
     *,
     pf_bytes: bytes,
     scad_df: pd.DataFrame,
-    bucket_months: list[int],
+    bucket_periodi: list[int],
     societa: str,
     fornitori_csv: Path,
     policy: UnmappedPolicy,
     extra_excluded: set[int] | None = None,
-    scaduto_month: int | None = None,
+    scaduto_periodo: int | None = None,
 ) -> tuple[bytes, dict]:
     """Applica lo scadenzario al PF, ritorna (xlsx bytes, summary dict).
 
-    ``scaduto_month``: primo mese aperto della rotation — il bucket 'scaduto'
+    ``scaduto_periodo``: primo periodo aperto della rotation — il bucket 'scaduto'
     finisce lì (non nel mese di oggi) e le righe dei fornitori mappati vengono
-    ripulite nei mesi >= scaduto_month prima della riscrittura (idempotenza).
+    ripulite nei periodi >= scaduto_periodo prima della riscrittura (idempotenza).
     """
     fornitori = load_fornitori(fornitori_csv, societa=societa)
     known_codici = set(fornitori.keys())
@@ -103,12 +104,16 @@ def apply_scadenzario(
     updated_bytes, write_summary = write_pf(
         pf_bytes=pf_bytes,
         scad_df=scad_df,
-        bucket_months=bucket_months,
+        bucket_periodi=bucket_periodi,
         fornitori_map=legacy_map,
         excluded=excluded_set,
-        scaduto_month=scaduto_month,
+        scaduto_periodo=scaduto_periodo,
         clear_codici=set(legacy_map.keys()),
     )
+    # write_pf mette "oltre_orizzonte" nello stesso dict delle voci scritte
+    # (chiave riservata, non è una voce_label): estraila prima di usare le
+    # chiavi restanti come "voci_aggiornate"/conteggio scritti.
+    oltre_orizzonte = write_summary.pop("oltre_orizzonte", {})
 
     # Niente perso in silenzio: i non-mappati vanno nel foglio DA MAPPARE, gli
     # esclusi (is_excluded) nel foglio ESCLUSI. Riusa il motore del generatore
@@ -122,10 +127,32 @@ def apply_scadenzario(
         }
         for cod, r in fornitori.items()
     }
-    primo = scaduto_month or min(bucket_months)
+    primo = scaduto_periodo or min(bucket_periodi)
     _per_voce, unmapped_rows, esclusi_rows = blocco_a_per_voce(
-        scad_df, bucket_months, fornitori_full, primo_mese_aperto=primo
+        scad_df, bucket_periodi, fornitori_full, primo_mese_aperto=primo
     )
+    # bucket_periodi/primo sono periodi (write_pf sopra li ha già validati con
+    # require_periodo): scrivi_da_mappare/scrivi_esclusi/hide_past_columns_rotation
+    # indirizzano colonne per mese-nudo (12 colonne calendario, no anno) — il
+    # confine periodo→mese-calendario è qui sotto, con guard anti-collisione.
+    for rows in (unmapped_rows, esclusi_rows):
+        for r in rows:
+            # DA MAPPARE/ESCLUSI hanno 12 colonne mese-nudo (no anno): due
+            # periodi diversi sullo stesso mese calendario (es. dic 2026 +
+            # dic 2027) collasserebbero in silenzio sulla stessa colonna —
+            # fail loud invece di perdere un importo.
+            bare_mesi = {periodo_anno_mese(m)[1] for m in r["mesi"]}
+            if len(bare_mesi) < len(r["mesi"]):
+                raise ValueError(
+                    f"Collisione multi-anno in DA MAPPARE/ESCLUSI per il "
+                    f"fornitore {r.get('codice')!r} ({r.get('nome')!r}): i "
+                    f"periodi {sorted(r['mesi'])} cadono sullo stesso mese "
+                    "calendario (il foglio ha 12 colonne mese-nudo, non "
+                    "anno-aware) — scriverli scambierebbe/perderebbe un "
+                    "importo in silenzio. Serve la migrazione a periodo di "
+                    "scrivi_da_mappare/scrivi_esclusi (Task 6)."
+                )
+            r["mesi"] = {periodo_anno_mese(m)[1]: v for m, v in r["mesi"].items()}
     wb = openpyxl.load_workbook(BytesIO(updated_bytes))
     scrivi_da_mappare(wb, unmapped_rows)
     scrivi_esclusi(wb, esclusi_rows)
@@ -144,5 +171,6 @@ def apply_scadenzario(
         "excluded_adhoc": sorted(adhoc_excluded),
         "voci_aggiornate": list(write_summary.keys()),
         "totale_fornitori_scritti": sum(len(v) for v in write_summary.values()),
+        "oltre_orizzonte": oltre_orizzonte,
     }
     return updated_bytes, summary

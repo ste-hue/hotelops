@@ -68,6 +68,17 @@ def detect_bu_from_footer(path: Path) -> str | None:
     wb.close()
     if not text:
         return None
+    # Filtro in NEGAZIONE ("CodiceHotel is not X or Y"): la BU è il complemento
+    # del set escluso; se non è univoco il file è ambiguo → errore, mai default.
+    neg = re.search(r"CodiceHotel is not ([^\n]+)", text)
+    if neg:
+        esclusi = {c for c in HOTEL_TO_BU if c in neg.group(1)}
+        inclusi = set(HOTEL_TO_BU) - esclusi
+        if len(inclusi) != 1:
+            raise ValueError(
+                f"BU ambigua dal footer in negazione (esclusi={sorted(esclusi)}): {text[:160]!r}"
+            )
+        return HOTEL_TO_BU[inclusi.pop()]
     # Export multi-struttura: l'aggregato finirebbe etichettato su UNA BU — rifiuta.
     if re.search(r"CodiceHotel is \w+\s*(,| or )", text):
         raise ValueError(

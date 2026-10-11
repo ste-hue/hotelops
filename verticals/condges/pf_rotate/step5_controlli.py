@@ -17,8 +17,10 @@ from openpyxl.utils import get_column_letter
 
 from verticals.condges.pf_rotate.excel_model import (
     find_layout,
-    find_month_columns,
+    find_month_periods,
     is_formula_with_refs,
+    periodo_anno_mese,
+    require_periodo,
     resolve_sheet_name,
 )
 
@@ -469,17 +471,19 @@ def _col_idx(col_letter: str) -> int:
     return column_index_from_string(col_letter)
 
 
-def verifica_controlli(wb: Workbook, *, mese_chiuso: int) -> ControlReport:
+def verifica_controlli(wb: Workbook, *, periodo_chiuso: int) -> ControlReport:
     """Esegui i check sul workbook in input. Layout-aware. Niente cache, puro Python."""
+    require_periodo(periodo_chiuso, "periodo_chiuso")
     pf = wb["Piano Finanziario"]
     layout = find_layout(wb)
-    month_cols = find_month_columns(pf, header_row=2)
+    month_cols = find_month_periods(pf, header_row=2)
 
     ordered_mesi = sorted(month_cols.keys())
     col_letters = [get_column_letter(month_cols[m]) for m in ordered_mesi]
-    if mese_chiuso not in month_cols:
-        raise ValueError(f"Mese chiuso {mese_chiuso} non trovato nel master.")
-    cutover_idx = ordered_mesi.index(mese_chiuso)
+    if periodo_chiuso not in month_cols:
+        anno, mese = periodo_anno_mese(periodo_chiuso)
+        raise ValueError(f"Periodo chiuso {anno}-{mese:02d} non trovato nel master.")
+    cutover_idx = ordered_mesi.index(periodo_chiuso)
     cutover_col = col_letters[cutover_idx]
     tail_cols = col_letters[cutover_idx + 1:]
 

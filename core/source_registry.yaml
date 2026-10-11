@@ -341,6 +341,37 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "piani_finanziari/ORTI"
+    notes: |
+      Master generazionali su Drive: cartella 1wGf0yL7RGrvumCKSVWFBlxC2zcAYT8u-
+      (un file per rotation, naming <SOC>_PF_<YYYY-MM>.xlsx = primo mese aperto;
+      l'ultima generazione è il master vivo). drive_file_id fisso NON adatto:
+      ogni rotation crea un file nuovo — si lista la cartella via SA drive-audit@
+      e si prende il piu' recente per societa. Dal 2026-07 (18/08) lo standard
+      ha orizzonte esteso a giugno anno+1.
+
+  ESOLVER_PF_INTUR_SNAPSHOT:
+    system: ESOLVER
+    dataset: PF
+    dataset_label: "Piano Finanziario (cash flow voci)"
+    societa: INTUR
+    lifecycle: SNAPSHOT
+    canonical_table: f_piano_finanziario_input
+    parser_module: ingest.flussi.ingest_piano_finanziario_xlsx
+    natural_key: [societa_id, voce_id, anno, mese, fonte]
+    loop_targets: [cash_control, budget_canonical]
+    promotion_policy: AUTO
+    detector_category: piano_finanziario
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "piani_finanziari/INTUR"
+    notes: |
+      Master generazionali su Drive: cartella 1wGf0yL7RGrvumCKSVWFBlxC2zcAYT8u-
+      (un file per rotation, naming <SOC>_PF_<YYYY-MM>.xlsx = primo mese aperto;
+      l'ultima generazione è il master vivo). drive_file_id fisso NON adatto:
+      ogni rotation crea un file nuovo — si lista la cartella via SA drive-audit@
+      e si prende il piu' recente per societa. Dal 2026-07 (18/08) lo standard
+      ha orizzonte esteso a giugno anno+1.
 
   # ── HotelCube accodamenti — APPEND, BU per-file ───────────────────────────
   HOTELCUBE_ACCODAMENTI_ORTI_APPEND:
@@ -1008,6 +1039,45 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "moolty/fbspiaggia/INTUR"
+
+
+  # ── SDI / Agenzia Entrate — export massivo FatturaPA — RAW_ONLY ───────────
+  # Esito delle "richieste massive" del portale Fatture e Corrispettivi: un
+  # batch <id>_fileProdotto1 per richiesta, dentro una coppia di file per
+  # fattura: <nomefile>.xml (o .xml.p7m firmato CAdES) + <nomefile>_metaDato.xml
+  # (idfile SdI, hashfile, cedente/cessionario, date accoglienza/emissione).
+  SDI_FATTUREXML_ORTI_APPEND:
+    system: SDI
+    dataset: FATTUREXML
+    dataset_label: "Export massivo AdE FatturaPA (xml/p7m + metaDato) — fatture attive e passive ORTI"
+    societa: ORTI
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: f_fatture_xml                    # nome TARGET — parser non scritto
+    parser_module: ingest.flussi.ingest_fatture_sdi   # nome TARGET — parser non scritto
+    hash_basis: idfile
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: fatture_sdi
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "fatture_sdi/ORTI"
+    notes: |
+      Unità di intake = il BATCH (zip <id>_fileProdotto1.zip), come la PEC:
+      un contenitore, il parser futuro esplode fatture + metaDato. Direzione
+      (attiva/passiva) SOLO dal contenuto: cedentepiva/cessionariopiva nel
+      metaDato vs P.IVA ORTI 04391390657 — il batch AdE è misto.
+      Chiave naturale della fattura = idfile SdI (metaDato): i batch di
+      richieste successive si SOVRAPPONGONO (2026-08 vs 2026-09: 67 idfile
+      doppi su 1.185) → dedup nel parser su idfile, mai sul nome file.
+      Sistema DIVERSO dal registro contabile Esolver (ESOLVER_FATTURE*):
+      l'XML dice cosa è stato fatturato, il registro come è stato
+      contabilizzato (cod_conto non esiste nell'XML; le estere non passano
+      da SdI). Decisione "sostituire o affiancare" APERTA (sessione
+      2026-08-08, workstream INGEST_CHIUSURE) → nasce RAW_ONLY.
+      Finestra consultazione AdE ~2 anni: l'intake è anche archiviazione.
+      Template richiesta massiva + procedura: docs/procedures/ade_download_massivo/.
 
 ESOLVER_PARTITE_APERTE_ORTI_APPEND:
   lifecycle: APPEND

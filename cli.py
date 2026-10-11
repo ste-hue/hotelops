@@ -202,6 +202,29 @@ def cmd_voci(args):
 # ── Manifest: catalogo tabelle BQ ──────────────────────────────────────────
 
 
+def cmd_canone(args):
+    """Cruscotto canone: aggiorna gli osservati da BigQuery e rigenera la pagina."""
+    from verticals.condges.build_canone_artifact import run
+
+    run(aggiorna=True, push=args.push)
+
+
+def cmd_budget(args):
+    """Budget per driver: genera il foglio della base camere."""
+    from pathlib import Path
+
+    from verticals.condges.budget_camere import base
+
+    if args.budget_cmd != "base":
+        print("uso: hotelops budget base [--out DIR] [--apertura MM-GG] [--chiusura MM-GG]")
+        sys.exit(1)
+    base.run(
+        Path(args.out).expanduser(),
+        apertura=base.giorno(args.apertura),
+        chiusura=base.giorno(args.chiusura),
+    )
+
+
 def cmd_manifest(args):
     """Genera manifest.yaml — catalogo di tutte le tabelle BQ."""
     from core.bq.manifest import generate_manifest, TABLES
@@ -1056,6 +1079,24 @@ def main():
         "--dry-run", action="store_true", help="Mostra l'ordine senza eseguire"
     )
 
+    # canone
+    p_canone = sub.add_parser(
+        "canone", help="Cruscotto canone ORTI → INTUR: rilegge le fonti e rigenera la pagina"
+    )
+    p_canone.add_argument(
+        "--push", action="store_true", help="Pubblica su canone.panorama-host.com"
+    )
+
+    # budget
+    p_budget = sub.add_parser("budget", help="Budget per driver (camere Hotel Panorama)")
+    budget_sub = p_budget.add_subparsers(dest="budget_cmd")
+    pb_base = budget_sub.add_parser(
+        "base", help="Genera il foglio: base 2026 per mese × categoria, aumenti da scrivere"
+    )
+    pb_base.add_argument("--out", default="~/Downloads", help="Cartella di uscita")
+    pb_base.add_argument("--apertura", default="04-20", help="Prima notte venduta, MM-GG")
+    pb_base.add_argument("--chiusura", default="10-20", help="Ultima notte venduta, MM-GG")
+
     # help
     sub.add_parser("help", help="Guida completa con esempi")
 
@@ -1138,7 +1179,7 @@ def main():
         "app_name",
         nargs="?",
         default=None,
-        help="App da lanciare: pf (default), scadenzario, accodamenti, reviews",
+        help="App da lanciare: pf (default), accodamenti, reviews",
     )
 
     # tesoreria
@@ -1174,6 +1215,20 @@ def main():
     p_reviews.add_argument(
         "--dry-run", action="store_true", help="Preview senza azioni"
     )
+    p_reviews.add_argument(
+        "--rispondi",
+        action="store_true",
+        help="Genera bozza di risposta a una recensione (testo da stdin o --file)",
+    )
+    p_reviews.add_argument(
+        "--bu", type=str, help="Business unit della recensione (HOTEL|RESIDENCE|CVM)"
+    )
+    p_reviews.add_argument(
+        "--file", type=str, help="File col testo della recensione (default: stdin)"
+    )
+    p_reviews.add_argument(
+        "--nota", type=str, help="Indicazione una-tantum per questa risposta"
+    )
 
     # pec
     p_pec = sub.add_parser("pec", help="PEC multi-casella: classify, pannello CEO, digest")
@@ -1190,7 +1245,8 @@ def main():
     pp_dg.add_argument("--entity", type=str, default=None,
                        choices=["INTUR", "ORTI", "VIGNA", "STEFANO_PERSONALE"])
     pp_dg.add_argument("--solo-anomalie", action="store_true")
-    pp_dg.add_argument("--format", choices=["markdown", "json"], default="markdown")
+    pp_dg.add_argument("--format", choices=["markdown", "json", "whatsapp"],
+                       default="markdown")
     pp_dg.add_argument("--dry-run", action="store_true")
 
     # docs
@@ -1417,6 +1473,8 @@ def main():
         "prev": cmd_previsione,
         "voci": cmd_voci,
         "manifest": cmd_manifest,
+        "canone": cmd_canone,
+        "budget": cmd_budget,
         "deploy-views": cmd_deploy_views,
         "classifica": cmd_classifica,
         "cls": cmd_classifica,

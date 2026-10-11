@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ingest.pec.digest import _render_markdown, _percorso_file
+from ingest.pec.digest import _render_markdown, _percorso_file, _render_whatsapp
 
 
 def _dati_finti() -> dict:
@@ -54,3 +54,58 @@ def test_digest_run_row_valida():
         "from_ts": datetime(2026, 7, 10), "to_ts": datetime(2026, 7, 17),
         "params": "{}",
     }], PecDigestRunRow, context="test")
+
+
+def _dati_novita(n: int = 1, **over) -> dict:
+    base = {
+        "finestra": (datetime(2026, 8, 5), datetime(2026, 8, 6, 7, 0)),
+        "in_arrivo": 17,
+        "novita": [
+            {"entity_id": "INTUR", "mittente": f"nuovo{i}@pec.it",
+             "subject": f"Sollecito {i}", "allegati": ["Sollecito.pdf"],
+             "mittente_nuovo": True, "oggetto_nuovo": True, "allegati_nuovi": True}
+            for i in range(n)
+        ],
+    }
+    base.update(over)
+    return base
+
+
+def test_whatsapp_zero_novita_una_riga_sola():
+    msg = _render_whatsapp(_dati_novita(n=0))
+    assert msg == "PEC 06/08 — niente di nuovo · 17 in arrivo"
+
+
+def test_whatsapp_una_novita_mittente_nuovo():
+    righe = _render_whatsapp(_dati_novita(n=1)).splitlines()
+    assert righe[0] == "PEC 06/08 — 1 novità"
+    assert righe[1] == "• INTUR — mittente nuovo: nuovo0@pec.it"
+    assert righe[2] == '  "Sollecito 0" [Sollecito.pdf]'
+    assert righe[-1] == "17 in arrivo."
+
+
+def test_whatsapp_motivo_oggetto_quando_il_mittente_e_noto():
+    dati = _dati_novita(n=1)
+    dati["novita"][0].update(mittente_nuovo=False, allegati_nuovi=False)
+    assert _render_whatsapp(dati).splitlines()[1] == (
+        "• INTUR — oggetto nuovo da nuovo0@pec.it")
+
+
+def test_whatsapp_motivo_allegati_quando_mittente_e_oggetto_sono_noti():
+    dati = _dati_novita(n=1)
+    dati["novita"][0].update(mittente_nuovo=False, oggetto_nuovo=False)
+    assert _render_whatsapp(dati).splitlines()[1] == (
+        "• INTUR — allegati nuovi da nuovo0@pec.it")
+
+
+def test_whatsapp_senza_allegati_nessuna_parentesi():
+    dati = _dati_novita(n=1)
+    dati["novita"][0]["allegati"] = []
+    assert _render_whatsapp(dati).splitlines()[2] == '  "Sollecito 0"'
+
+
+def test_whatsapp_tronca_a_otto_e_conta_il_resto():
+    righe = _render_whatsapp(_dati_novita(n=10)).splitlines()
+    assert righe[0] == "PEC 06/08 — 10 novità"
+    assert sum(1 for r in righe if r.startswith("•")) == 8
+    assert "…e altre 2" in righe

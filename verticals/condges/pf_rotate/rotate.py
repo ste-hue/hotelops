@@ -19,6 +19,7 @@ from pathlib import Path
 import openpyxl
 import pandas as pd
 
+from verticals.condges.pf_rotate.excel_model import require_periodo
 from verticals.condges.pf_rotate.step1_saldi import (
     fetch_saldi_da_bq,
     preflight_saldi,
@@ -63,9 +64,9 @@ def rotate(
     *,
     pf_path: Path,
     scad_df: pd.DataFrame,
-    bucket_months: list[int],
+    bucket_periodi: list[int],
     societa: str,
-    mese_chiuso: int,
+    periodo_chiuso: int,
     data_saldo: date,
     saldi: dict[str, float] | None = None,
     fornitori_csv: Path,
@@ -80,6 +81,7 @@ def rotate(
     allow_partial_saldi: se True, non hard-fail su conti obbligatori mancanti — scrive
         un PF parziale marcato _FAILED_CHECKS (escape hatch del gate O-A).
     """
+    require_periodo(periodo_chiuso, "periodo_chiuso")
     if scad_df.empty:
         raise ScadenzarioVuotoError(
             "Scadenziario con 0 scadenze: probabile export sbagliato — serve la "
@@ -103,36 +105,38 @@ def rotate(
         raise RuntimeError(
             "Saldi banca non disponibili (BQ vuota e nessun --banca passato)."
         )
-    write_saldi_banca(wb, mese_chiuso=mese_chiuso, data_saldo=data_saldo, saldi=saldi)
+    write_saldi_banca(
+        wb, periodo_chiuso=periodo_chiuso, data_saldo=data_saldo, saldi=saldi
+    )
 
     # Step 2: azzera
-    changes = azzera_mese(wb, mese_chiuso=mese_chiuso)
+    changes = azzera_mese(wb, periodo_chiuso)
 
     # Step 2b: allinea i controlli in-foglio al nuovo mese chiuso
     # (altrimenti restano ancorati al mese della rotation precedente → ERRORE finti)
-    advance_controlli(wb, mese_chiuso=mese_chiuso)
+    advance_controlli(wb, periodo_chiuso)
 
     # Serialize after step 1+2 prima dello step 3 (write_pf legge bytes)
     buf = BytesIO()
     wb.save(buf)
     step12_bytes = buf.getvalue()
 
-    # Step 3: scadenzario — scaduto ancorato al primo mese aperto, non a oggi
-    primo_mese_aperto = mese_chiuso % 12 + 1
+    # Step 3: scadenzario — scaduto ancorato al primo periodo aperto, non a oggi
+    primo_periodo_aperto = periodo_chiuso + 1
     out_bytes, scad_summary = apply_scadenzario(
         pf_bytes=step12_bytes,
         scad_df=scad_df,
-        bucket_months=bucket_months,
+        bucket_periodi=bucket_periodi,
         societa=societa,
         fornitori_csv=fornitori_csv,
         policy=unmapped_policy,
         extra_excluded=extra_excluded,
-        scaduto_month=primo_mese_aperto,
+        scaduto_periodo=primo_periodo_aperto,
     )
 
     # Step 5: controlli sul wb finale
     final_wb = openpyxl.load_workbook(BytesIO(out_bytes), data_only=False)
-    report = verifica_controlli(final_wb, mese_chiuso=mese_chiuso)
+    report = verifica_controlli(final_wb, periodo_chiuso=periodo_chiuso)
     # saldi_mancanti è non-vuoto solo in modalità allow_partial (altrimenti preflight
     # avrebbe già sollevato): marca il PF come parziale/difettoso.
     partial = bool(saldi_mancanti)

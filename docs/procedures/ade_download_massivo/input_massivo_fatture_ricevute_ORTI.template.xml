@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns1:InputMassivo
+    xsi:schemaLocation="http://www.sogei.it/InputPubblico untitled.xsd"
+    xmlns:ns1="http://www.sogei.it/InputPubblico"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <ns1:TipoRichiesta>
+        <ns1:Fatture>
+            <ns1:Richiesta>FATT</ns1:Richiesta>
+            <ns1:ElencoPiva>
+                <ns1:Piva>04391390657</ns1:Piva>
+            </ns1:ElencoPiva>
+            <ns1:TipoRicerca>PUNTUALE</ns1:TipoRicerca>
+            <ns1:FattureRicevute>
+                <ns1:DataRicezione>
+                    <ns1:Da>{{DATA_DA}}</ns1:Da>
+                    <ns1:A>{{DATA_A}}</ns1:A>
+                </ns1:DataRicezione>
+                <ns1:Flusso><ns1:Tutte>ALL</ns1:Tutte></ns1:Flusso>
+                <ns1:Ruolo>CESSIONARIO</ns1:Ruolo>
+            </ns1:FattureRicevute>
+        </ns1:Fatture>
+    </ns1:TipoRichiesta>
+</ns1:InputMassivo>

@@ -54,6 +54,8 @@ def test_promote_happy_path(
     monkeypatch.setattr("ingest.promotion.latest_status", lambda rid: "PROMOTABLE")
     fake_parser_invoke = MagicMock(return_value={"rows_written": 42})
     monkeypatch.setattr("ingest.promotion._invoke_parser", fake_parser_invoke)
+    # gate #125 neutralizzato: qui si testa il flusso, non il contatore FK
+    monkeypatch.setattr("ingest.promotion._count_canonical_rows", lambda t, r: None)
 
     result = promote_raw_object("raw-1", actor="test")
 
@@ -197,3 +199,57 @@ def test_invoke_parser_file_uri_unchanged(monkeypatch, tmp_path) -> None:
     )
 
     assert captured[0][1:5] == ["-m", "ingest.flussi.ingest_x", "--file", "/tmp/x.xlsx"]
+
+
+# ── Gate anti verde-fabbricato (issue #125): PROMOTED solo se le righe sono atterrate ──
+
+
+def test_promote_zero_righe_canonical_rejected(
+    monkeypatch, fake_registry, captured_events, fake_raw_object
+) -> None:
+    """Parser exit 0 ma nessuna riga in canonical → REJECTED EMPTY_PARSE, non PROMOTED."""
+    monkeypatch.setattr("ingest.promotion.latest_status", lambda rid: "PROMOTABLE")
+    monkeypatch.setattr(
+        "ingest.promotion._invoke_parser", MagicMock(return_value={"rows_written": -1})
+    )
+    monkeypatch.setattr("ingest.promotion._count_canonical_rows", lambda t, r: 0)
+
+    result = promote_raw_object("raw-1", actor="test")
+
+    assert result.status == "REJECTED"
+    assert result.reason == "EMPTY_PARSE"
+    types = [ev["event_type"] for ev in captured_events]
+    assert "REJECTED" in types
+    assert "PROMOTED" not in types
+
+
+def test_promote_rows_written_dal_conteggio_fk(
+    monkeypatch, fake_registry, captured_events, fake_raw_object
+) -> None:
+    """Il conteggio FK sostituisce il -1 del parser: rows_written onesto."""
+    monkeypatch.setattr("ingest.promotion.latest_status", lambda rid: "PROMOTABLE")
+    monkeypatch.setattr(
+        "ingest.promotion._invoke_parser", MagicMock(return_value={"rows_written": -1})
+    )
+    monkeypatch.setattr("ingest.promotion._count_canonical_rows", lambda t, r: 17)
+
+    result = promote_raw_object("raw-1", actor="test")
+
+    assert result.status == "PROMOTED"
+    assert result.rows_written == 17
+
+
+def test_promote_conteggio_non_disponibile_non_blocca(
+    monkeypatch, fake_registry, captured_events, fake_raw_object
+) -> None:
+    """Contatore FK non disponibile (None) → comportamento pre-gate, mai bloccare."""
+    monkeypatch.setattr("ingest.promotion.latest_status", lambda rid: "PROMOTABLE")
+    monkeypatch.setattr(
+        "ingest.promotion._invoke_parser", MagicMock(return_value={"rows_written": -1})
+    )
+    monkeypatch.setattr("ingest.promotion._count_canonical_rows", lambda t, r: None)
+
+    result = promote_raw_object("raw-1", actor="test")
+
+    assert result.status == "PROMOTED"
+    assert result.rows_written == -1

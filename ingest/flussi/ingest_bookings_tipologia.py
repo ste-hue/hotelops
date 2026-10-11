@@ -11,6 +11,8 @@ Layout (header-based):
 
 BU dal prefisso filename (PANORAMA/ANGELINA/CVM — il contenuto non ha
 CodiceHotel; il footer 'Applied filters' usa una negazione, inaffidabile).
+Export senza filtro struttura (tre strutture nello stesso file, caso reale
+2026-10-06): la BU si ricava riga per riga dal codice tipologia via d_camere.
 Codici tipologia decodificati da d_pms_codici (dominio ROOM_TYPE).
 
 Parser_module della source POWERBI_BOOKINGSTIPOLOGIA_ORTI_SNAPSHOT:
@@ -24,6 +26,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import logging
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -42,6 +45,51 @@ NAME_TO_BU = {
     "ANGELINA": "RESIDENCE",
     "CVM": "CVM",
 }
+D_CAMERE_CSV = (
+    Path(__file__).resolve().parents[2] / "core" / "bq" / "dimensioni" / "d_camere.csv"
+)
+# Dependance del Panorama (D201/D202): fuori inventario d_camere per scelta
+# (vedi registry NUMEROCAMERACLIENTI), ma venduta col codice DEP.
+CODICI_EXTRA = {"DEP": "HOTEL"}
+
+
+def bu_per_codice() -> dict[str, str]:
+    """Codice tipologia → BU, da d_camere (più la dependance)."""
+    with D_CAMERE_CSV.open(newline="") as f:
+        out = {r["cod_camera"]: r["business_unit_id"] for r in csv.DictReader(f)}
+    out.update(CODICI_EXTRA)
+    return out
+
+
+def assegna_bu(
+    righe: list[dict], file_name: str, path: Path | None = None
+) -> list[dict]:
+    """Aggiunge business_unit_id a ogni riga.
+
+    Prima il file intero (prefisso o footer); se la BU non è deducibile, riga
+    per riga dal codice tipologia. Un codice ignoto con notti è un errore;
+    senza notti (codici morti come DLXA) la riga si scarta.
+    """
+    try:
+        bu = detect_bu(file_name, path=path)
+    except ValueError:
+        bu = None
+    if bu is not None:
+        for r in righe:
+            r["business_unit_id"] = bu
+        return righe
+    codici = bu_per_codice()
+    out = []
+    for r in righe:
+        if r["tipologia"] in codici:
+            r["business_unit_id"] = codici[r["tipologia"]]
+            out.append(r)
+        elif r["camere"]:
+            raise ValueError(
+                f"{file_name}: tipologia {r['tipologia']!r} non è in d_camere "
+                f"({r['camere']} camere il {r['data']})"
+            )
+    return out
 
 
 def detect_bu(file_name: str, path: Path | None = None) -> str:
@@ -135,15 +183,19 @@ def parse_xlsx(path: Path) -> list[dict]:
     return out
 
 
-def build_rows(righe: list[dict], bu: str, raw_object_id: str | None) -> list[dict]:
+def build_rows(
+    righe: list[dict], bu: str | None, raw_object_id: str | None
+) -> list[dict]:
+    """`bu=None` → ogni riga porta già il suo business_unit_id (file misto)."""
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     out = []
     for r in righe:
         d_iso = r["data"].isoformat()
+        bu_riga = bu or r["business_unit_id"]
         out.append(
             {
                 "societa_id": "ORTI",
-                "business_unit_id": bu,
+                "business_unit_id": bu_riga,
                 "data": d_iso,
                 "tipologia": r["tipologia"],
                 "camere": r["camere"],
@@ -155,7 +207,7 @@ def build_rows(righe: list[dict], bu: str, raw_object_id: str | None) -> list[di
                 "ricavo_extra": round(r["ricavo_extra"], 2),
                 "ricavo_totale": round(r["ricavo_totale"], 2),
                 "fonte": FONTE,
-                "hash_riga": make_hash(bu, d_iso, r["tipologia"]),
+                "hash_riga": make_hash(bu_riga, d_iso, r["tipologia"]),
                 "raw_object_id": raw_object_id,
                 "data_caricamento": now,
             }
@@ -166,9 +218,9 @@ def build_rows(righe: list[dict], bu: str, raw_object_id: str | None) -> list[di
 def ingest_file(
     path: Path, raw_object_id: str | None = None, dry_run: bool = False
 ) -> int:
-    bu = detect_bu(path.name, path=path)
-    righe = parse_xlsx(path)
-    rows = build_rows(righe, bu, raw_object_id)
+    righe = assegna_bu(parse_xlsx(path), path.name, path=path)
+    rows = build_rows(righe, None, raw_object_id)
+    bu = ",".join(sorted({r["business_unit_id"] for r in rows})) or "-"
     validate_batch(
         rows, BookingsTipologiaRow, context=f"bookings_tipologia {path.name}"
     )

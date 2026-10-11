@@ -12,8 +12,10 @@ from openpyxl.utils import get_column_letter
 
 from verticals.condges.pf_rotate.excel_model import (
     find_layout,
-    find_month_columns,
+    find_month_periods,
     is_value_cell,
+    periodo_anno_mese,
+    require_periodo,
 )
 
 # Fogli da scansionare (master + dettagli canonici). I dettagli usano gli alias
@@ -57,21 +59,23 @@ def _resolve(wb: Workbook, alias_spec: str | list[str]) -> str | None:
     return None
 
 
-def azzera_mese(wb: Workbook, mese_chiuso: int) -> list[CellChange]:
+def azzera_mese(wb: Workbook, periodo_chiuso: int) -> list[CellChange]:
     """Svuota le celle-valore della colonna del mese chiuso in master + dettagli.
 
     Returns list of CellChange recording every overwrite.
     """
+    require_periodo(periodo_chiuso, "periodo_chiuso")
     changes: list[CellChange] = []
 
     # ── Master ─────────────────────────────────────────────────────────
     if "Piano Finanziario" not in wb.sheetnames:
         raise ValueError("Foglio 'Piano Finanziario' assente — input non valido.")
     pf = wb["Piano Finanziario"]
-    mese_cols_master = find_month_columns(pf, header_row=2)
-    if mese_chiuso not in mese_cols_master:
-        raise ValueError(f"Mese chiuso {mese_chiuso} non trovato nel master.")
-    col_master = mese_cols_master[mese_chiuso]
+    mese_cols_master = find_month_periods(pf, header_row=2)
+    if periodo_chiuso not in mese_cols_master:
+        anno, mese = periodo_anno_mese(periodo_chiuso)
+        raise ValueError(f"Periodo chiuso {anno}-{mese:02d} non trovato nel master.")
+    col_master = mese_cols_master[periodo_chiuso]
     col_letter = get_column_letter(col_master)
 
     layout = find_layout(wb)
@@ -92,10 +96,10 @@ def azzera_mese(wb: Workbook, mese_chiuso: int) -> list[CellChange]:
         if name is None:
             continue
         ws = wb[name]
-        mese_cols = find_month_columns(ws, header_row=2)
-        if mese_chiuso not in mese_cols:
+        mese_cols = find_month_periods(ws, header_row=2)
+        if periodo_chiuso not in mese_cols:
             continue
-        col = mese_cols[mese_chiuso]
+        col = mese_cols[periodo_chiuso]
         cl = get_column_letter(col)
         for r in range(DETAIL_VALUE_START_ROW, ws.max_row + 1):
             cell = ws.cell(r, col)

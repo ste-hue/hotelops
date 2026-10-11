@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import openpyxl
 import pytest
 
-from verticals.condges.pf_rotate.excel_model import find_layout
+from verticals.condges.pf_rotate.excel_model import find_layout, periodo
 from verticals.condges.pf_rotate.step1_saldi import (
     SaldiIncompletiError,
     banche_mancanti,
@@ -13,6 +13,8 @@ from verticals.condges.pf_rotate.step1_saldi import (
     preflight_saldi,
     write_saldi_banca,
 )
+
+P = lambda m: periodo(2026, m)  # noqa: E731
 
 
 def test_write_saldi_writes_to_cutover_column(minimal_pf_orti_bytes):
@@ -23,7 +25,7 @@ def test_write_saldi_writes_to_cutover_column(minimal_pf_orti_bytes):
     # Aggiorna a un nuovo cutover ipotetico (es. 31/05):
     write_saldi_banca(
         wb,
-        mese_chiuso=4,  # ancora APRILE (smoke: identica sovrascrittura)
+        periodo_chiuso=P(4),  # ancora APRILE (smoke: identica sovrascrittura)
         data_saldo=date(2026, 4, 30),
         saldi={"MPS": 300000.0, "Intesa": 50000.0},
     )
@@ -46,7 +48,7 @@ def test_write_saldi_partial_only_known_banks(minimal_pf_orti_bytes):
 
     write_saldi_banca(
         wb,
-        mese_chiuso=4,
+        periodo_chiuso=P(4),
         data_saldo=datetime.date(2026, 4, 30),
         saldi={"MPS": 200000.0},
     )
@@ -61,6 +63,7 @@ def _build_fixed_snapshot_wb() -> openpyxl.Workbook:
     wb.remove(wb.active)
     pf = wb.create_sheet("Piano Finanziario")
     pf["A1"] = "INTUR"
+    pf["B1"] = 2026
     pf["C1"] = "DATA RILEVAZ"
     # row 2: month headers in D..M (E = APRILE)
     pf["C2"] = None
@@ -101,7 +104,7 @@ def test_write_saldi_banca_fixed_snapshot_writes_to_col_c():
 
     out = write_saldi_banca(
         wb,
-        mese_chiuso=4,  # APRILE → col E (5); ma saldi vanno in C
+        periodo_chiuso=P(4),  # APRILE → col E (5); ma saldi vanno in C
         data_saldo=date(2026, 4, 30),
         saldi={"MPS": 100, "Intesa": 200, "BCP": 50},
     )
@@ -191,6 +194,7 @@ def _build_month_closed_wb_with_kross() -> openpyxl.Workbook:
     wb.remove(wb.active)
     pf = wb.create_sheet("Piano Finanziario")
     pf["A1"] = "ORTI"
+    pf["B1"] = 2026
     # C1 lasciato None → month-closed; APRILE in col C (mese_chiuso=4)
     pf.cell(2, 3, "APRILE")
     pf["A4"] = "SALDO MESE PRECEDENTE"
@@ -218,7 +222,7 @@ def test_write_saldi_no_mps_kross_collision():
     pf = wb["Piano Finanziario"]
     write_saldi_banca(
         wb,
-        mese_chiuso=4,
+        periodo_chiuso=P(4),
         data_saldo=date(2026, 4, 30),
         saldi={"MPS": 100000.0, "MPS_KROSS": 999.0},
     )
@@ -266,7 +270,7 @@ def test_write_saldi_fixed_snapshot_non_tocca_r4_mesi(intur_pf_bytes):
     before = [pf.cell(4, c).value for c in range(3, 12)]
     write_saldi_banca(
         wb,
-        mese_chiuso=4,
+        periodo_chiuso=P(4),
         data_saldo=date(2026, 4, 30),
         saldi={"Sella": 10000.0, "MPS": 20000.0, "Intesa": 3000.0},
     )
