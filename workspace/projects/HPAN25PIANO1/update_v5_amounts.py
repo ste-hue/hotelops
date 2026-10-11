@@ -18,6 +18,7 @@ Save in place: same path, no v6.
 """
 
 import json
+import os
 import re
 from pathlib import Path
 from openpyxl import load_workbook
@@ -25,6 +26,18 @@ from openpyxl.styles import PatternFill, Font
 
 V5_PATH = Path("/tmp/hpan25/HPAN25PIANO1_Tracking_v5.xlsx")
 AMOUNTS_JSON = Path("/tmp/hpan25/extracted_amounts.json")
+PARTITE_INTUR_XLSX = Path(
+    os.environ.get(
+        "HOTELOPS_HPAN25PIANO1_PARTITE_INTUR",
+        str(Path.home() / "Desktop" / "WORK" / "tmp" / "situazionepartitefornitoriINTUR.xlsx"),
+    )
+).expanduser()
+PARTITE_ORTI_XLSX = Path(
+    os.environ.get(
+        "HOTELOPS_HPAN25PIANO1_PARTITE_ORTI",
+        str(Path.home() / "Desktop" / "situazionepartitefornitoriORTI.xlsx"),
+    )
+).expanduser()
 BUDGET_TARGET_EUR = 1_200_000
 
 # Filename → F-code mapping (manual, deterministic — same as audit script)
@@ -521,8 +534,8 @@ def main():
 
     # ── Phase 7: build Chiusura_Fornitori sheet (operational cockpit) ──
     # Reads partite aperte INTUR + ORTI (for F013) from Esolver export, computes € Pagato per F-code
-    partite_xlsx = Path('/Users/stefanodellapietra/Desktop/WORK/tmp/situazionepartitefornitoriINTUR.xlsx')
-    partite_orti_xlsx = Path('/Users/stefanodellapietra/Desktop/situazionepartitefornitoriORTI.xlsx')
+    partite_xlsx = PARTITE_INTUR_XLSX
+    partite_orti_xlsx = PARTITE_ORTI_XLSX
     open_per_fc = {}
     open_docs_per_fc = {}
     if partite_xlsx.exists():

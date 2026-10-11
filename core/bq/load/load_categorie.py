@@ -41,13 +41,11 @@ except ImportError:
 
 from core.bq.client import get_client
 from core.config import PROJECT
+from core.local_paths import resolve_artifacts_root
 
 BQ_TABLE = f"{PROJECT}.hotelops.d_categorie_conti"
 
-DEFAULT_FILE = Path(
-    "/Users/stefanodellapietra/Desktop/WORK/artifacts/"
-    "Costi Ricavi 2025-2026 Budget.xlsx"
-)
+DEFAULT_FILE = resolve_artifacts_root() / "Costi Ricavi 2025-2026 Budget.xlsx"
 
 SHEET_NAME = "CATEGORIE"
 

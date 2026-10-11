@@ -43,10 +43,11 @@ except ImportError:
 
 from core.bq.client import get_client
 from core.config import PROJECT
+from core.local_paths import resolve_artifacts_root
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
-DATAHUB = Path("/Users/stefanodellapietra/Desktop/WORK/artifacts")
+DATAHUB = resolve_artifacts_root()
 DEFAULT_MAPPATURA = DATAHUB / "MAPPATURA DEI COSTI_v_2.xlsx"
 DEFAULT_INCIDENZA = DATAHUB / "Incidenza_costi_personale.xlsx"
 
