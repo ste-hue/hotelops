@@ -173,7 +173,7 @@ invariants correlati, **commit hash** se la decisione è già materializzata nel
 
 #### Q2 — È stato sfidato o confermato un invariant?
 
-Un invariant (I1–I8) può essere:
+Un invariant (vedere il set corrente in repo/docs/architecture/INVARIANTS.md) può essere:
 - **Confermato** — la sessione ha colpito il suo bordo e l'invariant ha tenuto. Spesso
   non richiede capture; è un no-op. Proponi capture solo se la conferma è stata non
   ovvia (es. "pensavamo di rilassare I3 ma abbiamo scoperto perché non si può").
@@ -187,29 +187,17 @@ Sfidare un invariant è grosso. Non silenziosamente. Mai un edit a INVARIANTS.md
 
 #### Q3 — È cambiata un'entità canonica o l'ontologia?
 
-Entità canoniche (per entity_protocol_v1): **Societa, Struttura, Reparto, Persona,
-Fornitore, Banca, Progetto, Contratto, Strumento_Finanziario, Consulente**.
+Verifica prima le fonti attive: `repo/docs/architecture/INVARIANTS.md`,
+`repo/docs/architecture/AI_INSTRUCTIONS.md`, `vault/SUPPLIERS_STRATEGY.md`
+e le tabelle `d_*` pertinenti. Il protocollo `entity_protocol_v1.md` e
+`ENTITY_REVIEW.md` sono archiviati: NON applicarne la state machine o i
+criteri CORE/TACTICAL/TRANSIENT come regole operative correnti.
 
-Il flusso corretto ha due passi:
-
-**Q3a — Triage CORE / TACTICAL / TRANSIENT** (via ENTITY_REVIEW.md + SUPPLIERS_STRATEGY.md):
-
-| Classe | Criterio | Destinazione |
-|---|---|---|
-| CORE | strategica, pluri-progetto, multi-anno, obbligazioni ricorrenti | `vault/ontology/<kind>/<name>.md` |
-| TACTICAL | singolo progetto o fornitore ricorrente ma non strategico | single registry file (Layer 2) |
-| TRANSIENT | una tantum, no obblighi residui | project-level / STATUS.md, **mai** vault |
-
-**Q3b — State (solo se CORE)** via entity_protocol_v1.md:
-candidate → approved → active → inactive. Ogni transizione richiede nota.
-
-Corollario **I3 (vault è SSOT per ontologia)**: se la modifica è già stata applicata
-direttamente in `core/bq/dimensioni/*.csv` o hardcoded in `CLAUDE.md` senza una nota
-vault corrispondente → è **drift**. Proponi la scrittura vault **prima** del merge CSV,
-e nota la violazione I3 nel proposal.
-
-**Se yes** → proponi file appropriato (`ontology/<kind>/<name>.md` per CORE, o suppliers
-registry per TACTICAL). Skippa TRANSIENT.
+Se una decisione modifica il significato di un'entità o l'autorità dei dati,
+confronta vault, codice e dato canonico. Proponi una capture con fonti, owner,
+decisione e commit correlati; nessuna scrittura automatica. Non dedurre che il
+vault sia automaticamente SSOT dell'ontologia: verifica il confine d'autorità
+nel contratto attivo.
 
 ### If none apply → skip
 
@@ -284,8 +272,7 @@ rischio è doppio perché il vault è già demoted: il check va in **due direzio
 
 **Medium (cross-reference vault ↔ repo):**
 
-6. **I3 violations** — modifiche a `core/bq/dimensioni/*.csv` o ontology hardcoded in
-   `repo/CLAUDE.md` da git log senza paired vault entry stessa data.
+6. **Ontology/authority drift** — confronta modifiche a `core/bq/dimensioni/*.csv`, ai contratti canonici e alle note vault, secondo gli invariants attualmente vigenti; segnala divergenze senza assumere che il vault sia sempre SSOT.
 7. **Stale architectural claims** — `PLATFORM.md` / `architecture/*` citano tabelle/file
    che non esistono più nel repo (rename, delete). Verifica con `git grep`.
 8. **Decisions superseded by commits** — decision dice "X farà Y", commit recente ha
