@@ -22,7 +22,8 @@ confuse them.
 
 ## Paths
 
-- Vault root: `/Users/stefanodellapietra/dev/projects/obsidian/Obsidian Vault/hotelops/`
+- Vault root: `/Users/stefanodellapietra/dev/Projects/obsidian/Obsidian Vault/HotelOps/`
+  (git repo privato `ste-hue/obsidian-vault`, branch `master`; la casing conta fuori da macOS)
 - Repo root: `/Users/stefanodellapietra/dev/Projects/hotelops/`
 
 ## Mode selection
@@ -193,11 +194,16 @@ e le tabelle `d_*` pertinenti. Il protocollo `entity_protocol_v1.md` e
 `ENTITY_REVIEW.md` sono archiviati: NON applicarne la state machine o i
 criteri CORE/TACTICAL/TRANSIENT come regole operative correnti.
 
+Confine d'autorità (I3, vigente): `vault/ontology/` è SSOT **solo per i nomi
+business** delle entità (società, banche, persone, categorie) e i valori `D_*`
+devono coincidere con essi; per tutto il resto (fatti tecnici, tabelle, viste,
+regole) l'autorità è repo + BigQuery. Se una modifica a `core/bq/dimensioni/*.csv`
+o a `D_*` introduce un nome business senza nota vault corrispondente → è drift I3:
+proponi la scrittura vault **prima** del merge e nota la violazione nel proposal.
+
 Se una decisione modifica il significato di un'entità o l'autorità dei dati,
 confronta vault, codice e dato canonico. Proponi una capture con fonti, owner,
-decisione e commit correlati; nessuna scrittura automatica. Non dedurre che il
-vault sia automaticamente SSOT dell'ontologia: verifica il confine d'autorità
-nel contratto attivo.
+decisione e commit correlati; nessuna scrittura automatica.
 
 ### If none apply → skip
 
@@ -272,7 +278,11 @@ rischio è doppio perché il vault è già demoted: il check va in **due direzio
 
 **Medium (cross-reference vault ↔ repo):**
 
-6. **Ontology/authority drift** — confronta modifiche a `core/bq/dimensioni/*.csv`, ai contratti canonici e alle note vault, secondo gli invariants attualmente vigenti; segnala divergenze senza assumere che il vault sia sempre SSOT.
+6. **I3 violations (nomi business)** — modifiche a `core/bq/dimensioni/*.csv` o a `D_*`
+   che introducono nomi di entità business senza paired nota in `vault/ontology/`
+   (git log vs vault). Fuori dai nomi business il vault non è SSOT: non segnalare come
+   violazione un fatto tecnico che il vault riporta diversamente dal repo — quello è
+   check 7.
 7. **Stale architectural claims** — `PLATFORM.md` / `architecture/*` citano tabelle/file
    che non esistono più nel repo (rename, delete). Verifica con `git grep`.
 8. **Decisions superseded by commits** — decision dice "X farà Y", commit recente ha
