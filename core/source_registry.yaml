@@ -1652,6 +1652,18 @@ sources:
     loop_targets: []
     promotion_policy: RAW_ONLY
     detector_category: fatture_sdi
+    freshness:
+      tier: M
+      cadence: adhoc
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Fatture e Corrispettivi (AdE)"
+      report: "Richiesta massiva fatture — xml/p7m + metaDato"
+      filters: "finestra di consultazione ~2 anni; batch misto attive/passive"
+      format: zip
     raw_storage:
       backend: gcs
       bucket: hotelops-raw
