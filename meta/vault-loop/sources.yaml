@@ -1,0 +1,47 @@
+# Vault Loop — tracked sources for the deterministic reconciliation
+# (scripts/vault_loop/reconcile.py). Spec: .claude/commands/vault-loop.md (Mode C)
+# + docs/superpowers/specs/2026-10-11-vault-loop-incremental-design.md.
+#
+# `path` is relative to the hotelops checkout that holds this file. Override any
+# source with the env var VAULT_LOOP_PATH_<NAME> (dashes -> underscores, upper).
+# Names only: no credentials, no content, nothing private in this file.
+
+first_run_window_days: 30   # commits considered on the first run (no checkpoint yet)
+decision_age_days: 30       # a decision older than this is "historical": edits need review
+
+sources:
+  hotelops:
+    path: .
+    authority: "repo docs: technical rules (INVARIANTS I1-I10, AI_INSTRUCTIONS), data contracts, CLI"
+    watch_paths:
+      - docs/architecture/
+      - docs/adr/
+      - core/schemas.py
+      - core/config.py
+      - core/bq/views/
+      - core/source_registry.yaml
+      - verticals/hub/registry.py
+      - cli.py
+      - AGENTS.md
+      - CLAUDE.md
+      - .claude/commands/vault-loop.md
+
+  mgmt-os:
+    path: ../mgmt_os
+    authority: "management state engine (Regia): decisions, fronts, verification state"
+    watch_paths:
+      - docs/
+      - mgmt/engine.py
+      - mgmt/repository.py
+      - mgmt/shared_server.py
+      - AGENTS.md
+      - README.md
+
+  vault:
+    path: ../obsidian/Obsidian Vault
+    subdir: HotelOps
+    authority: "reasoning memory; SSOT only for business entity names (I3)"
+    skip_dirs: [sessions, _archive]      # historical narrative: never pointer/claim-checked
+    archive_dirs: [_archive]
+    note_dirs: [decisions, workstreams, concepts, journal, sessions]
+    note_files: [log.md, INDEX.md]

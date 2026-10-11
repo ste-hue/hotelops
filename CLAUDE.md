@@ -7,10 +7,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > **CLAUDE.md = concetti + puntatori, NON catalogo.** Qui stanno solo le cose che NON si rigenerano: architettura, invarianti, dominio (INTUR/ORTI), regole operative. Lo **schema completo** è BigQuery stesso (`bq show <table>` / `INFORMATION_SCHEMA` — la source of truth). Dettagli curati: skill `hotelops-data-analyst` + `core/bq/SCHEMA_CONTEXT.md`; `hotelops manifest` → `core/bq/manifest.yaml` (snapshot parziale, subset di tabelle). Il **diario operativo vivo** è `STATUS.md` (leggilo prima di pianificare).
 
 > **For AI agents**: ground truth = repo + BigQuery schema. Read in this order before non-trivial work:
-> 1. `docs/architecture/INVARIANTS.md` — la costituzione (I1–I8, canonical per concept).
+> 1. `docs/architecture/INVARIANTS.md` — la costituzione (I1–I10, canonical per concept).
 > 2. `docs/architecture/AI_INSTRUCTIONS.md` — layer model, canonical truth registry, operational loop, anti-goals.
 > 3. `docs/architecture/LE_3_DIMENSIONI.md` — il concetto temporale più importante del sistema.
 > 4. `CLAUDE.md` (this file) — concetti, comandi, regole di dominio.
+> 5. `docs/adr/0005-ai-native-operating-infrastructure.md` — direzione accettata: cosa è durevole (fatti, calcoli, regole, contratti, memoria, diritti decisionali) e cosa è sostituibile (dashboard, framework, modelli). `docs/architecture/PRODUCT_OVERVIEW.md` = mappa dei tre moduli (Regia / CdG / Piano industriale).
+>
+> **Vault Loop** (vault ↔ repo): spec unica `.claude/commands/vault-loop.md` (Bootstrap / Capture / Lint); `.agents/skills/source-command-vault-loop` è solo un adapter. Lint deterministico e incrementale: `python -m scripts.vault_loop.reconcile` (`meta/vault-loop/README.md`).
 >
 > **Goal di lungo termine**: HotelOps è il **Company OS** — il sistema operativo decisionale delle vere operazioni del business. 3 layer: **Code** (`core/`, `ingest/`, `verticals/`) = come opera il twin; **BigQuery** = cosa osserva; **Vault** = meta-knowledge umano (non canonical per fatti tecnici, può essere stale — verifica sempre con repo + BQ + utente; asse **workstream** `workstreams/<NOME>.md` per rientrare su un fronte). Indice machine-readable delle sessioni: `~/dev/Projects/obsidian/Obsidian Vault/.cowork/sessions_semantic.json` (sintesi, decisioni, open threads per sessione — estratto da `HotelOps/sessions/`, rigenerato da Cowork: **read-only**, può essere stale di qualche giorno).
 
