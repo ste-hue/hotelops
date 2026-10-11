@@ -17,6 +17,13 @@ from ingest.pec_watermark import Watermark
 UV = 1000  # UIDVALIDITY finta, stabile in quasi tutti i test
 
 
+@pytest.fixture(autouse=True)
+def _pipeline_run_senza_bq(monkeypatch):
+    monkeypatch.setattr(
+        "core.pipeline_run.PipelineRun._insert_final", lambda self: None
+    )
+
+
 @pytest.fixture
 def lock_libero(monkeypatch):
     """main() prende il lock globale su GCS: qui lo si finge libero.
@@ -53,14 +60,20 @@ def _deps(messages, watermarks=None, chunk_size=50, promotion=None):
     un test non se ne occupa)."""
     messages_by_folder = messages if isinstance(messages, dict) else {"INBOX": messages}
     wm = {
-        (entity, "INBOX"): Watermark(uid, UV) for entity, uid in (watermarks or {}).items()
+        (entity, "INBOX"): Watermark(uid, UV)
+        for entity, uid in (watermarks or {}).items()
     }
     seen = set()
     calls = {"intake": [], "promote": []}
 
     def fake_fetch(
-        cfg, since_uid, folder="INBOX", since_date=None, conn_factory=None,
-        uidvalidity=None, chunk_size=chunk_size,
+        cfg,
+        since_uid,
+        folder="INBOX",
+        since_date=None,
+        conn_factory=None,
+        uidvalidity=None,
+        chunk_size=chunk_size,
     ):
         msgs = [(u, b) for u, b in messages_by_folder.get(folder, []) if u > since_uid]
         for start in range(0, len(msgs), chunk_size):
@@ -77,16 +90,22 @@ def _deps(messages, watermarks=None, chunk_size=50, promotion=None):
         calls["promote"].append(raw_object_id)
         return promotion() if promotion else _promotion()
 
-    return Deps(
-        fetch_since=fake_fetch,
-        read_watermark=lambda b, e, folder="INBOX": wm.get((e, folder), Watermark(0)),
-        write_watermark=lambda b, e, u, folder="INBOX", uidvalidity=None: wm.__setitem__(
-            (e, folder), Watermark(u, uidvalidity)
+    return (
+        Deps(
+            fetch_since=fake_fetch,
+            read_watermark=lambda b, e, folder="INBOX": wm.get(
+                (e, folder), Watermark(0)
+            ),
+            write_watermark=lambda b, e, u, folder="INBOX", uidvalidity=None: (
+                wm.__setitem__((e, folder), Watermark(u, uidvalidity))
+            ),
+            intake_file=fake_intake,
+            promote_raw_object=fake_promote,
+            get_password=lambda env: "s3cret",
         ),
-        intake_file=fake_intake,
-        promote_raw_object=fake_promote,
-        get_password=lambda env: "s3cret",
-    ), wm, calls
+        wm,
+        calls,
+    )
 
 
 def test_ingerisce_le_buste_nuove() -> None:
@@ -152,8 +171,15 @@ def test_intake_fallisce_a_meta_giro_produce_failed_e_non_avanza_watermark() -> 
     wm: dict = {}
     calls = {"intake": [], "promote": []}
 
-    def fake_fetch(cfg, since_uid, folder="INBOX", since_date=None, conn_factory=None,
-                   uidvalidity=None, chunk_size=50):
+    def fake_fetch(
+        cfg,
+        since_uid,
+        folder="INBOX",
+        since_date=None,
+        conn_factory=None,
+        uidvalidity=None,
+        chunk_size=50,
+    ):
         if folder != "INBOX":
             return
         yield Block(UV, since_uid, [(u, b) for u, b in messages if u > since_uid])
@@ -171,8 +197,8 @@ def test_intake_fallisce_a_meta_giro_produce_failed_e_non_avanza_watermark() -> 
     deps = Deps(
         fetch_since=fake_fetch,
         read_watermark=lambda b, e, folder="INBOX": wm.get(e, Watermark(0)),
-        write_watermark=lambda b, e, u, folder="INBOX", uidvalidity=None: wm.__setitem__(
-            e, Watermark(u, uidvalidity)
+        write_watermark=lambda b, e, u, folder="INBOX", uidvalidity=None: (
+            wm.__setitem__(e, Watermark(u, uidvalidity))
         ),
         intake_file=fake_intake,
         promote_raw_object=fake_promote,
@@ -193,8 +219,15 @@ def test_cartella_inviata_irraggiungibile_non_blocca_inbox() -> None:
     deps, wm, calls = _deps({"INBOX": [(11, b"una"), (12, b"due")]})
     real_fetch = deps.fetch_since
 
-    def fake_fetch(cfg, since_uid, folder="INBOX", since_date=None, conn_factory=None,
-                   uidvalidity=None, chunk_size=50):
+    def fake_fetch(
+        cfg,
+        since_uid,
+        folder="INBOX",
+        since_date=None,
+        conn_factory=None,
+        uidvalidity=None,
+        chunk_size=50,
+    ):
         if folder == "INBOX.Inviata":
             raise ConnectionError("Inviata giù")
         return real_fetch(cfg, since_uid, folder=folder, since_date=since_date)
@@ -218,8 +251,15 @@ def test_cartella_inbox_irraggiungibile_non_blocca_inviata() -> None:
     deps, wm, calls = _deps({"INBOX.Inviata": [(21, b"ventuno"), (22, b"ventidue")]})
     real_fetch = deps.fetch_since
 
-    def fake_fetch(cfg, since_uid, folder="INBOX", since_date=None, conn_factory=None,
-                   uidvalidity=None, chunk_size=50):
+    def fake_fetch(
+        cfg,
+        since_uid,
+        folder="INBOX",
+        since_date=None,
+        conn_factory=None,
+        uidvalidity=None,
+        chunk_size=50,
+    ):
         if folder == "INBOX":
             raise ConnectionError("INBOX giù")
         return real_fetch(cfg, since_uid, folder=folder, since_date=since_date)
@@ -260,8 +300,15 @@ def test_guasto_a_meta_cartella_conserva_i_blocchi_gia_fatti() -> None:
     deps, wm, calls = _deps([(u, bytes([u])) for u in range(1, 10)], chunk_size=3)
     real_fetch = deps.fetch_since
 
-    def flaky(cfg, since_uid, folder="INBOX", since_date=None, conn_factory=None,
-              uidvalidity=None, chunk_size=3):
+    def flaky(
+        cfg,
+        since_uid,
+        folder="INBOX",
+        since_date=None,
+        conn_factory=None,
+        uidvalidity=None,
+        chunk_size=3,
+    ):
         for n, blk in enumerate(real_fetch(cfg, since_uid, folder=folder)):
             if n == 2:
                 raise ConnectionError("socket error: EOF")
@@ -332,8 +379,15 @@ def test_rifiuti_non_mascherano_una_cartella_giu() -> None:
     )
     real_fetch = deps.fetch_since
 
-    def fake_fetch(cfg, since_uid, folder="INBOX", since_date=None, conn_factory=None,
-                   uidvalidity=None, chunk_size=50):
+    def fake_fetch(
+        cfg,
+        since_uid,
+        folder="INBOX",
+        since_date=None,
+        conn_factory=None,
+        uidvalidity=None,
+        chunk_size=50,
+    ):
         if folder == "INBOX.Inviata":
             raise ConnectionError("Inviata giù")
         return real_fetch(cfg, since_uid, folder=folder, since_date=since_date)
@@ -466,7 +520,9 @@ def test_main_stampa_cartelle_e_rifiutate(monkeypatch, capsys, lock_libero) -> N
         )
 
     monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
-    monkeypatch.setattr(sys, "argv", ["pec_fetch", "--source-name", "PEC_MAILBOX_VIGNA_APPEND"])
+    monkeypatch.setattr(
+        sys, "argv", ["pec_fetch", "--source-name", "PEC_MAILBOX_VIGNA_APPEND"]
+    )
 
     with pytest.raises(SystemExit):
         pec_fetch.main()
@@ -497,7 +553,9 @@ def test_main_continua_se_una_casella_solleva_inaspettatamente(
 
     assert exc_info.value.code == 2
     assert "PEC_MAILBOX_INTUR_APPEND" in seen
-    assert "PEC_MAILBOX_VIGNA_APPEND" in seen, "la casella dopo quella guasta va comunque tentata"
+    assert "PEC_MAILBOX_VIGNA_APPEND" in seen, (
+        "la casella dopo quella guasta va comunque tentata"
+    )
     captured = capsys.readouterr()
     assert "PEC_MAILBOX_ORTI_APPEND" in captured.err
 
@@ -509,7 +567,9 @@ def test_main_non_esce_2_per_soli_rifiuti(monkeypatch, capsys, lock_libero) -> N
     """Il job notturno non presidiato manda mail solo sui guasti veri."""
 
     def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
-        return FetchResult(entity_id=name, fetched=3, ingested=3, promoted=2, rejected=1)
+        return FetchResult(
+            entity_id=name, fetched=3, ingested=3, promoted=2, rejected=1
+        )
 
     monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
     monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
@@ -564,7 +624,9 @@ def test_main_esce_zero_se_un_giro_e_gia_in_corso(monkeypatch, capsys) -> None:
 
     monkeypatch.setattr(pec_fetch, "pec_lock_held", occupato)
     monkeypatch.setattr(
-        pec_fetch, "fetch_mailbox", lambda *a, **k: chiamate.append(a) or FetchResult("X")
+        pec_fetch,
+        "fetch_mailbox",
+        lambda *a, **k: chiamate.append(a) or FetchResult("X"),
     )
     monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
 
@@ -605,7 +667,9 @@ def test_main_rilascia_il_lock_anche_se_il_giro_fallisce(
     assert lock_libero == ["acquisito", "rilasciato"]
 
 
-def test_main_prende_il_lock_anche_con_source_name(monkeypatch, capsys, lock_libero) -> None:
+def test_main_prende_il_lock_anche_con_source_name(
+    monkeypatch, capsys, lock_libero
+) -> None:
     """Il lock è globale: la stessa PEC arriva a INTUR e a ORTI con lo stesso
     msgid, quindi anche un giro su una sola casella deve prenderlo."""
     monkeypatch.setattr(
@@ -631,7 +695,9 @@ def test_main_esce_2_se_nessuna_busta_e_stata_promossa(
     per quante notti serve, senza una mail."""
 
     def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
-        return FetchResult(entity_id=name, fetched=4, ingested=4, promoted=0, rejected=4)
+        return FetchResult(
+            entity_id=name, fetched=4, ingested=4, promoted=0, rejected=4
+        )
 
     monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
     monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
@@ -649,7 +715,9 @@ def test_main_resta_verde_se_almeno_una_busta_passa(
     """La guardia è sul caso degenere categorico, non su una soglia."""
 
     def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
-        return FetchResult(entity_id=name, fetched=10, ingested=10, promoted=9, rejected=1)
+        return FetchResult(
+            entity_id=name, fetched=10, ingested=10, promoted=9, rejected=1
+        )
 
     monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
     monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all"])
@@ -680,11 +748,15 @@ def test_main_guarda_i_totali_del_giro_non_la_singola_casella(
     assert "nessuna busta promossa" not in out.err
 
 
-def test_main_niente_falso_allarme_con_no_promote(monkeypatch, capsys, lock_libero) -> None:
+def test_main_niente_falso_allarme_con_no_promote(
+    monkeypatch, capsys, lock_libero
+) -> None:
     """`--no-promote` non promuove niente per definizione: non è un guasto."""
 
     def fake_fetch_mailbox(name, since_days=7, promote=True, deps=None):
-        return FetchResult(entity_id=name, fetched=3, ingested=3, promoted=0, rejected=0)
+        return FetchResult(
+            entity_id=name, fetched=3, ingested=3, promoted=0, rejected=0
+        )
 
     monkeypatch.setattr(pec_fetch, "fetch_mailbox", fake_fetch_mailbox)
     monkeypatch.setattr(sys, "argv", ["pec_fetch", "--all", "--no-promote"])
@@ -719,3 +791,34 @@ def test_sigterm_rilascia_il_lock(monkeypatch, lock_libero) -> None:
         assert lock_libero == ["acquisito", "rilasciato"]
     finally:
         signal.signal(signal.SIGTERM, precedente)
+
+
+def test_main_apre_un_pipeline_run_pec_fetch(monkeypatch):
+    """Il giro notturno registra `pec_fetch` in f_pipeline_runs (spec 2026-09-09 §8)."""
+    import sys
+    from contextlib import nullcontext
+
+    import ingest.pec_fetch as pf
+
+    runs = []
+
+    class FakeRun:
+        def __init__(self, pipeline_name, societa_id=None, file_sorgente=None):
+            self.pipeline_name = pipeline_name
+
+        def __enter__(self):
+            runs.append(self)
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr("core.pipeline_run.PipelineRun", FakeRun)
+    monkeypatch.setattr(pf, "pec_lock_held", lambda: nullcontext())
+    monkeypatch.setattr(pf, "_giro", lambda names, since_days, promote: None)
+    monkeypatch.setattr(pf.signal, "signal", lambda *a, **k: None)
+    monkeypatch.setattr(
+        sys, "argv", ["pec_fetch", "--source-name", "PEC_MAILBOX_INTUR_APPEND"]
+    )
+    pf.main()
+    assert [r.pipeline_name for r in runs] == ["pec_fetch"]

@@ -23,6 +23,20 @@ sources:
       backend: gcs                          # was: drive (Phase 4 pilot)
       bucket: hotelops-raw                   # NEW (only required for backend=gcs)
       path_template: "homebanking/ORTI/MPS"  # retained for Drive-side workspace
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: daily
+      coverage_column: data_operazione
+      dims: [banca_id]
+      dim_filter: {banca_id: [MPS, MPS_KROSS]}
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Homebanking MPS"
+      report: "Lista movimenti"
+      filters: "mese pieno, un file per conto (MPS e MPS KROSS)"
+      format: xls
 
   MPS_BANCA_INTUR_APPEND:
     system: MPS
@@ -40,6 +54,20 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "homebanking/INTUR/MPS"
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: daily
+      coverage_column: data_operazione
+      dims: [banca_id]
+      dim_filter: {banca_id: [MPS]}
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Homebanking MPS"
+      report: "Lista movimenti"
+      filters: "mese pieno"
+      format: xls
 
   SELLA_BANCA_INTUR_APPEND:
     system: SELLA
@@ -57,6 +85,20 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "homebanking/INTUR/SELLA"
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: daily
+      coverage_column: data_operazione
+      dims: [banca_id]
+      dim_filter: {banca_id: [SELLA]}
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Homebanking Sella"
+      report: "Lista movimenti conto"
+      filters: "mese pieno"
+      format: xls
 
   INTESA_BANCA_INTUR_APPEND:
     system: INTESA
@@ -74,6 +116,21 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "homebanking/INTUR/INTESA"
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: daily
+      coverage_column: data_operazione
+      dims: [banca_id]
+      dim_filter: {banca_id: [INTESA]}
+      dormant: "conto senza flussi dal 10/06/2026 (deciso 2026-06-30)"
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Homebanking Intesa"
+      report: "Movimenti"
+      filters: "mese pieno"
+      format: xlsx
 
   INTESA_BANCA_ORTI_APPEND:
     system: INTESA
@@ -91,6 +148,21 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "homebanking/ORTI/INTESA"
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: daily
+      coverage_column: data_operazione
+      dims: [banca_id]
+      dim_filter: {banca_id: [INTESA]}
+      dormant: "conto senza flussi dal 05/06/2026 (deciso 2026-06-30)"
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Homebanking Intesa"
+      report: "Movimenti"
+      filters: "mese pieno"
+      format: xlsx
 
   # ── Esolver flussi — APPEND ───────────────────────────────────────────────
   ESOLVER_MOVIMENTI_ORTI_APPEND:
@@ -110,6 +182,19 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "movimenti_contabili/ORTI"
+    freshness:
+      tier: E
+      cadence: monthly
+      grace_day: 20
+      grain: daily
+      coverage_column: data_registrazione
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Esolver"
+      report: "Prima nota › Lista movimenti contabili (LISTAMOVCONT)"
+      filters: "mese pieno"
+      format: xls
 
   ESOLVER_MOVIMENTI_INTUR_APPEND:
     system: ESOLVER
@@ -128,6 +213,19 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "movimenti_contabili/INTUR"
+    freshness:
+      tier: E
+      cadence: monthly
+      grace_day: 20
+      grain: daily
+      coverage_column: data_registrazione
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Esolver"
+      report: "Prima nota › Lista movimenti contabili (LISTAMOVCONT)"
+      filters: "mese pieno"
+      format: xls
 
   # ── Esolver scheda contabile — APPEND ─────────────────────────────────────
   ESOLVER_SCHEDA_ORTI_APPEND:
@@ -146,6 +244,21 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "registro_banca_esolver/ORTI"
+    freshness:
+      tier: E
+      cadence: monthly
+      grace_day: 20
+      grain: snapshot
+      coverage_column: data_snapshot
+      dims: [banca_id]
+      dim_filter: {banca_id: [MPS, MPS_KROSS]}
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Esolver"
+      report: "Scheda contabile raggruppata (mastrino, tutte le banche)"
+      filters: "a fine mese"
+      format: xlsx
 
   ESOLVER_SCHEDA_INTUR_APPEND:
     system: ESOLVER
@@ -163,6 +276,21 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "registro_banca_esolver/INTUR"
+    freshness:
+      tier: E
+      cadence: monthly
+      grace_day: 20
+      grain: snapshot
+      coverage_column: data_snapshot
+      dims: [banca_id]
+      dim_filter: {banca_id: [MPS, SELLA]}
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Esolver"
+      report: "Scheda contabile raggruppata (mastrino, tutte le banche)"
+      filters: "a fine mese"
+      format: xlsx
 
   # ── Registro fatture (righe contropartita) — APPEND ──────────────────────
   # Export Esolver "Lista fatture acquisto/vendita per numero dettagliata".
@@ -184,6 +312,19 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "fatture/ORTI/acquisto"
+    freshness:
+      tier: E
+      cadence: monthly
+      grace_day: 20
+      grain: daily
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Esolver"
+      report: "Lista fatture acquisto per numero dettagliata"
+      filters: "filtro su data di registrazione, salvato .xlsx"
+      format: xlsx
 
   ESOLVER_FATTUREACQUISTO_INTUR_APPEND:
     system: ESOLVER
@@ -201,6 +342,19 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "fatture/INTUR/acquisto"
+    freshness:
+      tier: E
+      cadence: monthly
+      grace_day: 20
+      grain: daily
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Esolver"
+      report: "Lista fatture acquisto per numero dettagliata"
+      filters: "filtro su data di registrazione, salvato .xlsx"
+      format: xlsx
 
   ESOLVER_FATTUREVENDITA_ORTI_APPEND:
     system: ESOLVER
@@ -218,6 +372,19 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "fatture/ORTI/vendita"
+    freshness:
+      tier: E
+      cadence: monthly
+      grace_day: 20
+      grain: daily
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Esolver"
+      report: "Lista fatture di vendita per cliente dettagliata"
+      filters: "filtro su data di registrazione, salvato .xlsx"
+      format: xlsx
 
   ESOLVER_FATTUREVENDITA_INTUR_APPEND:
     system: ESOLVER
@@ -235,6 +402,19 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "fatture/INTUR/vendita"
+    freshness:
+      tier: E
+      cadence: monthly
+      grace_day: 20
+      grain: daily
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Esolver"
+      report: "Lista fatture di vendita per cliente dettagliata"
+      filters: "filtro su data di registrazione, salvato .xlsx"
+      format: xlsx
 
   # ── Partite aperte — SNAPSHOT ─────────────────────────────────────────────
   ESOLVER_PARTITE_ORTI_SNAPSHOT:
@@ -253,6 +433,19 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "partite_fornitori/ORTI"
+    freshness:
+      tier: E
+      cadence: monthly
+      grace_day: 20
+      grain: snapshot
+      coverage_column: data_snapshot
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Esolver"
+      report: "Situazione partite sintetica per fornitori"
+      filters: "senza filtri"
+      format: xlsx
 
   ESOLVER_PARTITE_INTUR_SNAPSHOT:
     system: ESOLVER
@@ -269,6 +462,19 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "partite_fornitori/INTUR"
+    freshness:
+      tier: E
+      cadence: monthly
+      grace_day: 20
+      grain: snapshot
+      coverage_column: data_snapshot
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Esolver"
+      report: "Situazione partite sintetica per fornitori"
+      filters: "senza filtri"
+      format: xlsx
 
   # ── Bilancino — SNAPSHOT ──────────────────────────────────────────────────
   ESOLVER_BILANCINO_ORTI_SNAPSHOT:
@@ -286,6 +492,19 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "bilancino/ORTI"
+    freshness:
+      tier: E
+      cadence: monthly
+      grace_day: 20
+      grain: monthly
+      coverage_column: "LAST_DAY(PARSE_DATE('%Y-%m', mese))"
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Esolver"
+      report: "Bilancio di verifica"
+      filters: "mese chiuso, solo conti di livello imputazione"
+      format: xls
 
   ESOLVER_BILANCINO_INTUR_SNAPSHOT:
     system: ESOLVER
@@ -302,6 +521,19 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "bilancino/INTUR"
+    freshness:
+      tier: E
+      cadence: monthly
+      grace_day: 20
+      grain: monthly
+      coverage_column: "LAST_DAY(PARSE_DATE('%Y-%m', mese))"
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Esolver"
+      report: "Bilancio di verifica"
+      filters: "mese chiuso, solo conti di livello imputazione"
+      format: xls
 
   # ── Gasparotto budget — SNAPSHOT ──────────────────────────────────────────
   ESOLVER_BUDGET_ORTI_SNAPSHOT:
@@ -323,6 +555,18 @@ sources:
     notes: |
       Q7 chiusa: system=ESOLVER (la fonte primaria dei dati è l'ERP).
       Il file Master è curato da Romita ma i dati nascono in Esolver.
+    freshness:
+      tier: M
+      cadence: adhoc
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Drive (Romita)"
+      report: "Master Completo / Budget ORTI"
+      filters: "rilascio annuale"
+      format: xlsx
 
   # ── Piano finanziario — SNAPSHOT ──────────────────────────────────────────
   ESOLVER_PF_ORTI_SNAPSHOT:
@@ -348,6 +592,19 @@ sources:
       ogni rotation crea un file nuovo — si lista la cartella via SA drive-audit@
       e si prende il piu' recente per societa. Dal 2026-07 (18/08) lo standard
       ha orizzonte esteso a giugno anno+1.
+    freshness:
+      tier: E
+      cadence: monthly
+      grace_day: 20
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Drive › cartella master PF"
+      report: "Piano Finanziario post-rotate"
+      filters: "rotation mensile"
+      format: xlsx
 
   ESOLVER_PF_INTUR_SNAPSHOT:
     system: ESOLVER
@@ -372,6 +629,19 @@ sources:
       ogni rotation crea un file nuovo — si lista la cartella via SA drive-audit@
       e si prende il piu' recente per societa. Dal 2026-07 (18/08) lo standard
       ha orizzonte esteso a giugno anno+1.
+    freshness:
+      tier: E
+      cadence: monthly
+      grace_day: 20
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Drive › cartella master PF"
+      report: "Piano Finanziario post-rotate"
+      filters: "rotation mensile"
+      format: xlsx
 
   # ── HotelCube accodamenti — APPEND, BU per-file ───────────────────────────
   HOTELCUBE_ACCODAMENTI_ORTI_APPEND:
@@ -391,6 +661,19 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "accodamenti/ORTI"
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: daily
+      coverage_column: data_registrazione
+      dims: [business_unit_id]
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "HotelCube"
+      report: "Export accodamenti H_/R_/C_ (Corrispettivi, Movimenti, Fatture, Clienti .txt)"
+      filters: "cartella giornaliera ACCODAMENTI HOTEL CUBE"
+      format: txt
 
   # ── HotelCube Stampa Cassa (documenti fiscali) — RAW_ONLY ─────────────────
   HOTELCUBE_STAMPACASSA_ORTI_APPEND:
@@ -426,6 +709,18 @@ sources:
       intake; riesportare per serie/tipo documento, non "dall'ultima data".
       RAW_ONLY (hard gate): canonical_table/parser sono nomi TARGET futuri
       (candidata unificazione in un flusso incassi cassa).
+    freshness:
+      tier: M
+      cadence: adhoc
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "HotelCube"
+      report: "Stampa Cassa"
+      filters: "per struttura, max 1000 righe per export"
+      format: xlsx
 
   # ── RistoCube Stampa Cassa (documenti fiscali POS) — RAW_ONLY ─────────────
   RISTOCUBE_STAMPACASSA_ORTI_APPEND:
@@ -456,6 +751,18 @@ sources:
       (primo file 2026-07-30: serie 2026-R-A, doc 684–1942, 259 buchi).
       Verificare gap numerici per serie a ogni intake; riesportare spezzando
       per numero documento/mese, non "dall'ultima data".
+    freshness:
+      tier: M
+      cadence: adhoc
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "RistoCube"
+      report: "Stampa Cassa"
+      filters: "max 1000 righe per export"
+      format: xlsx
 
   # ── Coperti — APPEND ──────────────────────────────────────────────────────
   ORTI_COPERTI_ORTI_APPEND:
@@ -474,6 +781,17 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "coperti"
+    freshness:
+      tier: R
+      cadence: daily
+      grain: daily
+      coverage_column: data_servizio
+    acquisition:
+      mode: AUTO
+      owner: job
+      location: "Google Sheet Scarico Coperti"
+      report: "form conteggio pasti"
+      job: ingest_coperti
 
   # ── Economato consumi — APPEND ────────────────────────────────────────────
   ORTI_ECONOMATO_ORTI_APPEND:
@@ -492,6 +810,18 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "economato"
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: daily
+      basis: raw
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "HotelCube economato"
+      report: "Situazione consumi / Consumi articoli"
+      filters: "mese pieno"
+      format: xlsx
 
   # ── PMS statistiche — RAW_ONLY (esempio hard gate) ────────────────────────
   POWERBI_CONSUMI_ORTI_APPEND:
@@ -517,6 +847,18 @@ sources:
       auto-rileva il layout PowerBI (header "Data - Anno"/"CodiceArticolo"/"Importo",
       mese testuale IT) oltre all'Esolver classico; hash_riga canonico dedupa
       cross-layout. Cfr. decision "Source-Contract Ingest Model" (PROPOSED).
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: monthly
+      coverage_column: "LAST_DAY(DATE(anno, mese, 1))"
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Power BI PanoramaGroup"
+      report: "Consumptions F&B Data"
+      filters: "senza filtro Mese, sheet Export"
+      format: xlsx
 
   POWERBI_SEMANTICMODEL_ORTI_APPEND:
     system: POWERBI
@@ -544,6 +886,17 @@ sources:
       ingest_pms_statistiche è folder-batch legacy (paths posizionali,
       niente --file/--raw-object-id): viola il contratto di promotion e
       produrrebbe righe FK-void → NON flippare ad AUTO senza riscriverlo.
+    freshness:
+      tier: M
+      cadence: adhoc
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Power BI PanoramaGroup"
+      report: "documentazione semantic model Z_DataSet"
+      format: xlsx
 
   # ── Ricavi F&B Produzione Netta — SNAPSHOT ────────────────────────────────
   POWERBI_RICAVIFB_ORTI_SNAPSHOT:
@@ -563,6 +916,19 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "powerbi/ricavi_fb/ORTI"
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: monthly
+      coverage_column: "LAST_DAY(DATE(anno, mese, 1))"
+      dims: [business_unit_id]
+    acquisition:
+      mode: SEMI
+      owner: Stefano
+      location: "Power BI PanoramaGroup"
+      report: "Produzione Netta Dashboard"
+      filters: "un file per struttura e mese"
+      format: xlsx
 
   # ── Vendite F&B POS giornaliere (giorno × sala × articolo) — APPEND ───────
   POWERBI_VENDITEFB_ORTI_APPEND:
@@ -582,6 +948,18 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "powerbi/vendite_fb/ORTI"
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: daily
+      coverage_column: data_servizio
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Power BI PanoramaGroup"
+      report: "Consumptions F&B Data (vendite RistoCube)"
+      filters: "mese pieno"
+      format: xlsx
 
   # ── Menu engineering F&B — AUTO (consumer: modello F&B Feliciani) ─────────
   POWERBI_MENUENGINEERING_ORTI_SNAPSHOT:
@@ -613,6 +991,18 @@ sources:
       col COSTO UNITARIO per piatto; le Qtà del file (periodo ignoto) NON si
       usano come denominatore — coperti da f_coperti_giornalieri, qty da
       f_vendite_fb sul periodo del report.
+    freshness:
+      tier: E
+      cadence: adhoc
+      grain: snapshot
+      coverage_column: snapshot_date
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Power BI PanoramaGroup"
+      report: "Engineering F&B Data"
+      filters: "periodo nel filtro, non scritto nel file"
+      format: xlsx
 
   # ── Produzione PMS giornaliera per classe — SNAPSHOT ──────────────────────
   POWERBI_PRODUZIONE_ORTI_SNAPSHOT:
@@ -632,6 +1022,19 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "powerbi/produzione/ORTI"
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: daily
+      coverage_column: data
+      dims: [business_unit_id]
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Power BI PanoramaGroup"
+      report: "Daily Production Report"
+      filters: "Anno 2026, un file per struttura"
+      format: xlsx
 
   POWERBI_OCCUPAZIONE_ORTI_SNAPSHOT:
     system: POWERBI
@@ -650,6 +1053,19 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "powerbi/occupazione/ORTI"
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: daily
+      coverage_column: data
+      dims: [business_unit_id]
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Power BI PanoramaGroup"
+      report: "Produzione Consolidata Giornaliera"
+      filters: "un file per struttura"
+      format: xlsx
 
   # ── Andamento Prenotazioni (on-the-books) — RAW_ONLY ─────────────────────
   POWERBI_ANDAMENTOPRENOTAZIONI_ORTI_SNAPSHOT:
@@ -680,6 +1096,19 @@ sources:
       dim_tipologia (ASSEGNATA/VENDUTA/NESSUNA, dedotta dall'header) è in chiave:
       mai sommare varianti diverse della stessa snapshot_date.
       Flip a MANUAL 2026-07-11 (loop season_forecast, parser+tabella live).
+    freshness:
+      tier: E
+      cadence: weekly
+      grain: snapshot
+      coverage_column: snapshot_date
+      dims: [business_unit_id]
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Power BI PanoramaGroup"
+      report: "Andamento Prenotazioni"
+      filters: "tutte le strutture, senza filtro tipologia, Anno 2025+2026"
+      format: xlsx
 
   # ── Detailed Data Prenotations (on-the-books giornaliero) — RAW_ONLY ─────
   POWERBI_DETTAGLIOPRENOTAZIONI_ORTI_SNAPSHOT:
@@ -708,6 +1137,18 @@ sources:
       ⚠️ La data dello snapshot NON è nel contenuto: fa fede la data di intake.
       RAW_ONLY (hard gate): canonical_table/parser sono nomi TARGET futuri.
       Al flip, valutare snapshot_date nella natural key per il booking pace.
+    freshness:
+      tier: M
+      cadence: adhoc
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Power BI PanoramaGroup"
+      report: "Detailed Data Prenotations"
+      filters: "un file per struttura"
+      format: xlsx
 
   # ── Detailed Data for Bookings (giorno × tipologia venduta) — RAW_ONLY ───
   POWERBI_BOOKINGSTIPOLOGIA_ORTI_SNAPSHOT:
@@ -736,6 +1177,18 @@ sources:
       (dominio ROOM_TYPE); BU dal prefisso filename.
       Consuntivo (fotografia rivedibile) → SNAPSHOT replace per (bu, data).
       Flip a MANUAL 2026-07-11 (loop season_forecast, parser+tabella live).
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Power BI PanoramaGroup"
+      report: "Detailed Data for Bookings"
+      filters: "mese consuntivo, un file per struttura (le date in tabella arrivano al 2027: si misura il raw)"
+      format: xlsx
 
   # ── Numero Camera Clienti (rollup annuale per camera fisica) — RAW_ONLY ──
   POWERBI_NUMEROCAMERACLIENTI_ORTI_SNAPSHOT:
@@ -768,6 +1221,18 @@ sources:
       Fotografia rivedibile (l'anno in corso si aggiorna a ogni export)
       → SNAPSHOT. RAW_ONLY: nessun loop consumer dichiarato; flip quando
       un loop vorrà il ricavo per camera (es. ROI ristrutturazione).
+    freshness:
+      tier: M
+      cadence: adhoc
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Power BI PanoramaGroup"
+      report: "Numero Camera Clienti"
+      filters: "un file per struttura e anno"
+      format: xlsx
 
   # ── Consuntivo+Previsione mensile per classe (rollup forecast PMS) ────────
   POWERBI_CONSPREV_ORTI_SNAPSHOT:
@@ -796,6 +1261,19 @@ sources:
       (da intake_at) è nella natural key, le fotografie si accumulano.
       ⚠️ BU dal FOOTER per negazione ("CodiceHotel is not X or Y" → la
       struttura è il complemento) — né filename né colonna sono affidabili.
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: snapshot
+      coverage_column: snapshot_date
+      dims: [business_unit_id]
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Power BI PanoramaGroup"
+      report: "Consuntivo + Previsione mensile per classe"
+      filters: "un file per struttura"
+      format: xlsx
 
   # ── Consuntivo+Previsione mensile camere/pax — RAW_ONLY ──────────────────
   POWERBI_CONSPREVPAX_ORTI_SNAPSHOT:
@@ -821,6 +1299,18 @@ sources:
       consuntive già coperte da f_pms_statistiche; il "previsto notti"
       non ha ancora un loop → RAW_ONLY (canonical/parser = nomi TARGET).
       Flip quando il season_forecast vorrà anche le notti previste.
+    freshness:
+      tier: M
+      cadence: adhoc
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Power BI PanoramaGroup"
+      report: "Consuntivo + Previsione camere/pax"
+      filters: "un file per struttura"
+      format: xlsx
 
   # ── PEC in.tur@pec.it — buste ricevute + inviate (export webmail mbox) ────
   PEC_MAILBOX_INTUR_APPEND:
@@ -857,6 +1347,17 @@ sources:
       Dedup a 3 livelli: file (MD5 intake), messaggio (msgid certificato),
       allegato (sha256). Spec: docs/superpowers/specs/2026-07-08-pec-mbox-*.md.
       Nuove caselle (es. ORTI) = nuove entry con la stessa grammar.
+    freshness:
+      tier: R
+      cadence: adhoc
+      grain: daily
+      basis: raw
+    acquisition:
+      mode: AUTO
+      owner: job
+      location: "PEC Aruba"
+      report: "IMAP in.tur@pec.it"
+      job: pec_fetch
 
   # ── PEC orti@pec.it — export webmail mbox ─────────────────────────────────
   PEC_MAILBOX_ORTI_APPEND:
@@ -887,6 +1388,17 @@ sources:
     notes: |
       Stessa grammar di PEC_MAILBOX_INTUR_APPEND; entity dal registry (I-PEC-2).
       Spec: docs/superpowers/specs/2026-07-17-pec-multicasella-pannello-ceo-design.md
+    freshness:
+      tier: R
+      cadence: adhoc
+      grain: daily
+      basis: raw
+    acquisition:
+      mode: AUTO
+      owner: job
+      location: "PEC Aruba"
+      report: "IMAP orti@pec.it"
+      job: pec_fetch
 
   # ── PEC vineyardamalficoast@pec.it — export webmail mbox ──────────────────
   PEC_MAILBOX_VIGNA_APPEND:
@@ -916,6 +1428,17 @@ sources:
       path_template: "pec/mailbox/VIGNA"
     notes: |
       VIGNA è soggetto monitorato (EntityId), non SocietaId contabile.
+    freshness:
+      tier: R
+      cadence: adhoc
+      grain: daily
+      basis: raw
+    acquisition:
+      mode: AUTO
+      owner: job
+      location: "PEC Aruba"
+      report: "IMAP vineyardamalficoast@pec.it"
+      job: pec_fetch
 
   # ── PEC stefanojunior.dellapietra@mpspec.it — export .eml/.mbox ───────────
   PEC_MAILBOX_PERSONALE_APPEND:
@@ -941,6 +1464,17 @@ sources:
     notes: |
       Perimetro personale: MAI nel pannello AMM_CEO (I-PEC-3, whitelist
       PANEL_ENTITIES). Compare solo nel digest.
+    freshness:
+      tier: M
+      cadence: adhoc
+      grain: daily
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Webmail PEC MPS"
+      report: "export .eml"
+      format: eml
 
   # ── RistoCube Orders Report — APPEND ─────────────────────────────────────
   RISTOCUBE_ORDERS_ORTI_APPEND:
@@ -960,6 +1494,18 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "ristocube/orders/ORTI"
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: daily
+      coverage_column: data
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "RistoCube"
+      report: "Orders Report"
+      filters: "mese pieno"
+      format: xlsx
 
   POWERBI_CRUSCOTTO_ORTI_APPEND:
     system: POWERBI
@@ -981,6 +1527,17 @@ sources:
       Esempio hard gate: dati interessanti, nessun loop dichiarato. Resta
       in raw, no canonical promotion. Flip a AUTO + dichiara loop_target
       quando il consumer sarà pronto.
+    freshness:
+      tier: M
+      cadence: adhoc
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Power BI PanoramaGroup"
+      report: "Cruscotto / CruscottoMP"
+      format: xlsx
 
   # ── Spiagge.it Panorama Beach — SNAPSHOT ─────────────────────────────────
   SPIAGGEIT_SPIAGGIA_INTUR_SNAPSHOT:
@@ -1000,6 +1557,18 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "spiaggeit/spiaggia/INTUR"
+    freshness:
+      tier: M
+      cadence: adhoc
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Spiagge.it"
+      report: "dump JSON prenotazioni"
+      filters: "a fine stagione"
+      format: json
 
   # ── Registro Corrispettivi Spiaggia INTUR — SNAPSHOT ─────────────────────
   RT_CORRISPETTIVISPIAGGIA_INTUR_SNAPSHOT:
@@ -1020,6 +1589,18 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "intur/corrispettivi_spiaggia/INTUR"
+    freshness:
+      tier: R
+      cadence: monthly
+      grain: daily
+      coverage_column: data
+    acquisition:
+      mode: AUTO
+      owner: job
+      location: "Drive › Registro corrispettivi spiaggia"
+      report: "INTUR_REGISTRO CORRISPETTIVI SPIAGGIA_<anno>.xlsx"
+      filters: "compilato da amministrazione, un file per anno"
+      job: "drive_fetch:RT_CORRISPETTIVISPIAGGIA_INTUR_SNAPSHOT"
 
   # ── Moolty F&B bar spiaggia — APPEND ──────────────────────────────────────
   MOOLTY_FBSPIAGGIA_INTUR_APPEND:
@@ -1039,6 +1620,18 @@ sources:
       backend: gcs
       bucket: hotelops-raw
       path_template: "moolty/fbspiaggia/INTUR"
+    freshness:
+      tier: E
+      cadence: monthly
+      grain: daily
+      coverage_column: data
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Moolty"
+      report: "Report ordini"
+      filters: "mese pieno"
+      format: xlsx
 
 
   # ── SDI / Agenzia Entrate — export massivo FatturaPA — RAW_ONLY ───────────
@@ -1059,6 +1652,18 @@ sources:
     loop_targets: []
     promotion_policy: RAW_ONLY
     detector_category: fatture_sdi
+    freshness:
+      tier: M
+      cadence: adhoc
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Fatture e Corrispettivi (AdE)"
+      report: "Richiesta massiva fatture — xml/p7m + metaDato"
+      filters: "finestra di consultazione ~2 anni; batch misto attive/passive"
+      format: zip
     raw_storage:
       backend: gcs
       bucket: hotelops-raw

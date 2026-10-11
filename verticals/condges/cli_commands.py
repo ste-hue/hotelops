@@ -109,80 +109,49 @@ def _print_subtotals(fmt_eur, ce, be, cu, bu):
 # ── Health check ───────────────────────────────────────────────────────────
 
 
-def _staleness_flag(giorni: int, critical: int, warning: int = 7) -> str:
-    """Return ⚠ / ! / ✓ based on staleness thresholds."""
-    if giorni > critical:
-        return "⚠"
-    if giorni > warning:
-        return "!"
-    return "✓"
-
-
 def cmd_health(args):
     """Health check: freshness dati, gap, alert."""
+    import json as _json
+
     from cli import query, fmt_eur, bq
 
+    # ── SORGENTI: freshness contract dal registry (core/freshness.py) ──────
+    from core.freshness import compute, render_text, to_json, today_rome
+    from core.lineage.source_resolver import load_registry
+
+    json_mode = getattr(args, "json", False)
+    if json_mode:
+        items = compute(load_registry(), query)
+    else:
+        try:
+            items = compute(load_registry(), query)
+        except Exception as e:
+            print(f"  SORGENTI: errore — {e}")
+            items = []
+
+    only = getattr(args, "source", None)
+    if only:
+        items = [i for i in items if i.source_name == only]
+        if not items:
+            if json_mode:
+                print(_json.dumps([], ensure_ascii=False, indent=2))
+            else:
+                print(f"  sorgente sconosciuta: {only}")
+            return
+
+    if json_mode:
+        print(_json.dumps(to_json(items), ensure_ascii=False, indent=2))
+        return
+
     print("\n  ═══ HEALTH CHECK ═══\n")
-
-    # Banche freshness
-    rows = query("""
-    SELECT banca_id, societa_id, MAX(data_operazione) AS ultima,
-      DATE_DIFF(CURRENT_DATE('Europe/Rome'), MAX(data_operazione), DAY) AS giorni
-    FROM hotelops.f_banche_movimenti
-    GROUP BY 1, 2 ORDER BY giorni DESC
-    """)
-    print("  BANCHE:")
-    for r in rows:
-        flag = "⚠" if r["giorni"] > 7 else "✓"
-        print(
-            f"    {flag} {r['societa_id']}/{r['banca_id']}: ultima {r['ultima']} ({r['giorni']}gg fa)"
+    print(
+        render_text(
+            items,
+            today=today_rome(),
+            show_all=bool(only or getattr(args, "all", False)),
         )
-
-    # Movimenti freshness
-    rows = query("""
-    SELECT societa_id, MAX(data_registrazione) AS ultima,
-      DATE_DIFF(CURRENT_DATE('Europe/Rome'), MAX(data_registrazione), DAY) AS giorni
-    FROM hotelops.f_movimenti_contabili GROUP BY 1
-    """)
-    print("\n  MOVIMENTI CONTABILI:")
-    for r in rows:
-        flag = "⚠" if r["giorni"] > 14 else "✓"
-        print(
-            f"    {flag} {r['societa_id']}: ultima {r['ultima']} ({r['giorni']}gg fa)"
-        )
-
-    # IMPEGNO: partite aperte freshness (dimension IMPEGNO per v_previsione_cassa)
-    try:
-        from core.pipeline_run import IMPEGNO_STALENESS_DAYS, check_impegno_freshness
-
-        impegno_rows = check_impegno_freshness()
-        print("\n  IMPEGNO (partite aperte fornitori):")
-        if not impegno_rows:
-            print("    ⚠ nessun dato in f_partite_aperte_fornitori")
-        for r in impegno_rows:
-            flag = _staleness_flag(r["giorni"], IMPEGNO_STALENESS_DAYS)
-            print(
-                f"    {flag} {r['societa_id']}: snapshot {r['ultimo_snapshot']} "
-                f"({r['giorni']}gg fa) — {r['n_partite']} partite, {fmt_eur(r['totale_eur'])}"
-            )
-    except Exception as e:
-        print(f"\n  IMPEGNO (partite aperte): errore — {e}")
-
-    # Scheda contabile freshness (f_saldi_banca_snapshot, àncora di v_previsione_cassa)
-    rows = query("""
-    SELECT societa_id, banca_id, MAX(data_snapshot) AS ultimo_snapshot,
-      DATE_DIFF(CURRENT_DATE('Europe/Rome'), MAX(data_snapshot), DAY) AS giorni
-    FROM hotelops.f_saldi_banca_snapshot
-    GROUP BY 1, 2 ORDER BY giorni DESC
-    """)
-    print("\n  SCHEDA CONTABILE (saldi banca snapshot):")
-    if not rows:
-        print("    ⚠ nessun dato in f_saldi_banca_snapshot")
-    for r in rows:
-        flag = _staleness_flag(r["giorni"], 30)
-        print(
-            f"    {flag} {r['societa_id']}/{r['banca_id']}: snapshot {r['ultimo_snapshot']} ({r['giorni']}gg fa)"
-        )
+    )
+    print()
 
     # Budget loaded
     rows = query("""

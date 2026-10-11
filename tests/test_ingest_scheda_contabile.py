@@ -4,6 +4,14 @@ from datetime import date, datetime
 from pathlib import Path
 
 import openpyxl
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _pipeline_run_senza_bq(monkeypatch):
+    monkeypatch.setattr(
+        "core.pipeline_run.PipelineRun._insert_final", lambda self: None
+    )
 
 
 SCHEDA_HEADER = [

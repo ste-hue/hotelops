@@ -7,6 +7,13 @@ import pytest
 from ingest.promotion import promote_raw_object
 
 
+@pytest.fixture(autouse=True)
+def _pipeline_run_senza_bq(monkeypatch):
+    monkeypatch.setattr(
+        "core.pipeline_run.PipelineRun._insert_final", lambda self: None
+    )
+
+
 @pytest.fixture
 def fake_registry(monkeypatch):
     """Patch source_resolver to return a fake source_def."""

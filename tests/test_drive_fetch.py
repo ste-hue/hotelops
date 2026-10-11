@@ -58,3 +58,52 @@ def test_registry_source_has_drive_file_id() -> None:
     src = reg.get(TARGET_SOURCE)
     assert src is not None, f"{TARGET_SOURCE} missing from registry"
     assert src.drive_file_id == EXPECTED_FILE_ID
+
+
+def test_main_apre_un_pipeline_run_col_nome_del_job(monkeypatch, tmp_path):
+    """Il job registra `drive_fetch:<SOURCE>` in f_pipeline_runs (spec 2026-09-09 §8)."""
+    import sys
+    from types import SimpleNamespace
+
+    import ingest.drive_fetch as df
+
+    runs = []
+
+    class FakeRun:
+        def __init__(self, pipeline_name, societa_id=None, file_sorgente=None):
+            self.pipeline_name = pipeline_name
+            self.societa_id = societa_id
+            self.rows_new = None
+
+        def __enter__(self):
+            runs.append(self)
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr("core.pipeline_run.PipelineRun", FakeRun)
+    f = tmp_path / "x.xlsx"
+    f.write_bytes(b"x")
+    monkeypatch.setattr(df, "fetch_drive_file", lambda *a, **k: f)
+    monkeypatch.setattr(
+        "ingest.intake.intake_file",
+        lambda *a, **k: SimpleNamespace(
+            raw_object_id="r1", content_hash="h", deduped=False
+        ),
+    )
+    monkeypatch.setattr(
+        "ingest.promotion.promote_raw_object",
+        lambda *a, **k: SimpleNamespace(status="PROMOTED", reason=None, noop=False),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["drive_fetch", "--source-name", "RT_CORRISPETTIVISPIAGGIA_INTUR_SNAPSHOT"],
+    )
+    df.main()
+    assert [r.pipeline_name for r in runs] == [
+        "drive_fetch:RT_CORRISPETTIVISPIAGGIA_INTUR_SNAPSHOT"
+    ]
+    assert runs[0].societa_id == "INTUR"
+    assert runs[0].rows_new == 1
