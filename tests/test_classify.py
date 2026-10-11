@@ -910,3 +910,35 @@ class TestLifecycle:
         r3 = detect_piano_finanziario(f3)
         assert r3 is not None
         assert r3.lifecycle == LIFECYCLE_SNAPSHOT
+
+
+class TestSignatureFirst:
+    """Il valutatore dichiarativo vince sui detector Python; i legacy restano."""
+
+    def test_powerbi_riconosciuto_da_firma(self, tmp_path):
+        f = tmp_path / "data.xlsx"
+        _write_xlsx_file(
+            f,
+            ["Camera", "Volte", "ARB", "Infant", "ADR"],
+            [["H118", 22, 40, 0, 305.0]],
+            sheet_name="Export",
+        )
+        result = classify(f)
+        assert result.category == "numero_camera_clienti"
+        assert result.societa == "ORTI"
+        assert result.lifecycle == LIFECYCLE_SNAPSHOT
+        assert result.confidence == 0.95
+        assert result.details["matched_by"] == "registry.yaml signature"
+
+    def test_legacy_resta_al_detector_python(self, tmp_path):
+        """ricavi_fb usa header_0_2: il valutatore la salta, vince detect_ricavi_fb."""
+        f = tmp_path / "data.xlsx"
+        _write_xlsx_file(
+            f,
+            ["Classe", "Codice", "Descrizione Addebito", "Netto"],
+            [["02FB", "BAR", "Bar", 19527.0]],
+            sheet_name="Export",
+        )
+        result = classify(f)
+        assert result.category == "ricavi_fb"
+        assert "matched_by" not in result.details
