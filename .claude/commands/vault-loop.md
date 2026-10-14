@@ -9,7 +9,7 @@ description: Keeps Stefano's Obsidian vault (reasoning substrate) and the hotelo
 
 Stefano's operational substrate has two layers:
 - **Code repo** (`~/dev/Projects/hotelops/`) — operational truth: BigQuery, pipelines, Streamlit apps, CLI.
-- **Obsidian vault** (`~/dev/projects/obsidian/Obsidian Vault/hotelops/`) — reasoning
+- **Obsidian vault** (`HotelOps/` nel vault individuato sulla macchina corrente) — reasoning
   substrate: invariants, decisions, canonical ontology, agent operating manual.
 
 Agents that skip the vault drift off the invariants and invent answers. Agents that treat
@@ -106,7 +106,7 @@ Questi file nel vault sono **stub** che puntano al repo. Non trattarli come font
 verità: segui il link al repo.
 
 - `vault/procedures/reconcile_banca.md` → `repo/docs/protocols/state_transitions.md`
-- `vault/procedures/classifica_file.md` → `repo/ingest/classify.py` + `repo/core/registry.yaml`
+- `vault/procedures/classifica_file.md` → `repo/docs/procedures/classifica_file.md`
 - `vault/protocols/state_transitions.md` → `repo/docs/protocols/state_transitions.md`
 
 ### Parking lot — aware but don't auto-touch
@@ -180,7 +180,7 @@ Un invariant (vedere il set corrente in repo/docs/architecture/INVARIANTS.md) pu
   ovvia (es. "pensavamo di rilassare I3 ma abbiamo scoperto perché non si può").
 - **Sfidato** — qualcuno ha proposto di rilassarlo. Richiede decision esplicita paired con
   edit a INVARIANTS.md.
-- **Nuovo** — è emersa una regola platform-wide non ancora catturata. Promuoverla a I9 (o
+- **Nuovo** — è emersa una regola platform-wide non ancora catturata. Promuoverla al prossimo numero disponibile (o
   amend di uno esistente) richiede decision stub.
 
 Sfidare un invariant è grosso. Non silenziosamente. Mai un edit a INVARIANTS.md senza un
@@ -393,7 +393,22 @@ il codice. Niente vector search, solo link espliciti bidirezionali.
 
 > Bootstrap: read INVARIANTS → AI_INSTRUCTIONS → STATUS → lazy-load by topic. Opt-in:
 > log.md tail for temporal context.
-> Capture: triage decision / invariant / ontology (CORE-TACTICAL-TRANSIENT); propose
+> Capture: triage decision / invariant / ontology (fonti attive, confine I3); propose
 > stub + log.md line with commit traceability; skip if operational-only.
 > Lint: cheap (orphans, stubs, parking lot, audit follow-through) → medium (vault↔repo
 > drift) → expensive (semantic gaps); produce report, never auto-fix; pair with log.md.
+
+## Incremental Mode C runner
+
+`python -m scripts.vault_loop.reconcile` executes the deterministic subset of
+this specification; sources and watched paths are in `meta/vault-loop/sources.yaml`.
+Use actual discovered paths, never assume the Mac paths above are accessible.
+`meta/vault-loop/README.md` documents the runner, checkpoints and manual cloud
+template. It is implementation documentation, not another mode specification.
+
+Unreadable or unavailable dependencies, missing revision history and dirty
+snapshots hold checkpoints. An audit finishing does not prove reconciliation.
+CURRENT applies only to completed mechanical checks, never runtime deployment
+or semantic truth. Historical amendments remain reviewable; reports and persistent
+state containing vault references remain private. No recurring job is authorized
+by Bootstrap, Capture or Lint.

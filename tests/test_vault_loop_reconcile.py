@@ -223,13 +223,11 @@ def test_unavailable_source_is_not_success(world, monkeypatch):
         and not rows["mgmt-os"]["checkpoint_advanced"]
     )
     assert (
-        rows["hotelops"]["checkpoint_advanced"] and rows["vault"]["checkpoint_advanced"]
+        not rows["hotelops"]["checkpoint_advanced"]
+        and not rows["vault"]["checkpoint_advanced"]
     )
     cp = json.loads((world["state"] / "checkpoint.json").read_text())
-    assert "mgmt-os" not in cp["sources"] and set(cp["sources"]) == {
-        "hotelops",
-        "vault",
-    }
+    assert cp["sources"] == {}  # cross-repo pointer check could not complete
 
 
 # 6. repeated runs are idempotent
@@ -355,3 +353,142 @@ def test_report_is_scrubbed():
     report = vl.render_report(run_)
     assert "ghp_" not in report and "@example.com" not in report
     assert report.count("[REDACTED]") == 2 and "redacted" in report
+
+
+def test_missing_vault_subdirectory_is_unavailable(world):
+    import shutil
+
+    shutil.rmtree(world["vault"])
+    r = run(world)
+    assert r["overall"] == vl.SOURCE_UNAVAILABLE
+    assert not any(s["checkpoint_advanced"] for s in r["sources"])
+
+
+def test_missing_vault_preserves_repo_findings_and_checkpoints(world, monkeypatch):
+    run(world)
+    (world["mgmt"] / "docs" / "NEW.md").write_text("new")
+    commit_all(world["mgmt"], "Merge pull request #99 from x/new")
+    r1 = run(world)
+    fid = open_findings(r1, "arch-changes-unreflected:mgmt-os")[0]["id"]
+    before = json.loads((world["state"] / "checkpoint.json").read_text())["sources"]
+    monkeypatch.setenv(
+        "VAULT_LOOP_PATH_VAULT", str(world["vault_root"].parent / "absent")
+    )
+    r2 = run(world)
+    assert r2["findings"][fid]["state"] == "open"
+    assert (
+        json.loads((world["state"] / "checkpoint.json").read_text())["sources"]
+        == before
+    )
+
+
+def test_result_not_verified_holds_checkpoints(world):
+    (world["hotelops"] / "docs/architecture/INVARIANTS.md").unlink()
+    commit_all(world["hotelops"], "remove authority")
+    r = run(world)
+    assert r["overall"] == vl.NOT_VERIFIED
+    assert not any(
+        s["checkpoint_advanced"]
+        for s in r["sources"]
+        if s["name"] in {"hotelops", "vault"}
+    )
+
+
+def test_archived_amendment_remains_visible_across_runs(world):
+    run(world)
+    (world["vault"] / "_archive/DEAD_PROTOCOL.md").write_text("rewrite")
+    commit_all(world["vault_root"], "rewrite")
+    r1, r2 = run(world), run(world)
+    assert {f["id"] for f in open_findings(r1, "archived-content-modified")} == {
+        f["id"] for f in open_findings(r2, "archived-content-modified")
+    }
+    assert open_findings(r2, "archived-content-modified")
+
+
+def test_invalid_checkpoint_history_does_not_fall_back(world):
+    run(world)
+    p = world["state"] / "state.json"
+    bundle = json.loads(p.read_text())
+    bundle["checkpoint"]["sources"]["mgmt-os"]["sha"] = "f" * 40
+    p.write_text(json.dumps(bundle))
+    r = run(world)
+    assert r["overall"] == vl.NOT_VERIFIED
+    assert (
+        json.loads(p.read_text())["checkpoint"]["sources"]["mgmt-os"]["sha"] == "f" * 40
+    )
+
+
+def test_generic_filename_and_other_pr_do_not_acknowledge_change(world):
+    run(world)
+    (world["mgmt"] / "docs/README.md").write_text("new")
+    commit_all(world["mgmt"], "Merge pull request #7 from x/new")
+    with (world["vault"] / "log.md").open("a") as out:
+        out.write("mgmt-os PR #77 and README.md mentioned for unrelated work\n")
+    commit_all(world["vault_root"], "unrelated")
+    assert open_findings(run(world), "arch-changes-unreflected:mgmt-os")
+
+
+def test_corrupt_state_is_not_silently_reset(world):
+    run(world)
+    p = world["state"] / "state.json"
+    p.write_text("{broken")
+    with pytest.raises(json.JSONDecodeError):
+        run(world)
+    assert p.read_text() == "{broken"
+
+
+def test_atomic_bundle_survives_export_failure(world, monkeypatch):
+    run(world)
+    original = vl._atomic_write
+
+    def interrupted(path, content):
+        if path.name == "checkpoint.json":
+            raise OSError("simulated interruption after authoritative commit")
+        return original(path, content)
+
+    monkeypatch.setattr(vl, "_atomic_write", interrupted)
+    with pytest.raises(OSError):
+        run(world)
+    monkeypatch.setattr(vl, "_atomic_write", original)
+    assert run(world)["overall"] == vl.CURRENT
+
+
+def test_unreadable_note_does_not_report_current(world, monkeypatch):
+    original = Path.read_text
+
+    def unreadable(path, *args, **kwargs):
+        if path == world["vault"] / "INDEX.md":
+            raise OSError("unreadable")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", unreadable)
+    r = run(world)
+    assert r["overall"] == vl.NOT_VERIFIED
+    assert not next(s for s in r["sources"] if s["name"] == "vault")[
+        "checkpoint_advanced"
+    ]
+
+
+def test_historical_decision_deletion_stays_open(world):
+    run(world)
+    (world["vault"] / "decisions/2026-01-10_Old_Decision.md").unlink()
+    commit_all(world["vault_root"], "delete decision")
+    assert open_findings(run(world), "archived-content-modified")
+    assert open_findings(run(world), "archived-content-modified")
+
+
+def test_persistent_findings_redact_credentials(world):
+    run(world)
+    (world["mgmt"] / "docs/NEW.md").write_text("new")
+    commit_all(world["mgmt"], "change ghp_abcdefghijklmnopqrstuvwxyz0123")
+    run(world)
+    for name in ["state.json", "findings.json", "last_report.md"]:
+        assert "ghp_" not in (world["state"] / name).read_text()
+
+
+def test_source_inside_unrelated_parent_repo_is_rejected(world):
+    child = world["hotelops"] / "not-a-checkout"
+    child.mkdir()
+    source = vl.resolve(vl.Source("other", child, "unknown"))
+    assert not source.available
+    assert "repository root" in source.error

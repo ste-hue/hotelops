@@ -1,99 +1,130 @@
-# Vault Loop — weekly read-only reconciliation.
-# Lives in the PRIVATE repo ste-hue/obsidian-vault (copy to .github/workflows/).
-# hotelops is public: never run this there, the report names vault files.
-#
-# Needs: secret MGMT_OS_READ_TOKEN (fine-grained PAT, contents:read on ste-hue/mgmt-os),
-#        or remove the mgmt-os checkout + export VAULT_LOOP_PATH_MGMT_OS to a missing path
-#        (the run then reports SOURCE UNAVAILABLE for it, honestly).
+# Manual template for the PRIVATE ste-hue/obsidian-vault repository only.
+# The weekly schedule stays disabled until Stefano approves deployment.
 name: vault-loop
 
 on:
   workflow_dispatch:
   # schedule:
-  #   - cron: "0 6 * * 1"   # Mondays 06:00 UTC — enable only after Stefano's approval
+  #   - cron: "0 6 * * 1"
 
 permissions:
-  contents: write   # to commit state on the vault-loop-state branch of THIS private repo
+  contents: write
 
-concurrency: vault-loop
+concurrency:
+  group: vault-loop
+  cancel-in-progress: false
 
 jobs:
   reconcile:
+    if: github.repository == 'ste-hue/obsidian-vault' && github.event.repository.private == true
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout vault (this repo)
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           path: vault
           fetch-depth: 0
-
-      - name: Checkout hotelops (public, code + config)
-        uses: actions/checkout@v4
+          persist-credentials: false
+      - uses: actions/checkout@v4
         with:
           repository: ste-hue/hotelops
           path: hotelops
           fetch-depth: 0
-
-      - name: Checkout mgmt-os (private)
-        uses: actions/checkout@v4
+          persist-credentials: false
+      - uses: actions/checkout@v4
         with:
           repository: ste-hue/mgmt-os
           token: ${{ secrets.MGMT_OS_READ_TOKEN }}
           path: mgmt_os
           fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: ste-hue/mutui-tracker
+          token: ${{ secrets.MGMT_OS_READ_TOKEN }}
+          path: mutui-tracker
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: ste-hue/panorama-businessplan
+          token: ${{ secrets.MGMT_OS_READ_TOKEN }}
+          path: panorama-businessplan
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Checkout state branch
+      # Only an authenticated 404 permits bootstrap. Network/auth failures stop.
+      - name: Locate persistent state
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import os, urllib.request, urllib.error
+          url = 'https://api.github.com/repos/ste-hue/obsidian-vault/git/ref/heads/vault-loop-state'
+          request = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN']})
+          try:
+              with urllib.request.urlopen(request) as response:
+                  exists = True
+          except urllib.error.HTTPError as error:
+              if error.code != 404:
+                  raise RuntimeError('Unable to verify state branch') from None
+              exists = False
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('exists=' + str(exists).lower() + '\n')
+          PY
+      - name: Checkout persistent state
+        if: steps.state.outputs.exists == 'true'
         uses: actions/checkout@v4
         with:
           ref: vault-loop-state
           path: state
-        continue-on-error: true   # first run: branch does not exist yet
-
+          persist-credentials: false
+      - name: Bootstrap state directory
+        if: steps.state.outputs.exists == 'false'
+        run: mkdir -p state
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install (pyyaml only)
-        run: pip install --quiet pyyaml
-
-      - name: Reconcile (read-only)
-        id: run
+      - run: pip install --quiet pyyaml
+      - name: Reconcile sources
+        id: reconcile
         working-directory: hotelops
         env:
           VAULT_LOOP_PATH_HOTELOPS: ${{ github.workspace }}/hotelops
           VAULT_LOOP_PATH_MGMT_OS: ${{ github.workspace }}/mgmt_os
+          VAULT_LOOP_PATH_MUTUI_TRACKER: ${{ github.workspace }}/mutui-tracker
+          VAULT_LOOP_PATH_PANORAMA_BUSINESSPLAN: ${{ github.workspace }}/panorama-businessplan
           VAULT_LOOP_PATH_VAULT: ${{ github.workspace }}/vault
-          PYTHONPATH: ${{ github.workspace }}/hotelops
         run: |
-          mkdir -p "${{ github.workspace }}/state/vault_loop"
           set +e
-          python -m scripts.vault_loop.reconcile \
-            --state "${{ github.workspace }}/state/vault_loop" \
-            --out "${{ github.workspace }}/state/vault_loop/last_report.md" --quiet
-          echo "exit=$?" >> "$GITHUB_OUTPUT"
+          python -m scripts.vault_loop.reconcile --state "${{ github.workspace }}/state/vault_loop" --quiet
+          result=$?
           set -e
-          cat "${{ github.workspace }}/state/vault_loop/last_report.md" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload report (private repo artifact)
-        uses: actions/upload-artifact@v4
+          case "$result" in 0|1|2|3) ;; *) exit "$result" ;; esac
+          test -f "${{ github.workspace }}/state/vault_loop/state.json"
+          echo "exit=$result" >> "$GITHUB_OUTPUT"
+          # No vault paths, content or financial claims in logs or step summary.
+          echo "Vault Loop audit exit: $result. Private report retained." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
         with:
           name: vault-loop-report
           path: state/vault_loop/last_report.md
-          retention-days: 90
-
-      - name: Persist checkpoint + findings
+          if-no-files-found: error
+          retention-days: 30
+      - name: Persist atomic state and report
         working-directory: state
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git init -q 2>/dev/null || true
-          git checkout -q -B vault-loop-state
-          git config user.name "vault-loop"
-          git config user.email "vault-loop@users.noreply.github.com"
-          git add vault_loop/checkpoint.json vault_loop/findings.json vault_loop/last_report.md
-          git commit -q -m "vault-loop: run $(date -u +%Y-%m-%dT%H:%MZ) (exit ${{ steps.run.outputs.exit }})" || echo "no change"
-          git push -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" vault-loop-state
-
-      - name: Fail the job if a source was unavailable
-        if: steps.run.outputs.exit == '2'
-        run: |
-          echo "A source was unavailable: reconciliation incomplete (see summary)."
-          exit 2
+          if ! test -d .git; then git init -q -b vault-loop-state; fi
+          git config user.name vault-loop
+          git config user.email vault-loop@users.noreply.github.com
+          git config credential.helper '!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'
+          git add vault_loop/state.json vault_loop/checkpoint.json vault_loop/findings.json vault_loop/last_report.md
+          if ! git diff --cached --quiet; then
+            git commit -q -m "vault-loop: record audit"
+            git push -q https://github.com/ste-hue/obsidian-vault.git HEAD:refs/heads/vault-loop-state
+          fi
+      - name: Fail incomplete reconciliation
+        if: steps.reconcile.outputs.exit == '2' || steps.reconcile.outputs.exit == '3'
+        run: exit 1
