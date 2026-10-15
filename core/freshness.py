@@ -22,7 +22,14 @@ from core.lineage.schemas import (
 )
 
 Status = Literal[
-    "OK", "DUE", "STALE", "DORMANT", "JOB_DOWN", "DATA_STUCK", "NO_CONTRACT"
+    "OK",
+    "DUE",
+    "STALE",
+    "DORMANT",
+    "JOB_DOWN",
+    "NO_RECEIPT",
+    "DATA_STUCK",
+    "NO_CONTRACT",
 ]
 
 SEVERITY: dict[str, int] = {
@@ -30,6 +37,7 @@ SEVERITY: dict[str, int] = {
     "JOB_DOWN": 0,
     "DATA_STUCK": 0,
     "DUE": 1,
+    "NO_RECEIPT": 1,
     "OK": 2,
     "DORMANT": 3,
     "NO_CONTRACT": 4,
@@ -40,6 +48,7 @@ ICON: dict[str, str] = {
     "STALE": "🔴",
     "JOB_DOWN": "🔴",
     "DATA_STUCK": "🔴",
+    "NO_RECEIPT": "! ",
     "DORMANT": "⏸ ",
     "NO_CONTRACT": "? ",
 }
@@ -114,6 +123,14 @@ def status_for(
     cov = coverage_status(fc, covered, today)
     if ac.mode == "AUTO":
         if not job_ok:
+            # Ricevuta e dato sono due controlli: se la canonical è in regola, il
+            # job gira e manca solo la ricevuta in f_pipeline_runs (falso JOB_DOWN
+            # del 2026-10-12: immagini jobs senza PipelineRun). Per adhoc la
+            # copertura è OK per definizione: vale solo un dato arrivato nella
+            # finestra del job (2 giorni, come daily), altrimenti resta JOB_DOWN.
+            recente = covered is not None and (today - covered).days <= 2
+            if cov == "OK" and (fc.cadence != "adhoc" or recente):
+                return "NO_RECEIPT"
             return "JOB_DOWN"
         if cov == "STALE":
             return "DATA_STUCK"
@@ -132,6 +149,11 @@ def action_for(
     if ac.mode == "AUTO":
         if status == "JOB_DOWN":
             return f"→ controlla il job {ac.job}"
+        if status == "NO_RECEIPT":
+            return (
+                f"→ dati in regola, nessun run di {ac.job} in f_pipeline_runs: "
+                "l'immagine del job scrive la ricevuta?"
+            )
         if status == "DATA_STUCK":
             return f"→ job {ac.job} verde, dati fermi: controlla la fonte {ac.location}"
         return None

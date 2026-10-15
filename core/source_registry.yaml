@@ -1270,9 +1270,9 @@ sources:
     acquisition:
       mode: MANUAL
       owner: Stefano
-      location: "Power BI PanoramaGroup"
-      report: "Consuntivo + Previsione mensile per classe"
-      filters: "un file per struttura"
+      location: "Power BI PanoramaGroup › report StoricoPrevisioneBudget"
+      report: "visual produzione per classe (colonne Anno/Mese/Classe/Categoria/Addebito) › Esporta dati"
+      filters: "un file per struttura (filtro CodiceHotel, la BU si legge dal footer); NON i visual occupazione Camere/Pax né il grain senza Addebito"
       format: xlsx
 
   # ── Consuntivo+Previsione mensile camere/pax — RAW_ONLY ──────────────────

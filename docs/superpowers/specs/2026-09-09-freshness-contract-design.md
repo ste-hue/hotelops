@@ -75,6 +75,7 @@ settimane dopo la fine del mese, e solo da lì il mese è esportabile.
 Stati aggiuntivi:
 - `DORMANT` (⏸): `dormant` valorizzato. Mai rosso, riga in coda.
 - `JOB_DOWN` (🔴): `mode: AUTO` e nessun run `OK` di `job` in `f_pipeline_runs` nelle ultime 36 ore. Messaggio "job fermo".
+- `NO_RECEIPT` (!): `mode: AUTO`, nessun run di `job` nelle ultime 36 ore, ma coverage OK (per `adhoc`: dato arrivato negli ultimi 2 giorni, come la finestra daily). Il job gira e non scrive la ricevuta (2026-10-12: immagini jobs deployate prima di `PipelineRun`, 4 falsi JOB_DOWN su 48). Messaggio "dati in regola, nessun run in f_pipeline_runs: l'immagine del job scrive la ricevuta?". Senza dato recente resta JOB_DOWN.
 - `DATA_STUCK` (🔴): `mode: AUTO`, job verde, ma coverage STALE. Messaggio "job verde, dati fermi: controlla la fonte" (caso Sheet coperti cancellato, 2026-08-15).
 - `NO_CONTRACT` (?): source senza blocchi. Elencata in coda, senza colore.
 
@@ -92,7 +93,7 @@ Composta da `acquisition` e dallo stato, solo per SEMI e MANUAL non OK:
 ```
 
 Nota per lifecycle: APPEND → "sovrapporre qualche giorno è innocuo, dedup su hash"; SNAPSHOT → "fotografia a oggi, sostituisce la precedente".
-Per `mode: AUTO` nessuna frase se OK; con JOB_DOWN → "controlla il job <job>"; con DATA_STUCK → "controlla la fonte <location>".
+Per `mode: AUTO` nessuna frase se OK; con JOB_DOWN → "controlla il job <job>"; con NO_RECEIPT → "dati in regola, nessun run di <job> in f_pipeline_runs"; con DATA_STUCK → "controlla la fonte <location>".
 Dopo la frase: `blocca: <loop_targets>` se non vuoti. Il "dal" per `basis: raw` non si stampa (non conosciamo il periodo coperto).
 
 ## 6. Il motore — `core/freshness.py`

@@ -185,6 +185,15 @@ def test_auto_job_ok_entro_36h_e_data_stuck():
     q.jobs = [{"pipeline_name": "ingest_coperti", "last_ok": NOW - timedelta(hours=40)}]
     [it] = compute(_registry(cop), q, now=NOW)
     assert it.status == "JOB_DOWN"
+    # dati freschi, nessuna ricevuta: non è un job fermo
+    q.coverage["f_coperti_giornalieri"] = [
+        {"societa_id": "ORTI", "covered": date(2026, 9, 8)}
+    ]
+    q.jobs = []
+    [it] = compute(_registry(cop), q, now=NOW)
+    assert it.status == "NO_RECEIPT"
+    assert "ricevuta" in it.action
+    assert "! " in render_text([it], today_rome(NOW))
 
 
 def test_societa_non_filtrabile_usa_solo_dim_filter():
