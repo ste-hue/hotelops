@@ -65,30 +65,19 @@ Filtri: anno, piattaforma, BU, sentiment. KPI cards, trend mensile, breakdown ca
 
 ## Scheduling (automazione)
 
-### Cron (macchina locale o server)
+In produzione, Cloud Scheduler avvia due Cloud Run Jobs in `hotelops-suite`
+(`europe-west1`):
 
-```bash
-# Scrape giornaliero ore 7
-0 7 * * *  cd /path/to/hotelops && source .env && hotelops reviews --scrape >> /var/log/reviews.log 2>&1
+| Job | Comando | Schedule (Europe/Rome) | Configurazione nel repo |
+|---|---|---|---|
+| `reviews-scrape` | `python -m cli reviews --scrape` | Ogni giorno alle 07:00 | [`scripts/cloud/20_reviews_scrape.sh`](../../scripts/cloud/20_reviews_scrape.sh) |
+| `reviews-report` | `python -m cli reviews --report` | Lunedì alle 08:00 | [`scripts/cloud/30_reviews_report.sh`](../../scripts/cloud/30_reviews_report.sh) |
 
-# Report settimanale lunedi' ore 8
-0 8 * * 1  cd /path/to/hotelops && source .env && hotelops reviews --report >> /var/log/reviews-report.log 2>&1
-```
-
-### Cloud Run Jobs (zero maintenance)
-
-```bash
-# Deploy job
-gcloud run jobs create reviews-scrape \
-  --image=gcr.io/hotelops-suite/hotelops \
-  --command="hotelops,reviews,--scrape" \
-  --set-env-vars="APIFY_API_TOKEN=...,ANTHROPIC_API_KEY=..."
-
-# Schedule
-gcloud scheduler jobs create http reviews-daily \
-  --schedule="0 7 * * *" \
-  --uri="https://..../jobs/reviews-scrape/run"
-```
+I job usano l'immagine batch `Dockerfile.jobs`, i secret runtime da Secret
+Manager e il service account `hotelops-jobs@`. Gli script di configurazione
+sono il riferimento per job, permessi e trigger; non copiare credenziali o
+comandi di deploy da questa guida. Per esecuzioni manuali/locali, usa i comandi
+`hotelops reviews` sopra.
 
 ## Piattaforme e Actors
 

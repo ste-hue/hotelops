@@ -21,8 +21,8 @@ Guest reviews da Booking / TripAdvisor / Google / Expedia / Trip.com → NLP →
 ## Flow
 
 ```
-cron (crontab macchina stefano)
-  └─ hotelops reviews --scrape
+Cloud Scheduler (ogni giorno, 07:00 Europe/Rome)
+  └─ Cloud Run Job `reviews-scrape` (`python -m cli reviews --scrape`)
        ├─ reviews/ingest.read_watermarks   (prima di tutto; abort su BQ fail)
        ├─ reviews/scrape.py                Apify actor call, cap 15/property
        ├─ reviews/ingest.normalize_items   piattaforma-specific normalize
@@ -34,6 +34,12 @@ cron (crontab macchina stefano)
        ├─ reviews/alert.mark_alerts_sent   UPDATE alert_inviato=TRUE post-SMTP
        └─ reviews/alert.send_gap_alert     mail riepilogativa se gap rilevato
 ```
+
+Configurazione nel repository: `scripts/cloud/20_reviews_scrape.sh`.
+Il report settimanale è eseguito dal job `reviews-report`
+(`python -m cli reviews --report`), schedulato il lunedì alle 08:00
+Europe/Rome; vedi `scripts/cloud/30_reviews_report.sh`. Per una prova manuale
+resta disponibile `hotelops reviews --scrape`.
 
 BQ table: `hotelops-suite.hotelops.f_reviews` (APPEND, dedup per `review_hash`).
 
@@ -47,7 +53,7 @@ tabella separata (un watermark esplicito arriverà col Layer 2
 - `MAX_REVIEWS_PER_PROPERTY = 15` (reviews/scrape.py)
 - Soglia negativa: `punteggio_norm ≤ 6.0` (reviews/config.py / alert.py)
 - `GRACE_WINDOW_DAYS = 7` (reviews/alert.py) — solo per first-run keys
-- Cron: 2x/giorno (14:00, 22:00) — __verificare crontab su host__
+- Schedule produzione: scrape giornaliero alle 07:00 e report il lunedì alle 08:00 (Europe/Rome), via Cloud Scheduler
 - Budget Apify: **$25/mese** (hard limit, oltre → alert)
 
 ## Actor Apify per piattaforma
