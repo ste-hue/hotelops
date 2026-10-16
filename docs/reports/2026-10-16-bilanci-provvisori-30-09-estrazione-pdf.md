@@ -2,7 +2,12 @@
 
 **Data:** 2026-10-16 · **Macchina:** `tong` (Tongfang) · **Esecutore:** sessione Claude Code `hotelops-1c`
 **Commit di partenza:** `7db54f7` (main, allineato a `origin/main`, albero pulito)
-**Stato:** nessuna promozione su BigQuery. `f_bilancino` NON modificata. Nessun DELETE.
+**Stato al momento della scrittura (pomeriggio):** nessuna promozione, `f_bilancino` non
+modificata, nessun DELETE.
+**Stato a fine giornata:** superato dai fatti — la promozione canonica è avvenuta per
+altra via (export XLS del settembre chiuso, sessione Mac). Vedi §Verifica indipendente
+dopo la promozione in fondo: questo estratto da PDF è diventato il **controllo incrociato**
+della promozione, che è il suo valore residuo.
 
 ## Perché questo documento esiste
 
@@ -148,9 +153,50 @@ parziale ORTI al 25/09 sta su `mese='2026-09'`).
 6. **Natura provvisoria**: nessuna approvazione di chiusura stabilita. L'estratto non va
    usato come consuntivo definitivo.
 
-## Prossimo passo concreto
+## Verifica indipendente dopo la promozione (sera del 16/10)
 
-Chiedere ad amministrazione l'export xlsx del **settembre chiuso** per ORTI e INTUR.
-È l'unico input che sblocca la promozione canonica. Fino ad allora l'estratto resta un
-**derivato dei PDF a scopo di lettura e confronto**, non un export Esolver originale, e
-non entra in `f_bilancino`.
+Gli export XLS del settembre chiuso sono arrivati e sono stati promossi per altra via
+(sessione Mac, ore 17:00): DELETE scoped delle 190 righe del parziale `6039fc65` eseguita
+da Stefano con `!`, poi promozione manuale con `--mese 2026-09` — terza occorrenza del
+problema «`promote` non passa `--mese`». Stato verificato su BigQuery:
+
+| Società | mese | Righe | raw_object_id | file sorgente |
+|---|---|---|---|---|
+| ORTI | 2026-09 | 185 | `0cac12f0` | `orti_settembre.xls` |
+| INTUR | 2026-09 | 153 | `28d25435` | `intursettembre.xls` |
+
+Questo rende l'estratto dai PDF un **controllo incrociato indipendente** della promozione:
+due documenti diversi, prodotti da due export distinti, confrontati conto per conto.
+
+**INTUR: identico.** 153 conti su 153, **zero differenze**. Due documenti indipendenti che
+concordano al centesimo su tutti i conti di dettaglio.
+
+**ORTI: 5 differenze, tutte spiegate.** Gli scarti si presentano in partite che si
+compensano — la firma di scritture in partita doppia registrate *tra i due export* (il PDF
+è della mail delle 12:13, l'XLS è stato esportato nel pomeriggio):
+
+| Conto | XLS (promosso) | PDF (mattina) | Delta |
+|---|---:|---:|---:|
+| 15.01.07 Anticipi a fornitori terzi | 61.246,44 | 60.641,44 | −605,00 |
+| 19.01.01 Banca | 1.578.124,72 | 1.578.730,42 | +605,70 |
+| 75.01.98 | 1.998,28 | 1.997,58 | −0,70 |
+| 19.01.90 | 26.035,51 | 26.764,21 | +728,70 |
+| 33.03.01 | −725.973,44 | −726.702,14 | −728,70 |
+
+Prima terna: −605,00 + 605,70 − 0,70 = **0,00**. Seconda coppia: +728,70 − 728,70 =
+**0,00**. Entrambe quadrano esattamente. Più un conto presente solo nell'XLS (`19.90.02`),
+coerente con una scrittura nuova. Nessuna differenza è attribuibile all'estrazione: i due
+documenti sono due istanti della stessa giornata contabile.
+
+**Conclusione.** La promozione è confermata da una fonte indipendente. L'estratto non entra
+e non deve entrare in `f_bilancino`: resta un derivato dei PDF, e il suo valore è stato
+esattamente questo controllo.
+
+## Nota di igiene: raw object duplicati
+
+I miei intake sourceless dei due PDF (`75e30aae` ORTI, `21fc44f7` INTUR, `raw_uri` file://)
+sono **duplicati** degli stessi documenti registrati dalla sessione Mac (`910f71fe` ORTI,
+`fc53e7ea` INTUR). Quattro raw object per due documenti. I miei sono `RAW_ONLY` e non
+alimentano nulla, ma vanno riconciliati o ritirati. Causa: due sessioni hanno acquisito in
+parallelo lo stesso documento senza che la regola «un solo scrittore» fosse stata applicata
+ai raw object.
