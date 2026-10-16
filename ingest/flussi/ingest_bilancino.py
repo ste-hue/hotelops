@@ -5,6 +5,11 @@ Bilancio di verifica (trial balance) ingestion pipeline.
 Reads XLS exports from Esolver (Bilancio di verifica) into BigQuery f_bilancino.
 Only ingests leaf-level accounts (Livello di imputazione = Si).
 
+Lifecycle SNAPSHOT (I1, #152): ogni file è la fotografia cumulata di una
+società a un mese. La scrittura passa da bq_write_validated in mode="snapshot"
+con delete-scope (societa_id, mese): ri-promuovere un mese sostituisce TUTTE
+le righe di quel mese, niente append con dedup per hash.
+
 Usage:
     python -m ingest.flussi.ingest_bilancino \\
         --file /path/to/GENNAIO2026ESOLVER.xls \\
@@ -39,15 +44,9 @@ try:
 except ImportError:
     HAS_OPENPYXL = False
 
-try:
-    from google.cloud import bigquery
-
-    HAS_BQ = True
-except ImportError:
-    HAS_BQ = False
-
-from core.bq.client import get_client
+from core.bq.write import bq_write_validated
 from core.config import PROJECT
+from core.schemas import BilancinoRow
 
 BQ_TABLE = f"{PROJECT}.hotelops.f_bilancino"
 
@@ -467,57 +466,25 @@ def parse_bilancino(
     return rows
 
 
-def load_hashes_bq(
-    bq_client, mese: str, societa_id: str, logger: logging.Logger
-) -> set:
-    try:
-        result = bq_client.query(
-            f"SELECT hash_riga FROM `{BQ_TABLE}` WHERE mese = '{mese}' AND societa_id = '{societa_id}'"
-        ).result()
-        hashes = {row.hash_riga for row in result}
-        logger.info(f"Hashes BQ esistenti ({societa_id} {mese}): {len(hashes)}")
-        return hashes
-    except Exception as e:
-        logger.warning(f"Impossibile caricare hashes BQ: {e}")
-        return set()
+def write_to_bq(rows: list[dict], logger: logging.Logger):
+    """SNAPSHOT: sostituisce tutte le righe di (societa_id, mese) del batch.
 
-
-BQ_SCHEMA = (
-    [
-        bigquery.SchemaField("hash_riga", "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("societa_id", "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("mese", "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("codice_conto", "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("descrizione", "STRING"),
-        bigquery.SchemaField("tipo_conto", "STRING"),
-        bigquery.SchemaField("sezione", "STRING"),
-        bigquery.SchemaField("dare", "FLOAT64"),
-        bigquery.SchemaField("avere", "FLOAT64"),
-        bigquery.SchemaField("saldo", "FLOAT64"),
-        bigquery.SchemaField("business_unit_id", "STRING"),
-        bigquery.SchemaField("categoria", "STRING"),
-        bigquery.SchemaField("file_sorgente", "STRING"),
-        bigquery.SchemaField("data_ingresso", "STRING"),
-        bigquery.SchemaField("raw_object_id", "STRING"),
-    ]
-    if HAS_BQ
-    else []
-)
-
-
-def write_to_bq(rows: list[dict], bq_client, logger: logging.Logger):
+    Batch vuoto = nessuna DELETE (il gate è no-op): un parse a vuoto non
+    cancella il mese già in tabella.
+    """
     if not rows:
+        logger.warning("Nessuna riga da scrivere — mese in BQ lasciato intatto")
         return
-    job_config = bigquery.LoadJobConfig(
-        schema=BQ_SCHEMA,
-        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+    bq_write_validated(
+        BQ_TABLE,
+        [BilancinoRow(**r) for r in rows],
+        mode="snapshot",
+        natural_key=["societa_id", "mese"],
     )
-    job = bq_client.load_table_from_json(rows, BQ_TABLE, job_config=job_config)
-    job.result()
-    if job.errors:
-        logger.error(f"BQ errors: {job.errors}")
-    else:
-        logger.info(f"  BQ: {len(rows)} righe inserite in {BQ_TABLE}")
+    logger.info(
+        f"  BQ: {len(rows)} righe → {BQ_TABLE} "
+        f"(snapshot {rows[0]['societa_id']} {rows[0]['mese']} sostituito)"
+    )
 
 
 def write_to_csv(rows: list[dict], csv_path: Path, logger: logging.Logger):
@@ -611,24 +578,16 @@ def main():
         logger.info("DRY RUN — nessuna scrittura")
         return
 
-    if not HAS_BQ:
-        logger.error(
-            "google-cloud-bigquery non installato. Run: pip install google-cloud-bigquery"
-        )
-        sys.exit(1)
+    from core.pipeline_run import PipelineRun
 
-    bq_client = get_client()
-    existing_hashes = load_hashes_bq(bq_client, mese, args.societa, logger)
-    new_rows = [r for r in rows if r["hash_riga"] not in existing_hashes]
-    logger.info(
-        f"Nuove righe da inserire: {len(new_rows)} (già presenti: {len(rows) - len(new_rows)})"
-    )
-
-    write_to_bq(new_rows, bq_client, logger)
+    with PipelineRun(
+        "ingest_bilancino", societa_id=args.societa, file_sorgente=filepath.name
+    ):
+        write_to_bq(rows, logger)
 
     if args.datahub:
         csv_path = Path(args.datahub) / "fatti" / "f_bilancino.csv"
-        write_to_csv(new_rows, csv_path, logger)
+        write_to_csv(rows, csv_path, logger)
 
     logger.info("DONE")
 

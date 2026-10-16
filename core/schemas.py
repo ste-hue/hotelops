@@ -249,6 +249,35 @@ class ChiusuraMensileRow(BaseModel):
         return v
 
 
+# ── f_bilancino ───────────────────────────────────────────────────────────────
+
+
+class BilancinoRow(BaseModel):
+    """Schema for f_bilancino — bilancio di verifica Esolver, conti foglia.
+
+    Lifecycle SNAPSHOT: ogni file è la fotografia cumulata di una società a un
+    mese; la promozione sostituisce tutte le righe di (societa_id, mese)
+    (delete-scope del gate). Identità di riga = (societa_id, mese, codice_conto)
+    = hash_riga. `mese` e `data_ingresso` sono STRING in BQ (YYYY-MM / ISO date).
+    """
+
+    hash_riga: str
+    societa_id: SocietaId
+    mese: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    codice_conto: str
+    descrizione: Optional[str] = None
+    tipo_conto: Optional[str] = None
+    sezione: Optional[str] = None
+    dare: float = 0.0
+    avere: float = 0.0
+    saldo: float = 0.0
+    business_unit_id: Optional[BusinessUnitId] = None
+    categoria: Optional[str] = None
+    file_sorgente: Optional[str] = None
+    data_ingresso: Optional[str] = None
+    raw_object_id: Optional[str] = None
+
+
 # ── f_partite_aperte_fornitori ────────────────────────────────────────────────
 
 

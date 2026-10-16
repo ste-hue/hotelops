@@ -484,7 +484,7 @@ sources:
     lifecycle: SNAPSHOT
     canonical_table: f_bilancino
     parser_module: ingest.flussi.ingest_bilancino
-    natural_key: [data_snapshot, societa_id, codice_conto]
+    natural_key: [societa_id, mese]   # delete-scope SNAPSHOT: la promozione sostituisce il mese intero (identità di riga = societa_id, mese, codice_conto; `data_snapshot` non esiste in f_bilancino)
     loop_targets: [monthly_close, budget_canonical]
     promotion_policy: AUTO
     detector_category: bilancino
@@ -513,7 +513,7 @@ sources:
     lifecycle: SNAPSHOT
     canonical_table: f_bilancino
     parser_module: ingest.flussi.ingest_bilancino
-    natural_key: [data_snapshot, societa_id, codice_conto]
+    natural_key: [societa_id, mese]   # delete-scope SNAPSHOT: la promozione sostituisce il mese intero (identità di riga = societa_id, mese, codice_conto; `data_snapshot` non esiste in f_bilancino)
     loop_targets: [monthly_close, budget_canonical]
     promotion_policy: AUTO
     detector_category: bilancino

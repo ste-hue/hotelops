@@ -1,10 +1,16 @@
-"""Tests per il layout 'saldi Dare/Avere' di ingest_bilancino (terzo layout Esolver)."""
+"""Tests per il layout 'saldi Dare/Avere' di ingest_bilancino (terzo layout Esolver)
+e per la scrittura SNAPSHOT via bq_write_validated (I1, #152)."""
 
 import logging
+import sys
+from unittest.mock import MagicMock
 
 import openpyxl
+import pytest
+from pydantic import ValidationError
 
-from ingest.flussi.ingest_bilancino import parse_bilancino
+from core.schemas import BilancinoRow
+from ingest.flussi.ingest_bilancino import main, parse_bilancino
 
 logger = logging.getLogger("test_ingest_bilancino")
 
@@ -90,3 +96,82 @@ def test_grid_layout_still_dispatched(tmp_path):
     ])
     rows = parse_bilancino(p, "ORTI", "2026-01", logger)
     assert [r["codice_conto"] for r in rows] == ["05.01.07"]
+
+
+# ── Scrittura: SNAPSHOT via bq_write_validated (I1, #152) ─────────────────────
+# Prima: append + dedup per hash → ri-promuovere un mese pieno sopra un parziale
+# lasciava le righe stale (due DELETE manuali, 25/09 e 16/10). Ora il gate
+# cancella l'intero scope (societa_id, mese) e ricarica tutte le righe del file.
+
+
+@pytest.fixture
+def bq_client(monkeypatch):
+    """Client BQ mock dietro il gate; PipelineRun senza scrittura su f_pipeline_runs."""
+    monkeypatch.setattr(
+        "core.pipeline_run.PipelineRun._insert_final", lambda self: None
+    )
+    client = MagicMock()
+    client.load_table_from_json.return_value.result.return_value = None
+    monkeypatch.setattr("core.bq.write.get_client", lambda: client)
+    return client
+
+
+def _run_main(monkeypatch, path, *extra):
+    argv = [
+        "ingest_bilancino",
+        "--file",
+        str(path),
+        "--societa",
+        "ORTI",
+        "--raw-object-id",
+        "raw-42",
+        *extra,
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    main()
+
+
+def test_write_replaces_whole_societa_mese_scope(tmp_path, monkeypatch, bq_client):
+    p = _make_xlsx(
+        tmp_path,
+        HDR_5COL,
+        [
+            ["        05.01.07", "S", "Fabbricati strumentali", 100.0, None],
+            ["        47.91.01", None, "Ricavi per alloggi", None, 200.0],
+        ],
+        name="SETTEMBRE2026ESOLVER.xlsx",
+    )  # mese inferito dal filename
+    _run_main(monkeypatch, p)
+
+    delete_sql = bq_client.query.call_args.args[0]
+    assert delete_sql.startswith("DELETE FROM `hotelops-suite.hotelops.f_bilancino`")
+    assert "(societa_id, mese) IN" in delete_sql and "('ORTI', '2026-09')" in delete_sql
+    assert (
+        "codice_conto" not in delete_sql
+    )  # scope = il mese intero, non le sole righe del file
+
+    loaded = bq_client.load_table_from_json.call_args.args[0]
+    assert {r["codice_conto"] for r in loaded} == {"05.01.07", "47.91.01"}
+    assert all(
+        r["raw_object_id"] == "raw-42" and r["mese"] == "2026-09" for r in loaded
+    )
+
+
+def test_dry_run_does_not_touch_bq(tmp_path, monkeypatch, bq_client):
+    p = _make_xlsx(tmp_path, HDR_5COL, [["05.01.07", "S", "Fabbricati", 100.0, None]])
+    _run_main(monkeypatch, p, "--mese", "2026-09", "--dry-run")
+    bq_client.query.assert_not_called()
+    bq_client.load_table_from_json.assert_not_called()
+
+
+def test_empty_parse_does_not_delete_existing_month(tmp_path, monkeypatch, bq_client):
+    # Nessuna riga foglia con movimenti → nessuna DELETE: il mese già in BQ resta intatto.
+    p = _make_xlsx(tmp_path, HDR_5COL, [["61.01", None, "Conto a zero", None, None]])
+    _run_main(monkeypatch, p, "--mese", "2026-09")
+    bq_client.query.assert_not_called()
+    bq_client.load_table_from_json.assert_not_called()
+
+
+def test_bilancino_row_rejects_mese_non_yyyy_mm():
+    with pytest.raises(ValidationError):
+        BilancinoRow(hash_riga="h", societa_id="ORTI", mese="2026-9", codice_conto="05.01")
