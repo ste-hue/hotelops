@@ -23,9 +23,7 @@ def _mine_capex(args):
     project_keywords = (
         [k.strip() for k in args.keywords.split(",")] if args.keywords else None
     )
-    fuzzy_keywords = (
-        [k.strip() for k in args.fuzzy.split(",")] if args.fuzzy else None
-    )
+    fuzzy_keywords = [k.strip() for k in args.fuzzy.split(",")] if args.fuzzy else None
 
     print(f"\n{'═' * 70}")
     print(f"  CapEx mine — project: {args.project}")
@@ -81,15 +79,20 @@ def _mine_dossier(args):
 
     if args.apply:
         result = apply_census(company, census_path, dry_run=args.dry_run)
-        print(f"\n  applied={result['applied']} planned={result.get('planned')} "
-              f"skipped={result['skipped']} failed={len(result['failed'])}")
+        print(
+            f"\n  applied={result['applied']} planned={result.get('planned')} "
+            f"skipped={result['skipped']} failed={len(result['failed'])}"
+        )
         for f in result["failed"]:
             print(f"  FAIL {f['name']}: {f['error']}")
         return
 
     if args.users:
-        users = [{"email": u.strip(), "suspended": False}
-                 for u in args.users.split(",") if u.strip()]
+        users = [
+            {"email": u.strip(), "suspended": False}
+            for u in args.users.split(",")
+            if u.strip()
+        ]
     else:
         users = enumerate_domain_users(DIRECTORY_SUBJECT)
     print(f"  Census {company.company_id} su {len(users)} utenti…")

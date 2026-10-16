@@ -10,8 +10,17 @@ from __future__ import annotations
 
 import openpyxl
 
-MASTER_MONTHS_SEED = ["APRILE", "MAGGIO", "GIUGNO", "LUGLIO", "AGOSTO",
-                      "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE"]
+MASTER_MONTHS_SEED = [
+    "APRILE",
+    "MAGGIO",
+    "GIUGNO",
+    "LUGLIO",
+    "AGOSTO",
+    "SETTEMBRE",
+    "OTTOBRE",
+    "NOVEMBRE",
+    "DICEMBRE",
+]
 DETAIL_MONTHS_SEED = MASTER_MONTHS_SEED
 
 
@@ -79,9 +88,11 @@ def _make_master(months: list[str] = None, year: int = 2026) -> openpyxl.Workboo
     return wb
 
 
-def _make_detail(sheet_name: str = "Materie Prime-Consumo ",
-                 months: list[str] = None,
-                 year: int = 2026) -> openpyxl.Workbook:
+def _make_detail(
+    sheet_name: str = "Materie Prime-Consumo ",
+    months: list[str] = None,
+    year: int = 2026,
+) -> openpyxl.Workbook:
     """Minimal per-voce detail sheet."""
     months = months or DETAIL_MONTHS_SEED
     wb = openpyxl.Workbook()
@@ -134,18 +145,29 @@ def _make_detail(sheet_name: str = "Materie Prime-Consumo ",
 class TestShiftMaster:
     def test_month_headers_shift_left_with_wraparound(self):
         from verticals.condges.skeleton_shift import shift_master_sheet
+
         wb = _make_master()
         ws = wb["Piano Finanziario"]
 
         shift_master_sheet(ws, current_year=2026)
 
-        expected = ["MAGGIO", "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE",
-                    "OTTOBRE", "NOVEMBRE", "DICEMBRE", "GENNAIO"]
+        expected = [
+            "MAGGIO",
+            "GIUGNO",
+            "LUGLIO",
+            "AGOSTO",
+            "SETTEMBRE",
+            "OTTOBRE",
+            "NOVEMBRE",
+            "DICEMBRE",
+            "GENNAIO",
+        ]
         actual = [ws.cell(row=2, column=3 + i).value for i in range(9)]
         assert actual == expected
 
     def test_year_marker_added_for_wraparound(self):
         from verticals.condges.skeleton_shift import shift_master_sheet
+
         wb = _make_master()
         ws = wb["Piano Finanziario"]
 
@@ -157,6 +179,7 @@ class TestShiftMaster:
 
     def test_value_rows_shift_left(self):
         from verticals.condges.skeleton_shift import shift_master_sheet
+
         wb = _make_master()
         ws = wb["Piano Finanziario"]
 
@@ -175,6 +198,7 @@ class TestShiftMaster:
 
     def test_last_column_value_cleared_for_wraparound(self):
         from verticals.condges.skeleton_shift import shift_master_sheet
+
         wb = _make_master()
         ws = wb["Piano Finanziario"]
 
@@ -187,6 +211,7 @@ class TestShiftMaster:
 
     def test_formula_cells_unchanged(self):
         from verticals.condges.skeleton_shift import shift_master_sheet
+
         wb = _make_master()
         ws = wb["Piano Finanziario"]
 
@@ -206,6 +231,7 @@ class TestShiftMaster:
         """Row 4 col 3 (SALDO MESE PRECED current month VALUE) is NOT shifted;
         bank-balance update step owns it."""
         from verticals.condges.skeleton_shift import shift_master_sheet
+
         wb = _make_master()
         ws = wb["Piano Finanziario"]
         original = ws.cell(row=4, column=3).value
@@ -218,6 +244,7 @@ class TestShiftMaster:
         """Rows 32-33 (Saldo MPS, Saldo Intesa) and row 31 (date) are NOT
         touched here; bank-balance update step owns them."""
         from verticals.condges.skeleton_shift import shift_master_sheet
+
         wb = _make_master()
         ws = wb["Piano Finanziario"]
 
@@ -234,18 +261,29 @@ class TestShiftMaster:
 class TestShiftDetail:
     def test_month_headers_shift_left(self):
         from verticals.condges.skeleton_shift import shift_detail_sheet
+
         wb = _make_detail()
         ws = wb["Materie Prime-Consumo "]
 
         shift_detail_sheet(ws, current_year=2026)
 
-        expected = ["MAGGIO", "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE",
-                    "OTTOBRE", "NOVEMBRE", "DICEMBRE", "GENNAIO"]
+        expected = [
+            "MAGGIO",
+            "GIUGNO",
+            "LUGLIO",
+            "AGOSTO",
+            "SETTEMBRE",
+            "OTTOBRE",
+            "NOVEMBRE",
+            "DICEMBRE",
+            "GENNAIO",
+        ]
         actual = [ws.cell(row=2, column=4 + i).value for i in range(9)]
         assert actual == expected
 
     def test_year_marker_wraparound(self):
         from verticals.condges.skeleton_shift import shift_detail_sheet
+
         wb = _make_detail()
         ws = wb["Materie Prime-Consumo "]
 
@@ -256,6 +294,7 @@ class TestShiftDetail:
 
     def test_previsionale_row_shifts(self):
         from verticals.condges.skeleton_shift import shift_detail_sheet
+
         wb = _make_detail()
         ws = wb["Materie Prime-Consumo "]
 
@@ -270,6 +309,7 @@ class TestShiftDetail:
 
     def test_supplier_values_shift(self):
         from verticals.condges.skeleton_shift import shift_detail_sheet
+
         wb = _make_detail()
         ws = wb["Materie Prime-Consumo "]
 
@@ -286,6 +326,7 @@ class TestShiftDetail:
 
     def test_formula_cells_unchanged(self):
         from verticals.condges.skeleton_shift import shift_detail_sheet
+
         wb = _make_detail()
         ws = wb["Materie Prime-Consumo "]
 
@@ -309,6 +350,7 @@ class TestMergedHeaders:
         """Real PF has C1:K1 merged with single year value. After rollover with
         wraparound, year should split into two merged ranges (2026 + 2027)."""
         from verticals.condges.skeleton_shift import shift_master_sheet
+
         wb = _make_master()
         ws = wb["Piano Finanziario"]
         ws.merge_cells("C1:K1")  # simulate real-file merge
@@ -326,6 +368,7 @@ class TestMergedHeaders:
 
     def test_detail_row1_merged_year_is_split_on_wraparound(self):
         from verticals.condges.skeleton_shift import shift_detail_sheet
+
         wb = _make_detail()
         ws = wb["Materie Prime-Consumo "]
         ws.merge_cells("D1:L1")
@@ -342,12 +385,20 @@ class TestMergedHeaders:
 class TestRolloverMonths:
     def test_simple_shift_no_wraparound(self):
         from verticals.condges.skeleton_shift import rollover_month_labels
+
         labels, year_changes = rollover_month_labels(
             current_month=4, current_year=2026, n_forward=9
         )
         assert labels == [
-            "MAGGIO", "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE",
-            "OTTOBRE", "NOVEMBRE", "DICEMBRE", "GENNAIO",
+            "MAGGIO",
+            "GIUGNO",
+            "LUGLIO",
+            "AGOSTO",
+            "SETTEMBRE",
+            "OTTOBRE",
+            "NOVEMBRE",
+            "DICEMBRE",
+            "GENNAIO",
         ]
         # year_changes: list of (slot_index, new_year) for the wraparound
         assert year_changes == [(8, 2027)]
@@ -355,6 +406,7 @@ class TestRolloverMonths:
     def test_multi_year_wraparound(self):
         """Rolling from Nov: labels span 2 year transitions."""
         from verticals.condges.skeleton_shift import rollover_month_labels
+
         labels, year_changes = rollover_month_labels(
             current_month=11, current_year=2026, n_forward=9
         )

@@ -47,16 +47,24 @@ def compute_delta(ytd: dict[str, float]) -> dict[str, float]:
     return delta
 
 
-def build_payload(bilancino_rows: list[dict], gruppi: dict[str, str] | None = None) -> dict:
+def build_payload(
+    bilancino_rows: list[dict], gruppi: dict[str, str] | None = None
+) -> dict:
     mesi = sorted({r["mese"] for r in bilancino_rows})
     societa: dict[str, dict] = {}
     per_conto: dict[tuple, dict] = {}
     for r in bilancino_rows:
         key = (r["societa_id"], r["codice_conto"])
-        c = per_conto.setdefault(key, {
-            "codice": r["codice_conto"], "descrizione": r["descrizione"],
-            "tipo": r["tipo_conto"], "sezione": r["sezione"], "ytd": {},
-        })
+        c = per_conto.setdefault(
+            key,
+            {
+                "codice": r["codice_conto"],
+                "descrizione": r["descrizione"],
+                "tipo": r["tipo_conto"],
+                "sezione": r["sezione"],
+                "ytd": {},
+            },
+        )
         c["ytd"][r["mese"]] = round(float(r["saldo"]), 2)
     for (soc, _), c in per_conto.items():
         c["delta"] = compute_delta(c["ytd"])
@@ -79,14 +87,31 @@ def payload_to_csv(payload: dict) -> str:
     buf = io.StringIO()
     w = csv.writer(buf, lineterminator="\n")
     w.writerow(
-        ["societa", "mese", "codice_conto", "descrizione", "tipo_conto", "sezione", "saldo_ytd", "delta_mese"]
+        [
+            "societa",
+            "mese",
+            "codice_conto",
+            "descrizione",
+            "tipo_conto",
+            "sezione",
+            "saldo_ytd",
+            "delta_mese",
+        ]
     )
     for soc, blk in payload["societa"].items():
         for c in blk["conti"]:
             for mese in sorted(c["ytd"]):
                 w.writerow(
-                    [soc, mese, c["codice"], c["descrizione"], c["tipo"], c["sezione"],
-                     c["ytd"][mese], c["delta"].get(mese, "")]
+                    [
+                        soc,
+                        mese,
+                        c["codice"],
+                        c["descrizione"],
+                        c["tipo"],
+                        c["sezione"],
+                        c["ytd"][mese],
+                        c["delta"].get(mese, ""),
+                    ]
                 )
     return buf.getvalue()
 
@@ -101,7 +126,11 @@ def render_html(payload: dict) -> str:
 
 # ---------- push KV (Cloudflare Worker "bilancini", repo panorama_apps) ----------
 
-PUSH_ENV_VARS = ("CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "BILANCINI_KV_NAMESPACE_ID")
+PUSH_ENV_VARS = (
+    "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_ACCOUNT_ID",
+    "BILANCINI_KV_NAMESPACE_ID",
+)
 
 
 def load_push_env() -> dict[str, str]:
@@ -111,7 +140,9 @@ def load_push_env() -> dict[str, str]:
     env = {k: os.environ.get(k, "") for k in PUSH_ENV_VARS}
     missing = [k for k, v in env.items() if not v]
     if missing:
-        raise RuntimeError(f"--push richiede variabili d'ambiente mancanti: {', '.join(missing)}")
+        raise RuntimeError(
+            f"--push richiede variabili d'ambiente mancanti: {', '.join(missing)}"
+        )
     return env
 
 
@@ -129,7 +160,8 @@ def push_to_kv(html: str, payload: dict, env: dict[str, str]) -> None:
         {"key": "data.csv", "value": payload_to_csv(payload)},
     ]
     r = requests.put(
-        url, json=body,
+        url,
+        json=body,
         headers={"Authorization": f"Bearer {env['CLOUDFLARE_API_TOKEN']}"},
         timeout=60,
     )
@@ -765,8 +797,11 @@ renderNavigator();
 def main():
     ap = argparse.ArgumentParser(description="Build artifact Bilancini")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    ap.add_argument("--push", action="store_true",
-                    help="dopo il build, carica html/data.json/data.csv nel KV del Worker bilancini")
+    ap.add_argument(
+        "--push",
+        action="store_true",
+        help="dopo il build, carica html/data.json/data.csv nel KV del Worker bilancini",
+    )
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -777,7 +812,9 @@ def main():
         from core.env import load_dotenv_file
 
         load_dotenv_file()
-        push_env = load_push_env()  # fail-fast: env incompleta → errore PRIMA di toccare BQ
+        push_env = (
+            load_push_env()
+        )  # fail-fast: env incompleta → errore PRIMA di toccare BQ
 
     client = get_client()
     bilancino = fetch_bilancino(client)

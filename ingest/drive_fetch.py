@@ -50,7 +50,9 @@ def fetch_drive_file(file_id: str, dest_dir: Path, key_path: str = DEFAULT_KEY) 
     from googleapiclient.http import MediaIoBaseDownload
 
     svc = _drive_service(key_path)
-    meta = svc.files().get(fileId=file_id, fields="name", supportsAllDrives=True).execute()
+    meta = (
+        svc.files().get(fileId=file_id, fields="name", supportsAllDrives=True).execute()
+    )
     dest = Path(dest_dir) / meta["name"]
     req = svc.files().get_media(fileId=file_id)
     buf = io.BytesIO()
@@ -59,7 +61,9 @@ def fetch_drive_file(file_id: str, dest_dir: Path, key_path: str = DEFAULT_KEY) 
     while not done:
         _, done = dl.next_chunk()
     dest.write_bytes(buf.getvalue())
-    log.info("Fetched Drive file %r → %s (%d bytes)", meta["name"], dest, dest.stat().st_size)
+    log.info(
+        "Fetched Drive file %r → %s (%d bytes)", meta["name"], dest, dest.stat().st_size
+    )
     return dest
 
 
@@ -69,9 +73,14 @@ def main() -> None:
         description="Fetch a live Drive file, then run lineage intake + promote.",
     )
     p.add_argument("--source-name", required=True, help="Registry source name")
-    p.add_argument("--file-id", default=None,
-                   help="Override Drive file ID (bypasses registry drive_file_id)")
-    p.add_argument("--no-promote", action="store_true", help="Skip promote after intake")
+    p.add_argument(
+        "--file-id",
+        default=None,
+        help="Override Drive file ID (bypasses registry drive_file_id)",
+    )
+    p.add_argument(
+        "--no-promote", action="store_true", help="Skip promote after intake"
+    )
     p.add_argument("--key", default=DEFAULT_KEY, help="Path to SA key JSON")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args()
@@ -108,7 +117,9 @@ def main() -> None:
 
         from ingest.intake import intake_file
 
-        result = intake_file(local_file, source_name=args.source_name, actor="drive_sync")
+        result = intake_file(
+            local_file, source_name=args.source_name, actor="drive_sync"
+        )
         run.rows_new = 0 if result.deduped else 1
         print(f"raw_object_id={result.raw_object_id}")
         print(f"content_hash={result.content_hash}")
@@ -124,7 +135,9 @@ def main() -> None:
                 )
                 sys.exit(1)
             pr = promote_raw_object(result.raw_object_id, actor="drive_sync")
-            print(f"promote_status={pr.status} reason={pr.reason or '-'} noop={pr.noop}")
+            print(
+                f"promote_status={pr.status} reason={pr.reason or '-'} noop={pr.noop}"
+            )
 
 
 if __name__ == "__main__":

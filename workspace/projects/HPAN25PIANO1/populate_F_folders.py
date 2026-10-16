@@ -25,7 +25,11 @@ SUPPLIERS_YAML = Path(__file__).parent / "suppliers.yaml"
 def normalize(s: str) -> str:
     s = (s or "").upper()
     s = s.replace("&", "AND")  # preserve B&T → BAND T (then BAND matches as token)
-    s = re.sub(r"\b(S\.?\s*R\.?\s*L\.?|S\.?\s*P\.?\s*A\.?|SOCIO\s*UNICO|AZIONISTA\s*UNICO|SRL|SPA|SAS|SNC|GROUP)\b", " ", s)
+    s = re.sub(
+        r"\b(S\.?\s*R\.?\s*L\.?|S\.?\s*P\.?\s*A\.?|SOCIO\s*UNICO|AZIONISTA\s*UNICO|SRL|SPA|SAS|SNC|GROUP)\b",
+        " ",
+        s,
+    )
     s = re.sub(r"[^\w\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
@@ -67,7 +71,18 @@ def build_fuzzy_map() -> dict[str, str]:
         if compact:
             out.setdefault(compact, cod)
         for tok in rs.split():
-            if len(tok) >= 4 and tok not in {"SRL", "SPA", "SAS", "GROUP", "COSTRUZIONI", "TAPPEZZERIA", "GIUSEPPE", "ITALIA", "PIASTRELLISTI", "FIGLI"}:
+            if len(tok) >= 4 and tok not in {
+                "SRL",
+                "SPA",
+                "SAS",
+                "GROUP",
+                "COSTRUZIONI",
+                "TAPPEZZERIA",
+                "GIUSEPPE",
+                "ITALIA",
+                "PIASTRELLISTI",
+                "FIGLI",
+            }:
                 out.setdefault(tok, cod)
     # Add explicit aliases (overrides for short/brand names)
     for cod, aliases in EXPLICIT_ALIASES.items():
@@ -108,7 +123,9 @@ def list_fornitori_folders() -> dict[str, str]:
     """F-code → folder name (e.g., F001 → F001_AMCN)."""
     r = subprocess.run(
         ["rclone", "lsf", f"{RCLONE_REMOTE}:{PROJECT}/07_fornitori/", "--dirs-only"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     out = {}
     for line in r.stdout.strip().splitlines():
@@ -121,7 +138,9 @@ def list_fornitori_folders() -> dict[str, str]:
 def list_files(folder: str) -> list[str]:
     r = subprocess.run(
         ["rclone", "lsf", f"{RCLONE_REMOTE}:{PROJECT}/{folder}", "--files-only"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     return [line for line in r.stdout.strip().splitlines() if line]
 
@@ -131,7 +150,9 @@ def list_dest_files(folder: str) -> set[str]:
     try:
         r = subprocess.run(
             ["rclone", "lsf", f"{RCLONE_REMOTE}:{PROJECT}/{folder}", "--files-only"],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         return {line for line in r.stdout.strip().splitlines() if line}
     except subprocess.CalledProcessError:
@@ -142,19 +163,31 @@ def make_shortcut(src_path: str, dest_path: str, dry_run: bool) -> tuple[bool, s
     if dry_run:
         return True, "dry-run"
     cmd = [
-        "rclone", "backend", "shortcut", f"{RCLONE_REMOTE}:",
+        "rclone",
+        "backend",
+        "shortcut",
+        f"{RCLONE_REMOTE}:",
         f"{PROJECT}/{src_path}",
         f"{PROJECT}/{dest_path}",
     ]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
-        err = (r.stderr or r.stdout).strip().splitlines()[-1] if (r.stderr or r.stdout) else "unknown"
+        err = (
+            (r.stderr or r.stdout).strip().splitlines()[-1]
+            if (r.stderr or r.stdout)
+            else "unknown"
+        )
         return False, err[:120]
     return True, "ok"
 
 
-def process_source(src_folder: str, dest_subfolder: str, fmap: dict[str, str],
-                   f_folders: dict[str, str], dry_run: bool) -> dict:
+def process_source(
+    src_folder: str,
+    dest_subfolder: str,
+    fmap: dict[str, str],
+    f_folders: dict[str, str],
+    dry_run: bool,
+) -> dict:
     files = list_files(src_folder)
     print(f"\n── {src_folder} ({len(files)} files) → */{dest_subfolder}/")
     routed = skipped_unmatched = skipped_existing = errors = 0
@@ -191,7 +224,9 @@ def process_source(src_folder: str, dest_subfolder: str, fmap: dict[str, str],
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dry-run", action="store_true", help="Default = apply. --dry-run to preview")
+    ap.add_argument(
+        "--dry-run", action="store_true", help="Default = apply. --dry-run to preview"
+    )
     args = ap.parse_args()
 
     fmap = build_fuzzy_map()
@@ -202,19 +237,33 @@ def main():
 
     tot_routed = tot_errors = 0
     for r in [
-        process_source("FATTURE_LAVORI_HOTEL", "03_fatture", fmap, f_folders, args.dry_run),
-        process_source("Preventivi_Lavori_Hotel", "01_preventivi", fmap, f_folders, args.dry_run),
+        process_source(
+            "FATTURE_LAVORI_HOTEL", "03_fatture", fmap, f_folders, args.dry_run
+        ),
+        process_source(
+            "Preventivi_Lavori_Hotel", "01_preventivi", fmap, f_folders, args.dry_run
+        ),
     ]:
         tot_routed += r["routed"]
         tot_errors += r["errors"]
 
     # Handle offerta_santelia at root (single known preventivo)
     r = subprocess.run(
-        ["rclone", "lsf", f"{RCLONE_REMOTE}:{PROJECT}/", "--files-only", "--max-depth", "1"],
-        capture_output=True, text=True,
+        [
+            "rclone",
+            "lsf",
+            f"{RCLONE_REMOTE}:{PROJECT}/",
+            "--files-only",
+            "--max-depth",
+            "1",
+        ],
+        capture_output=True,
+        text=True,
     )
     root_files = [line for line in r.stdout.splitlines() if line]
-    root_preventivi = [f for f in root_files if "offerta" in f.lower() or "preventivo" in f.lower()]
+    root_preventivi = [
+        f for f in root_files if "offerta" in f.lower() or "preventivo" in f.lower()
+    ]
     if root_preventivi:
         print(f"\n── root preventivi ({len(root_preventivi)}) → */01_preventivi/")
         for fn in root_preventivi:

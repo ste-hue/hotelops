@@ -273,7 +273,9 @@ class AllegatiStore:
     obbligatori: nessun default che nasconda la casella (I-PEC-2).
     """
 
-    def __init__(self, bucket_name: str, prefix: str, dry_run: bool = False, client=None):
+    def __init__(
+        self, bucket_name: str, prefix: str, dry_run: bool = False, client=None
+    ):
         self.bucket_name = bucket_name
         self.prefix = prefix
         self.dry_run = dry_run
@@ -535,7 +537,9 @@ def ingest_file(
             f"formato {fmt} non ammesso per {src.source_name} "
             f"(input_formats={list(src.input_formats)})"
         )
-    store = AllegatiStore(bucket_name=src.bucket, prefix=src.source_name, dry_run=dry_run)
+    store = AllegatiStore(
+        bucket_name=src.bucket, prefix=src.source_name, dry_run=dry_run
+    )
     now = datetime.now()
     ro_id = raw_object_id or "dry-run"
 

@@ -77,7 +77,7 @@ def _sha256_file(path: Path) -> str:
 
 
 def _con_suffisso(dest_rel: Path, suffisso: str) -> Path:
-    """"<AAAA-MM> - nome.pdf" -> "<AAAA-MM> - nome (<suffisso>).pdf"."""
+    """ "<AAAA-MM> - nome.pdf" -> "<AAAA-MM> - nome (<suffisso>).pdf"."""
     stem, dot, ext = dest_rel.name.rpartition(".")
     nome = f"{stem} ({suffisso}).{ext}" if dot else f"{dest_rel.name} ({suffisso})"
     return dest_rel.parent / nome
@@ -158,13 +158,18 @@ def sync_panel(dry_run: bool = False, verify: bool = False) -> dict:
     root = Path(PANEL_ROOT)
     run_id = f"panel-{uuid.uuid4().hex[:12]}"
     now = datetime.now()
-    report = {"run_id": run_id, "copiati": 0, "skippati": 0, "falliti": 0,
-              "oversize": 0, "dry_run": dry_run, "anomalie_verify": []}
+    report = {
+        "run_id": run_id,
+        "copiati": 0,
+        "skippati": 0,
+        "falliti": 0,
+        "oversize": 0,
+        "dry_run": dry_run,
+        "anomalie_verify": [],
+    }
 
     if not root.exists():
-        raise FileNotFoundError(
-            f"root pannello non trovato (Drive spento?): {root}"
-        )
+        raise FileNotFoundError(f"root pannello non trovato (Drive spento?): {root}")
 
     esistenti = _gia_proiettate(client)
     rows: list[dict] = []
@@ -205,12 +210,19 @@ def sync_panel(dry_run: bool = False, verify: bool = False) -> dict:
                 dest_abs.unlink(missing_ok=True)
                 status = "FAILED"
                 report["falliti"] += 1
-        rows.append({
-            "projection_key": key, "msgid": cand.msgid, "sha256": cand.sha256,
-            "entity_id": cand.entity_id, "gcs_uri": cand.gcs_uri,
-            "destination_path": str(dest_rel), "run_id": run_id,
-            "projected_at": now, "status": status,
-        })
+        rows.append(
+            {
+                "projection_key": key,
+                "msgid": cand.msgid,
+                "sha256": cand.sha256,
+                "entity_id": cand.entity_id,
+                "gcs_uri": cand.gcs_uri,
+                "destination_path": str(dest_rel),
+                "run_id": run_id,
+                "projected_at": now,
+                "status": status,
+            }
+        )
 
     validate_batch(rows, PecPanelProjectionRow, context="f_pec_panel_projections")
     if rows and not dry_run:
@@ -218,7 +230,8 @@ def sync_panel(dry_run: bool = False, verify: bool = False) -> dict:
 
         bq_write_validated(
             F_PEC_PANEL_PROJECTIONS,
-            [PecPanelProjectionRow(**r) for r in rows], mode="append",
+            [PecPanelProjectionRow(**r) for r in rows],
+            mode="append",
         )
 
     if verify:
@@ -252,7 +265,8 @@ def _verify(client, root: Path) -> list[str]:
     su_disco = {
         str(p.relative_to(root))
         for p in root.rglob("*")
-        if p.is_file() and p.parts[len(root.parts)] in PANEL_ENTITIES
+        if p.is_file()
+        and p.parts[len(root.parts)] in PANEL_ENTITIES
         and "PEC" in p.parts
     }
     for rel in sorted(su_disco - attesi):
@@ -272,7 +286,9 @@ def _scrivi_indice(root: Path, client, dry_run: bool) -> None:
         )
         righe = list(client.query(sql).result())
         testo = ["# Indice documenti proiettati (rigenerato, non autorevole)", ""]
-        testo += [f"- `{r.destination_path}` ({r.projected_at:%Y-%m-%d})" for r in righe]
+        testo += [
+            f"- `{r.destination_path}` ({r.projected_at:%Y-%m-%d})" for r in righe
+        ]
         (root / "_indice.md").write_text("\n".join(testo) + "\n")
     except Exception as e:  # l'indice non deve mai far fallire il run
         log.warning("indice non aggiornato: %s", e)

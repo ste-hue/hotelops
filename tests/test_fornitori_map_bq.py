@@ -24,8 +24,7 @@ def test_upsert_fornitore_bq_emits_merge():
     assert "WHEN MATCHED THEN UPDATE" in sql
     assert "WHEN NOT MATCHED THEN INSERT" in sql
     params = {
-        p.name: p.value
-        for p in fake.query.call_args[1]["job_config"].query_parameters
+        p.name: p.value for p in fake.query.call_args[1]["job_config"].query_parameters
     }
     assert params["cod"] == 264
     assert params["soc"] == "ORTI"
@@ -88,8 +87,7 @@ def test_load_voci_pf_bq_returns_voce_dict():
     assert "d_voci_piano_finanziario" in sql
     assert "sezione" in sql and "USCITE" in sql
     params = {
-        p.name: p.value
-        for p in fake.query.call_args[1]["job_config"].query_parameters
+        p.name: p.value for p in fake.query.call_args[1]["job_config"].query_parameters
     }
     assert params["soc"] == "ORTI"
 
@@ -104,4 +102,3 @@ def test_load_voci_pf_bq_includes_global_voci():
     # Devono esserci entrambi: filtro societa specifica + righe globali (IS NULL / = '')
     assert "societa_id is null" in sql
     assert "societa_id = @soc" in sql
-

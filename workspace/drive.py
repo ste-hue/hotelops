@@ -54,9 +54,7 @@ def ensure_subfolder(service, parent_id: str, name: str) -> str:
         "parents": [parent_id],
     }
     folder = (
-        service.files()
-        .create(body=body, fields="id", supportsAllDrives=True)
-        .execute()
+        service.files().create(body=body, fields="id", supportsAllDrives=True).execute()
     )
     return folder["id"]
 
@@ -99,9 +97,7 @@ def create_shortcut(service, parent_id: str, name: str, target_id: str) -> str:
         "shortcutDetails": {"targetId": target_id},
     }
     created = (
-        service.files()
-        .create(body=body, fields="id", supportsAllDrives=True)
-        .execute()
+        service.files().create(body=body, fields="id", supportsAllDrives=True).execute()
     )
     return created["id"]
 

@@ -15,7 +15,13 @@ def test_parse_importo_italiano_e_anglosassone():
 def test_csv_parse_e_validate():
     from core.bq.load.load_saldi_banca_chiusura_mensile import parse_csv, setup_logger
 
-    p = Path(__file__).resolve().parents[1] / "core" / "bq" / "dimensioni" / "d_saldi_banca_chiusura_mensile.csv"
+    p = (
+        Path(__file__).resolve().parents[1]
+        / "core"
+        / "bq"
+        / "dimensioni"
+        / "d_saldi_banca_chiusura_mensile.csv"
+    )
     log = setup_logger()
     rows = parse_csv(p, log)
     assert len(rows) >= 5
@@ -27,7 +33,9 @@ def test_csv_parse_e_validate():
         and r["banca_id"] == "MPS"
         and r["data_riferimento"] == "2026-04-30"
     )
-    assert mps_apr["saldo_eur"] == 245171.52  # certificato 2026-06-12, corregge 251897.54
+    assert (
+        mps_apr["saldo_eur"] == 245171.52
+    )  # certificato 2026-06-12, corregge 251897.54
     # Kross fuori dall'anchor (deciso 2026-06-12, commit ee6ff55)
     assert not any(r["banca_id"] == "MPS_KROSS" for r in rows)
     intesa_apr = next(
@@ -38,4 +46,3 @@ def test_csv_parse_e_validate():
         and r["data_riferimento"] == "2026-04-30"
     )
     assert intesa_apr["saldo_eur"] == 87439.92
-

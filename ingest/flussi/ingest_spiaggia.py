@@ -15,6 +15,7 @@ Usage:
     python -m ingest.flussi.ingest_spiaggia --file <json> --raw-object-id <id>
     python -m ingest.flussi.ingest_spiaggia --file <json> --dry-run
 """
+
 from __future__ import annotations
 
 import argparse
@@ -148,43 +149,45 @@ def build_reservation_rows(
     out: list[SpiaggiaReservationRow] = []
     for d in recs:
         spot_name = to_str(d.get("spot_name"))
-        out.append(SpiaggiaReservationRow(
-            **_dims(spot_name),
-            id=int(d["id"]),
-            license_code=to_str(d.get("license_code")),
-            spot_type=to_str(d.get("spot_type")),
-            spot_name=spot_name,
-            status=to_int(d.get("status")),
-            seasonal=to_bool(d.get("seasonal")),
-            deleted=to_bool(d.get("deleted")),
-            online=to_bool(d.get("online")),
-            hotel=to_str(d.get("hotel")),
-            hotel_room=to_str(d.get("hotel_room")),
-            start_date=unix_to_date(d.get("start_date")),
-            end_date=unix_to_date(d.get("end_date")),
-            beds=to_int(d.get("beds")),
-            chairs=to_int(d.get("chairs")),
-            first_name=to_str(d.get("first_name")),
-            last_name=to_str(d.get("last_name")),
-            email=to_str(d.get("email")),
-            phone=to_str(d.get("phone_number")),
-            list_total=to_float(d.get("list_total")),
-            paid_total=to_float(d.get("paid_total")),
-            gross_booking_value=to_float(d.get("gross_booking_value")),
-            discount=to_float(d.get("discount")),
-            channel=to_str(d.get("channel")),
-            invoice_number=to_str(d.get("invoice_number")),
-            invoice_company=to_str(d.get("invoice_company")),
-            utm_source=to_str(d.get("utm_source")),
-            utm_medium=to_str(d.get("utm_medium")),
-            utm_campaign=to_str(d.get("utm_campaign")),
-            created_at=unix_to_ts(d.get("created_at")),
-            updated_at=unix_to_ts(d.get("updated_at")),
-            raw_object_id=raw_object_id,
-            file_sorgente=file_name,
-            hash_riga=make_hash("reservations", str(d["id"])),
-            data_caricamento=now,
-        ))
+        out.append(
+            SpiaggiaReservationRow(
+                **_dims(spot_name),
+                id=int(d["id"]),
+                license_code=to_str(d.get("license_code")),
+                spot_type=to_str(d.get("spot_type")),
+                spot_name=spot_name,
+                status=to_int(d.get("status")),
+                seasonal=to_bool(d.get("seasonal")),
+                deleted=to_bool(d.get("deleted")),
+                online=to_bool(d.get("online")),
+                hotel=to_str(d.get("hotel")),
+                hotel_room=to_str(d.get("hotel_room")),
+                start_date=unix_to_date(d.get("start_date")),
+                end_date=unix_to_date(d.get("end_date")),
+                beds=to_int(d.get("beds")),
+                chairs=to_int(d.get("chairs")),
+                first_name=to_str(d.get("first_name")),
+                last_name=to_str(d.get("last_name")),
+                email=to_str(d.get("email")),
+                phone=to_str(d.get("phone_number")),
+                list_total=to_float(d.get("list_total")),
+                paid_total=to_float(d.get("paid_total")),
+                gross_booking_value=to_float(d.get("gross_booking_value")),
+                discount=to_float(d.get("discount")),
+                channel=to_str(d.get("channel")),
+                invoice_number=to_str(d.get("invoice_number")),
+                invoice_company=to_str(d.get("invoice_company")),
+                utm_source=to_str(d.get("utm_source")),
+                utm_medium=to_str(d.get("utm_medium")),
+                utm_campaign=to_str(d.get("utm_campaign")),
+                created_at=unix_to_ts(d.get("created_at")),
+                updated_at=unix_to_ts(d.get("updated_at")),
+                raw_object_id=raw_object_id,
+                file_sorgente=file_name,
+                hash_riga=make_hash("reservations", str(d["id"])),
+                data_caricamento=now,
+            )
+        )
     return out
 
 
@@ -194,24 +197,26 @@ def build_cash_flow_rows(
     out: list[SpiaggiaCashFlowRow] = []
     for d in recs:
         method = to_int(d.get("method"))
-        out.append(SpiaggiaCashFlowRow(
-            **_dims(None),
-            id=int(d["id"]),
-            reservation_id=to_int(d.get("reservation_id")),
-            method=method,
-            method_label=method_label(method),
-            amount=to_float(d.get("amount")),
-            date=unix_to_date(d.get("date")),
-            receipt_id=to_int(d.get("receipt_id")),
-            invoice_id=to_int(d.get("invoice_id")),
-            deleted=to_bool(d.get("deleted")),
-            created_at=unix_to_ts(d.get("created_at")),
-            updated_at=unix_to_ts(d.get("updated_at")),
-            raw_object_id=raw_object_id,
-            file_sorgente=file_name,
-            hash_riga=make_hash("cash_flows", str(d["id"])),
-            data_caricamento=now,
-        ))
+        out.append(
+            SpiaggiaCashFlowRow(
+                **_dims(None),
+                id=int(d["id"]),
+                reservation_id=to_int(d.get("reservation_id")),
+                method=method,
+                method_label=method_label(method),
+                amount=to_float(d.get("amount")),
+                date=unix_to_date(d.get("date")),
+                receipt_id=to_int(d.get("receipt_id")),
+                invoice_id=to_int(d.get("invoice_id")),
+                deleted=to_bool(d.get("deleted")),
+                created_at=unix_to_ts(d.get("created_at")),
+                updated_at=unix_to_ts(d.get("updated_at")),
+                raw_object_id=raw_object_id,
+                file_sorgente=file_name,
+                hash_riga=make_hash("cash_flows", str(d["id"])),
+                data_caricamento=now,
+            )
+        )
     return out
 
 
@@ -221,22 +226,24 @@ def build_spot_rows(
     out: list[SpiaggiaSpotRow] = []
     for d in recs:
         name = to_str(d.get("name"))
-        out.append(SpiaggiaSpotRow(
-            **_dims(name),
-            id=int(d["id"]),
-            uuid=to_str(d.get("uuid")),
-            name=name,
-            type=to_str(d.get("type")),
-            sector=to_int(d.get("sector")),
-            price_list_id=to_int(d.get("price_list_id")),
-            pos_x=to_int(d.get("pos_x")),
-            pos_y=to_int(d.get("pos_y")),
-            element_type=to_str(d.get("element_type")),
-            raw_object_id=raw_object_id,
-            file_sorgente=file_name,
-            hash_riga=make_hash("spots", str(d["id"])),
-            data_caricamento=now,
-        ))
+        out.append(
+            SpiaggiaSpotRow(
+                **_dims(name),
+                id=int(d["id"]),
+                uuid=to_str(d.get("uuid")),
+                name=name,
+                type=to_str(d.get("type")),
+                sector=to_int(d.get("sector")),
+                price_list_id=to_int(d.get("price_list_id")),
+                pos_x=to_int(d.get("pos_x")),
+                pos_y=to_int(d.get("pos_y")),
+                element_type=to_str(d.get("element_type")),
+                raw_object_id=raw_object_id,
+                file_sorgente=file_name,
+                hash_riga=make_hash("spots", str(d["id"])),
+                data_caricamento=now,
+            )
+        )
     return out
 
 
@@ -291,7 +298,9 @@ def ingest_file(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Ingest dump Spiagge.it → 3 tabelle canonical")
+    ap = argparse.ArgumentParser(
+        description="Ingest dump Spiagge.it → 3 tabelle canonical"
+    )
     ap.add_argument("--file", required=True, type=Path, help="dump JSON Spiagge.it")
     ap.add_argument(
         "--raw-object-id",
@@ -307,7 +316,9 @@ def main() -> None:
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    counts = ingest_file(args.file, raw_object_id=args.raw_object_id, dry_run=args.dry_run)
+    counts = ingest_file(
+        args.file, raw_object_id=args.raw_object_id, dry_run=args.dry_run
+    )
     log.info("Totale: %s", counts)
 
 

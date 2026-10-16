@@ -9,6 +9,7 @@ Usage:
     python -m core.bq.load.create_spiaggia_tables
     python -m core.bq.load.create_spiaggia_tables --dry-run
 """
+
 from __future__ import annotations
 
 import argparse

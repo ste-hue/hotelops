@@ -174,9 +174,7 @@ def cmd_previsione(args):
 
     if not args.dry_run:
         written = result.get("rows_written", 0)
-        print(
-            f"  BQ: {written} righe scritte (snapshot, fonte={result.get('fonte')})"
-        )
+        print(f"  BQ: {written} righe scritte (snapshot, fonte={result.get('fonte')})")
 
 
 # ── Voci ────────────────────────────────────────────────────────────────────
@@ -216,7 +214,9 @@ def cmd_budget(args):
     from verticals.condges.budget_camere import base
 
     if args.budget_cmd != "base":
-        print("uso: hotelops budget base [--out DIR] [--apertura MM-GG] [--chiusura MM-GG]")
+        print(
+            "uso: hotelops budget base [--out DIR] [--apertura MM-GG] [--chiusura MM-GG]"
+        )
         sys.exit(1)
     base.run(
         Path(args.out).expanduser(),
@@ -886,7 +886,7 @@ def cmd_app(args):
 
     apps = {
         "pf": "verticals/condges/app_cdg.py",
-"accodamenti": "verticals/condges/app_accodamenti.py",
+        "accodamenti": "verticals/condges/app_accodamenti.py",
         "reviews": "verticals/reviews/app.py",
     }
     app_key = args.app_name or "pf"
@@ -961,13 +961,16 @@ def cmd_publish_export(args):
     for name, p in payloads.items():
         detail = f"serie {len(p['serie'])}" if "serie" in p else "meta"
         print(f"{name}.json  ({detail})")
-    print("DRY-RUN (nessun file scritto)" if args.dry_run else f"scritti in {site}/data/")
+    print(
+        "DRY-RUN (nessun file scritto)" if args.dry_run else f"scritti in {site}/data/"
+    )
 
     if args.deploy and not args.dry_run:
         publish_dir = str(Path(site).parent)
         print(f"\nDeploy Cloudflare (wrangler) da {publish_dir}…")
-        subprocess.run(["npx", "--yes", "wrangler@latest", "deploy"],
-                       cwd=publish_dir, check=True)
+        subprocess.run(
+            ["npx", "--yes", "wrangler@latest", "deploy"], cwd=publish_dir, check=True
+        )
 
 
 def cmd_pec(args):
@@ -978,7 +981,9 @@ def cmd_pec(args):
         from ingest.pec.classify import run_classify
 
         r = run_classify(dry_run=args.dry_run)
-        print(f"ruleset {r['ruleset_version']}: {r['classificati']} righe {r['per_stato']}")
+        print(
+            f"ruleset {r['ruleset_version']}: {r['classificati']} righe {r['per_stato']}"
+        )
     elif args.pec_cmd == "sync-panel":
         from ingest.pec.panel import sync_panel
 
@@ -995,11 +1000,17 @@ def cmd_pec(args):
         def parse(s):
             return datetime.strptime(s, "%Y-%m-%d") if s else None
 
-        print(run_digest(
-            da=parse(args.da), a=parse(args.a), casella=args.casella,
-            entity=args.entity, solo_anomalie=args.solo_anomalie,
-            fmt=args.format, dry_run=args.dry_run,
-        ))
+        print(
+            run_digest(
+                da=parse(args.da),
+                a=parse(args.a),
+                casella=args.casella,
+                entity=args.entity,
+                solo_anomalie=args.solo_anomalie,
+                fmt=args.format,
+                dry_run=args.dry_run,
+            )
+        )
     else:
         print("uso: hotelops pec {classify|sync-panel|digest}")
         sys.exit(1)
@@ -1090,21 +1101,29 @@ def main():
 
     # canone
     p_canone = sub.add_parser(
-        "canone", help="Cruscotto canone ORTI → INTUR: rilegge le fonti e rigenera la pagina"
+        "canone",
+        help="Cruscotto canone ORTI → INTUR: rilegge le fonti e rigenera la pagina",
     )
     p_canone.add_argument(
         "--push", action="store_true", help="Pubblica su canone.panorama-host.com"
     )
 
     # budget
-    p_budget = sub.add_parser("budget", help="Budget per driver (camere Hotel Panorama)")
+    p_budget = sub.add_parser(
+        "budget", help="Budget per driver (camere Hotel Panorama)"
+    )
     budget_sub = p_budget.add_subparsers(dest="budget_cmd")
     pb_base = budget_sub.add_parser(
-        "base", help="Genera il foglio: base 2026 per mese × categoria, aumenti da scrivere"
+        "base",
+        help="Genera il foglio: base 2026 per mese × categoria, aumenti da scrivere",
     )
     pb_base.add_argument("--out", default="~/Downloads", help="Cartella di uscita")
-    pb_base.add_argument("--apertura", default="04-20", help="Prima notte venduta, MM-GG")
-    pb_base.add_argument("--chiusura", default="10-20", help="Ultima notte venduta, MM-GG")
+    pb_base.add_argument(
+        "--apertura", default="04-20", help="Prima notte venduta, MM-GG"
+    )
+    pb_base.add_argument(
+        "--chiusura", default="10-20", help="Ultima notte venduta, MM-GG"
+    )
 
     # help
     sub.add_parser("help", help="Guida completa con esempi")
@@ -1240,22 +1259,35 @@ def main():
     )
 
     # pec
-    p_pec = sub.add_parser("pec", help="PEC multi-casella: classify, pannello CEO, digest")
+    p_pec = sub.add_parser(
+        "pec", help="PEC multi-casella: classify, pannello CEO, digest"
+    )
     pec_sub = p_pec.add_subparsers(dest="pec_cmd")
-    pp_cl = pec_sub.add_parser("classify", help="Classifica i messaggi non classificati")
+    pp_cl = pec_sub.add_parser(
+        "classify", help="Classifica i messaggi non classificati"
+    )
     pp_cl.add_argument("--dry-run", action="store_true")
-    pp_sp = pec_sub.add_parser("sync-panel", help="Proietta i documenti ALTA su AMM_CEO")
+    pp_sp = pec_sub.add_parser(
+        "sync-panel", help="Proietta i documenti ALTA su AMM_CEO"
+    )
     pp_sp.add_argument("--dry-run", action="store_true")
-    pp_sp.add_argument("--verify", action="store_true", help="Riconcilia pannello vs BQ")
+    pp_sp.add_argument(
+        "--verify", action="store_true", help="Riconcilia pannello vs BQ"
+    )
     pp_dg = pec_sub.add_parser("digest", help="Digest monitoraggio caselle")
     pp_dg.add_argument("--da", type=str, default=None)
     pp_dg.add_argument("--a", type=str, default=None)
     pp_dg.add_argument("--casella", type=str, default=None)
-    pp_dg.add_argument("--entity", type=str, default=None,
-                       choices=["INTUR", "ORTI", "VIGNA", "STEFANO_PERSONALE"])
+    pp_dg.add_argument(
+        "--entity",
+        type=str,
+        default=None,
+        choices=["INTUR", "ORTI", "VIGNA", "STEFANO_PERSONALE"],
+    )
     pp_dg.add_argument("--solo-anomalie", action="store_true")
-    pp_dg.add_argument("--format", choices=["markdown", "json", "whatsapp"],
-                       default="markdown")
+    pp_dg.add_argument(
+        "--format", choices=["markdown", "json", "whatsapp"], default="markdown"
+    )
     pp_dg.add_argument("--dry-run", action="store_true")
 
     # docs
@@ -1334,12 +1366,16 @@ def main():
         help="Export read-only BQ→JSON per il viewer static-edge",
     )
     p_pub.add_argument(
-        "--out", default=None,
+        "--out",
+        default=None,
         help="Dir del sito (default verticals/hub/publish/site)",
     )
     p_pub.add_argument("--dry-run", action="store_true")
-    p_pub.add_argument("--deploy", action="store_true",
-                       help="Dopo l'export, deploya il sito su Cloudflare (wrangler)")
+    p_pub.add_argument(
+        "--deploy",
+        action="store_true",
+        help="Dopo l'export, deploya il sito su Cloudflare (wrangler)",
+    )
     p_pub.set_defaults(func=cmd_publish_export)
 
     p_capture = sub.add_parser(
@@ -1451,19 +1487,44 @@ def main():
         "--dry-run", action="store_true", help="Search only, no Drive uploads"
     )
 
-    p_dossier = ws_sub.add_parser("mine-dossier", help="Census/apply dossier societario ORTI/INTUR")
-    p_dossier.add_argument("--company", required=True, choices=["ORTI", "INTUR", "orti", "intur"])
-    p_dossier.add_argument("--census", action="store_true", help="fase census (default)")
-    p_dossier.add_argument("--apply", action="store_true", help="fase apply dal census esistente")
+    p_dossier = ws_sub.add_parser(
+        "mine-dossier", help="Census/apply dossier societario ORTI/INTUR"
+    )
+    p_dossier.add_argument(
+        "--company", required=True, choices=["ORTI", "INTUR", "orti", "intur"]
+    )
+    p_dossier.add_argument(
+        "--census", action="store_true", help="fase census (default)"
+    )
+    p_dossier.add_argument(
+        "--apply", action="store_true", help="fase apply dal census esistente"
+    )
     p_dossier.add_argument("--dry-run", action="store_true")
-    p_dossier.add_argument("--users", default="", help="lista email per limitare il census")
-    p_dossier.add_argument("--out", default="", help="dir output census (default ~/.config/hotelops/dossier)")
+    p_dossier.add_argument(
+        "--users", default="", help="lista email per limitare il census"
+    )
+    p_dossier.add_argument(
+        "--out",
+        default="",
+        help="dir output census (default ~/.config/hotelops/dossier)",
+    )
 
-    p_off = ws_sub.add_parser("dossier-official", help="Documenti ufficiali via openapi-ita (costi vivi)")
-    p_off.add_argument("--company", required=True, choices=["ORTI", "INTUR", "orti", "intur"])
-    p_off.add_argument("--profile", action="store_true", help="scarica profilo advanced (€0.10)")
+    p_off = ws_sub.add_parser(
+        "dossier-official", help="Documenti ufficiali via openapi-ita (costi vivi)"
+    )
+    p_off.add_argument(
+        "--company", required=True, choices=["ORTI", "INTUR", "orti", "intur"]
+    )
+    p_off.add_argument(
+        "--profile", action="store_true", help="scarica profilo advanced (€0.10)"
+    )
     p_off.add_argument("--order", default="", help="comma list: visura,bilancio,soci")
-    p_off.add_argument("--anno", type=int, default=None, help="anno chiusura bilancio (default: anno precedente)")
+    p_off.add_argument(
+        "--anno",
+        type=int,
+        default=None,
+        help="anno chiusura bilancio (default: anno precedente)",
+    )
     p_off.add_argument("--yes", action="store_true", help="conferma la spesa")
 
     args = parser.parse_args()

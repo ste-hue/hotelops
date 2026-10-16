@@ -687,9 +687,7 @@ BQ_SCHEMA = (
 )
 
 
-def load_to_bq(
-    rows: list[dict], bq_client, logger: logging.Logger, anno: int
-) -> None:
+def load_to_bq(rows: list[dict], bq_client, logger: logging.Logger, anno: int) -> None:
     if not rows:
         logger.warning("Nessuna riga da caricare")
         return
@@ -803,9 +801,7 @@ def main() -> None:
             filepath, args.societa, args.anno, logger, fonte=FONTE
         )
     else:
-        rows = parse_gasparotto_budget(
-            filepath, args.societa, logger, anno=args.anno
-        )
+        rows = parse_gasparotto_budget(filepath, args.societa, logger, anno=args.anno)
     if not rows:
         logger.error("Nessuna riga estratta")
         sys.exit(1)

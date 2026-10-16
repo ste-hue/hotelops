@@ -39,16 +39,24 @@ from core.datahub import read_facts
 # -- Contracts ----------------------------------------------------------------
 
 BANK_REQUIRED_COLUMNS = {
-    "data_operazione", "descrizione", "importo_netto",
-    "id_movimento", "file_sorgente", "riga_sorgente",
+    "data_operazione",
+    "descrizione",
+    "importo_netto",
+    "id_movimento",
+    "file_sorgente",
+    "riga_sorgente",
 }
 
 LEDGER_REQUIRED_COLUMNS = {
-    "data_registrazione", "descrizione", "importo", "id_registrazione",
+    "data_registrazione",
+    "descrizione",
+    "importo",
+    "id_registrazione",
 }
 
 
 # -- Helpers ------------------------------------------------------------------
+
 
 def _make_run_id(societa: str, conto: str, date_from: str, date_to: str) -> str:
     """Deterministic run ID. Same params -> same ID -> idempotent overwrite."""
@@ -67,9 +75,18 @@ def _write_metrics(path: Path, metrics: dict) -> None:
 
 
 REGISTRY_COLS = [
-    "run_id", "societa", "conto", "date_from", "date_to", "status",
-    "auto_rate", "started_at", "completed_at", "duration_seconds",
-    "bank_transactions", "auto_matches",
+    "run_id",
+    "societa",
+    "conto",
+    "date_from",
+    "date_to",
+    "status",
+    "auto_rate",
+    "started_at",
+    "completed_at",
+    "duration_seconds",
+    "bank_transactions",
+    "auto_matches",
 ]
 
 
@@ -86,6 +103,7 @@ def _append_run_registry(datahub: Path, metrics: dict) -> None:
 
 
 # -- Mappers: fact row -> bank_reconcile input format -------------------------
+
 
 def _bank_to_txn(row: dict) -> dict:
     return {
@@ -111,32 +129,47 @@ def _ledger_to_txn(row: dict) -> dict:
 # -- Output flatteners -------------------------------------------------------
 
 MATCH_COLS = [
-    "bank_id", "bank_date", "bank_desc", "bank_amount",
-    "bank_file", "bank_row",
-    "ledger_id", "ledger_date", "ledger_desc", "ledger_amount",
-    "ledger_file", "score",
+    "bank_id",
+    "bank_date",
+    "bank_desc",
+    "bank_amount",
+    "bank_file",
+    "bank_row",
+    "ledger_id",
+    "ledger_date",
+    "ledger_desc",
+    "ledger_amount",
+    "ledger_file",
+    "score",
 ]
 NO_MATCH_COLS = [
-    "bank_id", "bank_date", "bank_desc", "bank_amount",
-    "bank_file", "bank_row",
+    "bank_id",
+    "bank_date",
+    "bank_desc",
+    "bank_amount",
+    "bank_file",
+    "bank_row",
 ]
 
 
 def _flatten_auto(bucket: list[dict]) -> list[dict]:
-    return [{
-        "bank_id": cs["bank_txn"].get("id_movimento", ""),
-        "bank_date": cs["bank_txn"]["date"],
-        "bank_desc": cs["bank_txn"]["description"],
-        "bank_amount": cs["bank_txn"]["amount"],
-        "bank_file": cs["bank_txn"].get("file_sorgente", ""),
-        "bank_row": cs["bank_txn"].get("riga_sorgente", ""),
-        "ledger_id": cs["candidates"][0].get("id_registrazione", ""),
-        "ledger_date": cs["candidates"][0]["date"],
-        "ledger_desc": cs["candidates"][0]["description"],
-        "ledger_amount": cs["candidates"][0]["amount"],
-        "ledger_file": cs["candidates"][0].get("file_sorgente", ""),
-        "score": f"{cs['scores'][0]:.4f}",
-    } for cs in bucket]
+    return [
+        {
+            "bank_id": cs["bank_txn"].get("id_movimento", ""),
+            "bank_date": cs["bank_txn"]["date"],
+            "bank_desc": cs["bank_txn"]["description"],
+            "bank_amount": cs["bank_txn"]["amount"],
+            "bank_file": cs["bank_txn"].get("file_sorgente", ""),
+            "bank_row": cs["bank_txn"].get("riga_sorgente", ""),
+            "ledger_id": cs["candidates"][0].get("id_registrazione", ""),
+            "ledger_date": cs["candidates"][0]["date"],
+            "ledger_desc": cs["candidates"][0]["description"],
+            "ledger_amount": cs["candidates"][0]["amount"],
+            "ledger_file": cs["candidates"][0].get("file_sorgente", ""),
+            "score": f"{cs['scores'][0]:.4f}",
+        }
+        for cs in bucket
+    ]
 
 
 def _flatten_review(bucket: list[dict]) -> list[dict]:
@@ -144,32 +177,37 @@ def _flatten_review(bucket: list[dict]) -> list[dict]:
     for cs in bucket:
         b = cs["bank_txn"]
         for erp, score in zip(cs["candidates"], cs["scores"]):
-            rows.append({
-                "bank_id": b.get("id_movimento", ""),
-                "bank_date": b["date"],
-                "bank_desc": b["description"],
-                "bank_amount": b["amount"],
-                "bank_file": b.get("file_sorgente", ""),
-                "bank_row": b.get("riga_sorgente", ""),
-                "ledger_id": erp.get("id_registrazione", ""),
-                "ledger_date": erp["date"],
-                "ledger_desc": erp["description"],
-                "ledger_amount": erp["amount"],
-                "ledger_file": erp.get("file_sorgente", ""),
-                "score": f"{score:.4f}",
-            })
+            rows.append(
+                {
+                    "bank_id": b.get("id_movimento", ""),
+                    "bank_date": b["date"],
+                    "bank_desc": b["description"],
+                    "bank_amount": b["amount"],
+                    "bank_file": b.get("file_sorgente", ""),
+                    "bank_row": b.get("riga_sorgente", ""),
+                    "ledger_id": erp.get("id_registrazione", ""),
+                    "ledger_date": erp["date"],
+                    "ledger_desc": erp["description"],
+                    "ledger_amount": erp["amount"],
+                    "ledger_file": erp.get("file_sorgente", ""),
+                    "score": f"{score:.4f}",
+                }
+            )
     return rows
 
 
 def _flatten_no_match(bucket: list[dict]) -> list[dict]:
-    return [{
-        "bank_id": cs["bank_txn"].get("id_movimento", ""),
-        "bank_date": cs["bank_txn"]["date"],
-        "bank_desc": cs["bank_txn"]["description"],
-        "bank_amount": cs["bank_txn"]["amount"],
-        "bank_file": cs["bank_txn"].get("file_sorgente", ""),
-        "bank_row": cs["bank_txn"].get("riga_sorgente", ""),
-    } for cs in bucket]
+    return [
+        {
+            "bank_id": cs["bank_txn"].get("id_movimento", ""),
+            "bank_date": cs["bank_txn"]["date"],
+            "bank_desc": cs["bank_txn"]["description"],
+            "bank_amount": cs["bank_txn"]["amount"],
+            "bank_file": cs["bank_txn"].get("file_sorgente", ""),
+            "bank_row": cs["bank_txn"].get("riga_sorgente", ""),
+        }
+        for cs in bucket
+    ]
 
 
 def _write_csv(path: Path, rows: list[dict], fieldnames: list[str]) -> int:
@@ -181,6 +219,7 @@ def _write_csv(path: Path, rows: list[dict], fieldnames: list[str]) -> int:
 
 
 # -- Main entry point ---------------------------------------------------------
+
 
 def run_reconciliation(
     datahub_path: str,
@@ -238,7 +277,9 @@ def run_reconciliation(
                 required=BANK_REQUIRED_COLUMNS,
                 context="f_banche_movimenti",
             )
-        bank_facts = _filter_by_date(bank_facts_all, "data_operazione", date_from, date_to)
+        bank_facts = _filter_by_date(
+            bank_facts_all, "data_operazione", date_from, date_to
+        )
         bank_txns = [_bank_to_txn(r) for r in bank_facts]
 
         # -- Ledger side --
@@ -253,7 +294,9 @@ def run_reconciliation(
                 required=LEDGER_REQUIRED_COLUMNS,
                 context="f_ledger_movimenti",
             )
-        ledger_facts = _filter_by_date(ledger_facts_all, "data_registrazione", date_from, date_to)
+        ledger_facts = _filter_by_date(
+            ledger_facts_all, "data_registrazione", date_from, date_to
+        )
         ledger_txns = [_ledger_to_txn(r) for r in ledger_facts]
 
         # -- Engine --
@@ -270,7 +313,8 @@ def run_reconciliation(
             kept_review, dropped_to_no_match = [], []
             for cs in result["review"]:
                 filtered_candidates = [
-                    (c, s) for c, s in zip(cs["candidates"], cs["scores"])
+                    (c, s)
+                    for c, s in zip(cs["candidates"], cs["scores"])
                     if s >= min_score
                 ]
                 if filtered_candidates:
@@ -291,55 +335,63 @@ def run_reconciliation(
         no_match_path = run_dir / "no_match.csv"
 
         n_auto = _write_csv(auto_path, _flatten_auto(result["auto"]), MATCH_COLS)
-        n_review = _write_csv(review_path, _flatten_review(result["review"]), MATCH_COLS)
-        n_no_match = _write_csv(no_match_path, _flatten_no_match(result["no_match"]), NO_MATCH_COLS)
+        n_review = _write_csv(
+            review_path, _flatten_review(result["review"]), MATCH_COLS
+        )
+        n_no_match = _write_csv(
+            no_match_path, _flatten_no_match(result["no_match"]), NO_MATCH_COLS
+        )
 
         # -- Phase 3: Finalize (success) --------------------------------------
         elapsed = time.monotonic() - t0
         completed_at = datetime.now()
         total_bank = len(bank_txns)
 
-        metrics.update({
-            "status": "completed",
-            "completed_at": completed_at.isoformat(),
-            "duration_seconds": round(elapsed, 2),
-            "inputs": {
-                "f_banche_movimenti": {
-                    "path": str(bank_path),
-                    "rows_read": len(bank_facts_all),
-                    "rows_after_date_filter": len(bank_facts),
+        metrics.update(
+            {
+                "status": "completed",
+                "completed_at": completed_at.isoformat(),
+                "duration_seconds": round(elapsed, 2),
+                "inputs": {
+                    "f_banche_movimenti": {
+                        "path": str(bank_path),
+                        "rows_read": len(bank_facts_all),
+                        "rows_after_date_filter": len(bank_facts),
+                    },
+                    "f_ledger_movimenti": {
+                        "path": str(ledger_path),
+                        "rows_read": len(ledger_facts_all),
+                        "rows_after_date_filter": len(ledger_facts),
+                    },
                 },
-                "f_ledger_movimenti": {
-                    "path": str(ledger_path),
-                    "rows_read": len(ledger_facts_all),
-                    "rows_after_date_filter": len(ledger_facts),
+                "outputs": {
+                    "matches_auto.csv": {"rows": n_auto, "path": str(auto_path)},
+                    "matches_review.csv": {"rows": n_review, "path": str(review_path)},
+                    "no_match.csv": {"rows": n_no_match, "path": str(no_match_path)},
                 },
-            },
-            "outputs": {
-                "matches_auto.csv": {"rows": n_auto, "path": str(auto_path)},
-                "matches_review.csv": {"rows": n_review, "path": str(review_path)},
-                "no_match.csv": {"rows": n_no_match, "path": str(no_match_path)},
-            },
-            "bank_transactions": total_bank,
-            "ledger_transactions": len(ledger_txns),
-            "auto_matches": n_auto,
-            "review_matches": n_review,
-            "no_matches": n_no_match,
-            "auto_rate": round(n_auto / total_bank, 4) if total_bank else 0,
-            "output_dir": str(run_dir),
-        })
+                "bank_transactions": total_bank,
+                "ledger_transactions": len(ledger_txns),
+                "auto_matches": n_auto,
+                "review_matches": n_review,
+                "no_matches": n_no_match,
+                "auto_rate": round(n_auto / total_bank, 4) if total_bank else 0,
+                "output_dir": str(run_dir),
+            }
+        )
 
     except Exception as e:
         # -- Phase 3: Finalize (failure) --------------------------------------
         elapsed = time.monotonic() - t0
         completed_at = datetime.now()
-        metrics.update({
-            "status": "failed",
-            "completed_at": completed_at.isoformat(),
-            "duration_seconds": round(elapsed, 2),
-            "error": str(e),
-            "error_type": type(e).__name__,
-        })
+        metrics.update(
+            {
+                "status": "failed",
+                "completed_at": completed_at.isoformat(),
+                "duration_seconds": round(elapsed, 2),
+                "error": str(e),
+                "error_type": type(e).__name__,
+            }
+        )
         _write_metrics(metrics_path, metrics)
         _append_run_registry(datahub, metrics)
         raise
@@ -351,23 +403,35 @@ def run_reconciliation(
 
 # -- CLI ----------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Reconcile bank transactions against ledger")
+        description="Reconcile bank transactions against ledger"
+    )
     parser.add_argument("--datahub", required=True)
     parser.add_argument("--societa", required=True)
     parser.add_argument("--conto", required=True)
     parser.add_argument("--from", dest="date_from", required=True)
     parser.add_argument("--to", dest="date_to", required=True)
-    parser.add_argument("--min-score", dest="min_score", type=float, default=0.0,
-                        help="Minimum score threshold for review matches (0.0–1.0). "
-                             "Candidates below this are moved to no_match.")
+    parser.add_argument(
+        "--min-score",
+        dest="min_score",
+        type=float,
+        default=0.0,
+        help="Minimum score threshold for review matches (0.0–1.0). "
+        "Candidates below this are moved to no_match.",
+    )
     args = parser.parse_args()
 
     try:
         metrics = run_reconciliation(
-            args.datahub, args.societa, args.conto, args.date_from, args.date_to,
-            min_score=args.min_score)
+            args.datahub,
+            args.societa,
+            args.conto,
+            args.date_from,
+            args.date_to,
+            min_score=args.min_score,
+        )
     except Exception:
         traceback.print_exc()
         sys.exit(1)

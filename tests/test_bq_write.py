@@ -252,8 +252,7 @@ def test_lineage_populated_from_active_pipeline_run(
 
     # The success log line carries lineage in `extra`
     record = next(
-        r for r in caplog.records
-        if getattr(r, "table", None) == "hotelops.f_x"
+        r for r in caplog.records if getattr(r, "table", None) == "hotelops.f_x"
     )
     assert record.pipeline_name == "test_pipeline"
     assert record.run_id == run.run_id
@@ -357,8 +356,7 @@ def test_lineage_warns_when_no_active_run(caplog):
     # Out-of-PipelineRun: gate generates a standalone UUID and tags
     # pipeline_name='unknown_pipeline' (DATA_ENGINEERING_RULES.md §3).
     record = next(
-        r for r in caplog.records
-        if getattr(r, "table", None) == "hotelops.f_x"
+        r for r in caplog.records if getattr(r, "table", None) == "hotelops.f_x"
     )
     assert record.pipeline_name == "unknown_pipeline"
     assert record.run_id is not None

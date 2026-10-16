@@ -19,7 +19,9 @@ CE_CATEGORIE_ORD = [
 ]
 
 
-def compute_ce_cascade(consuntivo_by_cat: pd.DataFrame, affitto: float = 0) -> list[dict]:
+def compute_ce_cascade(
+    consuntivo_by_cat: pd.DataFrame, affitto: float = 0
+) -> list[dict]:
     """Compute CE riclassificato cascade from consuntivo grouped by categoria_ce.
 
     Input: DataFrame with columns [categoria_ce, importo]
@@ -59,20 +61,104 @@ def compute_ce_cascade(consuntivo_by_cat: pd.DataFrame, affitto: float = 0) -> l
         return round(val / ricavi * 100, 1) if ricavi else 0
 
     rows = [
-        {"label": "Ricavi", "importo": ricavi, "pct_ricavi": _pct(ricavi), "is_subtotal": True, "indent": 0},
-        {"label": "Acquisti", "importo": -acquisti, "pct_ricavi": _pct(acquisti), "is_subtotal": False, "indent": 1},
-        {"label": "Costo Materie Prime", "importo": costo_mp, "pct_ricavi": _pct(costo_mp), "is_subtotal": True, "indent": 0},
-        {"label": "Costi Produttivi", "importo": -costi_prod_netti, "pct_ricavi": _pct(costi_prod_netti), "is_subtotal": False, "indent": 1},
-        {"label": "I Margine Operativo", "importo": margine_1, "pct_ricavi": _pct(margine_1), "is_subtotal": True, "indent": 0},
-        {"label": "Costo del Personale", "importo": -personale, "pct_ricavi": _pct(personale), "is_subtotal": False, "indent": 1},
-        {"label": "Costi Commerciali", "importo": -commerciali, "pct_ricavi": _pct(commerciali), "is_subtotal": False, "indent": 1},
-        {"label": "Costi Amministrativi", "importo": -amministrativi, "pct_ricavi": _pct(amministrativi), "is_subtotal": False, "indent": 1},
-        {"label": "Affitto d'Azienda (intercompany)", "importo": -affitto, "pct_ricavi": _pct(affitto), "is_subtotal": False, "indent": 1},
-        {"label": "Da definire (non mappati)", "importo": -da_definire, "pct_ricavi": _pct(da_definire), "is_subtotal": False, "indent": 1},
-        {"label": "EBIT", "importo": ebit, "pct_ricavi": _pct(ebit), "is_subtotal": True, "indent": 0},
-        {"label": "EBITDA", "importo": ebitda, "pct_ricavi": _pct(ebitda), "is_subtotal": True, "indent": 0},
-        {"label": "Oneri Finanziari", "importo": -oneri_fin, "pct_ricavi": _pct(oneri_fin), "is_subtotal": False, "indent": 1},
-        {"label": "Risultato Gestionale", "importo": risultato, "pct_ricavi": _pct(risultato), "is_subtotal": True, "indent": 0},
+        {
+            "label": "Ricavi",
+            "importo": ricavi,
+            "pct_ricavi": _pct(ricavi),
+            "is_subtotal": True,
+            "indent": 0,
+        },
+        {
+            "label": "Acquisti",
+            "importo": -acquisti,
+            "pct_ricavi": _pct(acquisti),
+            "is_subtotal": False,
+            "indent": 1,
+        },
+        {
+            "label": "Costo Materie Prime",
+            "importo": costo_mp,
+            "pct_ricavi": _pct(costo_mp),
+            "is_subtotal": True,
+            "indent": 0,
+        },
+        {
+            "label": "Costi Produttivi",
+            "importo": -costi_prod_netti,
+            "pct_ricavi": _pct(costi_prod_netti),
+            "is_subtotal": False,
+            "indent": 1,
+        },
+        {
+            "label": "I Margine Operativo",
+            "importo": margine_1,
+            "pct_ricavi": _pct(margine_1),
+            "is_subtotal": True,
+            "indent": 0,
+        },
+        {
+            "label": "Costo del Personale",
+            "importo": -personale,
+            "pct_ricavi": _pct(personale),
+            "is_subtotal": False,
+            "indent": 1,
+        },
+        {
+            "label": "Costi Commerciali",
+            "importo": -commerciali,
+            "pct_ricavi": _pct(commerciali),
+            "is_subtotal": False,
+            "indent": 1,
+        },
+        {
+            "label": "Costi Amministrativi",
+            "importo": -amministrativi,
+            "pct_ricavi": _pct(amministrativi),
+            "is_subtotal": False,
+            "indent": 1,
+        },
+        {
+            "label": "Affitto d'Azienda (intercompany)",
+            "importo": -affitto,
+            "pct_ricavi": _pct(affitto),
+            "is_subtotal": False,
+            "indent": 1,
+        },
+        {
+            "label": "Da definire (non mappati)",
+            "importo": -da_definire,
+            "pct_ricavi": _pct(da_definire),
+            "is_subtotal": False,
+            "indent": 1,
+        },
+        {
+            "label": "EBIT",
+            "importo": ebit,
+            "pct_ricavi": _pct(ebit),
+            "is_subtotal": True,
+            "indent": 0,
+        },
+        {
+            "label": "EBITDA",
+            "importo": ebitda,
+            "pct_ricavi": _pct(ebitda),
+            "is_subtotal": True,
+            "indent": 0,
+        },
+        {
+            "label": "Oneri Finanziari",
+            "importo": -oneri_fin,
+            "pct_ricavi": _pct(oneri_fin),
+            "is_subtotal": False,
+            "indent": 1,
+        },
+        {
+            "label": "Risultato Gestionale",
+            "importo": risultato,
+            "pct_ricavi": _pct(risultato),
+            "is_subtotal": True,
+            "indent": 0,
+        },
     ]
     return rows
 

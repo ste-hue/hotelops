@@ -22,8 +22,9 @@ def _eml_con_allegato(path: Path, casella_from: str, nome_allegato: str) -> Path
     m["Message-ID"] = f"<e2e-{nome_allegato}@test>"
     m["Date"] = "Wed, 15 Jul 2026 16:38:59 +0200"
     m.set_content("testo")
-    m.add_attachment(b"%PDF-fake", maintype="application", subtype="pdf",
-                     filename=nome_allegato)
+    m.add_attachment(
+        b"%PDF-fake", maintype="application", subtype="pdf", filename=nome_allegato
+    )
     path.write_bytes(bytes(m))
     return path
 
@@ -35,7 +36,8 @@ def test_e2e_parse_classify_panel(tmp_path, monkeypatch):
     # 1. Parse (dry-run: niente GCS/BQ) — entity dal registry
     src = resolve_pec_source("PEC_MAILBOX_PERSONALE_APPEND")
     eml = _eml_con_allegato(
-        tmp_path / "m.eml", "stefanojunior.dellapietra@mpspec.it",
+        tmp_path / "m.eml",
+        "stefanojunior.dellapietra@mpspec.it",
         "../../evil contratto.pdf",
     )
     report = ingest_file(eml, src, dry_run=True)
@@ -43,8 +45,10 @@ def test_e2e_parse_classify_panel(tmp_path, monkeypatch):
 
     # 2. Classify: oggetto legale → LEGALE/ALTA
     esito = classify_message(
-        "avvocato@legalmail.it", "Diffida ad adempiere",
-        ["../../evil contratto.pdf"], load_ruleset(),
+        "avvocato@legalmail.it",
+        "Diffida ad adempiere",
+        ["../../evil contratto.pdf"],
+        load_ruleset(),
     )
     assert esito["primary_category"] == "LEGALE"
     assert esito["importance"] == "ALTA"
@@ -53,12 +57,14 @@ def test_e2e_parse_classify_panel(tmp_path, monkeypatch):
     from ingest.pec.panel import _destination_path
 
     with pytest.raises(ValueError, match="whitelist"):
-        _destination_path("STEFANO_PERSONALE", "LEGALE",
-                          datetime(2026, 7, 15), "evil contratto.pdf")
+        _destination_path(
+            "STEFANO_PERSONALE", "LEGALE", datetime(2026, 7, 15), "evil contratto.pdf"
+        )
 
     # 4. Per un'entity ammessa, il nome malevolo resta sotto root (I-PEC-6)
-    rel = _destination_path("ORTI", "LEGALE", datetime(2026, 7, 15),
-                            "../../evil contratto.pdf")
+    rel = _destination_path(
+        "ORTI", "LEGALE", datetime(2026, 7, 15), "../../evil contratto.pdf"
+    )
     assert rel.parts[0] == "ORTI" and ".." not in str(rel)
 
 

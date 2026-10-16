@@ -1,4 +1,5 @@
 """Tests for ingest_ricavi_fb — Produzione Netta Dashboard → f_ricavi_fb."""
+
 from datetime import datetime, timezone
 
 import pytest
@@ -80,23 +81,39 @@ def test_parse_applied_filters_unknown_hotel():
 
 def test_parse_applied_filters_negazione_complemento():
     # Export Power BI 2026-09-24: "CodiceHotel is not X or Y" → la BU è il complemento
-    neg = _FILTER_TEXT.replace("CodiceHotel is PANORAMAHT", "CodiceHotel is not ANGELINARES or HOMEHOLIDAY")
+    neg = _FILTER_TEXT.replace(
+        "CodiceHotel is PANORAMAHT", "CodiceHotel is not ANGELINARES or HOMEHOLIDAY"
+    )
     assert parse_applied_filters(neg) == ("HOTEL", 2025, 8)
-    neg = _FILTER_TEXT.replace("CodiceHotel is PANORAMAHT", "CodiceHotel is not HOMEHOLIDAY or PANORAMAHT")
+    neg = _FILTER_TEXT.replace(
+        "CodiceHotel is PANORAMAHT", "CodiceHotel is not HOMEHOLIDAY or PANORAMAHT"
+    )
     assert parse_applied_filters(neg) == ("RESIDENCE", 2025, 8)
 
 
 def test_parse_applied_filters_negazione_ambigua_esplode():
     # Esclusa una sola struttura su tre: complemento non univoco → errore, mai default
-    neg = _FILTER_TEXT.replace("CodiceHotel is PANORAMAHT", "CodiceHotel is not PANORAMAHT")
+    neg = _FILTER_TEXT.replace(
+        "CodiceHotel is PANORAMAHT", "CodiceHotel is not PANORAMAHT"
+    )
     with pytest.raises(ValueError, match="ambigu"):
         parse_applied_filters(neg)
 
 
 _HEADER = [
-    "Classe", "Codice", "Descrizione Addebito", "Netto", "Netto A.P.",
-    "Diff A. - A.P.", "% A. vs A.P.", "Netto A.P.P.", "Diff A. - A.P.P.",
-    "% A. vs A.P.P.", "Lordo", "Lordo A.P.", "Lordo A.P.P.",
+    "Classe",
+    "Codice",
+    "Descrizione Addebito",
+    "Netto",
+    "Netto A.P.",
+    "Diff A. - A.P.",
+    "% A. vs A.P.",
+    "Netto A.P.P.",
+    "Diff A. - A.P.P.",
+    "% A. vs A.P.P.",
+    "Lordo",
+    "Lordo A.P.",
+    "Lordo A.P.P.",
 ]
 
 
@@ -108,46 +125,84 @@ def _write_fixture(path, codice_hotel, anno, mese_nome, data_rows):
     ws.append(_HEADER)
     for codice, desc, netto, lordo in data_rows:
         ws.append(["02FB", codice, desc, netto, 0, 0, 0, 0, 0, 0, lordo, 0, 0])
-    ws.append(["Total", None, None, sum(d[2] for d in data_rows),
-               0, 0, 0, 0, 0, 0, sum(d[3] for d in data_rows), 0, 0])
-    ws.append([
-        f"Applied filters:\nMis_PB_ShowRow is greater than 0\n"
-        f"CodiceHotel is {codice_hotel}\nAnno is {anno}\nMese is {mese_nome}\n"
-        f"ClasseAddebito is 02FB or "
-    ])
+    ws.append(
+        [
+            "Total",
+            None,
+            None,
+            sum(d[2] for d in data_rows),
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            sum(d[3] for d in data_rows),
+            0,
+            0,
+        ]
+    )
+    ws.append(
+        [
+            f"Applied filters:\nMis_PB_ShowRow is greater than 0\n"
+            f"CodiceHotel is {codice_hotel}\nAnno is {anno}\nMese is {mese_nome}\n"
+            f"ClasseAddebito is 02FB or "
+        ]
+    )
     wb.save(path)
 
 
 def test_parse_xlsx_period_and_rows(tmp_path):
     f = tmp_path / "HP_2025-08.xlsx"
-    _write_fixture(f, "PANORAMAHT", 2025, "agosto", [
-        ("SCBKFBB", "Scorpori Breakfast Bb", 100.0, 110.0),
-        ("RISLFOOD", "Risto Lunch Food", 50.0, 55.0),
-    ])
+    _write_fixture(
+        f,
+        "PANORAMAHT",
+        2025,
+        "agosto",
+        [
+            ("SCBKFBB", "Scorpori Breakfast Bb", 100.0, 110.0),
+            ("RISLFOOD", "Risto Lunch Food", 50.0, 55.0),
+        ],
+    )
     period, rows = parse_xlsx(f)
     assert period == ("HOTEL", 2025, 8)
     assert len(rows) == 2  # Total row excluded
-    assert rows[0] == {"codice": "SCBKFBB",
-                       "descrizione": "Scorpori Breakfast Bb",
-                       "netto": 100.0, "lordo": 110.0}
+    assert rows[0] == {
+        "codice": "SCBKFBB",
+        "descrizione": "Scorpori Breakfast Bb",
+        "netto": 100.0,
+        "lordo": 110.0,
+    }
 
 
 def test_parse_xlsx_excludes_total_row(tmp_path):
     f = tmp_path / "ANG_2026-04.xlsx"
-    _write_fixture(f, "ANGELINARES", 2026, "aprile", [
-        ("BAR", "Bar Residence", 21.0, 23.0),
-    ])
+    _write_fixture(
+        f,
+        "ANGELINARES",
+        2026,
+        "aprile",
+        [
+            ("BAR", "Bar Residence", 21.0, 23.0),
+        ],
+    )
     _, rows = parse_xlsx(f)
     assert [r["codice"] for r in rows] == ["BAR"]
 
 
 def test_build_rows_societa_and_fields():
-    raw = [{"codice": "RISLFOOD", "descrizione": "Risto Lunch Food",
-            "netto": 50.0, "lordo": 55.0}]
+    raw = [
+        {
+            "codice": "RISLFOOD",
+            "descrizione": "Risto Lunch Food",
+            "netto": 50.0,
+            "lordo": 55.0,
+        }
+    ]
     rows = build_rows(("HOTEL", 2025, 8), raw, "HP_2025-08.xlsx")
     assert len(rows) == 1
     r = rows[0]
-    assert r["societa_id"] == "ORTI"          # 2025-08 is post-cutover
+    assert r["societa_id"] == "ORTI"  # 2025-08 is post-cutover
     assert r["business_unit_id"] == "HOTEL"
     assert r["anno"] == 2025 and r["mese"] == 8
     assert r["file_sorgente"] == "HP_2025-08.xlsx"
@@ -187,10 +242,16 @@ def test_ingest_file_dry_run(tmp_path):
     from ingest.flussi.ingest_ricavi_fb import ingest_file
 
     f = tmp_path / "HP_2025-08.xlsx"
-    _write_fixture(f, "PANORAMAHT", 2025, "agosto", [
-        ("SCBKFBB", "Scorpori Breakfast Bb", 100.0, 110.0),
-        ("RISLFOOD", "Risto Lunch Food", 50.0, 55.0),
-    ])
+    _write_fixture(
+        f,
+        "PANORAMAHT",
+        2025,
+        "agosto",
+        [
+            ("SCBKFBB", "Scorpori Breakfast Bb", 100.0, 110.0),
+            ("RISLFOOD", "Risto Lunch Food", 50.0, 55.0),
+        ],
+    )
     n = ingest_file(f, dry_run=True)
     assert n == 2
 
@@ -203,9 +264,15 @@ def test_parse_applied_filters_unknown_month():
 
 def test_detect_ricavi_fb_matches(tmp_path):
     f = tmp_path / "HP_2025-08.xlsx"
-    _write_fixture(f, "PANORAMAHT", 2025, "agosto", [
-        ("SCBKFBB", "Scorpori Breakfast Bb", 100.0, 110.0),
-    ])
+    _write_fixture(
+        f,
+        "PANORAMAHT",
+        2025,
+        "agosto",
+        [
+            ("SCBKFBB", "Scorpori Breakfast Bb", 100.0, 110.0),
+        ],
+    )
     result = detect_ricavi_fb(f)
     assert result is not None
     assert result.file_type == "ricavi_fb"

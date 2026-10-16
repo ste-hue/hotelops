@@ -32,8 +32,9 @@ PREFISSI_MANUALI = [("orti-raw", "pec/"), ("stefano-raw", "pec/")]
 PREFISSI_CANONICI = ("pec/mailbox/",)
 
 
-def puo_rimuovere(promoted: bool, canonico_esiste: bool,
-                  hash_combacia: bool, lineage_persistita: bool) -> bool:
+def puo_rimuovere(
+    promoted: bool, canonico_esiste: bool, hash_combacia: bool, lineage_persistita: bool
+) -> bool:
     return promoted and canonico_esiste and hash_combacia and lineage_persistita
 
 
@@ -53,9 +54,16 @@ def _stato_lineage(client, content_hash: str) -> tuple[bool, bool, str | None]:
     """
     from google.cloud import bigquery
 
-    rows = list(client.query(sql, job_config=bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("h", "STRING", content_hash)]
-    )).result())
+    rows = list(
+        client.query(
+            sql,
+            job_config=bigquery.QueryJobConfig(
+                query_parameters=[
+                    bigquery.ScalarQueryParameter("h", "STRING", content_hash)
+                ]
+            ),
+        ).result()
+    )
     if not rows:
         return False, False, None
     r = rows[0]
@@ -64,8 +72,9 @@ def _stato_lineage(client, content_hash: str) -> tuple[bool, bool, str | None]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--esegui", action="store_true",
-                    help="rimuove davvero (default: solo report)")
+    ap.add_argument(
+        "--esegui", action="store_true", help="rimuove davvero (default: solo report)"
+    )
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -91,8 +100,10 @@ def main() -> None:
                 canonico = can is not None
                 combacia = canonico and _md5_hex(can) == h
             verdetto = puo_rimuovere(promoted, canonico, combacia, lineage)
-            riga = (f"gs://{bucket_name}/{blob.name} → promoted={promoted} "
-                    f"canonico={canonico} hash_ok={combacia} lineage={lineage}")
+            riga = (
+                f"gs://{bucket_name}/{blob.name} → promoted={promoted} "
+                f"canonico={canonico} hash_ok={combacia} lineage={lineage}"
+            )
             if verdetto:
                 rimossi.append(riga)
                 if args.esegui:

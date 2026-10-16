@@ -19,16 +19,19 @@ def resolve_datahub_root() -> Path:
 
     home = Path.home()
     candidates = [
-        home / "Library" / "CloudStorage" / "GoogleDrive" / "My Drive" / "00_hotelops_datahub",
+        home
+        / "Library"
+        / "CloudStorage"
+        / "GoogleDrive"
+        / "My Drive"
+        / "00_hotelops_datahub",
         home / "Google Drive" / "My Drive" / "00_hotelops_datahub",
         home / "hotelops_datahub",
     ]
     cloud_storage = home / "Library" / "CloudStorage"
     if cloud_storage.exists():
         for drive_mount in sorted(cloud_storage.glob("GoogleDrive-*")):
-            candidates.insert(
-                0, drive_mount / "My Drive" / "00_hotelops_datahub"
-            )
+            candidates.insert(0, drive_mount / "My Drive" / "00_hotelops_datahub")
 
     for candidate in candidates:
         if candidate.exists():

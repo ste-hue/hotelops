@@ -151,7 +151,9 @@ def write_saldi_banca(
         MANUAL_DATE_COL, MANUAL_VAL_COL = 2, 3  # B, C
         if target_col != MANUAL_VAL_COL and layout.saldi_banca_rows:
             date_cell = pf.cell(min(layout.saldi_banca_rows), MANUAL_DATE_COL)
-            if not (isinstance(date_cell.value, str) and date_cell.value.startswith("=")):
+            if not (
+                isinstance(date_cell.value, str) and date_cell.value.startswith("=")
+            ):
                 date_cell.value = data_saldo.strftime("%d/%m/%Y")
             for r in layout.saldi_banca_rows:
                 label = pf.cell(r, 1).value

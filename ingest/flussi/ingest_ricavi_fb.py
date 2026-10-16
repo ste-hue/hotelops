@@ -14,6 +14,7 @@ Usage:
     python -m ingest.flussi.ingest_ricavi_fb --file <xlsx> --raw-object-id <id>
     python -m ingest.flussi.ingest_ricavi_fb --file <xlsx> --dry-run
 """
+
 from __future__ import annotations
 
 import argparse
@@ -38,9 +39,18 @@ HOTEL_TO_BU = {
     "HOMEHOLIDAY": "CVM",
 }
 MESE_IT = {
-    "gennaio": 1, "febbraio": 2, "marzo": 3, "aprile": 4, "maggio": 5,
-    "giugno": 6, "luglio": 7, "agosto": 8, "settembre": 9, "ottobre": 10,
-    "novembre": 11, "dicembre": 12,
+    "gennaio": 1,
+    "febbraio": 2,
+    "marzo": 3,
+    "aprile": 4,
+    "maggio": 5,
+    "giugno": 6,
+    "luglio": 7,
+    "agosto": 8,
+    "settembre": 9,
+    "ottobre": 10,
+    "novembre": 11,
+    "dicembre": 12,
 }
 
 
@@ -101,12 +111,14 @@ def parse_xlsx(path: Path) -> tuple[tuple[str, int, int], list[dict]]:
         if not codice or not isinstance(netto, (int, float)):
             continue  # 'Total' row (codice None) and blanks
         lordo = r[10] if len(r) > 10 else None
-        data_rows.append({
-            "codice": str(codice).strip(),
-            "descrizione": (str(r[2]).strip() if len(r) > 2 and r[2] else None),
-            "netto": float(netto),
-            "lordo": float(lordo) if isinstance(lordo, (int, float)) else 0.0,
-        })
+        data_rows.append(
+            {
+                "codice": str(codice).strip(),
+                "descrizione": (str(r[2]).strip() if len(r) > 2 and r[2] else None),
+                "netto": float(netto),
+                "lordo": float(lordo) if isinstance(lordo, (int, float)) else 0.0,
+            }
+        )
     return period, data_rows
 
 
@@ -133,20 +145,22 @@ def build_rows(
     out: list[dict] = []
     for r in raw_rows:
         codice = r["codice"]
-        out.append({
-            "societa_id": societa,
-            "business_unit_id": bu,
-            "anno": anno,
-            "mese": mese,
-            "codice": codice,
-            "descrizione": r.get("descrizione"),
-            "netto": r["netto"],
-            "lordo": r["lordo"],
-            "file_sorgente": file_name,
-            "hash_riga": make_hash(bu, str(anno), str(mese), codice),
-            "raw_object_id": raw_object_id,
-            "data_caricamento": now,
-        })
+        out.append(
+            {
+                "societa_id": societa,
+                "business_unit_id": bu,
+                "anno": anno,
+                "mese": mese,
+                "codice": codice,
+                "descrizione": r.get("descrizione"),
+                "netto": r["netto"],
+                "lordo": r["lordo"],
+                "file_sorgente": file_name,
+                "hash_riga": make_hash(bu, str(anno), str(mese), codice),
+                "raw_object_id": raw_object_id,
+                "data_caricamento": now,
+            }
+        )
     return out
 
 
@@ -163,8 +177,9 @@ def ingest_file(
     validate_batch(rows, RicaviFbRow, context=f"ricavi_fb {path.name}")
     bu, anno, mese = period
     if dry_run:
-        log.info("[DRY-RUN] %s → %s %d-%02d : %d righe",
-                 path.name, bu, anno, mese, len(rows))
+        log.info(
+            "[DRY-RUN] %s → %s %d-%02d : %d righe", path.name, bu, anno, mese, len(rows)
+        )
         return len(rows)
 
     from core.bq.write import bq_write_validated

@@ -87,8 +87,7 @@ class TestParseGasparottoBudget:
             parse_gasparotto_budget(FIXTURE, "ORTI", logger)
         unmapped = [r for r in caplog.records if "UNMAPPED" in r.getMessage()]
         assert len(unmapped) == 0, (
-            f"Found {len(unmapped)} UNMAPPED rows: "
-            f"{[r.getMessage() for r in unmapped]}"
+            f"Found {len(unmapped)} UNMAPPED rows: {[r.getMessage() for r in unmapped]}"
         )
 
     def test_timedelta_rows_resolved(self, parsed_rows):
@@ -111,11 +110,7 @@ class TestParseGasparottoBudget:
 
     def test_totals_sane(self, parsed_rows):
         """Ricavi > 0 and costs > 0 — sanity check, no hardcoded values."""
-        ricavi = sum(
-            r["importo"] for r in parsed_rows if r["categoria_ce"] == "Ricavi"
-        )
-        costi = sum(
-            r["importo"] for r in parsed_rows if r["categoria_ce"] != "Ricavi"
-        )
+        ricavi = sum(r["importo"] for r in parsed_rows if r["categoria_ce"] == "Ricavi")
+        costi = sum(r["importo"] for r in parsed_rows if r["categoria_ce"] != "Ricavi")
         assert ricavi > 0, "Expected ricavi > 0"
         assert costi > 0, "Expected costi > 0"

@@ -9,6 +9,7 @@ Usage:
     python -m core.bq.load.create_produzione_table
     python -m core.bq.load.create_produzione_table --dry-run
 """
+
 from __future__ import annotations
 
 import argparse

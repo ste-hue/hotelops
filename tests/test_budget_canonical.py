@@ -76,14 +76,31 @@ def test_recognized_fonte_set(bq_client):
 # Format: (societa, anno, mese, cod_conto, expected_fonte, rationale)
 # Expected fonte must be one of RECOGNIZED_FONTI.
 KNOWN_WINNERS = [
-    ("ORTI", 2026, 1, "670101", "PERSONALE",
-     "payroll — PERSONALE > INCIDENZA > GASPAROTTO"),
-    ("ORTI", 2026, 1, "651101", "STRUTTURALI",
-     "fitto ORTI→INTUR — STRUTTURALI > GASPAROTTO"),
-    ("ORTI", 2026, 1, "479101", "CONS2025_IP",
-     "oneri 47 — CONS2025_IP > GASPAROTTO"),
-    ("ORTI", 2026, 1, "57091301", "MAPPATURA",
-     "MAPPATURA wins via exact-code precedence"),
+    (
+        "ORTI",
+        2026,
+        1,
+        "670101",
+        "PERSONALE",
+        "payroll — PERSONALE > INCIDENZA > GASPAROTTO",
+    ),
+    (
+        "ORTI",
+        2026,
+        1,
+        "651101",
+        "STRUTTURALI",
+        "fitto ORTI→INTUR — STRUTTURALI > GASPAROTTO",
+    ),
+    ("ORTI", 2026, 1, "479101", "CONS2025_IP", "oneri 47 — CONS2025_IP > GASPAROTTO"),
+    (
+        "ORTI",
+        2026,
+        1,
+        "57091301",
+        "MAPPATURA",
+        "MAPPATURA wins via exact-code precedence",
+    ),
 ]
 
 
@@ -92,7 +109,13 @@ KNOWN_WINNERS = [
     "societa,anno,mese,cod_conto,expected_fonte,rationale", KNOWN_WINNERS
 )
 def test_deterministic_winner(
-    bq_client, societa, anno, mese, cod_conto, expected_fonte, rationale,
+    bq_client,
+    societa,
+    anno,
+    mese,
+    cod_conto,
+    expected_fonte,
+    rationale,
 ):
     """T3: Known overlapping accounts resolve to the expected fonte."""
     from google.cloud.bigquery import ScalarQueryParameter, QueryJobConfig
@@ -102,12 +125,14 @@ def test_deterministic_winner(
     FROM `hotelops-suite.hotelops.v_budget_canonical`
     WHERE societa_id = @s AND anno = @a AND mese = @m AND cod_conto = @c
     """
-    job_config = QueryJobConfig(query_parameters=[
-        ScalarQueryParameter("s", "STRING", societa),
-        ScalarQueryParameter("a", "INT64", anno),
-        ScalarQueryParameter("m", "INT64", mese),
-        ScalarQueryParameter("c", "STRING", cod_conto),
-    ])
+    job_config = QueryJobConfig(
+        query_parameters=[
+            ScalarQueryParameter("s", "STRING", societa),
+            ScalarQueryParameter("a", "INT64", anno),
+            ScalarQueryParameter("m", "INT64", mese),
+            ScalarQueryParameter("c", "STRING", cod_conto),
+        ]
+    )
     rows = list(bq_client.query(sql, job_config=job_config).result())
     assert len(rows) == 1, (
         f"Expected exactly 1 row for ({societa}, {anno}, {mese}, {cod_conto}), "
@@ -137,9 +162,11 @@ def test_category_level_suppression_drops_gasparotto_siblings(bq_client):
     FROM `hotelops-suite.hotelops.v_budget_canonical`
     WHERE cod_conto = @c AND fonte = 'GASPAROTTO' AND anno = 2026
     """
-    job_config = QueryJobConfig(query_parameters=[
-        ScalarQueryParameter("c", "STRING", suppressed_cod_conto),
-    ])
+    job_config = QueryJobConfig(
+        query_parameters=[
+            ScalarQueryParameter("c", "STRING", suppressed_cod_conto),
+        ]
+    )
     n = next(bq_client.query(sql, job_config=job_config).result())["n"]
     assert n == 0, (
         f"GASPAROTTO row for {suppressed_cod_conto} should be suppressed by "

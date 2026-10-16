@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 
-
 def _fake_csv_sella(tmp_path: Path) -> Path:
     """Minimal Sella CSV that infer_meta + process_file can swallow.
 

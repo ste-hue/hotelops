@@ -1,10 +1,21 @@
-from datetime import date, date as _d, datetime, datetime as _dt, timezone, timezone as _tz
+from datetime import (
+    date,
+    date as _d,
+    datetime,
+    datetime as _dt,
+    timezone,
+    timezone as _tz,
+)
 import pytest
 from core.schemas import SpiaggiaCorrispettivoRow, make_hash
 
 import openpyxl
 from ingest.flussi.ingest_spiaggia_corrispettivi import (
-    to_eur, parse_data, iter_day_rows, build_corrispettivo_rows, ingest_file,
+    to_eur,
+    parse_data,
+    iter_day_rows,
+    build_corrispettivo_rows,
+    ingest_file,
     _find_anno,
 )
 
@@ -38,11 +49,17 @@ def test_corrispettivo_row_valid():
 def test_corrispettivo_row_rejects_bad_societa():
     with pytest.raises(Exception):
         SpiaggiaCorrispettivoRow(
-            societa_id="PIPPO", business_unit_id="LIDO",
-            data=date(2026, 6, 16), anno=2026, mese=6,
-            corrispettivo_spiaggia=1.0, corrispettivo_bar=1.0,
+            societa_id="PIPPO",
+            business_unit_id="LIDO",
+            data=date(2026, 6, 16),
+            anno=2026,
+            mese=6,
+            corrispettivo_spiaggia=1.0,
+            corrispettivo_bar=1.0,
             corrispettivo_totale=2.0,
-            file_sorgente="x.xlsx", hash_riga="x", data_caricamento=_now(),
+            file_sorgente="x.xlsx",
+            hash_riga="x",
+            data_caricamento=_now(),
         )
 
 
@@ -61,6 +78,7 @@ def test_parse_data():
     assert parse_data(None, 2026) is None
     # Bug 1: stale-year override — datetime/date cells from 2021 template must use header anno
     from datetime import datetime as _dtmod
+
     assert parse_data(_dtmod(2021, 6, 16), 2026) == _d(2026, 6, 16)
     assert parse_data(_d(2021, 6, 5), 2026) == _d(2026, 6, 5)
 
@@ -69,8 +87,11 @@ def _make_registro(tmp_path):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Giugno"
-    ws["E1"] = "Giugno"; ws["I1"] = "ANNO:"; ws["J1"] = "2026"
-    ws["M1"] = "RT"; ws["N1"] = "RT2CFL018343"
+    ws["E1"] = "Giugno"
+    ws["I1"] = "ANNO:"
+    ws["J1"] = "2026"
+    ws["M1"] = "RT"
+    ws["N1"] = "RT2CFL018343"
     # header rows then day rows: [n, data, totale, 22%, 10%] starting col A
     data = [
         (6, "6-Jun", "866.00", "339.00", "527.00"),
@@ -104,10 +125,16 @@ def test_build_rows_and_quality_gate(tmp_path):
     assert r.corrispettivo_spiaggia == 561.0
     assert r.corrispettivo_bar == 517.5
     assert r.corrispettivo_totale == 1078.5
-    assert r.societa_id == "INTUR" and r.business_unit_id == "LIDO" and r.location_id == "LIDO"
+    assert (
+        r.societa_id == "INTUR"
+        and r.business_unit_id == "LIDO"
+        and r.location_id == "LIDO"
+    )
     assert r.rt_matricola == "RT2CFL018343"
     assert r.raw_object_id == "raw-1"
-    assert r.hash_riga == make_hash("corrispettivi", "INTUR", _d(2026, 6, 16).isoformat())
+    assert r.hash_riga == make_hash(
+        "corrispettivi", "INTUR", _d(2026, 6, 16).isoformat()
+    )
 
 
 def test_ingest_file_dry_run(tmp_path):
@@ -119,6 +146,7 @@ def test_ingest_file_dry_run(tmp_path):
 def _make_registro_datetime(tmp_path):
     """Fixture with stale-year datetime cells and a zero-value day row."""
     from datetime import datetime as _dtmod
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Giugno"
@@ -126,12 +154,12 @@ def _make_registro_datetime(tmp_path):
     ws.cell(row=2, column=4, value="ANNO:")
     ws.cell(row=2, column=5, value=2026)
     # Day row with real values: datetime cell has stale year 2021
-    ws.cell(row=8, column=1, value=_dtmod(2021, 6, 16))   # stale year
+    ws.cell(row=8, column=1, value=_dtmod(2021, 6, 16))  # stale year
     ws.cell(row=8, column=2, value=1078.5)
     ws.cell(row=8, column=3, value=561.0)
     ws.cell(row=8, column=4, value=517.5)
     # Zero-value day row (closed day): should be excluded
-    ws.cell(row=9, column=1, value=_dtmod(2021, 6, 17))   # stale year
+    ws.cell(row=9, column=1, value=_dtmod(2021, 6, 17))  # stale year
     ws.cell(row=9, column=2, value=0)
     ws.cell(row=9, column=3, value=0)
     ws.cell(row=9, column=4, value=0)
@@ -162,8 +190,10 @@ def _make_conflicting_header(tmp_path, header_anno: int, filename_year: int):
     ws = wb.active
     ws.title = "Settembre"
     # Header with a DIFFERENT year than the filename
-    ws["I1"] = "ANNO:"; ws["J1"] = header_anno
-    ws["M1"] = "RT"; ws["N1"] = "RT2CFL018343"
+    ws["I1"] = "ANNO:"
+    ws["J1"] = header_anno
+    ws["M1"] = "RT"
+    ws["N1"] = "RT2CFL018343"
     # One data row
     ws.cell(row=8, column=1, value="28-Sep")
     ws.cell(row=8, column=2, value=1500.0)

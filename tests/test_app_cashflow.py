@@ -38,6 +38,7 @@ def test_unmapped_suppliers_filters_known_and_dedups():
 
 def test_load_voci_pf_bq_fallback_to_voce_labels(monkeypatch):
     """Se load_voci_pf_bq solleva, app_cashflow usa VOCE_LABELS come fallback."""
+
     # Verifichiamo la logica del fallback importando direttamente il modulo
     # (il render() Streamlit richiede un server attivo; testiamo solo la funzione).
     def boom(societa):

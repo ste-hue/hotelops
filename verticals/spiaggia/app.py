@@ -8,6 +8,7 @@ Standalone: `streamlit run verticals/spiaggia/app.py`
 Hub: `from verticals.spiaggia.app import render` → `st.Page(render, ...)`
      (render() NON chiama set_page_config — lo fa l'hub una volta sola).
 """
+
 from __future__ import annotations
 
 import pandas as pd
@@ -27,8 +28,14 @@ h1, h2, h3 { font-family: 'Cinzel', serif; color: #003764; }
 </style>
 """
 
-_NUM = ["spiaggia_intur", "bar_intur", "spiaggia_orti",
-        "stabilimento_totale", "pos_moolty", "scost_cassa"]
+_NUM = [
+    "spiaggia_intur",
+    "bar_intur",
+    "spiaggia_orti",
+    "stabilimento_totale",
+    "pos_moolty",
+    "scost_cassa",
+]
 
 
 def _q(sql: str) -> pd.DataFrame:
@@ -103,8 +110,10 @@ def render(can_upload: bool = False) -> None:
     """
     st.markdown(_BRAND_CSS, unsafe_allow_html=True)
     st.title("Panorama Beach")
-    st.markdown('<div class="pb-sub">Soldi totali spiaggia · per giorno</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        '<div class="pb-sub">Soldi totali spiaggia · per giorno</div>',
+        unsafe_allow_html=True,
+    )
 
     if can_upload:
         with st.expander("📥 Carica export Moolty (report POS)"):
@@ -114,7 +123,9 @@ def render(can_upload: bool = False) -> None:
                 "puoi caricare export che si sovrappongono."
             )
             up = st.file_uploader("Report Moolty xlsx", type=["xlsx"], key="moolty_up")
-            if up is not None and st.button("Ingerisci", type="primary", key="moolty_go"):
+            if up is not None and st.button(
+                "Ingerisci", type="primary", key="moolty_go"
+            ):
                 _ingest_moolty(up)
 
     g = load_giornaliero()
@@ -133,8 +144,9 @@ def render(can_upload: bool = False) -> None:
     gy = g[g["anno"] == anno].copy() if anno is not None else g.copy()
     if not gy.empty:
         dmin, dmax = gy["data"].min(), gy["data"].max()
-        periodo = fc2.date_input("Periodo", (dmin, dmax),
-                                 min_value=dmin, max_value=dmax)
+        periodo = fc2.date_input(
+            "Periodo", (dmin, dmax), min_value=dmin, max_value=dmax
+        )
         if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
             gy = gy[(gy["data"] >= periodo[0]) & (gy["data"] <= periodo[1])]
     if fc3.checkbox("Solo giorni col registro", value=False):
@@ -158,21 +170,34 @@ def render(can_upload: bool = False) -> None:
     st.bar_chart(gy.set_index("data")[["banco", "spiaggia_orti"]])
 
     # ---------------- Tabella interattiva (ordinabile) ----------------
-    show = gy[["data", "stabilimento_totale", "spiaggia_intur", "bar_intur",
-               "spiaggia_orti", "pos_moolty", "scost_cassa",
-               "flag_manca_corrispettivi"]].sort_values("data")
-    show = show.rename(columns={
-        "stabilimento_totale": "TOTALE",
-        "spiaggia_intur": "spiaggia (INTUR)",
-        "bar_intur": "bar (INTUR)",
-        "spiaggia_orti": "ospiti hotel (ORTI)",
-        "pos_moolty": "Moolty (cassa)",
-        "scost_cassa": "scost. cassa",
-        "flag_manca_corrispettivi": "⚠ no registro",
-    })
+    show = gy[
+        [
+            "data",
+            "stabilimento_totale",
+            "spiaggia_intur",
+            "bar_intur",
+            "spiaggia_orti",
+            "pos_moolty",
+            "scost_cassa",
+            "flag_manca_corrispettivi",
+        ]
+    ].sort_values("data")
+    show = show.rename(
+        columns={
+            "stabilimento_totale": "TOTALE",
+            "spiaggia_intur": "spiaggia (INTUR)",
+            "bar_intur": "bar (INTUR)",
+            "spiaggia_orti": "ospiti hotel (ORTI)",
+            "pos_moolty": "Moolty (cassa)",
+            "scost_cassa": "scost. cassa",
+            "flag_manca_corrispettivi": "⚠ no registro",
+        }
+    )
     st.dataframe(show, use_container_width=True, height=460, hide_index=True)
-    st.caption("Colonne ordinabili (clic sull'intestazione). scost. cassa = banco − Moolty. "
-               "⚠ no registro = giorno con Moolty ma corrispettivo non ancora compilato.")
+    st.caption(
+        "Colonne ordinabili (clic sull'intestazione). scost. cassa = banco − Moolty. "
+        "⚠ no registro = giorno con Moolty ma corrispettivo non ancora compilato."
+    )
 
 
 if __name__ == "__main__":

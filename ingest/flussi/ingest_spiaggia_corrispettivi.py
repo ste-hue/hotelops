@@ -8,6 +8,7 @@ Parser_module della source RT_CORRISPETTIVISPIAGGIA_INTUR_SNAPSHOT, invocato
 da `hotelops promote`:
     python -m ingest.flussi.ingest_spiaggia_corrispettivi --file X.xlsx --raw-object-id Y
 """
+
 from __future__ import annotations
 
 import argparse
@@ -29,8 +30,18 @@ BUSINESS_UNIT = "LIDO"
 LOCATION = "LIDO"
 
 _MONTHS = {
-    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
 }
 _DATE_RE = re.compile(r"^\s*(\d{1,2})-([A-Za-z]{3})\s*$")
 
@@ -85,7 +96,7 @@ def _find_anno(ws, file_name: str) -> int:
     for row in ws.iter_rows(min_row=1, max_row=6, values_only=True):
         for i, c in enumerate(row):
             if isinstance(c, str) and c.strip().upper().startswith("ANNO"):
-                for nxt in row[i + 1:]:
+                for nxt in row[i + 1 :]:
                     n = to_eur(nxt)
                     if n and 2018 <= int(n) <= 2035:
                         return int(n)
@@ -96,7 +107,7 @@ def _find_rt(ws) -> Optional[str]:
     for row in ws.iter_rows(min_row=1, max_row=6, values_only=True):
         for i, c in enumerate(row):
             if isinstance(c, str) and c.strip() == "RT":
-                for nxt in row[i + 1:]:
+                for nxt in row[i + 1 :]:
                     if isinstance(nxt, str) and nxt.strip().startswith("RT"):
                         return nxt.strip()
     return None
@@ -119,7 +130,7 @@ def iter_day_rows(ws, anno: int) -> list[tuple]:
                 break
         if d is None:
             continue
-        nums = [to_eur(c) for c in row[idx + 1:]]
+        nums = [to_eur(c) for c in row[idx + 1 :]]
         nums = [n for n in nums if n is not None]
         if len(nums) < 3:
             continue
@@ -143,26 +154,32 @@ def build_corrispettivo_rows(
         for d, totale, spiaggia, bar in iter_day_rows(ws, anno):
             # Quality gate per-riga: totale ~= spiaggia + bar (tolleranza 0.05)
             if abs((spiaggia + bar) - totale) > 0.05:
-                log.warning("riga %s: totale %.2f != spiaggia+bar %.2f",
-                            d, totale, spiaggia + bar)
-            out.append(SpiaggiaCorrispettivoRow(
-                societa_id=SOCIETA,
-                business_unit_id=BUSINESS_UNIT,
-                location_id=LOCATION,
-                oggetto_id=None,
-                funzione_id=None,
-                data=d,
-                anno=d.year,
-                mese=d.month,
-                corrispettivo_spiaggia=spiaggia,
-                corrispettivo_bar=bar,
-                corrispettivo_totale=totale,
-                rt_matricola=rt,
-                raw_object_id=raw_object_id,
-                file_sorgente=file_name,
-                hash_riga=make_hash("corrispettivi", SOCIETA, d.isoformat()),
-                data_caricamento=now,
-            ))
+                log.warning(
+                    "riga %s: totale %.2f != spiaggia+bar %.2f",
+                    d,
+                    totale,
+                    spiaggia + bar,
+                )
+            out.append(
+                SpiaggiaCorrispettivoRow(
+                    societa_id=SOCIETA,
+                    business_unit_id=BUSINESS_UNIT,
+                    location_id=LOCATION,
+                    oggetto_id=None,
+                    funzione_id=None,
+                    data=d,
+                    anno=d.year,
+                    mese=d.month,
+                    corrispettivo_spiaggia=spiaggia,
+                    corrispettivo_bar=bar,
+                    corrispettivo_totale=totale,
+                    rt_matricola=rt,
+                    raw_object_id=raw_object_id,
+                    file_sorgente=file_name,
+                    hash_riga=make_hash("corrispettivi", SOCIETA, d.isoformat()),
+                    data_caricamento=now,
+                )
+            )
     return out
 
 
@@ -180,30 +197,42 @@ def ingest_file(
             context=f"spiaggia_corrispettivi {path.name}",
         )
     if dry_run:
-        log.info("[DRY-RUN] corrispettivi → %s : %d righe", F_SPIAGGIA_CORRISPETTIVI, len(rows))
+        log.info(
+            "[DRY-RUN] corrispettivi → %s : %d righe",
+            F_SPIAGGIA_CORRISPETTIVI,
+            len(rows),
+        )
         return {"corrispettivi": len(rows)}
 
     from core.bq.write import bq_write_validated
+
     bq_write_validated(
         F_SPIAGGIA_CORRISPETTIVI,
         rows,
         mode="snapshot",
         natural_key=["societa_id", "anno"],
     )
-    log.info("OK corrispettivi → %s : %d righe (full-replace anno)",
-             F_SPIAGGIA_CORRISPETTIVI, len(rows))
+    log.info(
+        "OK corrispettivi → %s : %d righe (full-replace anno)",
+        F_SPIAGGIA_CORRISPETTIVI,
+        len(rows),
+    )
     return {"corrispettivi": len(rows)}
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Ingest Registro Corrispettivi Spiaggia → BQ")
+    ap = argparse.ArgumentParser(
+        description="Ingest Registro Corrispettivi Spiaggia → BQ"
+    )
     ap.add_argument("--file", required=True, type=Path)
     ap.add_argument("--raw-object-id", default=None)
     ap.add_argument("--societa", default=None, help="Ignorato — sempre INTUR.")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    counts = ingest_file(args.file, raw_object_id=args.raw_object_id, dry_run=args.dry_run)
+    counts = ingest_file(
+        args.file, raw_object_id=args.raw_object_id, dry_run=args.dry_run
+    )
     log.info("Totale: %s", counts)
 
 

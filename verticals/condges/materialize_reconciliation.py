@@ -24,14 +24,26 @@ from core.datahub import read_facts
 # -- Schema -------------------------------------------------------------------
 
 OBJECT_COLS = [
-    "bank_id", "societa_id", "banca_id", "data_operazione", "importo",
-    "descrizione_banca", "candidate_ledger_id", "candidate_score",
-    "confirmed_ledger_id", "status", "first_seen_at", "confirmed_at",
-    "is_pending", "is_confirmed", "days_pending",
+    "bank_id",
+    "societa_id",
+    "banca_id",
+    "data_operazione",
+    "importo",
+    "descrizione_banca",
+    "candidate_ledger_id",
+    "candidate_score",
+    "confirmed_ledger_id",
+    "status",
+    "first_seen_at",
+    "confirmed_at",
+    "is_pending",
+    "is_confirmed",
+    "days_pending",
 ]
 
 
 # -- Loaders ------------------------------------------------------------------
+
 
 def _load_bank_facts(datahub: Path) -> dict[str, dict]:
     """bank_id -> {bank row fields needed for the materialized view}."""
@@ -140,6 +152,7 @@ def _load_latest_decisions(datahub: Path) -> dict[str, dict]:
 
 # -- State machine ------------------------------------------------------------
 
+
 def _compute_status(engine_status: str, decision: str | None) -> str:
     """Resolve final status. Decisions override engine status."""
     if decision == "confirm":
@@ -151,7 +164,10 @@ def _compute_status(engine_status: str, decision: str | None) -> str:
 
 # -- Main entry point ---------------------------------------------------------
 
-def materialize_reconciliation_state(datahub_path: str, today: date | None = None) -> dict:
+
+def materialize_reconciliation_state(
+    datahub_path: str, today: date | None = None
+) -> dict:
     """Build the materialized reconciliation view. Returns summary dict."""
     datahub = Path(datahub_path)
     if today is None:
@@ -192,23 +208,25 @@ def materialize_reconciliation_state(datahub_path: str, today: date | None = Non
             except ValueError:
                 days_pending = 0
 
-        output_rows.append({
-            "bank_id": bank_id,
-            "societa_id": bank.get("societa_id", ""),
-            "banca_id": bank.get("banca_id", ""),
-            "data_operazione": bank.get("data_operazione", ""),
-            "importo": bank.get("importo", ""),
-            "descrizione_banca": bank.get("descrizione_banca", ""),
-            "candidate_ledger_id": engine.get("candidate_ledger_id", ""),
-            "candidate_score": engine.get("candidate_score", ""),
-            "confirmed_ledger_id": confirmed_ledger_id,
-            "status": status,
-            "first_seen_at": first_seen_at,
-            "confirmed_at": confirmed_at,
-            "is_pending": str(is_pending).lower(),
-            "is_confirmed": str(is_confirmed).lower(),
-            "days_pending": str(days_pending),
-        })
+        output_rows.append(
+            {
+                "bank_id": bank_id,
+                "societa_id": bank.get("societa_id", ""),
+                "banca_id": bank.get("banca_id", ""),
+                "data_operazione": bank.get("data_operazione", ""),
+                "importo": bank.get("importo", ""),
+                "descrizione_banca": bank.get("descrizione_banca", ""),
+                "candidate_ledger_id": engine.get("candidate_ledger_id", ""),
+                "candidate_score": engine.get("candidate_score", ""),
+                "confirmed_ledger_id": confirmed_ledger_id,
+                "status": status,
+                "first_seen_at": first_seen_at,
+                "confirmed_at": confirmed_at,
+                "is_pending": str(is_pending).lower(),
+                "is_confirmed": str(is_confirmed).lower(),
+                "days_pending": str(days_pending),
+            }
+        )
 
     # Write output (full overwrite)
     output_dir = datahub / "meta" / "actions" / "reconcile_banca" / "materialized"
@@ -229,9 +247,11 @@ def materialize_reconciliation_state(datahub_path: str, today: date | None = Non
 
 # -- CLI ----------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Materialize reconciliation state for all bank transactions")
+        description="Materialize reconciliation state for all bank transactions"
+    )
     parser.add_argument("--datahub", required=True)
     args = parser.parse_args()
 

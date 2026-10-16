@@ -1,4 +1,5 @@
 """Tests for ingest/flussi/ingest_spiaggia_fb.py — Moolty F&B bar spiaggia parser."""
+
 from datetime import date, datetime, timezone
 
 import openpyxl
@@ -94,7 +95,16 @@ def _make_moolty_report(tmp_path):
     ws.cell(row=1, column=1, value="Report 06/2025")
 
     # Row 2: headers
-    headers = ["Data", "Pagato", "Rata", "Metodo", "Entrata", "Uscita", "Causale", "Descrizione"]
+    headers = [
+        "Data",
+        "Pagato",
+        "Rata",
+        "Metodo",
+        "Entrata",
+        "Uscita",
+        "Causale",
+        "Descrizione",
+    ]
     for col, h in enumerate(headers, 1):
         ws.cell(row=2, column=col, value=h)
 
@@ -244,8 +254,16 @@ def _moolty_wb(tmp_path, righe, titolo="Report 06/2026", sheet="Report"):
     ws = wb.active
     ws.title = sheet
     ws.cell(row=1, column=1, value=titolo)
-    headers = ["Data", "Pagato", "Rata", "Metodo", "Entrata", "Uscita",
-               "Causale", "Descrizione"]
+    headers = [
+        "Data",
+        "Pagato",
+        "Rata",
+        "Metodo",
+        "Entrata",
+        "Uscita",
+        "Causale",
+        "Descrizione",
+    ]
     for col, h in enumerate(headers, 1):
         ws.cell(row=2, column=col, value=h)
     for i, r in enumerate(righe, start=3):
@@ -256,8 +274,16 @@ def _moolty_wb(tmp_path, righe, titolo="Report 06/2026", sheet="Report"):
     return f
 
 
-_RIGA = [datetime(2026, 6, 1, 8, 43), 1, "1/1", "Contanti", 25.0, None,
-         "Ordine", "# 101 del 01/06/2026 0..."]
+_RIGA = [
+    datetime(2026, 6, 1, 8, 43),
+    1,
+    "1/1",
+    "Contanti",
+    25.0,
+    None,
+    "Ordine",
+    "# 101 del 01/06/2026 0...",
+]
 
 
 def test_valida_moolty_ok(tmp_path):

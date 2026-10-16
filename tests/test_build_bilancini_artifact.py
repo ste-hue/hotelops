@@ -24,10 +24,24 @@ def test_compute_delta_first_month_is_ytd():
 
 def test_build_payload_signs_and_presence():
     bilancino = [
-        {"societa_id": "ORTI", "mese": "2026-05", "codice_conto": "47.91.01",
-         "descrizione": "Ricavi alloggi", "tipo_conto": "CE", "sezione": "Ricavi", "saldo": -1000.0},
-        {"societa_id": "ORTI", "mese": "2026-05", "codice_conto": "67.03.94",
-         "descrizione": "Vestiario dipendenti", "tipo_conto": "CE", "sezione": "Costi", "saldo": 80.0},
+        {
+            "societa_id": "ORTI",
+            "mese": "2026-05",
+            "codice_conto": "47.91.01",
+            "descrizione": "Ricavi alloggi",
+            "tipo_conto": "CE",
+            "sezione": "Ricavi",
+            "saldo": -1000.0,
+        },
+        {
+            "societa_id": "ORTI",
+            "mese": "2026-05",
+            "codice_conto": "67.03.94",
+            "descrizione": "Vestiario dipendenti",
+            "tipo_conto": "CE",
+            "sezione": "Costi",
+            "saldo": 80.0,
+        },
     ]
     payload = build_payload(bilancino)
     orti = {c["codice"]: c for c in payload["societa"]["ORTI"]["conti"]}
@@ -41,8 +55,15 @@ def test_build_payload_signs_and_presence():
 
 def test_build_payload_includes_gruppi_descriptions():
     bilancino = [
-        {"societa_id": "ORTI", "mese": "2026-05", "codice_conto": "47.91.01",
-         "descrizione": "Ricavi alloggi", "tipo_conto": "CE", "sezione": "Ricavi", "saldo": -1000.0},
+        {
+            "societa_id": "ORTI",
+            "mese": "2026-05",
+            "codice_conto": "47.91.01",
+            "descrizione": "Ricavi alloggi",
+            "tipo_conto": "CE",
+            "sezione": "Ricavi",
+            "saldo": -1000.0,
+        },
     ]
     gruppi = {"47.91": "Ricavi Hotel", "47": "RICAVI DELLE VENDITE E DELLE PRESTAZIONI"}
     payload = build_payload(bilancino, gruppi)
@@ -64,11 +85,22 @@ PUSH_ENV = {
 
 def _payload():
     return {
-        "generated_at": "2026-07-15", "mesi": ["2026-05"],
-        "societa": {"ORTI": {"conti": [{
-            "codice": "47.91.01", "descrizione": "Ricavi alloggi", "tipo": "CE",
-            "sezione": "Ricavi", "ytd": {"2026-05": -1000.0}, "delta": {"2026-05": -1000.0},
-        }]}},
+        "generated_at": "2026-07-15",
+        "mesi": ["2026-05"],
+        "societa": {
+            "ORTI": {
+                "conti": [
+                    {
+                        "codice": "47.91.01",
+                        "descrizione": "Ricavi alloggi",
+                        "tipo": "CE",
+                        "sezione": "Ricavi",
+                        "ytd": {"2026-05": -1000.0},
+                        "delta": {"2026-05": -1000.0},
+                    }
+                ]
+            }
+        },
         "gruppi": {},
     }
 
@@ -119,7 +151,10 @@ def test_push_to_kv_bulk_payload(monkeypatch):
     by_key = {e["key"]: e["value"] for e in calls["body"]}
     assert set(by_key) == {"html", "data.json", "data.csv"}
     assert by_key["html"] == html
-    assert '"generated_at": "2026-07-15"' in by_key["data.json"] or '"generated_at":"2026-07-15"' in by_key["data.json"]
+    assert (
+        '"generated_at": "2026-07-15"' in by_key["data.json"]
+        or '"generated_at":"2026-07-15"' in by_key["data.json"]
+    )
     assert by_key["data.csv"] == payload_to_csv(payload)
 
 
@@ -127,8 +162,11 @@ def test_push_to_kv_api_error_raises(monkeypatch):
     import requests
 
     monkeypatch.setattr(
-        requests, "put",
-        lambda *a, **kw: _FakeResp(ok=False, success=False, status_code=403, text="forbidden"),
+        requests,
+        "put",
+        lambda *a, **kw: _FakeResp(
+            ok=False, success=False, status_code=403, text="forbidden"
+        ),
     )
     with pytest.raises(RuntimeError, match="403"):
         push_to_kv("<html>", _payload(), PUSH_ENV)

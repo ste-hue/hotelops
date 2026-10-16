@@ -189,7 +189,11 @@ def _ingest_block(
                 res.rejected += 1
                 log.error(
                     "%s UID %d: promote %s (%s), raw_object_id=%s",
-                    entity, uid, pr.status, pr.reason, out.raw_object_id,
+                    entity,
+                    uid,
+                    pr.status,
+                    pr.reason,
+                    out.raw_object_id,
                 )
 
 
@@ -199,9 +203,15 @@ def main() -> None:
         description="Fetch IMAP read-only delle caselle PEC, poi intake + promote.",
     )
     p.add_argument("--source-name", default=None)
-    p.add_argument("--all", action="store_true", help="Tutte le caselle PEC con blocco imap")
-    p.add_argument("--since-days", type=int, default=7,
-                   help="Finestra di sicurezza oltre al watermark (0 = solo watermark)")
+    p.add_argument(
+        "--all", action="store_true", help="Tutte le caselle PEC con blocco imap"
+    )
+    p.add_argument(
+        "--since-days",
+        type=int,
+        default=7,
+        help="Finestra di sicurezza oltre al watermark (0 = solo watermark)",
+    )
     p.add_argument("--no-promote", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args()

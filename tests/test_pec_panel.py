@@ -45,7 +45,9 @@ def test_destination_entity_fuori_whitelist_rifiutata():
 def test_destination_traversal_nel_nome_resta_sotto_root():
     from datetime import datetime
 
-    rel = _destination_path("ORTI", "BANCA", datetime(2026, 1, 1), "../../../etc/passwd")
+    rel = _destination_path(
+        "ORTI", "BANCA", datetime(2026, 1, 1), "../../../etc/passwd"
+    )
     assert not str(rel).startswith("..")
     assert rel.parts[0] == "ORTI"
 
@@ -62,11 +64,23 @@ def test_riga_projection_valida():
 
     from core.schemas import PecPanelProjectionRow, validate_batch
 
-    validate_batch([{
-        "projection_key": "k", "msgid": "m", "sha256": "s", "entity_id": "ORTI",
-        "gcs_uri": "gs://orti-raw/x", "destination_path": "ORTI/PEC/Banca/x.pdf",
-        "run_id": "r", "projected_at": datetime(2026, 7, 17), "status": "COPIED",
-    }], PecPanelProjectionRow, context="test")
+    validate_batch(
+        [
+            {
+                "projection_key": "k",
+                "msgid": "m",
+                "sha256": "s",
+                "entity_id": "ORTI",
+                "gcs_uri": "gs://orti-raw/x",
+                "destination_path": "ORTI/PEC/Banca/x.pdf",
+                "run_id": "r",
+                "projected_at": datetime(2026, 7, 17),
+                "status": "COPIED",
+            }
+        ],
+        PecPanelProjectionRow,
+        context="test",
+    )
 
 
 def test_riga_projection_personale_rifiutata():
@@ -122,9 +136,13 @@ def test_sync_panel_download_fallito_rimuove_file_parziale_e_segna_failed(
     monkeypatch.setattr(panel, "PANEL_ROOT", str(tmp_path))
 
     cand = SimpleNamespace(
-        msgid="m1", sha256="s1", nome_file="doc.pdf",
-        gcs_uri="gs://bucket/doc.pdf", size_bytes=10,
-        entity_id="ORTI", data_evento=datetime(2026, 7, 1),
+        msgid="m1",
+        sha256="s1",
+        nome_file="doc.pdf",
+        gcs_uri="gs://bucket/doc.pdf",
+        size_bytes=10,
+        entity_id="ORTI",
+        data_evento=datetime(2026, 7, 1),
         primary_category="LEGALE",
     )
     monkeypatch.setattr(panel, "_candidati", lambda client: [cand])
@@ -168,9 +186,13 @@ def test_sync_panel_ritenta_dopo_failed_precedente(tmp_path, monkeypatch):
     monkeypatch.setattr(panel, "PANEL_ROOT", str(tmp_path))
 
     cand = SimpleNamespace(
-        msgid="m1", sha256="s1", nome_file="doc.pdf",
-        gcs_uri="gs://bucket/doc.pdf", size_bytes=10,
-        entity_id="ORTI", data_evento=datetime(2026, 7, 1),
+        msgid="m1",
+        sha256="s1",
+        nome_file="doc.pdf",
+        gcs_uri="gs://bucket/doc.pdf",
+        size_bytes=10,
+        entity_id="ORTI",
+        data_evento=datetime(2026, 7, 1),
         primary_category="LEGALE",
     )
     monkeypatch.setattr(panel, "_candidati", lambda client: [cand])
@@ -190,7 +212,8 @@ def test_sync_panel_ritenta_dopo_failed_precedente(tmp_path, monkeypatch):
                 allowed = {"COPIED", "SKIPPED_EXISTS"}
                 rows = [
                     SimpleNamespace(projection_key=r["projection_key"])
-                    for r in tabella if r["status"] in allowed
+                    for r in tabella
+                    if r["status"] in allowed
                 ]
                 return _FakeResult(rows)
             return _FakeResult([])  # _scrivi_indice: non rilevante qui
@@ -246,11 +269,16 @@ def test_sync_panel_collisione_contenuti_diversi_disambigua(tmp_path, monkeypatc
 
     contenuti = {"gs://b/uno.pdf": b"pratica uno", "gs://b/due.pdf": b"pratica due"}
     import hashlib as _hl
+
     cands = [
         SimpleNamespace(
-            msgid=f"m{i}", sha256=_hl.sha256(body).hexdigest(),
-            nome_file="RicevutaCu.pdf", gcs_uri=uri, size_bytes=len(body),
-            entity_id="INTUR", data_evento=datetime(2025, 3, 10 + i),
+            msgid=f"m{i}",
+            sha256=_hl.sha256(body).hexdigest(),
+            nome_file="RicevutaCu.pdf",
+            gcs_uri=uri,
+            size_bytes=len(body),
+            entity_id="INTUR",
+            data_evento=datetime(2025, 3, 10 + i),
             primary_category="REGISTRO_IMPRESE",
         )
         for i, (uri, body) in enumerate(contenuti.items())
@@ -258,7 +286,8 @@ def test_sync_panel_collisione_contenuti_diversi_disambigua(tmp_path, monkeypatc
     monkeypatch.setattr(panel, "_candidati", lambda client: cands)
     monkeypatch.setattr(panel, "_gia_proiettate", lambda client: set())
     monkeypatch.setattr(
-        panel, "_download_gcs",
+        panel,
+        "_download_gcs",
         lambda gcs_uri, dest: dest.write_bytes(contenuti[gcs_uri]),
     )
     written_rows = []
@@ -293,9 +322,13 @@ def _due_candidati_stesso_contenuto():
     sha = _hl.sha256(body).hexdigest()
     return body, [
         SimpleNamespace(
-            msgid=f"m{i}", sha256=sha, nome_file="FT 31.pdf",
-            gcs_uri="gs://b/ft31.pdf", size_bytes=len(body),
-            entity_id="ORTI", data_evento=datetime(2026, 6, 5 + i),
+            msgid=f"m{i}",
+            sha256=sha,
+            nome_file="FT 31.pdf",
+            gcs_uri="gs://b/ft31.pdf",
+            size_bytes=len(body),
+            entity_id="ORTI",
+            data_evento=datetime(2026, 6, 5 + i),
             primary_category="LEGALE",
         )
         for i in range(2)

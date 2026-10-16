@@ -55,15 +55,29 @@ SALA_MAP: dict[str, tuple[str, str]] = {
 
 # Mese italiano → numero
 MESE_IT: dict[str, int] = {
-    "gennaio": 1, "febbraio": 2, "marzo": 3, "aprile": 4,
-    "maggio": 5, "giugno": 6, "luglio": 7, "agosto": 8,
-    "settembre": 9, "ottobre": 10, "novembre": 11, "dicembre": 12,
+    "gennaio": 1,
+    "febbraio": 2,
+    "marzo": 3,
+    "aprile": 4,
+    "maggio": 5,
+    "giugno": 6,
+    "luglio": 7,
+    "agosto": 8,
+    "settembre": 9,
+    "ottobre": 10,
+    "novembre": 11,
+    "dicembre": 12,
 }
 
 
 def _make_hash(
-    societa: str, data_serv: date, sala: str, codice: str,
-    segmento: str | None, quantita: float, netto: float,
+    societa: str,
+    data_serv: date,
+    sala: str,
+    codice: str,
+    segmento: str | None,
+    quantita: float,
+    netto: float,
 ) -> str:
     """Hash naturale: una riga = una vendita di articolo X in sala Y a giorno Z
     a un segmento_cliente Z'.
@@ -184,8 +198,13 @@ def parse_xlsx(filepath: Path, raw_object_id: str | None = None) -> list[dict]:
         records.append(
             {
                 "hash_riga": _make_hash(
-                    SOCIETA_ID, data_serv, sala_norm,
-                    str(codice or ""), segmento, qta, imp_netto,
+                    SOCIETA_ID,
+                    data_serv,
+                    sala_norm,
+                    str(codice or ""),
+                    segmento,
+                    qta,
+                    imp_netto,
                 ),
                 "societa_id": SOCIETA_ID,
                 "business_unit_id": bu,
@@ -211,7 +230,12 @@ def parse_xlsx(filepath: Path, raw_object_id: str | None = None) -> list[dict]:
     wb.close()
 
     log.info(f"Parsed: {len(records)} righe")
-    if skipped_no_sala or skipped_invalid_date or skipped_no_amount or skipped_filter_note:
+    if (
+        skipped_no_sala
+        or skipped_invalid_date
+        or skipped_no_amount
+        or skipped_filter_note
+    ):
         log.info(
             f"Skipped: no_sala={skipped_no_sala} invalid_date={skipped_invalid_date} "
             f"no_amount={skipped_no_amount} filter_note={skipped_filter_note}"
@@ -283,7 +307,9 @@ def _summary(records: list[dict]) -> None:
     log.info(f"  SUMMARY: {len(records)} righe, netto totale €{netto_total:,.0f}")
     log.info("  Per mese:")
     for k in sorted(netto_by_mese.keys()):
-        log.info(f"    {k[0]}-{k[1]:02d}  {by_mese[k]:>5} righe   €{netto_by_mese[k]:>10,.0f}")
+        log.info(
+            f"    {k[0]}-{k[1]:02d}  {by_mese[k]:>5} righe   €{netto_by_mese[k]:>10,.0f}"
+        )
     log.info("  Per sala:")
     for s, n in by_sala.most_common():
         log.info(f"    {s:<15} {n:>5}")
@@ -335,11 +361,15 @@ def main() -> None:
         default=None,
         help="Accettato da `hotelops promote` — deve essere ORTI (unica società POS)",
     )
-    parser.add_argument("--dry-run", action="store_true", help="Parse only, no BQ write")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Parse only, no BQ write"
+    )
     args = parser.parse_args()
 
     if args.societa and args.societa != SOCIETA_ID:
-        log.error(f"--societa {args.societa} incoerente: vendite POS è sempre {SOCIETA_ID}")
+        log.error(
+            f"--societa {args.societa} incoerente: vendite POS è sempre {SOCIETA_ID}"
+        )
         sys.exit(2)
 
     from ingest._logging import setup_logging

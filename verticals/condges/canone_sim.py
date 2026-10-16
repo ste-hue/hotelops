@@ -29,7 +29,10 @@ SCHEMA = "canone-sim/1"
 ANGELINA_INTUR = "intur"
 ANGELINA_TERZI = "terzi"
 _ANGELINA_FINO_AL = 2028  # il file tiene i 120k in INTUR fino al 2028
-_ANGELINA_ANNI_APERTI = (2027, 2028)  # anni in cui il destinatario è una questione aperta
+_ANGELINA_ANNI_APERTI = (
+    2027,
+    2028,
+)  # anni in cui il destinatario è una questione aperta
 MAX_CANONE = 10_000_000
 
 
@@ -92,7 +95,9 @@ def scenario_base(inputs: dict) -> dict:
     return {"nome": "Base", "angelina": ANGELINA_INTUR, "anni": per_anno}
 
 
-def calculate(inputs: dict, scenario: dict, canone_automatico: bool = False) -> list[dict]:
+def calculate(
+    inputs: dict, scenario: dict, canone_automatico: bool = False
+) -> list[dict]:
     """Una riga per anno con le due gambe e il gruppo, calcolata in sequenza.
 
     ``canone_automatico=True`` ignora la scaletta e applica la regola del foglio
@@ -103,9 +108,18 @@ def calculate(inputs: dict, scenario: dict, canone_automatico: bool = False) -> 
     for y in anni(inputs):
         p = scenario["anni"][y]
         canone = None if canone_automatico else p["canone"]
-        riga = _riga(inputs, y, p["crescita"], p["costi"], canone, scenario["angelina"],
-                     prec["ricavi_o"], prec["ricavi_i"], prec["cassa_i"],
-                     inputs["common"]["workingCapitalRate"])
+        riga = _riga(
+            inputs,
+            y,
+            p["crescita"],
+            p["costi"],
+            canone,
+            scenario["angelina"],
+            prec["ricavi_o"],
+            prec["ricavi_i"],
+            prec["cassa_i"],
+            inputs["common"]["workingCapitalRate"],
+        )
         out.append(riga)
         prec = riga
     return out
@@ -120,8 +134,18 @@ def riga_2026(inputs: dict, scenario: dict | None = None) -> dict:
         "costi": o["operatingCostRate"],
         "canone": inputs["prior2026"]["appliedRent"],
     }
-    return _riga(inputs, 2026, p["crescita"], p["costi"], p["canone"], ANGELINA_INTUR,
-                 p25["ortiRevenue"], p25["inturRevenue"], p25["inturClosingCash"], 0.0)
+    return _riga(
+        inputs,
+        2026,
+        p["crescita"],
+        p["costi"],
+        p["canone"],
+        ANGELINA_INTUR,
+        p25["ortiRevenue"],
+        p25["inturRevenue"],
+        p25["inturClosingCash"],
+        0.0,
+    )
 
 
 def righe(inputs: dict, scenario: dict) -> list[dict]:
@@ -129,8 +153,18 @@ def righe(inputs: dict, scenario: dict) -> list[dict]:
     return [riga_2026(inputs, scenario), *calculate(inputs, scenario)]
 
 
-def _riga(inputs: dict, y: int, crescita: float, costi: float, canone: float | None,
-          angelina: str, prev_rev: float, prev_intur_rev: float, prev_cash: float, w: float) -> dict:
+def _riga(
+    inputs: dict,
+    y: int,
+    crescita: float,
+    costi: float,
+    canone: float | None,
+    angelina: str,
+    prev_rev: float,
+    prev_intur_rev: float,
+    prev_cash: float,
+    w: float,
+) -> dict:
     """Un anno. ``canone=None`` = regola automatica del BP (solo verifica)."""
     c = inputs["common"]
     t, m, s = c["taxRate"], c["maintenanceRate"], c["targetDSCR"]
@@ -140,26 +174,51 @@ def _riga(inputs: dict, y: int, crescita: float, costi: float, canone: float | N
     costi_o = revenue * costi
     ebitda_ante = revenue - costi_o
     a_terzi = y in _ANGELINA_ANNI_APERTI and angelina == ANGELINA_TERZI
-    angelina_a_intur = o["angelinaRent"] if y <= _ANGELINA_FINO_AL and not a_terzi else 0.0
-    altri_intur = i["beachRevenue"] + i["otherRentRevenue"] - (o["angelinaRent"] if a_terzi else 0.0)
+    angelina_a_intur = (
+        o["angelinaRent"] if y <= _ANGELINA_FINO_AL and not a_terzi else 0.0
+    )
+    altri_intur = (
+        i["beachRevenue"]
+        + i["otherRentRevenue"]
+        - (o["angelinaRent"] if a_terzi else 0.0)
+    )
     man_o, ccn_o = m * revenue, w * (revenue - prev_rev)
     affr = i["reserveReleasePayment"]
 
     # Banda alla soglia (diagnostica): max che ORTI regge, min che serve a INTUR.
-    max_tax = ebitda_ante - o["angelinaRent"] - (
-        s * o["debtService"] + man_o + ccn_o - t * (o["depreciation"] + o["interest"])
-    ) / (1 - t)
-    if ebitda_ante - max_tax - o["angelinaRent"] - o["depreciation"] - o["interest"] >= 0:
+    max_tax = (
+        ebitda_ante
+        - o["angelinaRent"]
+        - (
+            s * o["debtService"]
+            + man_o
+            + ccn_o
+            - t * (o["depreciation"] + o["interest"])
+        )
+        / (1 - t)
+    )
+    if (
+        ebitda_ante - max_tax - o["angelinaRent"] - o["depreciation"] - o["interest"]
+        >= 0
+    ):
         massimo = max_tax
     else:
         massimo = ebitda_ante - o["angelinaRent"] - s * o["debtService"] - man_o - ccn_o
-    fabbisogno = s * i["debtService"] + m * altri_intur + w * (altri_intur - prev_intur_rev) + affr
+    fabbisogno = (
+        s * i["debtService"]
+        + m * altri_intur
+        + w * (altri_intur - prev_intur_rev)
+        + affr
+    )
     min_tax = (
         fabbisogno
         - t * (i["depreciation"] + i["interest"])
         - (altri_intur - i["operatingCosts"]) * (1 - t)
     ) / (1 - t - m - w)
-    if altri_intur + min_tax - i["operatingCosts"] - i["depreciation"] - i["interest"] >= 0:
+    if (
+        altri_intur + min_tax - i["operatingCosts"] - i["depreciation"] - i["interest"]
+        >= 0
+    ):
         minimo = min_tax
     else:
         minimo = (fabbisogno - (altri_intur - i["operatingCosts"])) / (1 - m - w)
@@ -178,26 +237,53 @@ def _riga(inputs: dict, y: int, crescita: float, costi: float, canone: float | N
     rate_o, rate_i = o["debtService"], i["debtService"]
     br = i["cashBridge"]
     cassa_i = (
-        prev_cash + ebitda_i - tax_i - rate_i - affr
-        + br["newLoanDrawdowns"] - br["investmentSpend"]
-        - br["investmentVATPaid"] + br["investmentVATRecovered"]
+        prev_cash
+        + ebitda_i
+        - tax_i
+        - rate_i
+        - affr
+        + br["newLoanDrawdowns"]
+        - br["investmentSpend"]
+        - br["investmentVATPaid"]
+        + br["investmentVATRecovered"]
     )
     return {
-        "anno": y, "canone": canone, "canone_min_intur": minimo, "canone_max_orti": massimo,
-        "ricavi_o": revenue, "ricavi_o_prec": prev_rev, "crescita": crescita,
-        "costi_o": costi_o, "incidenza_costi": costi,
-        "angelina_o": o["angelinaRent"], "angelina_a_intur": angelina_a_intur,
-        "tax_o": tax_o, "man_o": man_o, "ccn_o": ccn_o,
-        "cfads_o": cfads_o, "rate_o": rate_o,
-        "ricavi_i": ricavi_i, "altri_ricavi_i": altri_intur, "costi_i": i["operatingCosts"],
-        "tax_i": tax_i, "man_i": man_i, "ccn_i": ccn_i, "affr_i": affr,
-        "cfads_i": cfads_i, "rate_i": rate_i, "cassa_i": cassa_i,
+        "anno": y,
+        "canone": canone,
+        "canone_min_intur": minimo,
+        "canone_max_orti": massimo,
+        "ricavi_o": revenue,
+        "ricavi_o_prec": prev_rev,
+        "crescita": crescita,
+        "costi_o": costi_o,
+        "incidenza_costi": costi,
+        "angelina_o": o["angelinaRent"],
+        "angelina_a_intur": angelina_a_intur,
+        "tax_o": tax_o,
+        "man_o": man_o,
+        "ccn_o": ccn_o,
+        "cfads_o": cfads_o,
+        "rate_o": rate_o,
+        "ricavi_i": ricavi_i,
+        "altri_ricavi_i": altri_intur,
+        "costi_i": i["operatingCosts"],
+        "tax_i": tax_i,
+        "man_i": man_i,
+        "ccn_i": ccn_i,
+        "affr_i": affr,
+        "cfads_i": cfads_i,
+        "rate_i": rate_i,
+        "cassa_i": cassa_i,
         "rate_i_dettaglio": dict(i.get("debtServiceBreakdown", {})),
-        "composizione_bp": dict(o.get("revenueBreakdown", {})), "ricavi_o_bp": o["revenue"],
-        "dscr_o": _ratio(cfads_o, rate_o), "dscr_i": _ratio(cfads_i, rate_i),
+        "composizione_bp": dict(o.get("revenueBreakdown", {})),
+        "ricavi_o_bp": o["revenue"],
+        "dscr_o": _ratio(cfads_o, rate_o),
+        "dscr_i": _ratio(cfads_i, rate_i),
         "dscr_g": _ratio(cfads_o + cfads_i, rate_o + rate_i),
-        "residuo_o": cfads_o - rate_o, "residuo_i": cfads_i - rate_i,
-        "manca_o": max(0.0, s * rate_o - cfads_o), "manca_i": max(0.0, s * rate_i - cfads_i),
+        "residuo_o": cfads_o - rate_o,
+        "residuo_i": cfads_i - rate_i,
+        "manca_o": max(0.0, s * rate_o - cfads_o),
+        "manca_i": max(0.0, s * rate_i - cfads_i),
         "manca_g": max(0.0, s * (rate_o + rate_i) - cfads_o - cfads_i),
     }
 
@@ -215,7 +301,10 @@ def _canone_motore(minimo: float, massimo: float, common: dict) -> float:
     if massimo < minimo:
         return massimo
     passo = common["roundingEUR"]
-    centro = _excel_round((minimo + common["bandPosition"] * (massimo - minimo)) / passo) * passo
+    centro = (
+        _excel_round((minimo + common["bandPosition"] * (massimo - minimo)) / passo)
+        * passo
+    )
     return min(massimo, max(minimo, centro))
 
 
@@ -246,12 +335,17 @@ def errori_scaletta(inputs: dict, scenario: dict) -> list[str]:
     for y in anni_scenario(inputs):
         canone = scenario["anni"][y]["canone"]
         if not 0 <= canone <= MAX_CANONE:
-            errori.append(f"{y}: canone fuori dai limiti (0 – {MAX_CANONE:,.0f} €).".replace(",", "."))
+            errori.append(
+                f"{y}: canone fuori dai limiti (0 – {MAX_CANONE:,.0f} €).".replace(
+                    ",", "."
+                )
+            )
         elif canone < precedente:
             errori.append(
                 f"{y}: {canone:,.0f} € è sotto il {anno_prec} ({precedente:,.0f} €). "
-                "La scaletta non può scendere: alza prima questo anno o abbassa il precedente."
-                .replace(",", ".")
+                "La scaletta non può scendere: alza prima questo anno o abbassa il precedente.".replace(
+                    ",", "."
+                )
             )
         precedente, anno_prec = canone, y
     return errori
@@ -271,7 +365,14 @@ def modifiche(inputs: dict, scenario: dict) -> list[dict]:
     base = scenario_base(inputs)
     diff = []
     if scenario["angelina"] != base["angelina"]:
-        diff.append({"anno": None, "campo": "angelina", "base": base["angelina"], "valore": scenario["angelina"]})
+        diff.append(
+            {
+                "anno": None,
+                "campo": "angelina",
+                "base": base["angelina"],
+                "valore": scenario["angelina"],
+            }
+        )
     for y in anni_scenario(inputs):
         for campo in ("canone", "crescita", "costi"):
             a, b = base["anni"][y][campo], scenario["anni"][y][campo]
@@ -280,7 +381,9 @@ def modifiche(inputs: dict, scenario: dict) -> list[dict]:
     return diff
 
 
-def scenario_to_json(inputs: dict, scenario: dict, salvato_il: datetime | None = None) -> str:
+def scenario_to_json(
+    inputs: dict, scenario: dict, salvato_il: datetime | None = None
+) -> str:
     doc = {
         "schema": SCHEMA,
         "nome": scenario["nome"],
@@ -296,13 +399,19 @@ def scenario_from_json(inputs: dict, raw: str | bytes) -> tuple[dict, list[str]]
     """Ritorna (scenario, avvisi). Esplode se il file non è uno scenario valido."""
     doc = json.loads(raw)
     if doc.get("schema") != SCHEMA:
-        raise ValueError(f"non è uno scenario del simulatore canone (schema {doc.get('schema')!r})")
+        raise ValueError(
+            f"non è uno scenario del simulatore canone (schema {doc.get('schema')!r})"
+        )
     if doc.get("angelina") not in (ANGELINA_INTUR, ANGELINA_TERZI):
         raise ValueError(f"angelina non valido: {doc.get('angelina')!r}")
     attesi = anni(inputs)
     if sorted(int(y) for y in doc["anni"] if int(y) != 2026) != attesi:
-        raise ValueError(f"anni dello scenario {sorted(doc['anni'])} ≠ anni del modello {attesi}")
-    if "2026" not in doc["anni"]:  # scenari salvati prima che il 2026 diventasse modificabile
+        raise ValueError(
+            f"anni dello scenario {sorted(doc['anni'])} ≠ anni del modello {attesi}"
+        )
+    if (
+        "2026" not in doc["anni"]
+    ):  # scenari salvati prima che il 2026 diventasse modificabile
         doc["anni"]["2026"] = scenario_base(inputs)["anni"][2026]
     scenario = {
         "nome": str(doc["nome"]),

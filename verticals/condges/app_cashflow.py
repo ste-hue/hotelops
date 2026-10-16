@@ -47,9 +47,7 @@ MESI = {
 }
 
 
-def scad_summary(
-    scad_df: pd.DataFrame, bucket_months: list[int]
-) -> dict[str, object]:
+def scad_summary(scad_df: pd.DataFrame, bucket_months: list[int]) -> dict[str, object]:
     """Cifre di display dallo scadenziario: scaduto (roll-forward) + buckets forward.
 
     Funzione pura, solo per la UI. Niente persistenza (il PF è proiezione).
@@ -178,8 +176,14 @@ def render() -> None:
             for n in nuovi:
                 cod = int(n["codice"])
                 suggested = sugg.get(cod, (None,))[0]
-                default = suggested if suggested in voci_ids else (
-                    "USCITE_VARIE_EXT" if "USCITE_VARIE_EXT" in voci_ids else (voci_ids[0] if voci_ids else ESCLUDI)
+                default = (
+                    suggested
+                    if suggested in voci_ids
+                    else (
+                        "USCITE_VARIE_EXT"
+                        if "USCITE_VARIE_EXT" in voci_ids
+                        else (voci_ids[0] if voci_ids else ESCLUDI)
+                    )
                 )
                 c_voce, c_ic = st.columns([4, 1])
                 with c_voce:
@@ -187,9 +191,11 @@ def render() -> None:
                         f"{cod} · {str(n['nome'])[:40]} (€ {n['totale']:,.2f})",
                         options=opzioni,
                         index=opzioni.index(default),
-                        format_func=lambda v: "— escludi SEMPRE (permanente) —"
-                        if v == ESCLUDI
-                        else voci_labels[v],
+                        format_func=lambda v: (
+                            "— escludi SEMPRE (permanente) —"
+                            if v == ESCLUDI
+                            else voci_labels[v]
+                        ),
                         key=f"map_{cod}",
                     )
                 with c_ic:
@@ -266,7 +272,8 @@ def render() -> None:
         "Per un'esclusione permanente usa 'escludi sempre' nella mappatura sopra."
     )
     nome_by_cod = {
-        int(r["codice_fornitore"]): str(r.get("nome", "")) for _, r in scad_df.iterrows()
+        int(r["codice_fornitore"]): str(r.get("nome", ""))
+        for _, r in scad_df.iterrows()
     }
     extra_excluded = set(
         st.multiselect(

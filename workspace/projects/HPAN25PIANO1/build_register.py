@@ -32,7 +32,11 @@ SUPPLIERS_YAML = Path(__file__).parent / "suppliers.yaml"
 def normalize(s: str) -> str:
     s = (s or "").upper()
     # strip suffixes and punctuation
-    s = re.sub(r"\b(S\.?\s*R\.?\s*L\.?|S\.?\s*P\.?\s*A\.?|SOCIO\s*UNICO|AZIONISTA\s*UNICO|SRL|SPA|SAS|SNC|GROUP)\b", " ", s)
+    s = re.sub(
+        r"\b(S\.?\s*R\.?\s*L\.?|S\.?\s*P\.?\s*A\.?|SOCIO\s*UNICO|AZIONISTA\s*UNICO|SRL|SPA|SAS|SNC|GROUP)\b",
+        " ",
+        s,
+    )
     s = re.sub(r"[^\w\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
@@ -54,7 +58,13 @@ def build_fuzzy_map() -> dict[str, str]:
             out.setdefault(compact_rs, cod)
         # Also each significant token as standalone (e.g., "ILLUXIT", "DORELAN")
         for tok in rs.split():
-            if len(tok) >= 4 and tok not in {"SRL", "SPA", "SAS", "GROUP", "COSTRUZIONI"}:
+            if len(tok) >= 4 and tok not in {
+                "SRL",
+                "SPA",
+                "SAS",
+                "GROUP",
+                "COSTRUZIONI",
+            }:
                 out.setdefault(tok, cod)
     return out
 
@@ -97,24 +107,47 @@ def match_fornitore_to_fcode(name: str, fuzzy_map: dict[str, str]) -> str | None
             return cod
     return None
 
+
 # Mapping F-code → macro budget (categorie del file budget_camere.xlsx)
 F_TO_BUDGET_MACRO = {
     # EDILE
-    "F001": "EDILE", "F008": "EDILE", "F019": "EDILE", "F024": "EDILE",
+    "F001": "EDILE",
+    "F008": "EDILE",
+    "F019": "EDILE",
+    "F024": "EDILE",
     "F022": "EDILE",  # OLIVA = smaltimento eternit → EDILE
     # ELETTRICO
-    "F025": "ELETTRICO", "F033": "ELETTRICO",
+    "F025": "ELETTRICO",
+    "F033": "ELETTRICO",
     # IMPIANTI (idro-meccanico + building automation + REI)
-    "F027": "IMPIANTI", "F028": "IMPIANTI", "F009": "IMPIANTI",
+    "F027": "IMPIANTI",
+    "F028": "IMPIANTI",
+    "F009": "IMPIANTI",
     # SPESE TECNICHE (progettazione + PM + autorizzazioni + trasporto cantiere)
-    "F003": "SPESE TECNICHE", "F013": "SPESE TECNICHE", "F018": "SPESE TECNICHE",
-    "F021": "SPESE TECNICHE", "F017": "SPESE TECNICHE", "F032": "SPESE TECNICHE",
+    "F003": "SPESE TECNICHE",
+    "F013": "SPESE TECNICHE",
+    "F018": "SPESE TECNICHE",
+    "F021": "SPESE TECNICHE",
+    "F017": "SPESE TECNICHE",
+    "F032": "SPESE TECNICHE",
     # INFISSI (porte + finestre)
-    "F029": "INFISSI", "F026": "INFISSI", "F023": "INFISSI", "F012": "INFISSI",
+    "F029": "INFISSI",
+    "F026": "INFISSI",
+    "F023": "INFISSI",
+    "F012": "INFISSI",
     # ARREDI / FORNITURE (mobili + apparati + sanitari)
-    "F002": "ARREDI", "F004": "ARREDI", "F005": "ARREDI", "F006": "ARREDI",
-    "F007": "ARREDI", "F010": "ARREDI", "F011": "ARREDI", "F014": "ARREDI",
-    "F015": "ARREDI", "F016": "ARREDI", "F020": "ARREDI", "F030": "ARREDI",
+    "F002": "ARREDI",
+    "F004": "ARREDI",
+    "F005": "ARREDI",
+    "F006": "ARREDI",
+    "F007": "ARREDI",
+    "F010": "ARREDI",
+    "F011": "ARREDI",
+    "F014": "ARREDI",
+    "F015": "ARREDI",
+    "F016": "ARREDI",
+    "F020": "ARREDI",
+    "F030": "ARREDI",
     "F031": "ARREDI",
 }
 
@@ -172,16 +205,18 @@ def load_fatture(wb) -> list[dict]:
         if not in_header or not isinstance(row[0], (int, float)):
             continue
         # Schema: # | Fornitore | Cod. Interno | Cod. Fornitore | N° Fattura | Data Emissione | Data Registr | Tipo Doc | ... | Importo
-        out.append({
-            "fornitore": str(row[1]).strip() if row[1] else "",
-            "cod_interno": str(row[2]).strip() if row[2] else "",
-            "cod_fornitore": row[3],
-            "numero": row[4],
-            "data_emissione": row[5],
-            "tipo_doc": row[7],
-            # importo is somewhere in remaining columns; try last few
-            "_raw_row": row,
-        })
+        out.append(
+            {
+                "fornitore": str(row[1]).strip() if row[1] else "",
+                "cod_interno": str(row[2]).strip() if row[2] else "",
+                "cod_fornitore": row[3],
+                "numero": row[4],
+                "data_emissione": row[5],
+                "tipo_doc": row[7],
+                # importo is somewhere in remaining columns; try last few
+                "_raw_row": row,
+            }
+        )
     # Heuristic: find importo column by scanning headers
     if headers:
         for col_idx, h in enumerate(headers):
@@ -217,14 +252,16 @@ def load_preventivi(wb) -> list[dict]:
         if not in_header or not isinstance(row[0], (int, float)):
             continue
         # # | Cod. Comm. | Cod. Fornitore | Fornitore | Voce/Scope | N° Preventivo | Data | Importo (€)
-        out.append({
-            "cod_interno": str(row[2]).strip() if row[2] else "",
-            "fornitore": str(row[3]).strip() if row[3] else "",
-            "voce": row[4] or "",
-            "numero": row[5] or "",
-            "data": row[6],
-            "importo_eur": parse_importo(row[7]),
-        })
+        out.append(
+            {
+                "cod_interno": str(row[2]).strip() if row[2] else "",
+                "fornitore": str(row[3]).strip() if row[3] else "",
+                "voce": row[4] or "",
+                "numero": row[5] or "",
+                "data": row[6],
+                "importo_eur": parse_importo(row[7]),
+            }
+        )
     return out
 
 
@@ -234,9 +271,15 @@ def fcode_macro(cod: str) -> str:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--xlsx", required=True, type=Path, help="HPAN25PIANO1_CapEx_Controllo.xlsx")
+    ap.add_argument(
+        "--xlsx", required=True, type=Path, help="HPAN25PIANO1_CapEx_Controllo.xlsx"
+    )
     ap.add_argument("--register-out", required=True, type=Path)
-    ap.add_argument("--classifier-csv", type=Path, help="optional: output of classify_attachments.py")
+    ap.add_argument(
+        "--classifier-csv",
+        type=Path,
+        help="optional: output of classify_attachments.py",
+    )
     args = ap.parse_args()
 
     if not args.xlsx.exists():
@@ -256,28 +299,32 @@ def main():
     register: list[dict] = []
     for f in fatture:
         cod = f["cod_interno"]
-        register.append({
-            "categoria": "FATTURA",
-            "fornitore": f["fornitore"],
-            "cod_interno": cod,
-            "macro": fcode_macro(cod),
-            "numero": f["numero"],
-            "data": f["data_emissione"],
-            "importo_eur": f.get("importo_eur", 0.0),
-            "fonte": "Controllo.xlsx::Dati Fatture",
-        })
+        register.append(
+            {
+                "categoria": "FATTURA",
+                "fornitore": f["fornitore"],
+                "cod_interno": cod,
+                "macro": fcode_macro(cod),
+                "numero": f["numero"],
+                "data": f["data_emissione"],
+                "importo_eur": f.get("importo_eur", 0.0),
+                "fonte": "Controllo.xlsx::Dati Fatture",
+            }
+        )
     for p in preventivi:
         cod = p["cod_interno"]
-        register.append({
-            "categoria": "PREVENTIVO",
-            "fornitore": p["fornitore"],
-            "cod_interno": cod,
-            "macro": fcode_macro(cod),
-            "numero": p["numero"],
-            "data": p["data"],
-            "importo_eur": p["importo_eur"],
-            "fonte": "Controllo.xlsx::Preventivi",
-        })
+        register.append(
+            {
+                "categoria": "PREVENTIVO",
+                "fornitore": p["fornitore"],
+                "cod_interno": cod,
+                "macro": fcode_macro(cod),
+                "numero": p["numero"],
+                "data": p["data"],
+                "importo_eur": p["importo_eur"],
+                "fonte": "Controllo.xlsx::Preventivi",
+            }
+        )
 
     # Optional: integrate classifier output (with fuzzy F-code matching)
     candidates_unmatched: list[dict] = []
@@ -312,7 +359,16 @@ def main():
                 candidates_unmatched.append(row)
 
     # Write register CSV
-    fields = ["categoria", "fornitore", "cod_interno", "macro", "numero", "data", "importo_eur", "fonte"]
+    fields = [
+        "categoria",
+        "fornitore",
+        "cod_interno",
+        "macro",
+        "numero",
+        "data",
+        "importo_eur",
+        "fonte",
+    ]
     with args.register_out.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
@@ -322,19 +378,25 @@ def main():
 
     # Also write unmatched candidates separately
     if candidates_unmatched:
-        unmatched_out = args.register_out.with_name(args.register_out.stem + "_unmatched.csv")
+        unmatched_out = args.register_out.with_name(
+            args.register_out.stem + "_unmatched.csv"
+        )
         with unmatched_out.open("w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=fields)
             w.writeheader()
             for r in candidates_unmatched:
                 w.writerow(r)
         unmatched_total = sum(r["importo_eur"] for r in candidates_unmatched)
-        print(f"Wrote UNMATCHED candidates: {unmatched_out} ({len(candidates_unmatched)} rows, ~€{unmatched_total:,.0f} aggregate — needs review)")
+        print(
+            f"Wrote UNMATCHED candidates: {unmatched_out} ({len(candidates_unmatched)} rows, ~€{unmatched_total:,.0f} aggregate — needs review)"
+        )
 
     # Aggregations
     by_cat = defaultdict(float)
     by_macro_cat: dict[tuple[str, str], float] = defaultdict(float)
-    by_fornitore: dict[str, dict] = defaultdict(lambda: {"PREVENTIVO": 0.0, "CONTRATTO": 0.0, "FATTURA": 0.0, "macro": ""})
+    by_fornitore: dict[str, dict] = defaultdict(
+        lambda: {"PREVENTIVO": 0.0, "CONTRATTO": 0.0, "FATTURA": 0.0, "macro": ""}
+    )
 
     for r in register:
         cat = r["categoria"]
@@ -373,17 +435,34 @@ def main():
         print(f"  {m:<22s} €{prev:>11,.0f} €{contr:>11,.0f} €{fatt:>11,.0f}")
 
     print(f"\nGAP vs target €{BUDGET_TARGET_EUR:,.0f}:")
-    print(f"  Documentato (max impegno/competenza): €{max(total_impegno, total_competenza):,.0f}")
-    print(f"  Mancante 'nell'etere':                €{gap_etere:,.0f}  ({gap_etere/BUDGET_TARGET_EUR*100:.0f}%)")
+    print(
+        f"  Documentato (max impegno/competenza): €{max(total_impegno, total_competenza):,.0f}"
+    )
+    print(
+        f"  Mancante 'nell'etere':                €{gap_etere:,.0f}  ({gap_etere / BUDGET_TARGET_EUR * 100:.0f}%)"
+    )
 
     print("\nPer FORNITORE (top 15 by max IMPEGNO+COMPETENZA):")
-    sorted_forn = sorted(by_fornitore.items(), key=lambda kv: -(max(kv[1]["PREVENTIVO"] + kv[1]["CONTRATTO"], kv[1]["FATTURA"])))[:15]
-    print(f"  {'Cod':<8s} {'Ragione sociale':<35s} {'Macro':<14s} {'Prev':>10s} {'Fatt':>10s}")
+    sorted_forn = sorted(
+        by_fornitore.items(),
+        key=lambda kv: (
+            -(max(kv[1]["PREVENTIVO"] + kv[1]["CONTRATTO"], kv[1]["FATTURA"]))
+        ),
+    )[:15]
+    print(
+        f"  {'Cod':<8s} {'Ragione sociale':<35s} {'Macro':<14s} {'Prev':>10s} {'Fatt':>10s}"
+    )
     for cod, d in sorted_forn:
         prev = d["PREVENTIVO"] + d["CONTRATTO"]
         fatt = d["FATTURA"]
-        rs = (d.get("ragione_sociale") or fornitori.get(cod, {}).get("ragione_sociale") or cod)[:33]
-        print(f"  {cod:<8s} {rs:<35s} {d.get('macro', '—')[:13]:<14s} €{prev:>9,.0f} €{fatt:>9,.0f}")
+        rs = (
+            d.get("ragione_sociale")
+            or fornitori.get(cod, {}).get("ragione_sociale")
+            or cod
+        )[:33]
+        print(
+            f"  {cod:<8s} {rs:<35s} {d.get('macro', '—')[:13]:<14s} €{prev:>9,.0f} €{fatt:>9,.0f}"
+        )
 
 
 if __name__ == "__main__":

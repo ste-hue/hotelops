@@ -18,12 +18,14 @@ BQ_PROJECT = "hotelops-suite"
 
 def _client():
     from google.cloud import bigquery
+
     return bigquery.Client(project=BQ_PROJECT)
 
 
 # ---------------------------------------------------------------------------
 # 1. Voci del Piano Finanziario
 # ---------------------------------------------------------------------------
+
 
 @st.cache_data(ttl=300)
 def load_voci() -> pd.DataFrame:
@@ -34,6 +36,7 @@ def load_voci() -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # 2. Consuntivo da movimenti contabili
 # ---------------------------------------------------------------------------
+
 
 @st.cache_data(ttl=300)
 def load_consuntivo(societa: str, anno: int) -> pd.DataFrame:
@@ -52,6 +55,7 @@ def load_consuntivo(societa: str, anno: int) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # 3. Budget mensile
 # ---------------------------------------------------------------------------
+
 
 @st.cache_data(ttl=300)
 def load_budget(societa: str, anno: int) -> pd.DataFrame:
@@ -82,6 +86,7 @@ def load_budget(societa: str, anno: int) -> pd.DataFrame:
 # 4. Mapping detail (drill-down)
 # ---------------------------------------------------------------------------
 
+
 @st.cache_data(ttl=300)
 def load_mapping_detail(societa: str) -> pd.DataFrame:
     """
@@ -109,6 +114,7 @@ def load_mapping_detail(societa: str) -> pd.DataFrame:
 # 5. Consuntivo detail (drill-down per codice conto)
 # ---------------------------------------------------------------------------
 
+
 @st.cache_data(ttl=300)
 def load_consuntivo_detail(societa: str, anno: int) -> pd.DataFrame:
     """
@@ -135,6 +141,7 @@ def load_consuntivo_detail(societa: str, anno: int) -> pd.DataFrame:
 # 6. Categorie conti
 # ---------------------------------------------------------------------------
 
+
 @st.cache_data(ttl=300)
 def load_categorie() -> pd.DataFrame:
     """
@@ -156,6 +163,7 @@ def load_categorie() -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # 7. Budget vs Consuntivo (BvA)
 # ---------------------------------------------------------------------------
+
 
 @st.cache_data(ttl=300)
 def load_bva(societa: str, anno: int) -> pd.DataFrame:

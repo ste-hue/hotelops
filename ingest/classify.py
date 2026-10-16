@@ -509,9 +509,7 @@ def _build_movimenti_result(
     ext = path.suffix  # preserve original extension
     canonical = f"{soc}_LISTAMOVCONT{ext.upper()}"
     dest = f"movimenti_contabili/{soc}" if societa else "movimenti_contabili"
-    pipeline = (
-        "python -m ingest.flussi.ingest_movimenti_contabili --file {dest_file}"
-    )
+    pipeline = "python -m ingest.flussi.ingest_movimenti_contabili --file {dest_file}"
     if societa:
         pipeline += f" --societa {societa}"
     return ClassificationResult(
@@ -821,9 +819,7 @@ def _build_banca_result(
     else:
         dest = "homebanking"
     # Bank ingest uses --source dir, not single file — just indicate pipeline
-    pipeline = (
-        "python -m ingest.banca.ingest --datahub {datahub} --source {staging}"
-    )
+    pipeline = "python -m ingest.banca.ingest --datahub {datahub} --source {staging}"
     return ClassificationResult(
         file_path=path,
         file_type=f"banca_{bnk.lower()}",

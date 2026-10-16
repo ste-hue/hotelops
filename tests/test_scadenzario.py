@@ -1,4 +1,5 @@
 """Tests for scadenzario Excel bridge."""
+
 from io import BytesIO
 
 import openpyxl
@@ -11,6 +12,7 @@ P = lambda m: periodo(2026, m)  # noqa: E731 - fixture di questo modulo = anno 2
 def _make_sintetica_workbook(rows, header_dates=None):
     """Create a minimal sintetica-style workbook in memory."""
     import openpyxl
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.cell(row=1, column=1, value="Fornitore/Tipo pagamento/Conto")
@@ -38,9 +40,12 @@ def _make_sintetica_workbook(rows, header_dates=None):
 class TestParseSinteticaScadenze:
     def test_parses_codice_and_nome(self, tmp_path):
         from verticals.condges.scadenzario_excel import parse_sintetica_scadenze
-        wb = _make_sintetica_workbook([
-            ("264 PANORAMA COMPANY S.R.L.", -1000, -500, -500),
-        ])
+
+        wb = _make_sintetica_workbook(
+            [
+                ("264 PANORAMA COMPANY S.R.L.", -1000, -500, -500),
+            ]
+        )
         f = tmp_path / "test.xlsx"
         wb.save(f)
         result, months = parse_sintetica_scadenze(f)
@@ -50,9 +55,12 @@ class TestParseSinteticaScadenze:
 
     def test_parses_buckets_from_headers(self, tmp_path):
         from verticals.condges.scadenzario_excel import parse_sintetica_scadenze
-        wb = _make_sintetica_workbook([
-            ("1 FORNITORE TEST", -1500, -500, -600, -400),
-        ])
+
+        wb = _make_sintetica_workbook(
+            [
+                ("1 FORNITORE TEST", -1500, -500, -600, -400),
+            ]
+        )
         f = tmp_path / "test.xlsx"
         wb.save(f)
         result, months = parse_sintetica_scadenze(f)
@@ -64,10 +72,13 @@ class TestParseSinteticaScadenze:
 
     def test_skips_rows_without_numeric_prefix(self, tmp_path):
         from verticals.condges.scadenzario_excel import parse_sintetica_scadenze
-        wb = _make_sintetica_workbook([
-            ("264 PANORAMA S.R.L.", -1000, -1000),
-            ("Totale", -1000, -1000),
-        ])
+
+        wb = _make_sintetica_workbook(
+            [
+                ("264 PANORAMA S.R.L.", -1000, -1000),
+                ("Totale", -1000, -1000),
+            ]
+        )
         f = tmp_path / "test.xlsx"
         wb.save(f)
         result, _ = parse_sintetica_scadenze(f)
@@ -75,9 +86,12 @@ class TestParseSinteticaScadenze:
 
     def test_handles_positive_amounts(self, tmp_path):
         from verticals.condges.scadenzario_excel import parse_sintetica_scadenze
-        wb = _make_sintetica_workbook([
-            ("1008 MIELE SPA", 2294.28, 2294.28),
-        ])
+
+        wb = _make_sintetica_workbook(
+            [
+                ("1008 MIELE SPA", 2294.28, 2294.28),
+            ]
+        )
         f = tmp_path / "test.xlsx"
         wb.save(f)
         result, _ = parse_sintetica_scadenze(f)
@@ -87,9 +101,15 @@ class TestParseSinteticaScadenze:
 class TestMapToVoci:
     def test_maps_supplier_to_voce(self):
         from verticals.condges.scadenzario_excel import map_to_voci
+
         partite = [
-            {"codice_fornitore": 1, "nome": "LE CROISSANT", "totale": -1000,
-             "scaduto": -500, "buckets": {5: -500}},
+            {
+                "codice_fornitore": 1,
+                "nome": "LE CROISSANT",
+                "totale": -1000,
+                "scaduto": -500,
+                "buckets": {5: -500},
+            },
         ]
         fornitori_map = {1: "USCITE_MATERIE_PRIME"}
         mapped, unmapped = map_to_voci(partite, fornitori_map)
@@ -99,9 +119,15 @@ class TestMapToVoci:
 
     def test_unmapped_supplier_goes_to_unmapped_list(self):
         from verticals.condges.scadenzario_excel import map_to_voci
+
         partite = [
-            {"codice_fornitore": 9999, "nome": "UNKNOWN", "totale": -100,
-             "scaduto": -100, "buckets": {}},
+            {
+                "codice_fornitore": 9999,
+                "nome": "UNKNOWN",
+                "totale": -100,
+                "scaduto": -100,
+                "buckets": {},
+            },
         ]
         fornitori_map = {1: "USCITE_MATERIE_PRIME"}
         mapped, unmapped = map_to_voci(partite, fornitori_map)
@@ -110,11 +136,22 @@ class TestMapToVoci:
 
     def test_multiple_suppliers_same_voce(self):
         from verticals.condges.scadenzario_excel import map_to_voci
+
         partite = [
-            {"codice_fornitore": 1, "nome": "A", "totale": -500,
-             "scaduto": -500, "buckets": {}},
-            {"codice_fornitore": 4, "nome": "B", "totale": -300,
-             "scaduto": -300, "buckets": {}},
+            {
+                "codice_fornitore": 1,
+                "nome": "A",
+                "totale": -500,
+                "scaduto": -500,
+                "buckets": {},
+            },
+            {
+                "codice_fornitore": 4,
+                "nome": "B",
+                "totale": -300,
+                "scaduto": -300,
+                "buckets": {},
+            },
         ]
         fornitori_map = {1: "USCITE_MATERIE_PRIME", 4: "USCITE_MATERIE_PRIME"}
         mapped, unmapped = map_to_voci(partite, fornitori_map)
@@ -124,6 +161,7 @@ class TestMapToVoci:
 class TestLoadFornitoriMap:
     def test_loads_csv(self, tmp_path):
         from verticals.condges.scadenzario_excel import load_fornitori_map
+
         csv_path = tmp_path / "d_fornitori.csv"
         csv_path.write_text(
             "codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany\n"
@@ -139,20 +177,36 @@ class TestGenerateExcel:
     def _sample_data(self):
         mapped = {
             "USCITE_MATERIE_PRIME": [
-                {"codice_fornitore": 1, "nome": "LE CROISSANT",
-                 "totale": -1500, "scaduto": -1000, "buckets": {5: -500}},
-                {"codice_fornitore": 4, "nome": "GIACINTO",
-                 "totale": -400, "scaduto": -400, "buckets": {}},
+                {
+                    "codice_fornitore": 1,
+                    "nome": "LE CROISSANT",
+                    "totale": -1500,
+                    "scaduto": -1000,
+                    "buckets": {5: -500},
+                },
+                {
+                    "codice_fornitore": 4,
+                    "nome": "GIACINTO",
+                    "totale": -400,
+                    "scaduto": -400,
+                    "buckets": {},
+                },
             ],
             "USCITE_UTENZE": [
-                {"codice_fornitore": 18, "nome": "AUSINO",
-                 "totale": -600, "scaduto": 0, "buckets": {5: -600}},
+                {
+                    "codice_fornitore": 18,
+                    "nome": "AUSINO",
+                    "totale": -600,
+                    "scaduto": 0,
+                    "buckets": {5: -600},
+                },
             ],
         }
         return mapped
 
     def test_creates_riepilogo_sheet(self, tmp_path):
         from verticals.condges.scadenzario_excel import generate_excel
+
         out = tmp_path / "test.xlsx"
         generate_excel(self._sample_data(), None, [], out, bucket_months=[5, 6, 7])
         wb = openpyxl.load_workbook(out)
@@ -160,6 +214,7 @@ class TestGenerateExcel:
 
     def test_creates_per_voce_sheets(self, tmp_path):
         from verticals.condges.scadenzario_excel import generate_excel
+
         out = tmp_path / "test.xlsx"
         generate_excel(self._sample_data(), None, [], out, bucket_months=[5, 6, 7])
         wb = openpyxl.load_workbook(out)
@@ -168,6 +223,7 @@ class TestGenerateExcel:
 
     def test_riepilogo_has_totals(self, tmp_path):
         from verticals.condges.scadenzario_excel import generate_excel
+
         out = tmp_path / "test.xlsx"
         generate_excel(self._sample_data(), None, [], out, bucket_months=[5, 6, 7])
         wb = openpyxl.load_workbook(out, data_only=True)
@@ -180,15 +236,24 @@ class TestGenerateExcel:
 
     def test_unmapped_sheet_created_when_needed(self, tmp_path):
         from verticals.condges.scadenzario_excel import generate_excel
+
         out = tmp_path / "test.xlsx"
-        unmapped = [{"codice_fornitore": 999, "nome": "UNKNOWN",
-                     "totale": -100, "scaduto": -100, "buckets": {}}]
+        unmapped = [
+            {
+                "codice_fornitore": 999,
+                "nome": "UNKNOWN",
+                "totale": -100,
+                "scaduto": -100,
+                "buckets": {},
+            }
+        ]
         generate_excel({}, None, unmapped, out, bucket_months=[5])
         wb = openpyxl.load_workbook(out)
         assert "DA VERIFICARE" in wb.sheetnames
 
     def test_no_unmapped_sheet_when_all_mapped(self, tmp_path):
         from verticals.condges.scadenzario_excel import generate_excel
+
         out = tmp_path / "test.xlsx"
         generate_excel(self._sample_data(), None, [], out, bucket_months=[5])
         wb = openpyxl.load_workbook(out)
@@ -297,9 +362,18 @@ def _make_pf_fixture(tmp_path):
     ws.cell(row=1, column=7, value=2026)
     months_2025 = ["SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE"]
     months_2026 = [
-        "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
-        "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
-        "NOVEMBRE", "DICEMBRE",
+        "GENNAIO",
+        "FEBBRAIO",
+        "MARZO",
+        "APRILE",
+        "MAGGIO",
+        "GIUGNO",
+        "LUGLIO",
+        "AGOSTO",
+        "SETTEMBRE",
+        "OTTOBRE",
+        "NOVEMBRE",
+        "DICEMBRE",
     ]
     for i, m in enumerate(months_2025):
         ws.cell(row=2, column=3 + i, value=m)
@@ -436,9 +510,18 @@ class TestBuildMonthColMap:
             ws.cell(row=2, column=4 + i, value=m)
         # 2026: C8-C19 = Jan-Dec
         months_2026 = [
-            "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
-            "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
-            "NOVEMBRE", "DICEMBRE",
+            "GENNAIO",
+            "FEBBRAIO",
+            "MARZO",
+            "APRILE",
+            "MAGGIO",
+            "GIUGNO",
+            "LUGLIO",
+            "AGOSTO",
+            "SETTEMBRE",
+            "OTTOBRE",
+            "NOVEMBRE",
+            "DICEMBRE",
         ]
         for i, m in enumerate(months_2026):
             ws.cell(row=2, column=8 + i, value=m)
@@ -464,9 +547,18 @@ def _make_pf_fixture_con_codici(tmp_path):
     ws_mp = wb.create_sheet("Materie Prime-Consumo ")
     ws_mp.cell(row=1, column=8, value=2026)
     months_2026 = [
-        "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
-        "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
-        "NOVEMBRE", "DICEMBRE",
+        "GENNAIO",
+        "FEBBRAIO",
+        "MARZO",
+        "APRILE",
+        "MAGGIO",
+        "GIUGNO",
+        "LUGLIO",
+        "AGOSTO",
+        "SETTEMBRE",
+        "OTTOBRE",
+        "NOVEMBRE",
+        "DICEMBRE",
     ]
     for i, m in enumerate(months_2026):
         ws_mp.cell(row=2, column=8 + i, value=m)
@@ -488,6 +580,7 @@ def _make_pf_fixture_con_codici(tmp_path):
 class TestWritePfRotation:
     def _scad_df(self, **extra_cols):
         import pandas as pd
+
         base = {
             "codice_fornitore": [92],
             "nome": ["AMALFI SEI ESSE S.R.L."],
@@ -524,8 +617,12 @@ class TestWritePfRotation:
             92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"}
         }
         out, _ = write_pf(
-            pf_path.read_bytes(), scad_df, [P(6)], fornitori_map,
-            scaduto_periodo=P(5), clear_codici={92},
+            pf_path.read_bytes(),
+            scad_df,
+            [P(6)],
+            fornitori_map,
+            scaduto_periodo=P(5),
+            clear_codici={92},
         )
         ws = openpyxl.load_workbook(BytesIO(out))["Materie Prime-Consumo "]
         # MAGGIO stantio (74.61) pulito
@@ -542,9 +639,20 @@ class TestWritePfRotation:
 
         wb = openpyxl.Workbook()
         wb.active.title = "Piano Finanziario"
-        months = ["GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
-                  "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
-                  "NOVEMBRE", "DICEMBRE"]
+        months = [
+            "GENNAIO",
+            "FEBBRAIO",
+            "MARZO",
+            "APRILE",
+            "MAGGIO",
+            "GIUGNO",
+            "LUGLIO",
+            "AGOSTO",
+            "SETTEMBRE",
+            "OTTOBRE",
+            "NOVEMBRE",
+            "DICEMBRE",
+        ]
         for title in ("Materie Prime-Consumo ", " Varie ed Eventuali"):
             ws = wb.create_sheet(title)
             ws.cell(row=1, column=8, value=2026)
@@ -561,17 +669,25 @@ class TestWritePfRotation:
         wb.save(pf)
 
         import pandas as pd
-        scad_df = pd.DataFrame({
-            "codice_fornitore": [123], "nome": ["PREGIS S.P.A."],
-            "totale": [-5907.99], "scaduto": [0.0], f"mese_{P(6)}": [-5907.99],
-        })
+
+        scad_df = pd.DataFrame(
+            {
+                "codice_fornitore": [123],
+                "nome": ["PREGIS S.P.A."],
+                "totale": [-5907.99],
+                "scaduto": [0.0],
+                f"mese_{P(6)}": [-5907.99],
+            }
+        )
         # rimappato a MATERIE_PRIME: il foglio Varie non riceve scritture
-        fornitori_map = {
-            123: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Pregis"}
-        }
+        fornitori_map = {123: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Pregis"}}
         out, _ = write_pf(
-            pf.read_bytes(), scad_df, [P(6)], fornitori_map,
-            scaduto_periodo=P(5), clear_codici={123},
+            pf.read_bytes(),
+            scad_df,
+            [P(6)],
+            fornitori_map,
+            scaduto_periodo=P(5),
+            clear_codici={123},
         )
         wb2 = openpyxl.load_workbook(BytesIO(out))
         # vecchio foglio pulito
@@ -590,12 +706,16 @@ class TestWritePfRotation:
         compatible = [
             ("Paravia Srl", "", "PARAVIA ELEVATORS SRL"),
             ("Lovali d'autore", "Locali d'autore", "Locali d Autore SRL"),
-            ("Centro Distribuzione Maglio",
-             "Centro Distribuzioni Maglio Di Maglio Cosimo",
-             "CENTRO DISTRIBUZIONI MAGLIO DI MAGLIO COSIMO"),
-            ("Ingrosso frutta di Michele e Vincenzo",
-             "Ingrosso Frutta Avagliano",
-             '"INGROSSO FRUTTA" DI AVAGLIANO MICHELE & VINCENZO - S.N.C.'),
+            (
+                "Centro Distribuzione Maglio",
+                "Centro Distribuzioni Maglio Di Maglio Cosimo",
+                "CENTRO DISTRIBUZIONI MAGLIO DI MAGLIO COSIMO",
+            ),
+            (
+                "Ingrosso frutta di Michele e Vincenzo",
+                "Ingrosso Frutta Avagliano",
+                '"INGROSSO FRUTTA" DI AVAGLIANO MICHELE & VINCENZO - S.N.C.',
+            ),
             ("Fioraio Santelia", "Santelia Luigi", "SANTELIA LUIGI"),
             ("Tur.Com", "Tur.Com. S.R.L.", "TUR.COM. S.R.L."),
             (None, "Vicart", "VICART S.R.L."),  # riga senza etichetta
@@ -623,13 +743,24 @@ class TestWritePfRotation:
         wb.active.title = "Piano Finanziario"
         ws = wb.create_sheet("Materie Prime-Consumo ")
         ws.cell(row=1, column=8, value=2026)
-        months = ["GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
-                  "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
-                  "NOVEMBRE", "DICEMBRE"]
+        months = [
+            "GENNAIO",
+            "FEBBRAIO",
+            "MARZO",
+            "APRILE",
+            "MAGGIO",
+            "GIUGNO",
+            "LUGLIO",
+            "AGOSTO",
+            "SETTEMBRE",
+            "OTTOBRE",
+            "NOVEMBRE",
+            "DICEMBRE",
+        ]
         for i, m in enumerate(months):
             ws.cell(row=2, column=8 + i, value=m)
         # codici shiftati di una riga in alto rispetto ai nomi
-        ws.cell(row=5, column=1, value=71)      # codice di Vicart...
+        ws.cell(row=5, column=1, value=71)  # codice di Vicart...
         ws.cell(row=5, column=2, value="Valgarda Srl")  # ...sul nome Valgarda
         ws.cell(row=6, column=1, value=1306)
         ws.cell(row=6, column=2, value="Vicart")
@@ -637,13 +768,17 @@ class TestWritePfRotation:
         wb.save(pf)
 
         import pandas as pd
-        scad_df = pd.DataFrame({
-            "codice_fornitore": [71], "nome": ["VICART S.R.L."],
-            "totale": [-500.0], "scaduto": [0.0], f"mese_{P(6)}": [-500.0],
-        })
-        fornitori_map = {
-            71: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Vicart"}
-        }
+
+        scad_df = pd.DataFrame(
+            {
+                "codice_fornitore": [71],
+                "nome": ["VICART S.R.L."],
+                "totale": [-500.0],
+                "scaduto": [0.0],
+                f"mese_{P(6)}": [-500.0],
+            }
+        )
+        fornitori_map = {71: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Vicart"}}
         out, _ = write_pf(
             pf.read_bytes(), scad_df, [P(6)], fornitori_map, scaduto_periodo=P(6)
         )
@@ -653,9 +788,7 @@ class TestWritePfRotation:
         # SÌ sulla riga col nome Vicart
         assert ws2.cell(row=6, column=13).value == 500.0
 
-    def test_codice_su_riga_sbagliata_senza_match_nome_va_su_riga_nuova(
-        self, tmp_path
-    ):
+    def test_codice_su_riga_sbagliata_senza_match_nome_va_su_riga_nuova(self, tmp_path):
         """Se il codice punta a una riga col nome incompatibile e il nome non
         esiste altrove nel foglio, MAI scrivere sotto il nome sbagliato:
         il fornitore va su una riga vuota con codice+nome corretti."""
@@ -665,22 +798,39 @@ class TestWritePfRotation:
         wb.active.title = "Piano Finanziario"
         ws = wb.create_sheet("Materie Prime-Consumo ")
         ws.cell(row=1, column=8, value=2026)
-        months = ["GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO",
-                  "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE",
-                  "NOVEMBRE", "DICEMBRE"]
+        months = [
+            "GENNAIO",
+            "FEBBRAIO",
+            "MARZO",
+            "APRILE",
+            "MAGGIO",
+            "GIUGNO",
+            "LUGLIO",
+            "AGOSTO",
+            "SETTEMBRE",
+            "OTTOBRE",
+            "NOVEMBRE",
+            "DICEMBRE",
+        ]
         for i, m in enumerate(months):
             ws.cell(row=2, column=8 + i, value=m)
-        ws.cell(row=5, column=1, value=1438)    # codice di Romano Ciro...
+        ws.cell(row=5, column=1, value=1438)  # codice di Romano Ciro...
         ws.cell(row=5, column=2, value="Musica totale")  # ...sul nome sbagliato
         ws.cell(row=10, column=1, value="---")  # ancora: righe 6..9 vuote
         pf = tmp_path / "pf_shiftato_no_nome.xlsx"
         wb.save(pf)
 
         import pandas as pd
-        scad_df = pd.DataFrame({
-            "codice_fornitore": [1438], "nome": ["ROMANO CIRO S.R.L."],
-            "totale": [-122.0], "scaduto": [0.0], f"mese_{P(6)}": [-122.0],
-        })
+
+        scad_df = pd.DataFrame(
+            {
+                "codice_fornitore": [1438],
+                "nome": ["ROMANO CIRO S.R.L."],
+                "totale": [-122.0],
+                "scaduto": [0.0],
+                f"mese_{P(6)}": [-122.0],
+            }
+        )
         fornitori_map = {
             1438: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Romano Ciro"}
         }
@@ -706,18 +856,28 @@ class TestWritePfRotation:
 
         pf_path = _make_pf_fixture_con_codici(tmp_path)
         import pandas as pd
+
         # Vicart reale: NC scaduta +90.28, FT maggio -85.40, FT giugno -1413.63
-        scad_df = pd.DataFrame({
-            "codice_fornitore": [92], "nome": ["VICART S.R.L."],
-            "totale": [-1408.75], "scaduto": [90.28],
-            f"mese_{P(5)}": [-85.40], f"mese_{P(6)}": [-1413.63],
-        })
+        scad_df = pd.DataFrame(
+            {
+                "codice_fornitore": [92],
+                "nome": ["VICART S.R.L."],
+                "totale": [-1408.75],
+                "scaduto": [90.28],
+                f"mese_{P(5)}": [-85.40],
+                f"mese_{P(6)}": [-1413.63],
+            }
+        )
         fornitori_map = {
             92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"}
         }
         out, _ = write_pf(
-            pf_path.read_bytes(), scad_df, [P(5), P(6)], fornitori_map,
-            scaduto_periodo=P(5), clear_codici={92},
+            pf_path.read_bytes(),
+            scad_df,
+            [P(5), P(6)],
+            fornitori_map,
+            scaduto_periodo=P(5),
+            clear_codici={92},
         )
         ws = openpyxl.load_workbook(BytesIO(out))["Materie Prime-Consumo "]
         # maggio: 85.40 coperto dalla NC -> niente uscita

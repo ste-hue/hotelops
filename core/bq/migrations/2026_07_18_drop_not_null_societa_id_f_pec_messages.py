@@ -39,8 +39,7 @@ def run(dry_run: bool = False) -> None:
     from core.bq.client import get_client
 
     alter = (
-        f"ALTER TABLE `{PROJECT}.{DATASET}.{TABLE}` "
-        f"ALTER COLUMN {COLUMN} DROP NOT NULL"
+        f"ALTER TABLE `{PROJECT}.{DATASET}.{TABLE}` ALTER COLUMN {COLUMN} DROP NOT NULL"
     )
     if dry_run:
         log.info("[DRY RUN] %s", alter)

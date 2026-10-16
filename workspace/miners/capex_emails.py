@@ -220,9 +220,7 @@ def mine_mailbox(
     n_att_total = 0
 
     for msgs in threads_certo:
-        folder_name, n_att = _persist_thread(
-            drive, certo_id, msgs, p1_msg_ids, gmail
-        )
+        folder_name, n_att = _persist_thread(drive, certo_id, msgs, p1_msg_ids, gmail)
         n_att_total += n_att
         primary = sorted(msgs, key=lambda m: m.date or "")[0]
         index_rows.append(
@@ -241,9 +239,7 @@ def mine_mailbox(
         print(f"    ✓ Certo: {folder_name} ({len(msgs)} msg, {n_att} att)")
 
     for msgs, score in threads_rivedere:
-        folder_name, n_att = _persist_thread(
-            drive, rivedere_id, msgs, set(), gmail
-        )
+        folder_name, n_att = _persist_thread(drive, rivedere_id, msgs, set(), gmail)
         n_att_total += n_att
         primary = sorted(msgs, key=lambda m: m.date or "")[0]
         index_rows.append(
@@ -300,7 +296,9 @@ def mine_capex_project(
         )
 
     drive = get_drive_writer(write_as)
-    run_folder_name = f"{project_code}__extract_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    run_folder_name = (
+        f"{project_code}__extract_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    )
     run_folder_id = ensure_subfolder(drive, drive_parent_id, run_folder_name)
     print(f"  Run folder: {run_folder_name}")
 
@@ -351,9 +349,13 @@ def _build_readme(
     if fuzzy_keywords:
         lines.append(f"Fuzzy keywords (Pass 3): {', '.join(fuzzy_keywords)}")
     lines.append("\n## Folders")
-    lines.append("- `_Certo/` — Pass 1 (strict project-keyword match) + Pass 2 (thread expansion)")
+    lines.append(
+        "- `_Certo/` — Pass 1 (strict project-keyword match) + Pass 2 (thread expansion)"
+    )
     if fuzzy_keywords:
-        lines.append("- `_DaRivedere/` — Pass 3 (fuzzy keyword), scored. Manual review needed.")
+        lines.append(
+            "- `_DaRivedere/` — Pass 3 (fuzzy keyword), scored. Manual review needed."
+        )
     lines.append("\n## Per-mailbox summary")
     for r in results:
         lines.append(

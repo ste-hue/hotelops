@@ -4,6 +4,7 @@ Every module needing a BQ client must import `get_client()` from here instead of
 instantiating `bigquery.Client(...)` directly. Ensures one project constant
 (from core.config) and reuses a single client instance per process.
 """
+
 from google.cloud import bigquery
 
 from core.config import PROJECT

@@ -5,7 +5,9 @@ import pytest
 from ingest import pec_imap
 from ingest.pec_imap import ImapConfig, fetch_since
 
-CFG = ImapConfig(host="imaps.pec.aruba.it", port=993, user="x@pec.it", password="s3cret")
+CFG = ImapConfig(
+    host="imaps.pec.aruba.it", port=993, user="x@pec.it", password="s3cret"
+)
 
 
 class _FakeImap:
@@ -50,7 +52,9 @@ class _FakeImap:
                     hit.append(uids[-1])
                 uids = hit
             elif criterion.startswith("SINCE"):
-                since = datetime.strptime(criterion.split(maxsplit=1)[1], "%d-%b-%Y").date()
+                since = datetime.strptime(
+                    criterion.split(maxsplit=1)[1], "%d-%b-%Y"
+                ).date()
                 uids = [
                     u
                     for u in uids
@@ -227,8 +231,14 @@ def test_fetch_usa_body_peek_e_non_rfc822() -> None:
 
 def test_blocchi_da_chunk_size() -> None:
     fake = _FakeImap({u: b"x" for u in range(1, 8)})
-    blocks = list(fetch_since(CFG, since_uid=0, conn_factory=_factory(fake), chunk_size=3))
-    assert [[uid for uid, _ in b.messages] for b in blocks] == [[1, 2, 3], [4, 5, 6], [7]]
+    blocks = list(
+        fetch_since(CFG, since_uid=0, conn_factory=_factory(fake), chunk_size=3)
+    )
+    assert [[uid for uid, _ in b.messages] for b in blocks] == [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7],
+    ]
 
 
 def test_blocchi_in_uid_crescente() -> None:
@@ -251,7 +261,9 @@ def test_i_blocchi_gia_scaricati_restano_se_uno_dopo_fallisce() -> None:
     fake.uid = flaky
     got = []
     with pytest.raises(ConnectionError):
-        for blk in fetch_since(CFG, since_uid=0, conn_factory=_factory(fake), chunk_size=2):
+        for blk in fetch_since(
+            CFG, since_uid=0, conn_factory=_factory(fake), chunk_size=2
+        ):
             got.extend(uid for uid, _ in blk.messages)
     assert got == [1, 2]
 

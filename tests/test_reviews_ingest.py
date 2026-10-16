@@ -157,7 +157,12 @@ def _trip_raw(**overrides) -> dict:
 def test_extract_trip_hotel_id():
     url = "https://www.trip.com/hotels/maiori-hotel-detail-774198/panorama/"
     assert _extract_trip_hotel_id(url) == "774198"
-    assert _extract_trip_hotel_id("https://it.trip.com/hotels/maiori-hotel-detail-3094414/angelina-residence/") == "3094414"
+    assert (
+        _extract_trip_hotel_id(
+            "https://it.trip.com/hotels/maiori-hotel-detail-3094414/angelina-residence/"
+        )
+        == "3094414"
+    )
     assert _extract_trip_hotel_id(None) == ""
     assert _extract_trip_hotel_id("https://other.site/x") == ""
 
@@ -183,14 +188,20 @@ def test_normalize_trip_italian_uses_content():
 
 def test_normalize_trip_non_latin_falls_back_to_translation():
     """Chinese review: content is CJK, fall back to translatedContent."""
-    row = normalize_trip(_trip_raw(language="zh", content="很好的酒店", translatedContent="Great hotel"))
+    row = normalize_trip(
+        _trip_raw(language="zh", content="很好的酒店", translatedContent="Great hotel")
+    )
     assert row["testo"] == "Great hotel"
     assert row["lingua"] == "zh"
 
 
 def test_normalize_trip_english_uses_content():
     """EN language: prefer original content over translation."""
-    row = normalize_trip(_trip_raw(language="en", content="Lovely place", translatedContent="Posto delizioso"))
+    row = normalize_trip(
+        _trip_raw(
+            language="en", content="Lovely place", translatedContent="Posto delizioso"
+        )
+    )
     assert row["testo"] == "Lovely place"
 
 

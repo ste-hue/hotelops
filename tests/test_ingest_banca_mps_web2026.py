@@ -21,6 +21,7 @@ from openpyxl import Workbook
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
 
+
 def _build_mps_web2026_xlsx(
     tmp_path: Path,
     filename: str = "ORTI_estratto_test.xlsx",
@@ -49,9 +50,30 @@ def _build_mps_web2026_xlsx(
     """
     if rows is None:
         rows = [
-            ("2026-05-11", "2026-05-11", "Incasso POS", "Incasso tramite p.o.s.", "", 1888.00),
-            ("2026-05-10", "2026-05-10", "Bonifico a tuo favore", "Bonifico per ordine", "", 914.95),
-            ("2026-05-09", "2026-05-09", "Addebito Direct Debit", "Addebito diretto.", "", -287.23),
+            (
+                "2026-05-11",
+                "2026-05-11",
+                "Incasso POS",
+                "Incasso tramite p.o.s.",
+                "",
+                1888.00,
+            ),
+            (
+                "2026-05-10",
+                "2026-05-10",
+                "Bonifico a tuo favore",
+                "Bonifico per ordine",
+                "",
+                914.95,
+            ),
+            (
+                "2026-05-09",
+                "2026-05-09",
+                "Addebito Direct Debit",
+                "Addebito diretto.",
+                "",
+                -287.23,
+            ),
         ]
 
     f = tmp_path / filename
@@ -82,7 +104,15 @@ def _build_mps_web2026_xlsx(
     ws.cell(row=17, column=4, value=308221.10)
 
     # Header row 19
-    headers = ["", "DATA CONT.", "DATA VAL.", "CAUSALE", "DESCRIZIONE", "", "IMPORTO(€)"]
+    headers = [
+        "",
+        "DATA CONT.",
+        "DATA VAL.",
+        "CAUSALE",
+        "DESCRIZIONE",
+        "",
+        "IMPORTO(€)",
+    ]
     for ci, h in enumerate(headers, start=1):
         ws.cell(row=19, column=ci, value=h)
 
@@ -100,11 +130,13 @@ def _build_mps_web2026_xlsx(
 
 # ── Tests: _detect_banca_from_content (unit) ─────────────────────────────
 
+
 def test_detect_mps_from_iban_in_preamble(tmp_path):
     """ABI 01030 in IBAN at R12 → 'MPS' (even though first 5 rows are blank)."""
     f = _build_mps_web2026_xlsx(tmp_path, iban="IT18X0103076230000001194052")
 
     from ingest.banca.ingest import _detect_banca_from_content
+
     assert _detect_banca_from_content(f) == "MPS"
 
 
@@ -117,6 +149,7 @@ def test_detect_mps_kross_from_conto_suffix(tmp_path):
     )
 
     from ingest.banca.ingest import _detect_banca_from_content
+
     assert _detect_banca_from_content(f) == "MPS_KROSS"
 
 
@@ -129,6 +162,7 @@ def test_detect_intesa_from_abi(tmp_path):
     )
 
     from ingest.banca.ingest import _detect_banca_from_content
+
     assert _detect_banca_from_content(f) == "INTESA"
 
 
@@ -141,17 +175,21 @@ def test_detect_unknown_when_no_iban(tmp_path):
     wb.save(f)
 
     from ingest.banca.ingest import _detect_banca_from_content
+
     assert _detect_banca_from_content(f) is None
 
 
 # ── Tests: backward compat ───────────────────────────────────────────────
+
 
 def test_classic_mps_columns_still_detected(tmp_path):
     """Old MPS format (Data/Valuta/Dare/Avere header at R1) must still work."""
     f = tmp_path / "MPS_ORTI_classic.xlsx"
     wb = Workbook()
     ws = wb.active
-    for ci, h in enumerate(["Data", "Valuta", "Dare", "Avere", "Descrizione operazioni"], 1):
+    for ci, h in enumerate(
+        ["Data", "Valuta", "Dare", "Avere", "Descrizione operazioni"], 1
+    ):
         ws.cell(row=1, column=ci, value=h)
     ws.cell(row=2, column=1, value="2025-01-01")
     ws.cell(row=2, column=2, value="2025-01-01")
@@ -161,10 +199,12 @@ def test_classic_mps_columns_still_detected(tmp_path):
     wb.save(f)
 
     from ingest.banca.ingest import _detect_banca_from_content
+
     assert _detect_banca_from_content(f) == "MPS"
 
 
 # ── Test: integration through ingest_single_file ─────────────────────────
+
 
 def test_orti_no_banca_keyword_writes_rows_via_iban(tmp_path, monkeypatch):
     """End-to-end: filename has no 'MPS' keyword → IBAN preamble must drive
@@ -216,6 +256,7 @@ def test_orti_no_banca_keyword_writes_rows_via_iban(tmp_path, monkeypatch):
 # contenuto. L'IBAN nel preambolo è autoritativo: quando c'è, il filename
 # non conta. Il fallback filename resta per i file senza IBAN leggibile.
 
+
 def test_infer_meta_iban_beats_filename_mps_is_really_kross(tmp_path):
     """File named MPS but containing the Kross IBAN → MPS_KROSS."""
     f = _build_mps_web2026_xlsx(
@@ -225,6 +266,7 @@ def test_infer_meta_iban_beats_filename_mps_is_really_kross(tmp_path):
     )
 
     from ingest.banca.ingest import infer_meta
+
     assert infer_meta(f)["societa_banca"] == "ORTI_MPS_KROSS"
 
 
@@ -237,6 +279,7 @@ def test_infer_meta_iban_beats_filename_kross_is_really_mps(tmp_path):
     )
 
     from ingest.banca.ingest import infer_meta
+
     assert infer_meta(f)["societa_banca"] == "ORTI_MPS"
 
 
@@ -246,4 +289,5 @@ def test_infer_meta_filename_fallback_without_iban(tmp_path):
     f.write_text("Codice identificativo,Data operazione\n", encoding="utf-8")
 
     from ingest.banca.ingest import infer_meta
+
     assert infer_meta(f)["societa_banca"] == "INTUR_SELLA"

@@ -24,6 +24,7 @@ def test_order_summary_rejects_unknown():
 
 # --- _extract_attachments ---
 
+
 def test_extract_attachments_single_flat_dict():
     content = b"%PDF-1.4 fake"
     raw = {"file": base64.b64encode(content).decode(), "nome": "bilancio.pdf"}
@@ -51,6 +52,7 @@ def test_extract_attachments_bare_list():
 
 
 # --- expand_archives ---
+
 
 def _make_zip(entries: dict[str, bytes]) -> bytes:
     buf = io.BytesIO()

@@ -20,6 +20,7 @@ def test_plan_apply_filters_ledger_and_applies_threshold():
 
 # --- apply_census: scorciatoie Drive vs upload Gmail ---
 
+
 class _Exec:
     def __init__(self, result):
         self._result = result
@@ -93,16 +94,18 @@ def test_apply_drive_item_creates_shortcut(monkeypatch, tmp_path):
         "workspace.miners.dossier_apply.ensure_shared_with", lambda *a: True
     )
 
-    items = [{
-        "key": "drive:F1",
-        "source": "drive",
-        "file_id": "F1",
-        "name": "contratto.pdf",
-        "mime_type": "application/pdf",
-        "category": "01_Societario",
-        "confidence": 0.9,
-        "holders": ["a@panoramagroup.it"],
-    }]
+    items = [
+        {
+            "key": "drive:F1",
+            "source": "drive",
+            "file_id": "F1",
+            "name": "contratto.pdf",
+            "mime_type": "application/pdf",
+            "category": "01_Societario",
+            "confidence": 0.9,
+            "holders": ["a@panoramagroup.it"],
+        }
+    ]
     census_path = _write_census(tmp_path, items)
 
     result = apply_census(company, census_path)
@@ -112,7 +115,8 @@ def test_apply_drive_item_creates_shortcut(monkeypatch, tmp_path):
 
     folder_id = _folder_id(fake_writer, "01_Societario")
     shortcut_calls = [
-        c for c in fake_writer.files_.created
+        c
+        for c in fake_writer.files_.created
         if c["body"].get("mimeType") == "application/vnd.google-apps.shortcut"
     ]
     assert len(shortcut_calls) == 1
@@ -138,23 +142,26 @@ def test_apply_drive_google_doc_shortcut_no_pdf_suffix(monkeypatch, tmp_path):
         "workspace.miners.dossier_apply.ensure_shared_with", lambda *a: True
     )
 
-    items = [{
-        "key": "drive:F2",
-        "source": "drive",
-        "file_id": "F2",
-        "name": "Verbale Assemblea",
-        "mime_type": "application/vnd.google-apps.document",
-        "category": "01_Societario",
-        "confidence": 0.9,
-        "holders": ["a@panoramagroup.it"],
-    }]
+    items = [
+        {
+            "key": "drive:F2",
+            "source": "drive",
+            "file_id": "F2",
+            "name": "Verbale Assemblea",
+            "mime_type": "application/vnd.google-apps.document",
+            "category": "01_Societario",
+            "confidence": 0.9,
+            "holders": ["a@panoramagroup.it"],
+        }
+    ]
     census_path = _write_census(tmp_path, items)
 
     result = apply_census(company, census_path)
 
     assert result["applied"] == 1
     shortcut_calls = [
-        c for c in fake_writer.files_.created
+        c
+        for c in fake_writer.files_.created
         if c["body"].get("mimeType") == "application/vnd.google-apps.shortcut"
     ]
     assert len(shortcut_calls) == 1
@@ -187,17 +194,19 @@ def test_apply_gmail_item_still_uploads_bytes(monkeypatch, tmp_path):
         lambda svc, msg: [FakeAttachment(content)],
     )
 
-    items = [{
-        "key": f"hash:{sha}",
-        "source": "gmail",
-        "thread_id": "T1",
-        "attachment_sha256": sha,
-        "name": "allegato.pdf",
-        "mime_type": "application/pdf",
-        "category": "02_Fiscale",
-        "confidence": 0.9,
-        "holders": ["a@panoramagroup.it"],
-    }]
+    items = [
+        {
+            "key": f"hash:{sha}",
+            "source": "gmail",
+            "thread_id": "T1",
+            "attachment_sha256": sha,
+            "name": "allegato.pdf",
+            "mime_type": "application/pdf",
+            "category": "02_Fiscale",
+            "confidence": 0.9,
+            "holders": ["a@panoramagroup.it"],
+        }
+    ]
     census_path = _write_census(tmp_path, items)
 
     result = apply_census(company, census_path)
@@ -205,7 +214,8 @@ def test_apply_gmail_item_still_uploads_bytes(monkeypatch, tmp_path):
     assert result["applied"] == 1
     folder_id = _folder_id(fake_writer, "02_Fiscale")
     upload_calls = [
-        c for c in fake_writer.files_.created
+        c
+        for c in fake_writer.files_.created
         if c["body"].get("mimeType") != "application/vnd.google-apps.folder"
         and c["body"].get("mimeType") != "application/vnd.google-apps.shortcut"
     ]
@@ -225,16 +235,18 @@ def test_apply_shortcut_appends_ledger_per_item(monkeypatch, tmp_path):
         "workspace.miners.dossier_apply.ensure_shared_with", lambda *a: True
     )
 
-    items = [{
-        "key": "drive:F1",
-        "source": "drive",
-        "file_id": "F1",
-        "name": "contratto.pdf",
-        "mime_type": "application/pdf",
-        "category": "01_Societario",
-        "confidence": 0.9,
-        "holders": ["a@panoramagroup.it"],
-    }]
+    items = [
+        {
+            "key": "drive:F1",
+            "source": "drive",
+            "file_id": "F1",
+            "name": "contratto.pdf",
+            "mime_type": "application/pdf",
+            "category": "01_Societario",
+            "confidence": 0.9,
+            "holders": ["a@panoramagroup.it"],
+        }
+    ]
     census_path = _write_census(tmp_path, items)
 
     result1 = apply_census(company, census_path)
@@ -262,21 +274,21 @@ def test_apply_drive_item_self_shares_then_shortcut(monkeypatch, tmp_path):
         share_calls.append((owner_or_holder, file_id, grantee))
         return True
 
-    monkeypatch.setattr(
-        "workspace.miners.dossier_apply.ensure_shared_with", fake_share
-    )
+    monkeypatch.setattr("workspace.miners.dossier_apply.ensure_shared_with", fake_share)
 
-    items = [{
-        "key": "drive:F1",
-        "source": "drive",
-        "file_id": "F1",
-        "name": "contratto.pdf",
-        "mime_type": "application/pdf",
-        "category": "01_Societario",
-        "confidence": 0.9,
-        "owner": "b@panoramagroup.it",
-        "holders": ["a@panoramagroup.it"],
-    }]
+    items = [
+        {
+            "key": "drive:F1",
+            "source": "drive",
+            "file_id": "F1",
+            "name": "contratto.pdf",
+            "mime_type": "application/pdf",
+            "category": "01_Societario",
+            "confidence": 0.9,
+            "owner": "b@panoramagroup.it",
+            "holders": ["a@panoramagroup.it"],
+        }
+    ]
     census_path = _write_census(tmp_path, items)
 
     result = apply_census(company, census_path)
@@ -284,7 +296,8 @@ def test_apply_drive_item_self_shares_then_shortcut(monkeypatch, tmp_path):
     assert result["applied"] == 1
     assert share_calls == [("b@panoramagroup.it", "F1", WRITE_AS)]
     shortcut_calls = [
-        c for c in fake_writer.files_.created
+        c
+        for c in fake_writer.files_.created
         if c["body"].get("mimeType") == "application/vnd.google-apps.shortcut"
     ]
     assert len(shortcut_calls) == 1
@@ -344,7 +357,8 @@ def test_apply_drive_external_owner_still_creates_shortcut(monkeypatch, tmp_path
     # per F1 nessun utente interno impersonabile: ensure_shared_with mai chiamato
     assert share_calls == [("a@panoramagroup.it", "F2", WRITE_AS)]
     shortcut_calls = [
-        c for c in fake_writer.files_.created
+        c
+        for c in fake_writer.files_.created
         if c["body"].get("mimeType") == "application/vnd.google-apps.shortcut"
     ]
     assert len(shortcut_calls) == 2
@@ -377,17 +391,19 @@ def test_apply_shortcut_create_fails_not_in_not_shared(monkeypatch, tmp_path):
         "workspace.miners.dossier_apply.ensure_shared_with", lambda *a: False
     )
 
-    items = [{
-        "key": "drive:F1",
-        "source": "drive",
-        "file_id": "F1",
-        "name": "esterno.pdf",
-        "mime_type": "application/pdf",
-        "category": "01_Societario",
-        "confidence": 0.9,
-        "owner": "ext@gmail.com",
-        "holders": ["ext@gmail.com"],
-    }]
+    items = [
+        {
+            "key": "drive:F1",
+            "source": "drive",
+            "file_id": "F1",
+            "name": "esterno.pdf",
+            "mime_type": "application/pdf",
+            "category": "01_Societario",
+            "confidence": 0.9,
+            "owner": "ext@gmail.com",
+            "holders": ["ext@gmail.com"],
+        }
+    ]
     census_path = _write_census(tmp_path, items)
 
     result = apply_census(company, census_path)

@@ -42,7 +42,12 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_OUTPUT = Path.home() / "Desktop" / "Riconciliazione_accodamenti.xlsx"
 
-_STRUTTURA_DISPLAY = {"hotel": "HP", "residence": "ANGELINA", "cvm": "CVM", "unknown": "???"}
+_STRUTTURA_DISPLAY = {
+    "hotel": "HP",
+    "residence": "ANGELINA",
+    "cvm": "CVM",
+    "unknown": "???",
+}
 _STRUTTURA_FT_SUFFIX = {"hotel": "H", "residence": "R", "cvm": "C", "unknown": ""}
 
 # Tolleranza di quadratura: differenza massima (€) tra incassi e atteso
@@ -129,7 +134,9 @@ def _new_day() -> dict:
 
 
 def _gen_importo(gen: dict) -> Decimal:
-    return max(gen.get("importo_dare", Decimal("0")), gen.get("importo_avere", Decimal("0")))
+    return max(
+        gen.get("importo_dare", Decimal("0")), gen.get("importo_avere", Decimal("0"))
+    )
 
 
 def _accumulate(corr_events, mov_events, fatt_events, days, key_fn):
@@ -175,16 +182,21 @@ def _accumulate(corr_events, mov_events, fatt_events, days, key_fn):
         elif event_type == "giro_caparra":
             for gen in event["gens"]:
                 importo = _gen_importo(gen)
-                if importo > Decimal("0") and classify_payment_account(gen["conto_esolver"]) == "caparra":
+                if (
+                    importo > Decimal("0")
+                    and classify_payment_account(gen["conto_esolver"]) == "caparra"
+                ):
                     day["caparre_evase"] += importo
             par = event.get("par")
             if par and par.get("num_doc_partita"):
                 suffix = _STRUTTURA_FT_SUFFIX.get(event.get("struttura", ""), "")
-                day["giri_caparra_ft"].append({
-                    "num": par["num_doc_partita"],
-                    "label": f"F{par['num_doc_partita']}{suffix}",
-                    "importo": par.get("importo_partita", Decimal("0")),
-                })
+                day["giri_caparra_ft"].append(
+                    {
+                        "num": par["num_doc_partita"],
+                        "label": f"F{par['num_doc_partita']}{suffix}",
+                        "importo": par.get("importo_partita", Decimal("0")),
+                    }
+                )
 
     # Fatture
     for event in fatt_events:
@@ -195,7 +207,8 @@ def _accumulate(corr_events, mov_events, fatt_events, days, key_fn):
             # Rigs da solo danno NETTO e silenziosamente sottostima fatture_importo.
             logger.warning(
                 "Fattura senza righe IVA scartata: num=%s data=%s",
-                num_doc, event["tes"].get("data_doc"),
+                num_doc,
+                event["tes"].get("data_doc"),
             )
             continue
         data = _normalize_date(event["tes"]["data_doc"])
@@ -254,7 +267,10 @@ def build_daily_reconciliation(corr_events, mov_events, fatt_events) -> list[dic
     """Aggrega tutti gli eventi per data (tutte le strutture sommate)."""
     days: dict = defaultdict(_new_day)
     _accumulate(corr_events, mov_events, fatt_events, days, key_fn=lambda _e, d: d)
-    return [_day_to_row(days[data], data) for data in sorted(days.keys(), key=_sort_key_date)]
+    return [
+        _day_to_row(days[data], data)
+        for data in sorted(days.keys(), key=_sort_key_date)
+    ]
 
 
 def build_detail_reconciliation(corr_events, mov_events, fatt_events) -> list[dict]:
@@ -269,7 +285,9 @@ def build_detail_reconciliation(corr_events, mov_events, fatt_events) -> list[di
     )
 
     rows = []
-    for data, struttura in sorted(days.keys(), key=lambda k: (_sort_key_date(k[0]), k[1])):
+    for data, struttura in sorted(
+        days.keys(), key=lambda k: (_sort_key_date(k[0]), k[1])
+    ):
         display = _STRUTTURA_DISPLAY.get(struttura, struttura)
         rows.append(_day_to_row(days[(data, struttura)], data, display))
     return rows
@@ -319,14 +337,19 @@ def _accumulate_bq(rows: list[dict], days: dict, key_fn) -> None:
 def build_daily_from_bq(rows: list[dict]) -> list[dict]:
     days: dict = defaultdict(_new_day)
     _accumulate_bq(rows, days, key_fn=lambda _r, d: d)
-    return [_day_to_row(days[data], data) for data in sorted(days.keys(), key=_sort_key_date)]
+    return [
+        _day_to_row(days[data], data)
+        for data in sorted(days.keys(), key=_sort_key_date)
+    ]
 
 
 def build_detail_from_bq(rows: list[dict]) -> list[dict]:
     days: dict = defaultdict(_new_day)
     _accumulate_bq(rows, days, key_fn=lambda r, d: (d, r.get("_struttura", "unknown")))
     out = []
-    for data, struttura in sorted(days.keys(), key=lambda k: (_sort_key_date(k[0]), k[1])):
+    for data, struttura in sorted(
+        days.keys(), key=lambda k: (_sort_key_date(k[0]), k[1])
+    ):
         display = _STRUTTURA_DISPLAY.get(struttura, struttura)
         out.append(_day_to_row(days[(data, struttura)], data, display))
     return out
@@ -391,8 +414,17 @@ def _write_riepilogo_sheet(ws, rows: list[dict]) -> None:
     sub.fill = _GRIGIO
     sub.alignment = Alignment(horizontal="center", vertical="center")
 
-    headers = ["DATA", "TOTALI POS", "CAPARRE\nincassate", "CORRISPETTIVI*",
-               "CAPARRE\nevase", "di cui ft", "Lista Fatture", "OK?", "Note"]
+    headers = [
+        "DATA",
+        "TOTALI POS",
+        "CAPARRE\nincassate",
+        "CORRISPETTIVI*",
+        "CAPARRE\nevase",
+        "di cui ft",
+        "Lista Fatture",
+        "OK?",
+        "Note",
+    ]
     for col, h in enumerate(headers, 1):
         _hdr(ws.cell(row=3, column=col), h)
 
@@ -412,26 +444,63 @@ def _write_riepilogo_sheet(ws, rows: list[dict]) -> None:
 
         qcell = ws.cell(r, 8)
         qcell.value = "✓" if is_ok else "!!"
-        qcell.font = Font(name="Calibri", bold=True, size=11,
-                          color="375623" if is_ok else "C00000")
+        qcell.font = Font(
+            name="Calibri", bold=True, size=11, color="375623" if is_ok else "C00000"
+        )
         qcell.fill = _VERDE if is_ok else _ROSSO
         qcell.alignment = Alignment(horizontal="center", vertical="center")
         qcell.border = _BORDO
 
         _cel(ws.cell(r, 9), row["note"], fill)
 
-        for k in ("totali_pos", "caparre_incassate", "corrispettivi", "caparre_evase", "di_cui_ft"):
+        for k in (
+            "totali_pos",
+            "caparre_incassate",
+            "corrispettivi",
+            "caparre_evase",
+            "di_cui_ft",
+        ):
             totals[k] += row[k]
         r += 1
 
     # Riga totali
     if rows:
         _cel(ws.cell(r, 1), "TOTALE", _GRIGIO, bold=True, align="center")
-        _cel(ws.cell(r, 2), _fmt_money(totals["totali_pos"], True), _GRIGIO, bold=True, align="right")
-        _cel(ws.cell(r, 3), _fmt_money(totals["caparre_incassate"]), _GRIGIO, bold=True, align="right")
-        _cel(ws.cell(r, 4), _fmt_money(totals["corrispettivi"], True), _GRIGIO, bold=True, align="right")
-        _cel(ws.cell(r, 5), _fmt_money(totals["caparre_evase"]), _GRIGIO, bold=True, align="right")
-        _cel(ws.cell(r, 6), _fmt_money(totals["di_cui_ft"]), _GRIGIO, bold=True, align="right")
+        _cel(
+            ws.cell(r, 2),
+            _fmt_money(totals["totali_pos"], True),
+            _GRIGIO,
+            bold=True,
+            align="right",
+        )
+        _cel(
+            ws.cell(r, 3),
+            _fmt_money(totals["caparre_incassate"]),
+            _GRIGIO,
+            bold=True,
+            align="right",
+        )
+        _cel(
+            ws.cell(r, 4),
+            _fmt_money(totals["corrispettivi"], True),
+            _GRIGIO,
+            bold=True,
+            align="right",
+        )
+        _cel(
+            ws.cell(r, 5),
+            _fmt_money(totals["caparre_evase"]),
+            _GRIGIO,
+            bold=True,
+            align="right",
+        )
+        _cel(
+            ws.cell(r, 6),
+            _fmt_money(totals["di_cui_ft"]),
+            _GRIGIO,
+            bold=True,
+            align="right",
+        )
         _cel(ws.cell(r, 7), "", _GRIGIO)
         _cel(ws.cell(r, 8), "", _GRIGIO)
         _cel(ws.cell(r, 9), "", _GRIGIO)
@@ -462,14 +531,23 @@ def _write_dettaglio_sheet(ws, detail_rows: list[dict]) -> None:
     sub.fill = _GRIGIO
     sub.alignment = Alignment(horizontal="center", vertical="center")
 
-    headers = ["DATA", "STRUTTURA", "TOTALI POS", "CAPARRE\nincassate",
-               "CORRISPETTIVI*", "CAPARRE\nevase", "di cui ft", "Fattura"]
+    headers = [
+        "DATA",
+        "STRUTTURA",
+        "TOTALI POS",
+        "CAPARRE\nincassate",
+        "CORRISPETTIVI*",
+        "CAPARRE\nevase",
+        "di cui ft",
+        "Fattura",
+    ]
     for col, h in enumerate(headers, 1):
         _hdr(ws.cell(row=3, column=col), h)
 
     struttura_fills = {"HP": _CHIARO, "CVM": _VERDE, "ANGELINA": _GIALLO}
     r = 4
     from itertools import groupby
+
     sorted_rows = sorted(detail_rows, key=lambda x: _sort_key_date(x["data"]))
 
     for data, group in groupby(sorted_rows, key=lambda x: x["data"]):
@@ -481,14 +559,29 @@ def _write_dettaglio_sheet(ws, detail_rows: list[dict]) -> None:
             fill = struttura_fills.get(row["struttura"], _BIANCO)
             _cel(ws.cell(r, 1), "", fill)
             _cel(ws.cell(r, 2), row["struttura"], fill, bold=True, align="center")
-            _cel(ws.cell(r, 3), _fmt_money(row["totali_pos"], True), fill, align="right")
-            _cel(ws.cell(r, 4), _fmt_money(row["caparre_incassate"]), fill, align="right")
-            _cel(ws.cell(r, 5), _fmt_money(row["corrispettivi"], True), fill, align="right")
+            _cel(
+                ws.cell(r, 3), _fmt_money(row["totali_pos"], True), fill, align="right"
+            )
+            _cel(
+                ws.cell(r, 4), _fmt_money(row["caparre_incassate"]), fill, align="right"
+            )
+            _cel(
+                ws.cell(r, 5),
+                _fmt_money(row["corrispettivi"], True),
+                fill,
+                align="right",
+            )
             _cel(ws.cell(r, 6), _fmt_money(row["caparre_evase"]), fill, align="right")
             _cel(ws.cell(r, 7), _fmt_money(row["di_cui_ft"]), fill, align="right")
             _cel(ws.cell(r, 8), row.get("lista_fatture", ""), fill)
 
-            for k in ("totali_pos", "caparre_incassate", "corrispettivi", "caparre_evase", "di_cui_ft"):
+            for k in (
+                "totali_pos",
+                "caparre_incassate",
+                "corrispettivi",
+                "caparre_evase",
+                "di_cui_ft",
+            ):
                 day_totals[k] += row[k]
             if row.get("lista_fatture"):
                 all_ft.append(row["lista_fatture"])
@@ -497,11 +590,41 @@ def _write_dettaglio_sheet(ws, detail_rows: list[dict]) -> None:
         # Totale giornaliero
         _cel(ws.cell(r, 1), data, _GRIGIO, bold=True, align="center")
         _cel(ws.cell(r, 2), "TOTALE", _GRIGIO, bold=True, align="center")
-        _cel(ws.cell(r, 3), _fmt_money(day_totals["totali_pos"], True), _GRIGIO, bold=True, align="right")
-        _cel(ws.cell(r, 4), _fmt_money(day_totals["caparre_incassate"]), _GRIGIO, bold=True, align="right")
-        _cel(ws.cell(r, 5), _fmt_money(day_totals["corrispettivi"], True), _GRIGIO, bold=True, align="right")
-        _cel(ws.cell(r, 6), _fmt_money(day_totals["caparre_evase"]), _GRIGIO, bold=True, align="right")
-        _cel(ws.cell(r, 7), _fmt_money(day_totals["di_cui_ft"]), _GRIGIO, bold=True, align="right")
+        _cel(
+            ws.cell(r, 3),
+            _fmt_money(day_totals["totali_pos"], True),
+            _GRIGIO,
+            bold=True,
+            align="right",
+        )
+        _cel(
+            ws.cell(r, 4),
+            _fmt_money(day_totals["caparre_incassate"]),
+            _GRIGIO,
+            bold=True,
+            align="right",
+        )
+        _cel(
+            ws.cell(r, 5),
+            _fmt_money(day_totals["corrispettivi"], True),
+            _GRIGIO,
+            bold=True,
+            align="right",
+        )
+        _cel(
+            ws.cell(r, 6),
+            _fmt_money(day_totals["caparre_evase"]),
+            _GRIGIO,
+            bold=True,
+            align="right",
+        )
+        _cel(
+            ws.cell(r, 7),
+            _fmt_money(day_totals["di_cui_ft"]),
+            _GRIGIO,
+            bold=True,
+            align="right",
+        )
         _cel(ws.cell(r, 8), "; ".join(all_ft) if all_ft else "", _GRIGIO, bold=True)
         r += 1
 
@@ -586,7 +709,11 @@ def report_ultime_date(input_dir: Path) -> dict[str, datetime]:
             with open(full, encoding="latin-1", errors="ignore") as f:
                 for line in f:
                     parts = line.strip().split("|")
-                    if len(parts) > 4 and parts[0] in ("TES", "GEN") and len(parts[4]) == 8:
+                    if (
+                        len(parts) > 4
+                        and parts[0] in ("TES", "GEN")
+                        and len(parts[4]) == 8
+                    ):
                         try:
                             d = datetime.strptime(parts[4], "%d%m%Y")
                             if prefisso not in ultime or d > ultime[prefisso]:
@@ -605,7 +732,9 @@ def print_ultime_date(ultime: dict[str, datetime]) -> None:
         if prefisso in ultime:
             u = ultime[prefisso]
             prossima = (u + timedelta(days=1)).strftime("%d/%m/%Y")
-            print(f"  {nome:<12}  già caricato fino al {u.strftime('%d/%m/%Y')}  →  esporta da {prossima}")
+            print(
+                f"  {nome:<12}  già caricato fino al {u.strftime('%d/%m/%Y')}  →  esporta da {prossima}"
+            )
         else:
             print(f"  {nome:<12}  nessun dato — esporta dall'inizio del mese")
     print("=" * 58)
@@ -619,20 +748,33 @@ def run_accodamenti_to_excel(input_dir: Path, output_path: Path) -> dict:
     """Orchestra: parse → aggregate → Excel. Returns stats dict."""
     input_files = find_input_files(input_dir)
     total_txt = sum(len(v) for v in input_files.values())
-    logger.info("File trovati: %d (%d corrispettivi, %d movimenti, %d fatture, %d clienti)",
-                total_txt, len(input_files["corrispettivi"]), len(input_files["movimenti"]),
-                len(input_files["fatture"]), len(input_files["clienti"]))
+    logger.info(
+        "File trovati: %d (%d corrispettivi, %d movimenti, %d fatture, %d clienti)",
+        total_txt,
+        len(input_files["corrispettivi"]),
+        len(input_files["movimenti"]),
+        len(input_files["fatture"]),
+        len(input_files["clienti"]),
+    )
 
     corr, mov, fatt = parse_all_events(input_files)
-    logger.info("Eventi parsati: %d corrispettivi, %d movimenti, %d fatture",
-                len(corr), len(mov), len(fatt))
+    logger.info(
+        "Eventi parsati: %d corrispettivi, %d movimenti, %d fatture",
+        len(corr),
+        len(mov),
+        len(fatt),
+    )
 
     rows = build_daily_reconciliation(corr, mov, fatt)
     detail = build_detail_reconciliation(corr, mov, fatt)
 
     write_excel(rows, detail, output_path)
-    logger.info("Excel generato: %s (%d giorni, %d righe dettaglio)",
-                output_path, len(rows), len(detail))
+    logger.info(
+        "Excel generato: %s (%d giorni, %d righe dettaglio)",
+        output_path,
+        len(rows),
+        len(detail),
+    )
 
     return {
         "giorni": len(rows),

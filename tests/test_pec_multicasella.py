@@ -90,7 +90,11 @@ def test_registry_quattro_sorgenti_pec():
     attese = {
         "PEC_MAILBOX_INTUR_APPEND": ("in.tur@pec.it", "INTUR", "hotelops-raw"),
         "PEC_MAILBOX_ORTI_APPEND": ("orti@pec.it", "ORTI", "orti-raw"),
-        "PEC_MAILBOX_VIGNA_APPEND": ("vineyardamalficoast@pec.it", "VIGNA", "vigna-raw"),
+        "PEC_MAILBOX_VIGNA_APPEND": (
+            "vineyardamalficoast@pec.it",
+            "VIGNA",
+            "vigna-raw",
+        ),
         "PEC_MAILBOX_PERSONALE_APPEND": (
             "stefanojunior.dellapietra@mpspec.it",
             "STEFANO_PERSONALE",
@@ -137,8 +141,13 @@ def test_source_pec_senza_casella_rifiutata():
 # ── Parser generalizzato ─────────────────────────────────────────────────────
 
 
-def _make_eml(path: Path, from_addr: str, to_addr: str, subject: str,
-              attach: tuple[str, bytes] | None = None) -> Path:
+def _make_eml(
+    path: Path,
+    from_addr: str,
+    to_addr: str,
+    subject: str,
+    attach: tuple[str, bytes] | None = None,
+) -> Path:
     m = EmailMessage()
     m["From"] = from_addr
     m["To"] = to_addr
@@ -235,7 +244,9 @@ def test_formato_non_ammesso_rifiutato(tmp_path):
 def test_allegati_store_prefix_per_source():
     from ingest.flussi.ingest_pec_mbox import AllegatiStore
 
-    store = AllegatiStore(bucket_name="orti-raw", prefix="PEC_MAILBOX_ORTI_APPEND", dry_run=True)
+    store = AllegatiStore(
+        bucket_name="orti-raw", prefix="PEC_MAILBOX_ORTI_APPEND", dry_run=True
+    )
     sha, uri = store.store("doc.pdf", b"contenuto")
     assert uri.startswith("gs://orti-raw/PEC_MAILBOX_ORTI_APPEND/allegati/")
 
@@ -257,17 +268,22 @@ def test_promotion_passa_source_alle_pec(monkeypatch, tmp_path):
     f.write_bytes(b"")
 
     sd_pec = SimpleNamespace(
-        system="PEC", societa="ORTI", source_name="PEC_MAILBOX_ORTI_APPEND",
+        system="PEC",
+        societa="ORTI",
+        source_name="PEC_MAILBOX_ORTI_APPEND",
         parser_module="ingest.flussi.ingest_pec_mbox",
     )
-    _invoke_parser("ingest.flussi.ingest_pec_mbox", f"file://{f}", sd_pec,
-                   raw_object_id="raw-1")
+    _invoke_parser(
+        "ingest.flussi.ingest_pec_mbox", f"file://{f}", sd_pec, raw_object_id="raw-1"
+    )
     assert "--source" in catturato["cmd"]
     assert "PEC_MAILBOX_ORTI_APPEND" in catturato["cmd"]
     assert "--societa" not in catturato["cmd"]
 
     sd_altro = SimpleNamespace(
-        system="ESOLVER", societa="ORTI", source_name="ESOLVER_X_ORTI_APPEND",
+        system="ESOLVER",
+        societa="ORTI",
+        source_name="ESOLVER_X_ORTI_APPEND",
         parser_module="ingest.flussi.qualcosa",
     )
     _invoke_parser("ingest.flussi.qualcosa", f"file://{f}", sd_altro)
@@ -278,8 +294,9 @@ def test_promotion_passa_source_alle_pec(monkeypatch, tmp_path):
 def test_bonifica_richiede_tutte_le_verifiche():
     from scripts.bonifica_pec_manuali import puo_rimuovere
 
-    ok = dict(promoted=True, canonico_esiste=True, hash_combacia=True,
-              lineage_persistita=True)
+    ok = dict(
+        promoted=True, canonico_esiste=True, hash_combacia=True, lineage_persistita=True
+    )
     assert puo_rimuovere(**ok)
     for k in ok:
         kw = {**ok, k: False}

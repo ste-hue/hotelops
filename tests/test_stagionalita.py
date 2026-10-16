@@ -105,9 +105,19 @@ class TestComputeCoefficients:
         ricavi = _make_ricavi("HOTEL", hotel) + _make_ricavi("RESIDENCE", residence)
         rows = compute_coefficients(ricavi, "ORTI", "TEST")
 
-        hq_rows = {r["mese"]: r["coefficiente"] for r in rows if r["business_unit_id"] == "HQ"}
-        hotel_rows = {r["mese"]: r["coefficiente"] for r in rows if r["business_unit_id"] == "HOTEL"}
-        res_rows = {r["mese"]: r["coefficiente"] for r in rows if r["business_unit_id"] == "RESIDENCE"}
+        hq_rows = {
+            r["mese"]: r["coefficiente"] for r in rows if r["business_unit_id"] == "HQ"
+        }
+        hotel_rows = {
+            r["mese"]: r["coefficiente"]
+            for r in rows
+            if r["business_unit_id"] == "HOTEL"
+        }
+        res_rows = {
+            r["mese"]: r["coefficiente"]
+            for r in rows
+            if r["business_unit_id"] == "RESIDENCE"
+        }
 
         # HQ July should be between HOTEL July and RESIDENCE July
         assert hq_rows[7] > res_rows[7]  # RESIDENCE is flat=1.0
@@ -125,7 +135,9 @@ class TestComputeCoefficients:
 
     def test_validate_batch_passes(self):
         """Output of compute_coefficients passes validate_batch."""
-        ricavi = _make_ricavi("HOTEL", [100, 200, 300, 400, 500, 600, 600, 500, 400, 300, 200, 100])
+        ricavi = _make_ricavi(
+            "HOTEL", [100, 200, 300, 400, 500, 600, 600, 500, 400, 300, 200, 100]
+        )
         rows = compute_coefficients(ricavi, "ORTI", "RICAVI_STORICI")
         # Should not raise
         validate_batch(rows, CoefficienteStagionalitaRow, context="test")

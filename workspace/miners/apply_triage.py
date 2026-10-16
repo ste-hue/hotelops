@@ -21,12 +21,19 @@ import subprocess
 from pathlib import Path
 
 RCLONE_REMOTE = "mywork"
-PROJECT_DRIVE_PATH = "04_Progetti_Investimenti/Investimenti2026/HPAN25PIANO1_CamerePrimoPiano"
+PROJECT_DRIVE_PATH = (
+    "04_Progetti_Investimenti/Investimenti2026/HPAN25PIANO1_CamerePrimoPiano"
+)
 
 
 def list_f_folders() -> dict[str, str]:
     """Return mapping F-code → folder name (e.g. 'F001' → 'F001_AMCN')."""
-    cmd = ["rclone", "lsf", f"{RCLONE_REMOTE}:{PROJECT_DRIVE_PATH}/07_fornitori/", "--dirs-only"]
+    cmd = [
+        "rclone",
+        "lsf",
+        f"{RCLONE_REMOTE}:{PROJECT_DRIVE_PATH}/07_fornitori/",
+        "--dirs-only",
+    ]
     out = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
     mapping = {}
     for line in out.strip().splitlines():
@@ -37,7 +44,9 @@ def list_f_folders() -> dict[str, str]:
     return mapping
 
 
-def compute_dest(f_code: str, subfolder: str, thread_folder_name: str, f_map: dict[str, str]) -> str | None:
+def compute_dest(
+    f_code: str, subfolder: str, thread_folder_name: str, f_map: dict[str, str]
+) -> str | None:
     """Return destination relative path under PROJECT_DRIVE_PATH, or None if skip."""
     if f_code == "NOISE":
         return None
@@ -54,7 +63,10 @@ def compute_dest(f_code: str, subfolder: str, thread_folder_name: str, f_map: di
 def rclone_shortcut(src_path: str, dest_path: str, dry_run: bool) -> tuple[bool, str]:
     """Create Drive shortcut. Returns (ok, message)."""
     cmd = [
-        "rclone", "backend", "shortcut", f"{RCLONE_REMOTE}:",
+        "rclone",
+        "backend",
+        "shortcut",
+        f"{RCLONE_REMOTE}:",
         f"{PROJECT_DRIVE_PATH}/{src_path}",
         f"{PROJECT_DRIVE_PATH}/{dest_path}",
     ]
@@ -62,18 +74,33 @@ def rclone_shortcut(src_path: str, dest_path: str, dry_run: bool) -> tuple[bool,
         return True, "dry-run"
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
-        return False, (r.stderr or r.stdout).strip().splitlines()[-1] if (r.stderr or r.stdout) else "unknown err"
+        return False, (r.stderr or r.stdout).strip().splitlines()[-1] if (
+            r.stderr or r.stdout
+        ) else "unknown err"
     return True, "ok"
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--csv", required=True, type=Path, help="triage_proposal.csv (approved)")
-    ap.add_argument("--run-folder", required=True,
-                    help="Run folder name under workspace-controller-test/ (e.g. HPAN25PIANO1__extract_20260512_113045)")
-    ap.add_argument("--apply", action="store_true", help="Actually create shortcuts (default = dry-run)")
-    ap.add_argument("--min-confidence", default="MED", choices=["HIGH", "MED", "LOW"],
-                    help="Skip rows below this confidence (default MED → applies HIGH+MED)")
+    ap.add_argument(
+        "--csv", required=True, type=Path, help="triage_proposal.csv (approved)"
+    )
+    ap.add_argument(
+        "--run-folder",
+        required=True,
+        help="Run folder name under workspace-controller-test/ (e.g. HPAN25PIANO1__extract_20260512_113045)",
+    )
+    ap.add_argument(
+        "--apply",
+        action="store_true",
+        help="Actually create shortcuts (default = dry-run)",
+    )
+    ap.add_argument(
+        "--min-confidence",
+        default="MED",
+        choices=["HIGH", "MED", "LOW"],
+        help="Skip rows below this confidence (default MED → applies HIGH+MED)",
+    )
     args = ap.parse_args()
 
     f_map = list_f_folders()
@@ -96,11 +123,15 @@ def main():
 
             f_code = row.get("f_code", "NOISE")
             subfolder = row.get("subfolder", "04_comunicazioni")
-            drive_folder_rel = row.get("drive_folder", "")  # e.g. _Certo/<thread_folder>
+            drive_folder_rel = row.get(
+                "drive_folder", ""
+            )  # e.g. _Certo/<thread_folder>
             mailbox = row.get("mailbox", "")
             if not drive_folder_rel or not mailbox:
                 rows_err += 1
-                errors.append((row.get("thread_id", "?"), "missing drive_folder or mailbox"))
+                errors.append(
+                    (row.get("thread_id", "?"), "missing drive_folder or mailbox")
+                )
                 continue
 
             thread_folder_name = Path(drive_folder_rel).name
@@ -119,7 +150,9 @@ def main():
                 by_dest.setdefault(f_code, []).append(row)
 
     print(f"\n{'━' * 64}")
-    print(f"{'DRY-RUN' if not args.apply else 'APPLIED'} — confidence ≥ {args.min_confidence}")
+    print(
+        f"{'DRY-RUN' if not args.apply else 'APPLIED'} — confidence ≥ {args.min_confidence}"
+    )
     print(f"{'━' * 64}")
     print(f"  Total rows in CSV:       {rows_total}")
     print(f"  Skipped (low confidence): {rows_skip_conf}")

@@ -253,7 +253,13 @@ def _stagionalita_args(ctx: dict) -> list[str]:
 
 def _dim_saldi_chiusura_args(ctx: dict) -> list[str]:
     """Repo CSV → f_saldi_banca_chiusura_mensile (saldi fine mese certificati)."""
-    csv_path = HOTELOPS_ROOT / "core" / "bq" / "dimensioni" / "d_saldi_banca_chiusura_mensile.csv"
+    csv_path = (
+        HOTELOPS_ROOT
+        / "core"
+        / "bq"
+        / "dimensioni"
+        / "d_saldi_banca_chiusura_mensile.csv"
+    )
     args = ["--file", str(csv_path)]
     if ctx["dry_run"]:
         args.append("--dry-run")

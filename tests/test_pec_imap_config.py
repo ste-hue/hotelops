@@ -3,9 +3,24 @@ import pytest
 from core.lineage.source_resolver import load_registry
 
 CASELLE = [
-    ("PEC_MAILBOX_INTUR_APPEND", "in.tur@pec.it", "imaps.pec.aruba.it", "PEC_PASSWORD_INTUR"),
-    ("PEC_MAILBOX_ORTI_APPEND", "orti@pec.it", "imaps.pec.aruba.it", "PEC_PASSWORD_ORTI"),
-    ("PEC_MAILBOX_VIGNA_APPEND", "vineyardamalficoast@pec.it", "imaps.pec.aruba.it", "PEC_PASSWORD_VIGNA"),
+    (
+        "PEC_MAILBOX_INTUR_APPEND",
+        "in.tur@pec.it",
+        "imaps.pec.aruba.it",
+        "PEC_PASSWORD_INTUR",
+    ),
+    (
+        "PEC_MAILBOX_ORTI_APPEND",
+        "orti@pec.it",
+        "imaps.pec.aruba.it",
+        "PEC_PASSWORD_ORTI",
+    ),
+    (
+        "PEC_MAILBOX_VIGNA_APPEND",
+        "vineyardamalficoast@pec.it",
+        "imaps.pec.aruba.it",
+        "PEC_PASSWORD_VIGNA",
+    ),
 ]
 
 

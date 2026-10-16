@@ -33,12 +33,24 @@ from ..drive import ensure_subfolder, get_drive_writer, upload_bytes
 
 # prezzi base (senza sconti best-price): il gate mostra il caso peggiore
 ORDER_CATALOG: dict[str, dict] = {
-    "visura": {"endpoint": "storica-societa-capitale", "cost": 5.90,
-               "category": "01_Societario", "label": "Visura storica"},
-    "bilancio": {"endpoint": "bilancio-ottico", "cost": 4.50,
-                 "category": "03_Bilanci", "label": "Bilancio ottico (ultimo)"},
-    "soci": {"endpoint": "soci-attivi", "cost": 2.30,
-             "category": "01_Societario", "label": "Elenco soci attivi"},
+    "visura": {
+        "endpoint": "storica-societa-capitale",
+        "cost": 5.90,
+        "category": "01_Societario",
+        "label": "Visura storica",
+    },
+    "bilancio": {
+        "endpoint": "bilancio-ottico",
+        "cost": 4.50,
+        "category": "03_Bilanci",
+        "label": "Bilancio ottico (ultimo)",
+    },
+    "soci": {
+        "endpoint": "soci-attivi",
+        "cost": 2.30,
+        "category": "01_Societario",
+        "label": "Elenco soci attivi",
+    },
 }
 
 
@@ -122,7 +134,10 @@ def expand_archives(files: list[tuple[str, bytes]]) -> list[tuple[str, bytes, st
                     if member.is_dir():
                         continue
                     inner_bytes = zf.read(member.filename)
-                    mime = mimetypes.guess_type(member.filename)[0] or "application/octet-stream"
+                    mime = (
+                        mimetypes.guess_type(member.filename)[0]
+                        or "application/octet-stream"
+                    )
                     out.append((member.filename, inner_bytes, mime))
         else:
             mime = mimetypes.guess_type(name)[0] or "application/pdf"
@@ -130,7 +145,12 @@ def expand_archives(files: list[tuple[str, bytes]]) -> list[tuple[str, bytes, st
     return out
 
 
-def place_orders(company: DossierCompany, orders: list[str], poll_minutes: int = 20, anno_chiusura: int | None = None) -> list[dict]:
+def place_orders(
+    company: DossierCompany,
+    orders: list[str],
+    poll_minutes: int = 20,
+    anno_chiusura: int | None = None,
+) -> list[dict]:
     """Invia gli ordini a pagamento, fa polling dello stato e carica i PDF su Drive.
 
     Adattato al contratto reale di openapi_ita.visure.VisureAPI (vedi docstring
@@ -168,14 +188,23 @@ def place_orders(company: DossierCompany, orders: list[str], poll_minutes: int =
                 break
             time.sleep(60)
         if not ready:
-            results.append({"order": entry["order_id"], "status": "timeout", "request_id": req_id})
+            results.append(
+                {"order": entry["order_id"], "status": "timeout", "request_id": req_id}
+            )
             continue
         raw = api.download(entry["endpoint"], req_id)
-        files = _extract_attachments(raw, fallback_name=f"{entry['order_id']}_{company.company_id}")
+        files = _extract_attachments(
+            raw, fallback_name=f"{entry['order_id']}_{company.company_id}"
+        )
         expanded = expand_archives(files)
         folder = ensure_subfolder(writer, company.drive_folder_id, entry["category"])
         for fname, data, mime in expanded:
             upload_bytes(writer, folder, fname, data, mime)
-        results.append({"order": entry["order_id"], "status": "ok",
-                        "files": [f for f, _, _ in expanded]})
+        results.append(
+            {
+                "order": entry["order_id"],
+                "status": "ok",
+                "files": [f for f, _, _ in expanded],
+            }
+        )
     return results

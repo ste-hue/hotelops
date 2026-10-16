@@ -92,7 +92,9 @@ def main() -> None:
 
     if args.dry_run:
         for r in rows[:8]:
-            print(f"  {r['codice_cliente']:>6}  {r['ragione_sociale']}  ({r['citta']} {r['provincia']})")
+            print(
+                f"  {r['codice_cliente']:>6}  {r['ragione_sociale']}  ({r['citta']} {r['provincia']})"
+            )
         return
 
     client = get_client()

@@ -39,7 +39,9 @@ _APERTE = [
 ]
 
 
-def build_payload(inputs: dict, osservati: dict | None, generato_il: datetime | None = None) -> dict:
+def build_payload(
+    inputs: dict, osservati: dict | None, generato_il: datetime | None = None
+) -> dict:
     """Tutto ciò che la pagina mostra o calcola. Niente ``expected`` né metadati interni."""
     years = {
         y: {"orti": v["orti"], "intur": v["intur"]}
@@ -54,8 +56,11 @@ def build_payload(inputs: dict, osservati: dict | None, generato_il: datetime | 
         "prior2025": inputs["prior2025"],
         "prior2026": inputs["prior2026"],
         "years": years,
-        "base": {"nome": "Base", "angelina": base["angelina"],
-                 "anni": {str(y): v for y, v in base["anni"].items()}},
+        "base": {
+            "nome": "Base",
+            "angelina": base["angelina"],
+            "anni": {str(y): v for y, v in base["anni"].items()},
+        },
         "fonti": cf.stato_fonti(inputs, osservati),
         "confronti": cf.base_vs_osservato(inputs, osservati),
         "osservati_del": (osservati or {}).get("acquisito_il", ""),
@@ -84,7 +89,9 @@ def load_push_env() -> dict[str, str]:
     env = {k: os.environ.get(k, "") for k in PUSH_ENV_VARS}
     missing = [k for k, v in env.items() if not v]
     if missing:
-        raise RuntimeError(f"--push richiede variabili d'ambiente mancanti: {', '.join(missing)}")
+        raise RuntimeError(
+            f"--push richiede variabili d'ambiente mancanti: {', '.join(missing)}"
+        )
     return env
 
 
@@ -97,7 +104,8 @@ def push_to_kv(html: str, env: dict[str, str]) -> None:
         f"/storage/kv/namespaces/{KV_NAMESPACE_ID}/bulk"
     )
     r = requests.put(
-        url, json=[{"key": "html", "value": html}],
+        url,
+        json=[{"key": "html", "value": html}],
         headers={"Authorization": f"Bearer {env['CLOUDFLARE_API_TOKEN']}"},
         timeout=60,
     )
@@ -606,7 +614,9 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
 
     path = cs.inputs_path()
     if not path.exists():
-        raise SystemExit(f"Dati di base non trovati: {path} (numeri del BP, fuori da git).")
+        raise SystemExit(
+            f"Dati di base non trovati: {path} (numeri del BP, fuori da git)."
+        )
     inputs = cs.load_inputs(path.read_bytes())
     osservati = cf.salva_osservati(cf.aggiorna()) if aggiorna else cf.carica_osservati()
 
@@ -624,10 +634,16 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Build cruscotto Canone ORTI → INTUR")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    ap.add_argument("--aggiorna", action="store_true",
-                    help="interroga le fonti osservate (BigQuery, sola lettura) prima del build")
-    ap.add_argument("--push", action="store_true",
-                    help="dopo il build, pubblica la pagina nel KV del Worker canone (dietro Access)")
+    ap.add_argument(
+        "--aggiorna",
+        action="store_true",
+        help="interroga le fonti osservate (BigQuery, sola lettura) prima del build",
+    )
+    ap.add_argument(
+        "--push",
+        action="store_true",
+        help="dopo il build, pubblica la pagina nel KV del Worker canone (dietro Access)",
+    )
     args = ap.parse_args()
     run(args.out, args.aggiorna, args.push)
 

@@ -514,7 +514,8 @@ def main():
     parser.add_argument("--verbose", "-v", action="store_true")
     parser.add_argument("--inspect", metavar="FILE", help="Ispeziona file raw ed esci")
     parser.add_argument(
-        "--file", default=None,
+        "--file",
+        default=None,
         help="Single TXT file to ingest (promotion mode — bypasses sync and staging)",
     )
     parser.add_argument(
@@ -532,7 +533,9 @@ def main():
     if args.file:
         if not args.raw_object_id:
             parser.error("--file richiede --raw-object-id (I9)")
-        log_dir = Path(args.datahub) / "meta" / "pipeline" / "logs" if args.datahub else None
+        log_dir = (
+            Path(args.datahub) / "meta" / "pipeline" / "logs" if args.datahub else None
+        )
         logger = setup_logging(log_dir, args.verbose)
         filepath = Path(args.file)
         if not filepath.exists():
@@ -558,7 +561,9 @@ def main():
         return
 
     if not args.datahub or not args.staging:
-        parser.error("--datahub e --staging sono richiesti (oppure usa --file per la modalità single-file)")
+        parser.error(
+            "--datahub e --staging sono richiesti (oppure usa --file per la modalità single-file)"
+        )
 
     datahub = Path(args.datahub)
     staging = Path(args.staging)

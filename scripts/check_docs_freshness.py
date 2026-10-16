@@ -44,7 +44,9 @@ class DocReport:
     subsystem: str = ""
     last_verified: date | None = None
     code_paths: list[str] = field(default_factory=list)
-    stale_paths: list[tuple[str, date]] = field(default_factory=list)  # (path, commit_date)
+    stale_paths: list[tuple[str, date]] = field(
+        default_factory=list
+    )  # (path, commit_date)
     dead_paths: list[str] = field(default_factory=list)
     parse_error: str = ""
 
@@ -180,7 +182,9 @@ def collect_docs() -> list[Path]:
         base = REPO_ROOT / d
         if not base.exists():
             continue
-        out.extend(sorted(p for p in base.glob("*.md") if not p.name.startswith("README")))
+        out.extend(
+            sorted(p for p in base.glob("*.md") if not p.name.startswith("README"))
+        )
     return out
 
 

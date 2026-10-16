@@ -142,9 +142,7 @@ class TestBloccoAEsclusi:
             self._df(), [5, 6], self.FORN, primo_mese_aperto=5
         )
         assert all(r["codice"] != 264 for r in unmapped)
-        assert all(
-            r["codice"] != 264 for righe in per_voce.values() for r in righe
-        )
+        assert all(r["codice"] != 264 for righe in per_voce.values() for r in righe)
         assert len(esclusi) == 1
         assert esclusi[0]["codice"] == 264
         assert esclusi[0]["nome"] == "Panorama Company"  # nome dal CSV

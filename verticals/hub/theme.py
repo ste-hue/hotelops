@@ -17,15 +17,15 @@ from __future__ import annotations
 import streamlit as st
 
 # ── Palette "panoramic horizon" (hex esatti dal brief) ──────────────────────
-NAVY = "#003764"        # deep-sea — anchor, wordmark, heading
-SKY = "#57c1e8"         # sky cyan — la signature wave
-AZURE = "#00a8e1"       # azure — hotel accent, focus
-TEAL = "#00bfd6"        # teal
-GOLD = "#ffd13f"        # sun gold
-CORAL = "#ff7f2f"       # sunset coral — roof terrace
-IVORY = "#fbf9f5"       # limestone bg
-SAND = "#f3eee6"        # warm surface
-SLATE = "#3a4750"       # body text
+NAVY = "#003764"  # deep-sea — anchor, wordmark, heading
+SKY = "#57c1e8"  # sky cyan — la signature wave
+AZURE = "#00a8e1"  # azure — hotel accent, focus
+TEAL = "#00bfd6"  # teal
+GOLD = "#ffd13f"  # sun gold
+CORAL = "#ff7f2f"  # sunset coral — roof terrace
+IVORY = "#fbf9f5"  # limestone bg
+SAND = "#f3eee6"  # warm surface
+SLATE = "#3a4750"  # body text
 
 _CSS = f"""
 <style>

@@ -17,7 +17,9 @@ def test_load_ruleset_reale():
 
 
 def test_match_singolo_banca():
-    out = classify_message("filiale@pec.gruppobper.it", "Estratto conto", [], load_ruleset())
+    out = classify_message(
+        "filiale@pec.gruppobper.it", "Estratto conto", [], load_ruleset()
+    )
     assert out["stato"] == "CLASSIFICATO"
     assert out["primary_category"] == "BANCA"
     assert out["importance"] == "NORMALE"
@@ -35,12 +37,22 @@ def test_multi_match_vince_priorita():
 
 
 def test_pari_priorita_categorie_diverse_ambiguo():
-    rs = _rs([
-        Rule(id="a", priority=50, match={"subject_regex": "x"},
-             assign={"category": "BANCA"}),
-        Rule(id="b", priority=50, match={"subject_regex": "x"},
-             assign={"category": "FISCO"}),
-    ])
+    rs = _rs(
+        [
+            Rule(
+                id="a",
+                priority=50,
+                match={"subject_regex": "x"},
+                assign={"category": "BANCA"},
+            ),
+            Rule(
+                id="b",
+                priority=50,
+                match={"subject_regex": "x"},
+                assign={"category": "FISCO"},
+            ),
+        ]
+    )
     out = classify_message("chiunque@pec.it", "x", [], rs)
     assert out["stato"] == "AMBIGUO"
     assert set(out["matches"]) == {"a", "b"}
@@ -63,8 +75,16 @@ def test_document_type_da_allegato_non_decide_categoria():
 
 
 def test_regex_rotta_errore_classificazione():
-    rs = _rs([Rule(id="rotta", priority=1, match={"subject_regex": "("},
-                   assign={"category": "BANCA"})])
+    rs = _rs(
+        [
+            Rule(
+                id="rotta",
+                priority=1,
+                match={"subject_regex": "("},
+                assign={"category": "BANCA"},
+            )
+        ]
+    )
     out = classify_message("x@pec.it", "s", [], rs)
     assert out["stato"] == "ERRORE_CLASSIFICAZIONE"
 
@@ -75,11 +95,18 @@ def test_riga_classificazione_valida():
     from core.schemas import PecClassificazioneRow, validate_batch
 
     row = {
-        "msgid": "m1", "entity_id": "ORTI", "stato": "CLASSIFICATO",
-        "primary_category": "BANCA", "importance": "NORMALE",
-        "document_type": "ALTRO", "matches": '["banca"]',
-        "ruleset_version": "1.0.0", "classified_at": datetime(2026, 7, 17),
-        "override_source": None, "override_note": None,
-        "hash_riga": "h", "data_caricamento": datetime(2026, 7, 17),
+        "msgid": "m1",
+        "entity_id": "ORTI",
+        "stato": "CLASSIFICATO",
+        "primary_category": "BANCA",
+        "importance": "NORMALE",
+        "document_type": "ALTRO",
+        "matches": '["banca"]',
+        "ruleset_version": "1.0.0",
+        "classified_at": datetime(2026, 7, 17),
+        "override_source": None,
+        "override_note": None,
+        "hash_riga": "h",
+        "data_caricamento": datetime(2026, 7, 17),
     }
     validate_batch([row], PecClassificazioneRow, context="test")

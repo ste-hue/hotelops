@@ -10,15 +10,17 @@ from verticals.condges.cdg_engine import (
 
 def _make_consuntivo():
     """Minimal consuntivo by categoria_ce."""
-    return pd.DataFrame([
-        {"categoria_ce": "Ricavi", "importo": 1_000_000},
-        {"categoria_ce": "Acquisti", "importo": 200_000},
-        {"categoria_ce": "Costi Produttivi", "importo": 150_000},
-        {"categoria_ce": "Costo del Personale", "importo": 250_000},
-        {"categoria_ce": "Costi Commerciali", "importo": 30_000},
-        {"categoria_ce": "Costi Amministrativi", "importo": 150_000},
-        {"categoria_ce": "Oneri Finanziari", "importo": 50_000},
-    ])
+    return pd.DataFrame(
+        [
+            {"categoria_ce": "Ricavi", "importo": 1_000_000},
+            {"categoria_ce": "Acquisti", "importo": 200_000},
+            {"categoria_ce": "Costi Produttivi", "importo": 150_000},
+            {"categoria_ce": "Costo del Personale", "importo": 250_000},
+            {"categoria_ce": "Costi Commerciali", "importo": 30_000},
+            {"categoria_ce": "Costi Amministrativi", "importo": 150_000},
+            {"categoria_ce": "Oneri Finanziari", "importo": 50_000},
+        ]
+    )
 
 
 class TestCECascade:
@@ -71,10 +73,13 @@ class TestCECascade:
     def test_da_definire_riga_esplicita_e_dentro_ebit(self):
         # I conti non mappati (categoria 'Da definire', segno-bilancio: costo>0)
         # NON spariscono: riga esplicita in cascata e inclusi nei costi operativi.
-        df = pd.concat([
-            _make_consuntivo(),
-            pd.DataFrame([{"categoria_ce": "Da definire", "importo": 40_000}]),
-        ], ignore_index=True)
+        df = pd.concat(
+            [
+                _make_consuntivo(),
+                pd.DataFrame([{"categoria_ce": "Da definire", "importo": 40_000}]),
+            ],
+            ignore_index=True,
+        )
         result = compute_ce_cascade(df)
         vals = {r["label"]: r["importo"] for r in result}
         assert vals["Da definire (non mappati)"] == -40_000
@@ -91,26 +96,30 @@ class TestIndicatori:
     def test_ebitda_pct(self):
         ce = _make_consuntivo()
         cascade = compute_ce_cascade(ce)
-        tipo_df = pd.DataFrame([
-            {"tipo_costo": "IP", "importo": 1_000_000},
-            {"tipo_costo": "F", "importo": 400_000},
-            {"tipo_costo": "V", "importo": 200_000},
-            {"tipo_costo": "P", "importo": 250_000},
-            {"tipo_costo": "X", "importo": 50_000},
-        ])
+        tipo_df = pd.DataFrame(
+            [
+                {"tipo_costo": "IP", "importo": 1_000_000},
+                {"tipo_costo": "F", "importo": 400_000},
+                {"tipo_costo": "V", "importo": 200_000},
+                {"tipo_costo": "P", "importo": 250_000},
+                {"tipo_costo": "X", "importo": 50_000},
+            ]
+        )
         result = compute_indicatori(cascade, tipo_df)
         assert result["ebitda_pct"] == 22.0  # EBITDA/Ricavi * 100
 
     def test_bep_fatturato(self):
         ce = _make_consuntivo()
         cascade = compute_ce_cascade(ce)
-        tipo_df = pd.DataFrame([
-            {"tipo_costo": "IP", "importo": 1_000_000},
-            {"tipo_costo": "F", "importo": 400_000},
-            {"tipo_costo": "V", "importo": 200_000},
-            {"tipo_costo": "P", "importo": 250_000},
-            {"tipo_costo": "X", "importo": 50_000},
-        ])
+        tipo_df = pd.DataFrame(
+            [
+                {"tipo_costo": "IP", "importo": 1_000_000},
+                {"tipo_costo": "F", "importo": 400_000},
+                {"tipo_costo": "V", "importo": 200_000},
+                {"tipo_costo": "P", "importo": 250_000},
+                {"tipo_costo": "X", "importo": 50_000},
+            ]
+        )
         result = compute_indicatori(cascade, tipo_df)
         # BEP = Costi Fissi / (1 - Costi Variabili / Ricavi)
         # Fissi = F + P + X = 400k + 250k + 50k = 700k
@@ -121,13 +130,15 @@ class TestIndicatori:
     def test_bep_giorno(self):
         ce = _make_consuntivo()
         cascade = compute_ce_cascade(ce)
-        tipo_df = pd.DataFrame([
-            {"tipo_costo": "IP", "importo": 1_000_000},
-            {"tipo_costo": "F", "importo": 400_000},
-            {"tipo_costo": "V", "importo": 200_000},
-            {"tipo_costo": "P", "importo": 250_000},
-            {"tipo_costo": "X", "importo": 50_000},
-        ])
+        tipo_df = pd.DataFrame(
+            [
+                {"tipo_costo": "IP", "importo": 1_000_000},
+                {"tipo_costo": "F", "importo": 400_000},
+                {"tipo_costo": "V", "importo": 200_000},
+                {"tipo_costo": "P", "importo": 250_000},
+                {"tipo_costo": "X", "importo": 50_000},
+            ]
+        )
         result = compute_indicatori(cascade, tipo_df)
         # BEP giorno = (875k / 1M) * 365 = 319.4
         assert result["bep_giorno"] == 319
@@ -144,7 +155,7 @@ class TestProiezioneAnno:
         assert result == 12_000
 
     def test_zero_ytd(self):
-        result = compute_proiezione_anno(0, "IP", 3, [1]*12)
+        result = compute_proiezione_anno(0, "IP", 3, [1] * 12)
         assert result == 0
 
     def test_no_stagionalita_falls_back_linear(self):

@@ -7,6 +7,7 @@ Coperti → KPI → Range industria → Alert.
 Run: streamlit run verticals/condges/audit_consumi_dashboard.py
 Spec: docs/superpowers/specs/2026-05-21-audit-consumi-fb-direzione-design.md
 """
+
 from __future__ import annotations
 
 import pandas as pd
@@ -40,8 +41,9 @@ def run_query(sql: str) -> pd.DataFrame:
     return get_bq_client().query(sql).to_dataframe()
 
 
-def alert_color(value: float, target_lo: float, target_hi: float,
-                warning_hi: float) -> str:
+def alert_color(
+    value: float, target_lo: float, target_hi: float, warning_hi: float
+) -> str:
     """Ritorna colore semaforo per valore vs range.
     verde se nel target, giallo se warning, rosso se investigate.
     """
@@ -90,23 +92,25 @@ def render_primer() -> None:
     )
 
     st.header("Le 3 fonti dati su BigQuery")
-    fonti = pd.DataFrame([
-        {
-            "Fonte HotelCube (che conosci)": "Produzione Netta Dashboard (Power BI export)",
-            "Tabella BigQuery": "`f_ricavi_fb`",
-            "Cosa contiene": "Ricavi netti per BU×mese×codice (SCBKFBB, BRK*, RISLFOOD, BAR, BAN…)",
-        },
-        {
-            "Fonte HotelCube (che conosci)": "Scarico magazzino HotelCube (Excel Economato)",
-            "Tabella BigQuery": "`f_consumi_economato`",
-            "Cosa contiene": "Cost mensile per reparto×prodotto (BRK, CUCINA, CANTINA, DIPEND, HSK*, MAN*…)",
-        },
-        {
-            "Fonte HotelCube (che conosci)": "Conta coperti (Hoxell / Google Sheet RistoCube)",
-            "Tabella BigQuery": "`f_coperti_giornalieri`",
-            "Cosa contiene": "Coperti giornalieri per BU × tipo_pasto (BRK, LUNCH, DINNER)",
-        },
-    ])
+    fonti = pd.DataFrame(
+        [
+            {
+                "Fonte HotelCube (che conosci)": "Produzione Netta Dashboard (Power BI export)",
+                "Tabella BigQuery": "`f_ricavi_fb`",
+                "Cosa contiene": "Ricavi netti per BU×mese×codice (SCBKFBB, BRK*, RISLFOOD, BAR, BAN…)",
+            },
+            {
+                "Fonte HotelCube (che conosci)": "Scarico magazzino HotelCube (Excel Economato)",
+                "Tabella BigQuery": "`f_consumi_economato`",
+                "Cosa contiene": "Cost mensile per reparto×prodotto (BRK, CUCINA, CANTINA, DIPEND, HSK*, MAN*…)",
+            },
+            {
+                "Fonte HotelCube (che conosci)": "Conta coperti (Hoxell / Google Sheet RistoCube)",
+                "Tabella BigQuery": "`f_coperti_giornalieri`",
+                "Cosa contiene": "Coperti giornalieri per BU × tipo_pasto (BRK, LUNCH, DINNER)",
+            },
+        ]
+    )
     st.dataframe(fonti, hide_index=True, use_container_width=True)
 
     st.header("Mental model: 6 layer canonical")
@@ -135,29 +139,31 @@ coperti). I layer 4-6 li costruiamo noi.
     )
 
     st.header("I 3 vertical in sintesi")
-    sint = pd.DataFrame([
-        {
-            "Vertical": "🥐 B1 BREAKFAST",
-            "Ricavi": "SCBKFBB + BRK* (multi-BU: HOTEL+RES+ANG+CVM)",
-            "Consumi": "reparto BRK",
-            "Coperti": "tipo_pasto=BRK (tutte BU)",
-            "KPI primary": "€/coperto + food cost %",
-        },
-        {
-            "Vertical": "🍽️ B2 RISTORANTE",
-            "Ricavi": "RISLFOOD + RISDFOOD + RISTLUNC + RISTDINN + DINFOOD + LUNBAR + RISBFOOD + BAN + eventi",
-            "Consumi": "reparto CUCINA",
-            "Coperti": "tipo_pasto IN (LUNCH, DINNER)",
-            "KPI primary": "Food cost % (target 25-35%)",
-        },
-        {
-            "Vertical": "🍷 B3 BAR / BEVERAGE",
-            "Ricavi": "BAR + RISLBEVE + RISDBEV + DINBEV + BANB + PROSECCO",
-            "Consumi": "reparto CANTINA",
-            "Coperti": "n/a (bar standalone) o lunch+dinner per drink al pasto",
-            "KPI primary": "Beverage cost % (target 10-30%)",
-        },
-    ])
+    sint = pd.DataFrame(
+        [
+            {
+                "Vertical": "🥐 B1 BREAKFAST",
+                "Ricavi": "SCBKFBB + BRK* (multi-BU: HOTEL+RES+ANG+CVM)",
+                "Consumi": "reparto BRK",
+                "Coperti": "tipo_pasto=BRK (tutte BU)",
+                "KPI primary": "€/coperto + food cost %",
+            },
+            {
+                "Vertical": "🍽️ B2 RISTORANTE",
+                "Ricavi": "RISLFOOD + RISDFOOD + RISTLUNC + RISTDINN + DINFOOD + LUNBAR + RISBFOOD + BAN + eventi",
+                "Consumi": "reparto CUCINA",
+                "Coperti": "tipo_pasto IN (LUNCH, DINNER)",
+                "KPI primary": "Food cost % (target 25-35%)",
+            },
+            {
+                "Vertical": "🍷 B3 BAR / BEVERAGE",
+                "Ricavi": "BAR + RISLBEVE + RISDBEV + DINBEV + BANB + PROSECCO",
+                "Consumi": "reparto CANTINA",
+                "Coperti": "n/a (bar standalone) o lunch+dinner per drink al pasto",
+                "KPI primary": "Beverage cost % (target 10-30%)",
+            },
+        ]
+    )
     st.dataframe(sint, hide_index=True, use_container_width=True)
 
     st.info(
@@ -175,9 +181,7 @@ def render_b1_breakfast() -> None:
     st.header("Layer 1: Ricavi")
     st.caption("Codici inclusi nel bucket breakfast (proposta da confermare)")
 
-    codici_brk_sql = (
-        "'SCBKFBB', 'SCBKFHB', 'BRKADULT', 'BRKBABY', 'BRKEXT', 'BRKEXTC'"
-    )
+    codici_brk_sql = "'SCBKFBB', 'SCBKFHB', 'BRKADULT', 'BRKBABY', 'BRKEXT', 'BRKEXTC'"
     ricavi = run_query(
         f"""
         SELECT codice,
@@ -193,7 +197,9 @@ def render_b1_breakfast() -> None:
     )
     st.dataframe(ricavi, hide_index=True, use_container_width=True)
     ricavi_totale = float(ricavi["netto_2025"].sum())
-    st.metric("Ricavi breakfast totali 2025", f"€ {ricavi_totale:,.0f}".replace(",", "."))
+    st.metric(
+        "Ricavi breakfast totali 2025", f"€ {ricavi_totale:,.0f}".replace(",", ".")
+    )
 
     # ── Layer 2: Consumi ──
     st.header("Layer 2: Consumi")
@@ -242,27 +248,55 @@ def render_b1_breakfast() -> None:
     kpi_fc = cost_totale / ricavi_totale if ricavi_totale else 0
     col1.metric("€ cost/coperto", f"€ {kpi_cost_pax:.2f}")
     col2.metric("€ ricavo/coperto", f"€ {kpi_ricavo_pax:.2f}")
-    col3.metric("Food cost %", f"{kpi_fc*100:.1f}%")
+    col3.metric("Food cost %", f"{kpi_fc * 100:.1f}%")
 
     # ── Layer 5: Range industria ──
     st.header("Layer 5: Range industria — buffet hotel 4*")
-    range_df = pd.DataFrame([
-        {"Indicatore": "€ cost/pax", "Target": "€4-6", "Warning": "€6-8", "Investigate": ">€8 o <€3"},
-        {"Indicatore": "€ ricavo/pax (scorporo)", "Target": "€8-12", "Warning": "€7-8 o €12-15", "Investigate": "<€7 o >€15"},
-        {"Indicatore": "Food cost %", "Target": "30-50%", "Warning": "50-60%", "Investigate": ">60% o <30%"},
-    ])
+    range_df = pd.DataFrame(
+        [
+            {
+                "Indicatore": "€ cost/pax",
+                "Target": "€4-6",
+                "Warning": "€6-8",
+                "Investigate": ">€8 o <€3",
+            },
+            {
+                "Indicatore": "€ ricavo/pax (scorporo)",
+                "Target": "€8-12",
+                "Warning": "€7-8 o €12-15",
+                "Investigate": "<€7 o >€15",
+            },
+            {
+                "Indicatore": "Food cost %",
+                "Target": "30-50%",
+                "Warning": "50-60%",
+                "Investigate": ">60% o <30%",
+            },
+        ]
+    )
     st.dataframe(range_df, hide_index=True, use_container_width=True)
 
     # ── Layer 6: Alert ──
     st.header("Layer 6: Alert vs range")
-    alert_df = pd.DataFrame([
-        {"KPI": "€ cost/pax", "Valore": f"€ {kpi_cost_pax:.2f}",
-         "Status": alert_color(kpi_cost_pax, 4.0, 6.0, 8.0)},
-        {"KPI": "€ ricavo/pax", "Valore": f"€ {kpi_ricavo_pax:.2f}",
-         "Status": alert_color(kpi_ricavo_pax, 8.0, 12.0, 15.0)},
-        {"KPI": "Food cost %", "Valore": f"{kpi_fc*100:.1f}%",
-         "Status": alert_color(kpi_fc*100, 30.0, 50.0, 60.0)},
-    ])
+    alert_df = pd.DataFrame(
+        [
+            {
+                "KPI": "€ cost/pax",
+                "Valore": f"€ {kpi_cost_pax:.2f}",
+                "Status": alert_color(kpi_cost_pax, 4.0, 6.0, 8.0),
+            },
+            {
+                "KPI": "€ ricavo/pax",
+                "Valore": f"€ {kpi_ricavo_pax:.2f}",
+                "Status": alert_color(kpi_ricavo_pax, 8.0, 12.0, 15.0),
+            },
+            {
+                "KPI": "Food cost %",
+                "Valore": f"{kpi_fc * 100:.1f}%",
+                "Status": alert_color(kpi_fc * 100, 30.0, 50.0, 60.0),
+            },
+        ]
+    )
     st.dataframe(alert_df, hide_index=True, use_container_width=True)
     st.caption("🟢 nel target · 🟡 warning · 🔴 investigate")
 
@@ -281,7 +315,10 @@ def render_b1_breakfast() -> None:
     )
     fig = px.bar(
         monthly.melt(id_vars="mese", value_vars=["cost", "ricavo"]),
-        x="mese", y="value", color="variable", barmode="group",
+        x="mese",
+        y="value",
+        color="variable",
+        barmode="group",
         labels={"mese": "Mese 2025", "value": "€", "variable": ""},
         title="Cost vs Ricavo breakfast — 2025 Apr-Oct",
     )
@@ -323,7 +360,9 @@ def render_b2_ristorante() -> None:
     )
     st.dataframe(ricavi, hide_index=True, use_container_width=True)
     ricavi_totale = float(ricavi["netto_2025"].sum())
-    st.metric("Ricavi ristorante totali 2025", f"€ {ricavi_totale:,.0f}".replace(",", "."))
+    st.metric(
+        "Ricavi ristorante totali 2025", f"€ {ricavi_totale:,.0f}".replace(",", ".")
+    )
 
     # ── Layer 2: Consumi ──
     st.header("Layer 2: Consumi reparto CUCINA")
@@ -368,30 +407,46 @@ def render_b2_ristorante() -> None:
     kpi_fc = cost_totale / ricavi_totale if ricavi_totale else 0
     col1.metric("€ cost/coperto", f"€ {kpi_cost_pax:.2f}")
     col2.metric("€ ricavo/coperto", f"€ {kpi_ricavo_pax:.2f}")
-    col3.metric("Food cost %", f"{kpi_fc*100:.1f}%")
+    col3.metric("Food cost %", f"{kpi_fc * 100:.1f}%")
 
     # ── Layer 5: Range industria ──
     st.header("Layer 5: Range industria")
-    range_df = pd.DataFrame([
-        {"Tipo struttura": "🍕 Pizzeria", "Food cost target": "~15%"},
-        {"Tipo struttura": "🍝 Ristorante medio", "Food cost target": "25-35%"},
-        {"Tipo struttura": "⭐⭐⭐ Michelin 3 stelle", "Food cost target": "~38%"},
-        {"Tipo struttura": "🎯 Target Panorama (atteso)", "Food cost target": "25-35%"},
-        {"Tipo struttura": "⚠️ Warning", "Food cost target": ">40%"},
-        {"Tipo struttura": "🚨 Investigate", "Food cost target": ">50-60%"},
-    ])
+    range_df = pd.DataFrame(
+        [
+            {"Tipo struttura": "🍕 Pizzeria", "Food cost target": "~15%"},
+            {"Tipo struttura": "🍝 Ristorante medio", "Food cost target": "25-35%"},
+            {"Tipo struttura": "⭐⭐⭐ Michelin 3 stelle", "Food cost target": "~38%"},
+            {
+                "Tipo struttura": "🎯 Target Panorama (atteso)",
+                "Food cost target": "25-35%",
+            },
+            {"Tipo struttura": "⚠️ Warning", "Food cost target": ">40%"},
+            {"Tipo struttura": "🚨 Investigate", "Food cost target": ">50-60%"},
+        ]
+    )
     st.dataframe(range_df, hide_index=True, use_container_width=True)
 
     # ── Layer 6: Alert ──
     st.header("Layer 6: Alert vs range")
-    alert_df = pd.DataFrame([
-        {"KPI": "Food cost %", "Valore": f"{kpi_fc*100:.1f}%",
-         "Status": alert_color(kpi_fc*100, 25.0, 35.0, 50.0)},
-        {"KPI": "€ cost/coperto", "Valore": f"€ {kpi_cost_pax:.2f}",
-         "Status": "ℹ️ (no range fisso)"},
-        {"KPI": "€ ricavo/coperto", "Valore": f"€ {kpi_ricavo_pax:.2f}",
-         "Status": "ℹ️ (no range fisso)"},
-    ])
+    alert_df = pd.DataFrame(
+        [
+            {
+                "KPI": "Food cost %",
+                "Valore": f"{kpi_fc * 100:.1f}%",
+                "Status": alert_color(kpi_fc * 100, 25.0, 35.0, 50.0),
+            },
+            {
+                "KPI": "€ cost/coperto",
+                "Valore": f"€ {kpi_cost_pax:.2f}",
+                "Status": "ℹ️ (no range fisso)",
+            },
+            {
+                "KPI": "€ ricavo/coperto",
+                "Valore": f"€ {kpi_ricavo_pax:.2f}",
+                "Status": "ℹ️ (no range fisso)",
+            },
+        ]
+    )
     st.dataframe(alert_df, hide_index=True, use_container_width=True)
     st.caption("🟢 nel target · 🟡 warning · 🔴 investigate")
 
@@ -424,7 +479,10 @@ def render_b2_ristorante() -> None:
     )
     fig = px.bar(
         monthly.melt(id_vars="mese", value_vars=["cost", "ricavo"]),
-        x="mese", y="value", color="variable", barmode="group",
+        x="mese",
+        y="value",
+        color="variable",
+        barmode="group",
         labels={"mese": "Mese 2025", "value": "€", "variable": ""},
         title="Cost CUCINA vs Ricavo ristorante — 2025 Apr-Oct",
     )
@@ -467,7 +525,9 @@ def render_b3_bar() -> None:
     )
     st.dataframe(ricavi, hide_index=True, use_container_width=True)
     ricavi_totale = float(ricavi["netto_2025"].sum())
-    st.metric("Ricavi beverage totali 2025", f"€ {ricavi_totale:,.0f}".replace(",", "."))
+    st.metric(
+        "Ricavi beverage totali 2025", f"€ {ricavi_totale:,.0f}".replace(",", ".")
+    )
 
     # ── Layer 2: Consumi ──
     st.header("Layer 2: Consumi reparto CANTINA")
@@ -489,7 +549,9 @@ def render_b3_bar() -> None:
 
     # ── Layer 3: Coperti (proxy) ──
     st.header("Layer 3: Coperti (proxy lunch + dinner)")
-    st.caption("Il drink al pasto è il caso più frequente — usiamo coperti lunch+dinner come proxy")
+    st.caption(
+        "Il drink al pasto è il caso più frequente — usiamo coperti lunch+dinner come proxy"
+    )
     coperti = run_query(
         """
         SELECT anno, tipo_pasto,
@@ -511,26 +573,42 @@ def render_b3_bar() -> None:
     kpi_fc = cost_totale / ricavi_totale if ricavi_totale else 0
     col1.metric("€ cost/coperto (proxy)", f"€ {kpi_cost_pax:.2f}")
     col2.metric("€ ricavo/coperto (proxy)", f"€ {kpi_ricavo_pax:.2f}")
-    col3.metric("Beverage cost %", f"{kpi_fc*100:.1f}%")
+    col3.metric("Beverage cost %", f"{kpi_fc * 100:.1f}%")
 
     # ── Layer 5: Range industria ──
     st.header("Layer 5: Range industria beverage")
-    range_df = pd.DataFrame([
-        {"Tipo": "💧 Beverage basic (acqua, bevande analcoliche)", "Cost target": "10-15%"},
-        {"Tipo": "🍷 Beverage medio (vino, cocktail standard)", "Cost target": "15-25%"},
-        {"Tipo": "🥃 Top-tier (alcolici premium, vini importanti)", "Cost target": "25-30%"},
-        {"Tipo": "🎯 Target Panorama (atteso hotel mix)", "Cost target": "15-25%"},
-        {"Tipo": "⚠️ Warning", "Cost target": ">30%"},
-        {"Tipo": "🚨 Investigate", "Cost target": ">40% o <10%"},
-    ])
+    range_df = pd.DataFrame(
+        [
+            {
+                "Tipo": "💧 Beverage basic (acqua, bevande analcoliche)",
+                "Cost target": "10-15%",
+            },
+            {
+                "Tipo": "🍷 Beverage medio (vino, cocktail standard)",
+                "Cost target": "15-25%",
+            },
+            {
+                "Tipo": "🥃 Top-tier (alcolici premium, vini importanti)",
+                "Cost target": "25-30%",
+            },
+            {"Tipo": "🎯 Target Panorama (atteso hotel mix)", "Cost target": "15-25%"},
+            {"Tipo": "⚠️ Warning", "Cost target": ">30%"},
+            {"Tipo": "🚨 Investigate", "Cost target": ">40% o <10%"},
+        ]
+    )
     st.dataframe(range_df, hide_index=True, use_container_width=True)
 
     # ── Layer 6: Alert ──
     st.header("Layer 6: Alert vs range")
-    alert_df = pd.DataFrame([
-        {"KPI": "Beverage cost %", "Valore": f"{kpi_fc*100:.1f}%",
-         "Status": alert_color(kpi_fc*100, 15.0, 25.0, 40.0)},
-    ])
+    alert_df = pd.DataFrame(
+        [
+            {
+                "KPI": "Beverage cost %",
+                "Valore": f"{kpi_fc * 100:.1f}%",
+                "Status": alert_color(kpi_fc * 100, 15.0, 25.0, 40.0),
+            },
+        ]
+    )
     st.dataframe(alert_df, hide_index=True, use_container_width=True)
     st.caption("🟢 nel target · 🟡 warning · 🔴 investigate")
 
@@ -548,7 +626,9 @@ def render_b3_bar() -> None:
         """
     )
     fig = px.bar(
-        monthly, x="mese", y="cost",
+        monthly,
+        x="mese",
+        y="cost",
         labels={"mese": "Mese 2025", "cost": "Cost CANTINA (€)"},
         title="Cost reparto CANTINA — 2025 Apr-Oct",
     )
@@ -565,57 +645,59 @@ def render_anomalie() -> None:
         "nei dati, ci basta una conferma rapida nel Form."
     )
 
-    anomalie = pd.DataFrame([
-        {
-            "ID": "FYI-1",
-            "Anomalia": "Storni UoM maggio 2025",
-            "Cosa abbiamo notato": "15 righe negative -€166k su BRK/CUCINA/CANTINA in maggio 2025",
-            "La nostra ipotesi": "Confusione kg vs grammi (caffè in grani comprato in kg, consumato in g)",
-            "Implicazione": "Già flaggate is_anomalia, escluse di default dai KPI",
-        },
-        {
-            "ID": "FYI-2",
-            "Anomalia": "BANCHETTI reparto sotto-stimato",
-            "Cosa abbiamo notato": "Cost €1.2k vs Revenue BAN €17k = food cost implicito 7%",
-            "La nostra ipotesi": "Il cibo dei banchetti esce da CUCINA mescolato col ristorante",
-            "Implicazione": "Non separabile a livello mensile, restano aggregati in B2",
-        },
-        {
-            "ID": "FYI-3",
-            "Anomalia": "BAR_HOTEL reparto vuoto",
-            "Cosa abbiamo notato": "7 righe €0 cost vs revenue BAR €76k",
-            "La nostra ipotesi": "Drink bar usa stock CANTINA, no magazzino dedicato",
-            "Implicazione": "B3 unifica BAR_HOTEL+CANTINA come fonte cost",
-        },
-        {
-            "ID": "FYI-4",
-            "Anomalia": "Codici da sospendere",
-            "Cosa abbiamo notato": "17 codici marcati 'da sospendere' nel tuo file `pianodeicontilavoro.xlsx`",
-            "La nostra ipotesi": "Forward-only deprecati, storico mantenuto",
-            "Implicazione": "Filtriamo da default Looker",
-        },
-        {
-            "ID": "FYI-5",
-            "Anomalia": "Codici orfani",
-            "Cosa abbiamo notato": "ACCFCI (Acconto Fuori Campo Iva) €252 non in classe nota",
-            "La nostra ipotesi": "Legacy, va in 07DIV o classe nuova",
-            "Implicazione": "Trattati come '(da mappare)'",
-        },
-        {
-            "ID": "FYI-6",
-            "Anomalia": "Reparti operativi non-F&B",
-            "Cosa abbiamo notato": "DIPEND €22k, HSK* €60k, MAN* €10k, DIREZIONE €13k, DEPERIMENTO €6k, D* dotazioni",
-            "La nostra ipotesi": "Sono costi operativi reali (non food cost), vivono fuori P&L F&B",
-            "Implicazione": "Pagina dashboard separata 'Costi operativi non-F&B'",
-        },
-        {
-            "ID": "FYI-7",
-            "Anomalia": "Carico magazzino stagionale",
-            "Cosa abbiamo notato": "Picco cost BRK luglio €76k, €/coperto oscilla €3.6-€12.5",
-            "La nostra ipotesi": "Acquisti concentrati luglio per servire fino a settembre",
-            "Implicazione": "Lettura trimestrale > mensile per BRK",
-        },
-    ])
+    anomalie = pd.DataFrame(
+        [
+            {
+                "ID": "FYI-1",
+                "Anomalia": "Storni UoM maggio 2025",
+                "Cosa abbiamo notato": "15 righe negative -€166k su BRK/CUCINA/CANTINA in maggio 2025",
+                "La nostra ipotesi": "Confusione kg vs grammi (caffè in grani comprato in kg, consumato in g)",
+                "Implicazione": "Già flaggate is_anomalia, escluse di default dai KPI",
+            },
+            {
+                "ID": "FYI-2",
+                "Anomalia": "BANCHETTI reparto sotto-stimato",
+                "Cosa abbiamo notato": "Cost €1.2k vs Revenue BAN €17k = food cost implicito 7%",
+                "La nostra ipotesi": "Il cibo dei banchetti esce da CUCINA mescolato col ristorante",
+                "Implicazione": "Non separabile a livello mensile, restano aggregati in B2",
+            },
+            {
+                "ID": "FYI-3",
+                "Anomalia": "BAR_HOTEL reparto vuoto",
+                "Cosa abbiamo notato": "7 righe €0 cost vs revenue BAR €76k",
+                "La nostra ipotesi": "Drink bar usa stock CANTINA, no magazzino dedicato",
+                "Implicazione": "B3 unifica BAR_HOTEL+CANTINA come fonte cost",
+            },
+            {
+                "ID": "FYI-4",
+                "Anomalia": "Codici da sospendere",
+                "Cosa abbiamo notato": "17 codici marcati 'da sospendere' nel tuo file `pianodeicontilavoro.xlsx`",
+                "La nostra ipotesi": "Forward-only deprecati, storico mantenuto",
+                "Implicazione": "Filtriamo da default Looker",
+            },
+            {
+                "ID": "FYI-5",
+                "Anomalia": "Codici orfani",
+                "Cosa abbiamo notato": "ACCFCI (Acconto Fuori Campo Iva) €252 non in classe nota",
+                "La nostra ipotesi": "Legacy, va in 07DIV o classe nuova",
+                "Implicazione": "Trattati come '(da mappare)'",
+            },
+            {
+                "ID": "FYI-6",
+                "Anomalia": "Reparti operativi non-F&B",
+                "Cosa abbiamo notato": "DIPEND €22k, HSK* €60k, MAN* €10k, DIREZIONE €13k, DEPERIMENTO €6k, D* dotazioni",
+                "La nostra ipotesi": "Sono costi operativi reali (non food cost), vivono fuori P&L F&B",
+                "Implicazione": "Pagina dashboard separata 'Costi operativi non-F&B'",
+            },
+            {
+                "ID": "FYI-7",
+                "Anomalia": "Carico magazzino stagionale",
+                "Cosa abbiamo notato": "Picco cost BRK luglio €76k, €/coperto oscilla €3.6-€12.5",
+                "La nostra ipotesi": "Acquisti concentrati luglio per servire fino a settembre",
+                "Implicazione": "Lettura trimestrale > mensile per BRK",
+            },
+        ]
+    )
     st.dataframe(anomalie, hide_index=True, use_container_width=True)
 
     st.header("Per la tua valutazione")
@@ -633,15 +715,38 @@ def render_recap() -> None:
     )
 
     st.header("Cosa ti chiediamo nel Form")
-    riepilogo = pd.DataFrame([
-        {"Sezione": "S1 — Breakfast", "Cosa chiediamo": "Conferma codici ricavi + se aggregare BU"},
-        {"Sezione": "S2 — Ristorante", "Cosa chiediamo": "Conferma codici food + dove vanno eventi e RISBFOOD"},
-        {"Sezione": "S3 — Bar/Beverage", "Cosa chiediamo": "Conferma codici drink + se BARHOTEL=BAR"},
-        {"Sezione": "S4 — Coperti mapping", "Cosa chiediamo": "Fonte coperti corretta + clienti vs esterni"},
-        {"Sezione": "S5 — Range operativi", "Cosa chiediamo": "Target tuoi food/beverage cost per Panorama"},
-        {"Sezione": "S6 — Anomalie FYI", "Cosa chiediamo": "Conferma rapida ✓/✗ per le 7 osservazioni"},
-        {"Sezione": "S7 — Catch-all", "Cosa chiediamo": "Cosa manca? Codici da aggiungere?"},
-    ])
+    riepilogo = pd.DataFrame(
+        [
+            {
+                "Sezione": "S1 — Breakfast",
+                "Cosa chiediamo": "Conferma codici ricavi + se aggregare BU",
+            },
+            {
+                "Sezione": "S2 — Ristorante",
+                "Cosa chiediamo": "Conferma codici food + dove vanno eventi e RISBFOOD",
+            },
+            {
+                "Sezione": "S3 — Bar/Beverage",
+                "Cosa chiediamo": "Conferma codici drink + se BARHOTEL=BAR",
+            },
+            {
+                "Sezione": "S4 — Coperti mapping",
+                "Cosa chiediamo": "Fonte coperti corretta + clienti vs esterni",
+            },
+            {
+                "Sezione": "S5 — Range operativi",
+                "Cosa chiediamo": "Target tuoi food/beverage cost per Panorama",
+            },
+            {
+                "Sezione": "S6 — Anomalie FYI",
+                "Cosa chiediamo": "Conferma rapida ✓/✗ per le 7 osservazioni",
+            },
+            {
+                "Sezione": "S7 — Catch-all",
+                "Cosa chiediamo": "Cosa manca? Codici da aggiungere?",
+            },
+        ]
+    )
     st.dataframe(riepilogo, hide_index=True, use_container_width=True)
 
     st.header("👉 Apri il Google Form")

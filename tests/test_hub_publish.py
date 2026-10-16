@@ -26,14 +26,18 @@ def test_export_all_produces_only_meta(tmp_path):
     fake_fresh = {"fb": {"giorni": 12}, "reviews": {"giorni": 3, "media_mese": 8.5}}
     with patch("verticals.hub.freshness.carica_freshness", return_value=fake_fresh):
         from verticals.hub.publish.export import export_all
+
         result = export_all(str(tmp_path), "2026-06-14T00:00:00Z", dry_run=True)
 
-    assert set(result.keys()) == {"_meta"}, f"export_all produced unexpected keys: {set(result.keys())}"
+    assert set(result.keys()) == {"_meta"}, (
+        f"export_all produced unexpected keys: {set(result.keys())}"
+    )
     assert result["_meta"]["surfaces"]["fb"]["giorni"] == 12
     assert result["_meta"]["surfaces"]["reviews"]["media_mese"] == 8.5
 
 
 _SITE = Path(__file__).resolve().parents[1] / "verticals/hub/publish/site"
+
 
 def test_apps_manifest_valid():
     manifest = json.loads((_SITE / "apps.json").read_text(encoding="utf-8"))
@@ -49,6 +53,7 @@ def test_apps_manifest_valid():
         else:
             assert a["url"].startswith("http"), f"external senza url valido: {a}"
 
+
 def test_internal_cards_reference_exported_surfaces():
     # ogni card internal.kpi_from deve essere una surface che _meta.json espone
     fresh = {"fb": {"giorni": 10}, "reviews": {"giorni": 2, "media_mese": 8.1}}
@@ -57,4 +62,6 @@ def test_internal_cards_reference_exported_surfaces():
     manifest = json.loads((_SITE / "apps.json").read_text(encoding="utf-8"))
     for a in manifest["apps"]:
         if a["kind"] == "internal":
-            assert a["kpi_from"] in surfaces, f"{a['id']} punta a surface assente: {a['kpi_from']}"
+            assert a["kpi_from"] in surfaces, (
+                f"{a['id']} punta a surface assente: {a['kpi_from']}"
+            )

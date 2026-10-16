@@ -31,19 +31,44 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 BUDGET_TARGET_EUR = 1_200_000
-PROJECT_DRIVE_PATH = "04_Progetti_Investimenti/Investimenti2026/HPAN25PIANO1_CamerePrimoPiano"
+PROJECT_DRIVE_PATH = (
+    "04_Progetti_Investimenti/Investimenti2026/HPAN25PIANO1_CamerePrimoPiano"
+)
 RCLONE_REMOTE = "mywork"
 
 F_TO_BUDGET_MACRO = {
-    "F001": "EDILE", "F008": "EDILE", "F019": "EDILE", "F024": "EDILE", "F022": "EDILE",
-    "F025": "ELETTRICO", "F033": "ELETTRICO",
-    "F027": "IMPIANTI", "F028": "IMPIANTI", "F009": "IMPIANTI",
-    "F003": "SPESE TECNICHE", "F013": "SPESE TECNICHE", "F018": "SPESE TECNICHE",
-    "F021": "SPESE TECNICHE", "F017": "SPESE TECNICHE", "F032": "SPESE TECNICHE",
-    "F029": "INFISSI", "F026": "INFISSI", "F023": "INFISSI", "F012": "INFISSI",
-    "F002": "ARREDI", "F004": "ARREDI", "F005": "ARREDI", "F006": "ARREDI",
-    "F007": "ARREDI", "F010": "ARREDI", "F011": "ARREDI", "F014": "ARREDI",
-    "F015": "ARREDI", "F016": "ARREDI", "F020": "ARREDI", "F030": "ARREDI",
+    "F001": "EDILE",
+    "F008": "EDILE",
+    "F019": "EDILE",
+    "F024": "EDILE",
+    "F022": "EDILE",
+    "F025": "ELETTRICO",
+    "F033": "ELETTRICO",
+    "F027": "IMPIANTI",
+    "F028": "IMPIANTI",
+    "F009": "IMPIANTI",
+    "F003": "SPESE TECNICHE",
+    "F013": "SPESE TECNICHE",
+    "F018": "SPESE TECNICHE",
+    "F021": "SPESE TECNICHE",
+    "F017": "SPESE TECNICHE",
+    "F032": "SPESE TECNICHE",
+    "F029": "INFISSI",
+    "F026": "INFISSI",
+    "F023": "INFISSI",
+    "F012": "INFISSI",
+    "F002": "ARREDI",
+    "F004": "ARREDI",
+    "F005": "ARREDI",
+    "F006": "ARREDI",
+    "F007": "ARREDI",
+    "F010": "ARREDI",
+    "F011": "ARREDI",
+    "F014": "ARREDI",
+    "F015": "ARREDI",
+    "F016": "ARREDI",
+    "F020": "ARREDI",
+    "F030": "ARREDI",
     "F031": "ARREDI",
 }
 
@@ -59,7 +84,11 @@ NOISE_KEYWORDS = re.compile(
 
 def normalize(s: str) -> str:
     s = (s or "").upper()
-    s = re.sub(r"\b(S\.?\s*R\.?\s*L\.?|S\.?\s*P\.?\s*A\.?|SOCIO\s*UNICO|AZIONISTA\s*UNICO|SRL|SPA|SAS|SNC|GROUP)\b", " ", s)
+    s = re.sub(
+        r"\b(S\.?\s*R\.?\s*L\.?|S\.?\s*P\.?\s*A\.?|SOCIO\s*UNICO|AZIONISTA\s*UNICO|SRL|SPA|SAS|SNC|GROUP)\b",
+        " ",
+        s,
+    )
     s = re.sub(r"[^\w\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
@@ -76,7 +105,18 @@ def build_fuzzy_map() -> dict[str, str]:
         if compact and compact != rs:
             out.setdefault(compact, cod)
         for tok in rs.split():
-            if len(tok) >= 4 and tok not in {"SRL", "SPA", "SAS", "GROUP", "COSTRUZIONI", "TAPPEZZERIA", "GIUSEPPE", "ITALIA", "S.P.A", "PIASTRELLISTI"}:
+            if len(tok) >= 4 and tok not in {
+                "SRL",
+                "SPA",
+                "SAS",
+                "GROUP",
+                "COSTRUZIONI",
+                "TAPPEZZERIA",
+                "GIUSEPPE",
+                "ITALIA",
+                "S.P.A",
+                "PIASTRELLISTI",
+            }:
                 out.setdefault(tok, cod)
     return out
 
@@ -108,7 +148,9 @@ def folder_url(folder_id: str) -> str:
     return f"https://drive.google.com/drive/folders/{folder_id}"
 
 
-def rclone_lsjson(remote_path: str, recursive: bool = False, dirs_only: bool = False) -> list[dict]:
+def rclone_lsjson(
+    remote_path: str, recursive: bool = False, dirs_only: bool = False
+) -> list[dict]:
     cmd = ["rclone", "lsjson", f"{RCLONE_REMOTE}:{remote_path}"]
     if recursive:
         cmd.append("-R")
@@ -181,12 +223,14 @@ def load_xlsx_data(xlsx: Path) -> dict:
                 if isinstance(v, (int, float)) and v > 0:
                     imp = float(v)
                     break
-        fatture_xlsx[cod].append({
-            "fornitore_name": row[1] or "",
-            "numero": row[4],
-            "data": row[5],
-            "importo_eur": imp,
-        })
+        fatture_xlsx[cod].append(
+            {
+                "fornitore_name": row[1] or "",
+                "numero": row[4],
+                "data": row[5],
+                "importo_eur": imp,
+            }
+        )
 
     preventivi_xlsx: dict[str, list[dict]] = defaultdict(list)
     ws = wb["Preventivi"]
@@ -202,13 +246,15 @@ def load_xlsx_data(xlsx: Path) -> dict:
         cod = str(row[2]).strip() if row[2] else ""
         if not cod.startswith("F"):
             continue
-        preventivi_xlsx[cod].append({
-            "fornitore_name": row[3] or "",
-            "voce": row[4] or "",
-            "numero": row[5] or "",
-            "data": row[6],
-            "importo_eur": parse_importo(row[7]),
-        })
+        preventivi_xlsx[cod].append(
+            {
+                "fornitore_name": row[3] or "",
+                "voce": row[4] or "",
+                "numero": row[5] or "",
+                "data": row[6],
+                "importo_eur": parse_importo(row[7]),
+            }
+        )
 
     return {
         "fornitori": fornitori,
@@ -228,8 +274,11 @@ def load_classifier_by_filename(classifier_csv: Path | None) -> dict[str, dict]:
     return out
 
 
-def scan_drive(drive_index_json: Path, f_folders_json: Path,
-               classifier_by_name: dict[str, dict] | None = None) -> tuple[list[dict], dict[str, str]]:
+def scan_drive(
+    drive_index_json: Path,
+    f_folders_json: Path,
+    classifier_by_name: dict[str, dict] | None = None,
+) -> tuple[list[dict], dict[str, str]]:
     """Return (documents list, F-folder ID map). Includes ALL files (canonical + mining)."""
     files = json.loads(drive_index_json.read_text())
     classifier_by_name = classifier_by_name or {}
@@ -286,7 +335,9 @@ def scan_drive(drive_index_json: Path, f_folders_json: Path,
                 continue
             c = classifier_by_name.get(name)
             if c:
-                cat = c.get("category_final") or c.get("stage2") or c.get("stage1") or "?"
+                cat = (
+                    c.get("category_final") or c.get("stage2") or c.get("stage1") or "?"
+                )
             else:
                 cat = "MINING_UNCLASSIFIED"
             # FILTER mining output: only keep CapEx-relevant categories
@@ -320,23 +371,27 @@ def scan_drive(drive_index_json: Path, f_folders_json: Path,
             if importo > 500_000:
                 importo = 0.0  # noise cap
 
-        docs.append({
-            "path": path,
-            "name": name,
-            "size_kb": f["Size"] // 1024,
-            "drive_id": f["ID"],
-            "drive_url": drive_url(f["ID"]),
-            "category": cat,
-            "fcode": fcode or "",
-            "source": source,
-            "fornitore_extracted": forn,
-            "importo_extracted": importo,
-        })
+        docs.append(
+            {
+                "path": path,
+                "name": name,
+                "size_kb": f["Size"] // 1024,
+                "drive_id": f["ID"],
+                "drive_url": drive_url(f["ID"]),
+                "category": cat,
+                "fcode": fcode or "",
+                "source": source,
+                "fornitore_extracted": forn,
+                "importo_extracted": importo,
+            }
+        )
 
     return docs, f_folders
 
 
-def integrate_classifier(classifier_csv: Path, fmap: dict[str, str]) -> tuple[list[dict], list[dict]]:
+def integrate_classifier(
+    classifier_csv: Path, fmap: dict[str, str]
+) -> tuple[list[dict], list[dict]]:
     """Returns (matched, unmatched) candidates from mining classifier."""
     matched, unmatched = [], []
     if not classifier_csv.exists():
@@ -402,8 +457,15 @@ def load_prev_importi(out_path: Path) -> dict[str, float]:
         return {}
 
 
-def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], f_folders: dict[str, str],
-               candidates_matched: list[dict], candidates_unmatched: list[dict]):
+def write_xlsx(
+    out_path: Path,
+    source_xlsx: Path,
+    data: dict,
+    docs: list[dict],
+    f_folders: dict[str, str],
+    candidates_matched: list[dict],
+    candidates_unmatched: list[dict],
+):
     """Build clean v5 tracking xlsx with ONLY 3 sheets: Summary, Tracking_Fornitori, Documents.
     Importi from prev tracking (if exists) take precedence over source xlsx for user-edit preservation."""
     wb = Workbook()
@@ -417,8 +479,12 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
     hdr_font = Font(bold=True, color="FFFFFF")
     hdr_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
     money_fmt = '€#,##0;[Red]-€#,##0;"—"'
-    border = Border(left=Side(style="thin", color="BFBFBF"), right=Side(style="thin", color="BFBFBF"),
-                    top=Side(style="thin", color="BFBFBF"), bottom=Side(style="thin", color="BFBFBF"))
+    border = Border(
+        left=Side(style="thin", color="BFBFBF"),
+        right=Side(style="thin", color="BFBFBF"),
+        top=Side(style="thin", color="BFBFBF"),
+        bottom=Side(style="thin", color="BFBFBF"),
+    )
     link_font = Font(color="0563C1", underline="single")
 
     def write_header(ws, headers, row=1):
@@ -430,10 +496,18 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
             c.border = border
 
     # Build inherited importi from xlsx (one-time migration) → map (cod, filename_match) → importo
-    importi_xlsx_fatt = {(p["cod_interno"] if False else cod, str(p.get("numero", "")).strip()): p["importo_eur"]
-                         for cod, lst in data["fatture_xlsx"].items() for p in lst}
-    importi_xlsx_prev = {(cod, str(p.get("numero", "")).strip()): p["importo_eur"]
-                         for cod, lst in data["preventivi_xlsx"].items() for p in lst}
+    importi_xlsx_fatt = {
+        (p["cod_interno"] if False else cod, str(p.get("numero", "")).strip()): p[
+            "importo_eur"
+        ]
+        for cod, lst in data["fatture_xlsx"].items()
+        for p in lst
+    }
+    importi_xlsx_prev = {
+        (cod, str(p.get("numero", "")).strip()): p["importo_eur"]
+        for cod, lst in data["preventivi_xlsx"].items()
+        for p in lst
+    }
 
     def lookup_importo(d: dict) -> tuple[float, str]:
         """Return (importo, source). Priority: prev tracking (user edit) > xlsx Dati Fatture/Preventivi > 0."""
@@ -454,13 +528,28 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
 
     # ── Sheet 1: Tracking_Fornitori (filesystem-driven, no double count) ────
     ws = wb.create_sheet("Tracking_Fornitori", 0)
-    write_header(ws, [
-        "Cod", "Ragione Sociale", "Macro", "Scope",
-        "# Prev", "€ Prev", "# Contr", "€ Contr", "# Fatt", "€ Fatt", "Totale €",
-        "Status", "Cartella F* (Drive)",
-    ])
+    write_header(
+        ws,
+        [
+            "Cod",
+            "Ragione Sociale",
+            "Macro",
+            "Scope",
+            "# Prev",
+            "€ Prev",
+            "# Contr",
+            "€ Contr",
+            "# Fatt",
+            "€ Fatt",
+            "Totale €",
+            "Status",
+            "Cartella F* (Drive)",
+        ],
+    )
 
-    docs_by_fcode: dict[str, dict[str, list]] = defaultdict(lambda: {"PREVENTIVO": [], "CONTRATTO": [], "FATTURA": []})
+    docs_by_fcode: dict[str, dict[str, list]] = defaultdict(
+        lambda: {"PREVENTIVO": [], "CONTRATTO": [], "FATTURA": []}
+    )
     for d in docs:
         if d["fcode"] and d["category"] in ("PREVENTIVO", "CONTRATTO", "FATTURA"):
             docs_by_fcode[d["fcode"]][d["category"]].append(d)
@@ -478,15 +567,25 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
         contrs = docs_by_fcode[cod]["CONTRATTO"]
         fatts = docs_by_fcode[cod]["FATTURA"]
         # importi: prefer user-edits in Documents (sum prev_importi where match), fallback to xlsx aggregated per F-code
-        user_edit_prev = sum(d["importo_eur"] for d in prevs if d["importo_eur"] > 0 and d["importo_source"] == "user-edit (preserved)")
-        user_edit_fatt = sum(d["importo_eur"] for d in fatts if d["importo_eur"] > 0 and d["importo_source"] == "user-edit (preserved)")
+        user_edit_prev = sum(
+            d["importo_eur"]
+            for d in prevs
+            if d["importo_eur"] > 0 and d["importo_source"] == "user-edit (preserved)"
+        )
+        user_edit_fatt = sum(
+            d["importo_eur"]
+            for d in fatts
+            if d["importo_eur"] > 0 and d["importo_source"] == "user-edit (preserved)"
+        )
         xlsx_prev = sum(p["importo_eur"] for p in data["preventivi_xlsx"].get(cod, []))
         xlsx_fatt = sum(p["importo_eur"] for p in data["fatture_xlsx"].get(cod, []))
         eur_prev = user_edit_prev if user_edit_prev > 0 else xlsx_prev
         eur_contr = 0.0  # contracts rarely have xlsx importi; could add later
         eur_fatt = user_edit_fatt if user_edit_fatt > 0 else xlsx_fatt
         eur_tot = eur_prev + eur_contr + eur_fatt
-        grand_prev += eur_prev; grand_contr += eur_contr; grand_fatt += eur_fatt
+        grand_prev += eur_prev
+        grand_contr += eur_contr
+        grand_fatt += eur_fatt
 
         # Status filesystem-driven + importo-aware
         has_imp = len(prevs) + len(contrs) > 0
@@ -495,7 +594,7 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
         if has_imp and has_comp and has_euros:
             status = "COMPLETO"
         elif has_comp and not has_euros:
-            status = "FATTURE SENZA €"   # docs ci sono ma manca importo
+            status = "FATTURE SENZA €"  # docs ci sono ma manca importo
         elif has_comp:
             status = "SOLO COMPETENZA"
         elif has_imp:
@@ -508,12 +607,16 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
         ws.cell(row=row_idx, column=3, value=macro)
         ws.cell(row=row_idx, column=4, value=f["scope"])
         ws.cell(row=row_idx, column=5, value=len(prevs))
-        c = ws.cell(row=row_idx, column=6, value=eur_prev if eur_prev else None); c.number_format = money_fmt
+        c = ws.cell(row=row_idx, column=6, value=eur_prev if eur_prev else None)
+        c.number_format = money_fmt
         ws.cell(row=row_idx, column=7, value=len(contrs))
-        c = ws.cell(row=row_idx, column=8, value=eur_contr if eur_contr else None); c.number_format = money_fmt
+        c = ws.cell(row=row_idx, column=8, value=eur_contr if eur_contr else None)
+        c.number_format = money_fmt
         ws.cell(row=row_idx, column=9, value=len(fatts))
-        c = ws.cell(row=row_idx, column=10, value=eur_fatt if eur_fatt else None); c.number_format = money_fmt
-        c = ws.cell(row=row_idx, column=11, value=eur_tot if eur_tot else None); c.number_format = money_fmt
+        c = ws.cell(row=row_idx, column=10, value=eur_fatt if eur_fatt else None)
+        c.number_format = money_fmt
+        c = ws.cell(row=row_idx, column=11, value=eur_tot if eur_tot else None)
+        c.number_format = money_fmt
         ws.cell(row=row_idx, column=12, value=status)
         if cod in f_folders:
             c = ws.cell(row=row_idx, column=13, value="Apri →")
@@ -525,10 +628,18 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
 
     # Totals
     ws.cell(row=row_idx, column=1, value="TOTALE").font = Font(bold=True)
-    c = ws.cell(row=row_idx, column=6, value=grand_prev); c.number_format = money_fmt; c.font = Font(bold=True)
-    c = ws.cell(row=row_idx, column=8, value=grand_contr); c.number_format = money_fmt; c.font = Font(bold=True)
-    c = ws.cell(row=row_idx, column=10, value=grand_fatt); c.number_format = money_fmt; c.font = Font(bold=True)
-    c = ws.cell(row=row_idx, column=11, value=grand_prev + grand_contr + grand_fatt); c.number_format = money_fmt; c.font = Font(bold=True)
+    c = ws.cell(row=row_idx, column=6, value=grand_prev)
+    c.number_format = money_fmt
+    c.font = Font(bold=True)
+    c = ws.cell(row=row_idx, column=8, value=grand_contr)
+    c.number_format = money_fmt
+    c.font = Font(bold=True)
+    c = ws.cell(row=row_idx, column=10, value=grand_fatt)
+    c.number_format = money_fmt
+    c.font = Font(bold=True)
+    c = ws.cell(row=row_idx, column=11, value=grand_prev + grand_contr + grand_fatt)
+    c.number_format = money_fmt
+    c.font = Font(bold=True)
 
     # backward-compat for Summary aggregations below
     tot_prev = grand_prev + grand_contr  # IMPEGNO = preventivi + contratti
@@ -540,10 +651,20 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
 
     # ── Sheet 2: Documents ──────────────────────────────────────────────────
     ws_doc = wb.create_sheet("Documents", 1)
-    write_header(ws_doc, [
-        "Cod", "Categoria", "Source", "Path Drive", "Nome file", "Size KB",
-        "Fornitore estratto", "€ importo", "Link Drive",
-    ])
+    write_header(
+        ws_doc,
+        [
+            "Cod",
+            "Categoria",
+            "Source",
+            "Path Drive",
+            "Nome file",
+            "Size KB",
+            "Fornitore estratto",
+            "€ importo",
+            "Link Drive",
+        ],
+    )
     r = 2
     # xlsx fatture (authoritative for importi, no Drive link since per-record)
     for cod, lst in data["fatture_xlsx"].items():
@@ -552,7 +673,11 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
             ws_doc.cell(row=r, column=2, value="FATTURA (xlsx)")
             ws_doc.cell(row=r, column=3, value="Controllo.xlsx")
             ws_doc.cell(row=r, column=4, value="Dati Fatture sheet")
-            ws_doc.cell(row=r, column=5, value=f"FT {item.get('numero', '?')} del {item.get('data', '?')}")
+            ws_doc.cell(
+                row=r,
+                column=5,
+                value=f"FT {item.get('numero', '?')} del {item.get('data', '?')}",
+            )
             ws_doc.cell(row=r, column=7, value=item.get("fornitore_name", ""))
             c = ws_doc.cell(row=r, column=8, value=item["importo_eur"])
             c.number_format = money_fmt
@@ -565,7 +690,11 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
             ws_doc.cell(row=r, column=2, value="PREVENTIVO (xlsx)")
             ws_doc.cell(row=r, column=3, value="Controllo.xlsx")
             ws_doc.cell(row=r, column=4, value="Preventivi sheet")
-            ws_doc.cell(row=r, column=5, value=f"Prev {item.get('numero', '')} del {item.get('data', '')}")
+            ws_doc.cell(
+                row=r,
+                column=5,
+                value=f"Prev {item.get('numero', '')} del {item.get('data', '')}",
+            )
             ws_doc.cell(row=r, column=7, value=item.get("fornitore_name", ""))
             c = ws_doc.cell(row=r, column=8, value=item["importo_eur"])
             c.number_format = money_fmt
@@ -573,7 +702,9 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
                 ws_doc.cell(row=r, column=col).border = border
             r += 1
     # All Drive files (canonical + mining), each with clickable link
-    for d in sorted(docs, key=lambda x: (x["source"], x["fcode"] or "ZZZ", x["category"], x["path"])):
+    for d in sorted(
+        docs, key=lambda x: (x["source"], x["fcode"] or "ZZZ", x["category"], x["path"])
+    ):
         ws_doc.cell(row=r, column=1, value=d["fcode"] or "—")
         ws_doc.cell(row=r, column=2, value=d["category"])
         ws_doc.cell(row=r, column=3, value=d["source"])
@@ -624,11 +755,17 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
 
     ws_s["A11"] = "Per macro budget (importi da Documents):"
     ws_s["A11"].font = Font(bold=True)
-    macro_agg: dict[str, dict[str, float]] = defaultdict(lambda: {"prev": 0.0, "fatt": 0.0})
+    macro_agg: dict[str, dict[str, float]] = defaultdict(
+        lambda: {"prev": 0.0, "fatt": 0.0}
+    )
     for cod in fornitori:
         macro = F_TO_BUDGET_MACRO.get(cod, "?")
-        macro_agg[macro]["prev"] += sum(d["importo_eur"] for d in docs_by_fcode[cod]["PREVENTIVO"]) + sum(d["importo_eur"] for d in docs_by_fcode[cod]["CONTRATTO"])
-        macro_agg[macro]["fatt"] += sum(d["importo_eur"] for d in docs_by_fcode[cod]["FATTURA"])
+        macro_agg[macro]["prev"] += sum(
+            d["importo_eur"] for d in docs_by_fcode[cod]["PREVENTIVO"]
+        ) + sum(d["importo_eur"] for d in docs_by_fcode[cod]["CONTRATTO"])
+        macro_agg[macro]["fatt"] += sum(
+            d["importo_eur"] for d in docs_by_fcode[cod]["FATTURA"]
+        )
 
     ws_s["A12"] = "Macro"
     ws_s["B12"] = "€ IMPEGNO"
@@ -639,8 +776,10 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
     r = 13
     for macro in sorted(macro_agg.keys()):
         ws_s.cell(row=r, column=1, value=macro)
-        c = ws_s.cell(row=r, column=2, value=macro_agg[macro]["prev"]); c.number_format = money_fmt
-        c = ws_s.cell(row=r, column=3, value=macro_agg[macro]["fatt"]); c.number_format = money_fmt
+        c = ws_s.cell(row=r, column=2, value=macro_agg[macro]["prev"])
+        c.number_format = money_fmt
+        c = ws_s.cell(row=r, column=3, value=macro_agg[macro]["fatt"])
+        c.number_format = money_fmt
         r += 1
 
     # Compute scoperti list for Summary teaser + dedicated sheet
@@ -652,16 +791,26 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
         and not docs_by_fcode[cod]["CONTRATTO"]
         and not docs_by_fcode[cod]["FATTURA"]
     ]
-    ws_s["A" + str(r + 2)] = f"Fornitori SCOPERTI: {len(scoperti)} — vedi foglio Scoperti per dettaglio"
+    ws_s["A" + str(r + 2)] = (
+        f"Fornitori SCOPERTI: {len(scoperti)} — vedi foglio Scoperti per dettaglio"
+    )
     ws_s["A" + str(r + 2)].font = Font(bold=True)
     ws_s["A" + str(r + 3)] = ", ".join(scoperti)
 
     # ── Sheet 4: Scoperti (dedicato per follow-up uno-per-uno) ──────────────
     ws_sc = wb.create_sheet("Scoperti", 3)
-    write_header(ws_sc, [
-        "Cod", "Ragione Sociale", "Macro", "Scope", "Mappa dice atteso?",
-        "Cartella F* (Drive)", "Azione",
-    ])
+    write_header(
+        ws_sc,
+        [
+            "Cod",
+            "Ragione Sociale",
+            "Macro",
+            "Scope",
+            "Mappa dice atteso?",
+            "Cartella F* (Drive)",
+            "Azione",
+        ],
+    )
     rr = 2
     # known "expected" per mappa tesoro: hardcoded summary
     mappa_atteso = {
@@ -691,7 +840,9 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
             c = ws_sc.cell(row=rr, column=6, value="Apri →")
             c.hyperlink = folder_url(f_folders[cod])
             c.font = link_font
-        ws_sc.cell(row=rr, column=7, value="Verificare con gm/amministrazione: c'è doc o no?")
+        ws_sc.cell(
+            row=rr, column=7, value="Verificare con gm/amministrazione: c'è doc o no?"
+        )
         for col in range(1, 8):
             ws_sc.cell(row=rr, column=col).border = border
         rr += 1
@@ -708,29 +859,57 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--xlsx", required=True, type=Path, help="Controllo.xlsx (read-only source)")
-    ap.add_argument("--drive-index", required=True, type=Path, help="rclone lsjson -R output (files)")
-    ap.add_argument("--f-folders", required=True, type=Path, help="rclone lsjson --dirs-only of 07_fornitori/")
-    ap.add_argument("--classifier-csv", type=Path, help="Optional: output of classify_attachments.py")
-    ap.add_argument("--output", required=True, type=Path, help="Output tracking xlsx path")
+    ap.add_argument(
+        "--xlsx", required=True, type=Path, help="Controllo.xlsx (read-only source)"
+    )
+    ap.add_argument(
+        "--drive-index",
+        required=True,
+        type=Path,
+        help="rclone lsjson -R output (files)",
+    )
+    ap.add_argument(
+        "--f-folders",
+        required=True,
+        type=Path,
+        help="rclone lsjson --dirs-only of 07_fornitori/",
+    )
+    ap.add_argument(
+        "--classifier-csv",
+        type=Path,
+        help="Optional: output of classify_attachments.py",
+    )
+    ap.add_argument(
+        "--output", required=True, type=Path, help="Output tracking xlsx path"
+    )
     args = ap.parse_args()
 
     data = load_xlsx_data(args.xlsx)
-    print(f"Loaded: {len(data['fornitori'])} fornitori, "
-          f"{sum(len(v) for v in data['fatture_xlsx'].values())} fatture, "
-          f"{sum(len(v) for v in data['preventivi_xlsx'].values())} preventivi (xlsx)")
+    print(
+        f"Loaded: {len(data['fornitori'])} fornitori, "
+        f"{sum(len(v) for v in data['fatture_xlsx'].values())} fatture, "
+        f"{sum(len(v) for v in data['preventivi_xlsx'].values())} preventivi (xlsx)"
+    )
 
-    classifier_by_name = load_classifier_by_filename(args.classifier_csv) if args.classifier_csv else {}
+    classifier_by_name = (
+        load_classifier_by_filename(args.classifier_csv) if args.classifier_csv else {}
+    )
     docs, f_folders = scan_drive(args.drive_index, args.f_folders, classifier_by_name)
-    print(f"Drive: {len(docs)} documenti (incl. mining run), {len(f_folders)} F-folder IDs")
+    print(
+        f"Drive: {len(docs)} documenti (incl. mining run), {len(f_folders)} F-folder IDs"
+    )
 
     matched, unmatched = [], []
     if args.classifier_csv and args.classifier_csv.exists():
         fmap = build_fuzzy_map()
         matched, unmatched = integrate_classifier(args.classifier_csv, fmap)
-        print(f"Classifier: {len(matched)} matched + {len(unmatched)} unmatched (after noise filter)")
+        print(
+            f"Classifier: {len(matched)} matched + {len(unmatched)} unmatched (after noise filter)"
+        )
 
-    tot_p, tot_f, mc_eur, gap, n_scoperti = write_xlsx(args.output, args.xlsx, data, docs, f_folders, matched, unmatched)
+    tot_p, tot_f, mc_eur, gap, n_scoperti = write_xlsx(
+        args.output, args.xlsx, data, docs, f_folders, matched, unmatched
+    )
     print(f"\nWrote: {args.output}")
     print(f"  IMPEGNO (xlsx):              €{tot_p:>11,.0f}")
     print(f"  COMPETENZA (xlsx):           €{tot_f:>11,.0f}")

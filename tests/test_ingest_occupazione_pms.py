@@ -5,8 +5,21 @@ from pathlib import Path
 import openpyxl
 import pytest
 
-HEADER = ["Data", "Cam. Totali", "OOO", "Cam. Vendibili", "Cam. Occupate", "Cam. Day Use",
-          "Adulti", "Ragazzi", "Bambini", "ARB", "Infant", "Pax Day Use", "Importo"]
+HEADER = [
+    "Data",
+    "Cam. Totali",
+    "OOO",
+    "Cam. Vendibili",
+    "Cam. Occupate",
+    "Cam. Day Use",
+    "Adulti",
+    "Ragazzi",
+    "Bambini",
+    "ARB",
+    "Infant",
+    "Pax Day Use",
+    "Importo",
+]
 
 
 def _make_xlsx(tmp_path: Path, footer: str) -> Path:
@@ -24,7 +37,9 @@ def _make_xlsx(tmp_path: Path, footer: str) -> Path:
 def test_footer_positivo_da_bu(tmp_path):
     from ingest.flussi.ingest_occupazione_pms import detect_bu_from_footer
 
-    path = _make_xlsx(tmp_path, "Applied filters:\nCodiceHotel is PANORAMAHT\nAnno is 2026")
+    path = _make_xlsx(
+        tmp_path, "Applied filters:\nCodiceHotel is PANORAMAHT\nAnno is 2026"
+    )
     assert detect_bu_from_footer(path) == "HOTEL"
 
 
@@ -44,6 +59,8 @@ def test_footer_in_negazione_ambiguo_esplode(tmp_path):
     # Esclusa una sola struttura su tre: il complemento non è univoco → mai default silenzioso.
     from ingest.flussi.ingest_occupazione_pms import detect_bu_from_footer
 
-    path = _make_xlsx(tmp_path, "Applied filters:\nCodiceHotel is not PANORAMAHT\nAnno is 2026")
+    path = _make_xlsx(
+        tmp_path, "Applied filters:\nCodiceHotel is not PANORAMAHT\nAnno is 2026"
+    )
     with pytest.raises(ValueError, match="ambigu"):
         detect_bu_from_footer(path)

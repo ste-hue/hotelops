@@ -65,7 +65,11 @@ def _cmd_summary(args):
 def _cmd_scrape(args):
     """Trigger manual scrape. Watermark-gated pipeline."""
     from core.pipeline_run import PipelineRun
-    from verticals.reviews.scrape import scrape_platform, scrape_all, MAX_REVIEWS_PER_PROPERTY
+    from verticals.reviews.scrape import (
+        scrape_platform,
+        scrape_all,
+        MAX_REVIEWS_PER_PROPERTY,
+    )
     from verticals.reviews.ingest import (
         normalize_items,
         dedup_reviews,

@@ -23,7 +23,12 @@ import streamlit as st
 from verticals.condges.bq_data import load_bva, load_consuntivo, load_voci
 from verticals.condges.cashflow import project_cashflow
 from verticals.condges.export_excel import generate_tesoreria_excel
-from verticals.condges.parse_pf import PFData, ScadenzarioData, parse_pf, parse_scadenzario
+from verticals.condges.parse_pf import (
+    PFData,
+    ScadenzarioData,
+    parse_pf,
+    parse_scadenzario,
+)
 from verticals.condges.scadenze_parse import (
     parse_scadenze,
     partite_df_to_scadenzario_data,
@@ -38,8 +43,18 @@ from verticals.condges.scadenzario_excel import parse_sintetica_scadenze
 st.set_page_config(page_title="Tesoreria", layout="wide")
 
 MESI_NOMI = [
-    "Gen", "Feb", "Mar", "Apr", "Mag", "Giu",
-    "Lug", "Ago", "Set", "Ott", "Nov", "Dic",
+    "Gen",
+    "Feb",
+    "Mar",
+    "Apr",
+    "Mag",
+    "Giu",
+    "Lug",
+    "Ago",
+    "Set",
+    "Ott",
+    "Nov",
+    "Dic",
 ]
 
 BANKS_BY_SOCIETA: dict[str, list[str]] = {
@@ -58,6 +73,7 @@ SCAD_TIPO_LABELS: dict[str, str] = {
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _last_day_prev_month() -> date:
     today = date.today()
@@ -141,7 +157,14 @@ def _build_cashflow_df(cashflow_rows) -> pd.DataFrame:
 
 def _style_cashflow(df: pd.DataFrame) -> pd.io.formats.style.Styler:
     """Apply color styling to the cashflow dataframe."""
-    eur_cols = ["Saldo Inizio", "+ Entrate", "- Uscite PF", "- Fornitori", "Netto", "Saldo Fine"]
+    eur_cols = [
+        "Saldo Inizio",
+        "+ Entrate",
+        "- Uscite PF",
+        "- Fornitori",
+        "Netto",
+        "Saldo Fine",
+    ]
 
     def color_stato(val: str) -> str:
         if val == "PERICOLO":
@@ -177,31 +200,37 @@ def _cashflow_chart(cashflow_rows) -> go.Figure:
 
     fig = go.Figure()
 
-    fig.add_trace(go.Bar(
-        name="Entrate",
-        x=mesi,
-        y=entrate,
-        marker_color="#27AE60",
-        opacity=0.85,
-    ))
+    fig.add_trace(
+        go.Bar(
+            name="Entrate",
+            x=mesi,
+            y=entrate,
+            marker_color="#27AE60",
+            opacity=0.85,
+        )
+    )
 
-    fig.add_trace(go.Bar(
-        name="Uscite",
-        x=mesi,
-        y=[-u for u in uscite],
-        marker_color="#E74C3C",
-        opacity=0.85,
-    ))
+    fig.add_trace(
+        go.Bar(
+            name="Uscite",
+            x=mesi,
+            y=[-u for u in uscite],
+            marker_color="#E74C3C",
+            opacity=0.85,
+        )
+    )
 
-    fig.add_trace(go.Scatter(
-        name="Saldo Fine",
-        x=mesi,
-        y=saldi,
-        mode="lines+markers",
-        line=dict(color="#2980B9", width=2),
-        marker=dict(size=7),
-        yaxis="y2",
-    ))
+    fig.add_trace(
+        go.Scatter(
+            name="Saldo Fine",
+            x=mesi,
+            y=saldi,
+            mode="lines+markers",
+            line=dict(color="#2980B9", width=2),
+            marker=dict(size=7),
+            yaxis="y2",
+        )
+    )
 
     # Red zone below 0
     fig.add_hline(
@@ -230,12 +259,17 @@ def _cashflow_chart(cashflow_rows) -> go.Figure:
 # Sidebar
 # ---------------------------------------------------------------------------
 
-def render_sidebar() -> tuple[int, PFData | None, str, date, dict[str, float], ScadenzarioData | None]:
+
+def render_sidebar() -> tuple[
+    int, PFData | None, str, date, dict[str, float], ScadenzarioData | None
+]:
     """Render sidebar controls. Returns (anno, pf_data, societa, data_saldo, saldi_banca, scad_data)."""
     with st.sidebar:
         st.title("⚙️ Parametri")
 
-        anno = st.number_input("Anno", min_value=2020, max_value=2035, value=2026, step=1)
+        anno = st.number_input(
+            "Anno", min_value=2020, max_value=2035, value=2026, step=1
+        )
 
         st.divider()
         st.subheader("Piano Finanziario")
@@ -245,9 +279,7 @@ def render_sidebar() -> tuple[int, PFData | None, str, date, dict[str, float], S
         if pf_file is not None:
             try:
                 pf_data = parse_pf(pf_file.read())
-                st.success(
-                    f"✅ {pf_data.societa} — {len(pf_data.voci)} voci"
-                )
+                st.success(f"✅ {pf_data.societa} — {len(pf_data.voci)} voci")
                 if pf_data.warnings:
                     with st.expander(f"⚠️ {len(pf_data.warnings)} avvisi"):
                         for w in pf_data.warnings:
@@ -263,8 +295,14 @@ def render_sidebar() -> tuple[int, PFData | None, str, date, dict[str, float], S
 
         st.divider()
         st.subheader("Società")
-        default_societa = pf_data.societa if pf_data and pf_data.societa in ("ORTI", "INTUR") else "ORTI"
-        societa = st.selectbox("Società", ["ORTI", "INTUR"], index=["ORTI", "INTUR"].index(default_societa))
+        default_societa = (
+            pf_data.societa
+            if pf_data and pf_data.societa in ("ORTI", "INTUR")
+            else "ORTI"
+        )
+        societa = st.selectbox(
+            "Società", ["ORTI", "INTUR"], index=["ORTI", "INTUR"].index(default_societa)
+        )
 
         st.divider()
         st.subheader("Saldi Banca")
@@ -314,7 +352,9 @@ def render_sidebar() -> tuple[int, PFData | None, str, date, dict[str, float], S
             horizontal=True,
             key="scad_tipo",
         )
-        scad_file = st.file_uploader("Carica Scadenzario (opzionale)", type=["xlsx"], key="scad_uploader")
+        scad_file = st.file_uploader(
+            "Carica Scadenzario (opzionale)", type=["xlsx"], key="scad_uploader"
+        )
 
         scad_data: ScadenzarioData | None = None
         if scad_file is not None:
@@ -327,7 +367,9 @@ def render_sidebar() -> tuple[int, PFData | None, str, date, dict[str, float], S
                     scad_data = partite_df_to_scadenzario_data(df_scad, bucket_months)
                 else:
                     suppliers, bucket_months = parse_sintetica_scadenze(BytesIO(raw))
-                    scad_data = sintetica_list_to_scadenzario_data(suppliers, bucket_months)
+                    scad_data = sintetica_list_to_scadenzario_data(
+                        suppliers, bucket_months
+                    )
                 st.success(f"✅ {len(scad_data.fornitori)} fornitori")
             except Exception as exc:
                 st.error(f"Errore parsing Scadenzario: {exc}")
@@ -338,6 +380,7 @@ def render_sidebar() -> tuple[int, PFData | None, str, date, dict[str, float], S
 # ---------------------------------------------------------------------------
 # Main content sections
 # ---------------------------------------------------------------------------
+
 
 def render_header_metrics(
     saldi_banca: dict[str, float],
@@ -360,7 +403,12 @@ def render_header_metrics(
         if scad_data:
             n_forn = len(scad_data.fornitori)
             scaduto = scad_data.scaduto_totale
-            st.metric("Fornitori", n_forn, delta=f"scaduto {_fmt_eur(scaduto)}", delta_color="inverse")
+            st.metric(
+                "Fornitori",
+                n_forn,
+                delta=f"scaduto {_fmt_eur(scaduto)}",
+                delta_color="inverse",
+            )
         else:
             st.metric("Fornitori", "—")
 
@@ -500,12 +548,16 @@ def render_fornitori_section(scad_data: ScadenzarioData) -> None:
         df_summary = pd.DataFrame([summary_row])
         eur_cols = [c for c in df_summary.columns if c != "Voce"]
         fmt = _eur_fmt(eur_cols)
-        st.dataframe(df_summary.style.format(fmt), hide_index=True, use_container_width=True)
+        st.dataframe(
+            df_summary.style.format(fmt), hide_index=True, use_container_width=True
+        )
 
     st.divider()
 
     # Full table: all fornitori x mesi
-    sorted_forn = sorted(scad_data.fornitori, key=lambda r: r.get("totale", 0) or 0, reverse=True)
+    sorted_forn = sorted(
+        scad_data.fornitori, key=lambda r: r.get("totale", 0) or 0, reverse=True
+    )
 
     rows_display = []
     for f in sorted_forn:
@@ -570,7 +622,11 @@ def render_bva_section(societa: str, anno: int) -> None:
     with col2:
         st.metric("Consuntivo YTD", _fmt_eur(tot_consuntivo))
     with col3:
-        st.metric("Delta", _fmt_eur(tot_delta), delta=f"{tot_delta/tot_budget*100:.1f}%" if tot_budget else None)
+        st.metric(
+            "Delta",
+            _fmt_eur(tot_delta),
+            delta=f"{tot_delta / tot_budget * 100:.1f}%" if tot_budget else None,
+        )
 
     st.divider()
 
@@ -592,7 +648,9 @@ def render_bva_section(societa: str, anno: int) -> None:
         ):
             # For each conto in this category, show monthly breakdown
             cat_df = df_bva[df_bva["categoria_ce"] == cat]
-            conto_ids = cat_conti.sort_values("delta", key=abs, ascending=False)["codice_conto_display"].tolist()
+            conto_ids = cat_conti.sort_values("delta", key=abs, ascending=False)[
+                "codice_conto_display"
+            ].tolist()
 
             for conto_id in conto_ids:
                 conto_rows = cat_df[cat_df["codice_conto_display"] == conto_id]
@@ -614,21 +672,27 @@ def render_bva_section(societa: str, anno: int) -> None:
                 for m in range(1, mese_corrente + 1):
                     m_data = conto_rows[conto_rows["mese"] == m]
                     bud = float(m_data["budget"].sum()) if not m_data.empty else 0.0
-                    cons = float(m_data["consuntivo"].sum()) if not m_data.empty else 0.0
-                    rows_display.append({
-                        "Mese": MESI_NOMI[m - 1],
-                        "Budget": bud,
-                        "Consuntivo": cons,
-                        "Delta": cons - bud,
-                    })
+                    cons = (
+                        float(m_data["consuntivo"].sum()) if not m_data.empty else 0.0
+                    )
+                    rows_display.append(
+                        {
+                            "Mese": MESI_NOMI[m - 1],
+                            "Budget": bud,
+                            "Consuntivo": cons,
+                            "Delta": cons - bud,
+                        }
+                    )
 
                 # Add totale row
-                rows_display.append({
-                    "Mese": "TOTALE",
-                    "Budget": conto_budget,
-                    "Consuntivo": conto_cons,
-                    "Delta": conto_delta,
-                })
+                rows_display.append(
+                    {
+                        "Mese": "TOTALE",
+                        "Budget": conto_budget,
+                        "Consuntivo": conto_cons,
+                        "Delta": conto_delta,
+                    }
+                )
 
                 df_display = pd.DataFrame(rows_display)
                 eur_cols = ["Budget", "Consuntivo", "Delta"]
@@ -641,12 +705,19 @@ def render_bva_section(societa: str, anno: int) -> None:
 
     # Show unmatched conti (no categoria_ce)
     unmatched = conti[conti["categoria_ce"].isna()]
-    if not unmatched.empty and (unmatched["budget"].abs().sum() > 100 or unmatched["consuntivo"].abs().sum() > 100):
+    if not unmatched.empty and (
+        unmatched["budget"].abs().sum() > 100
+        or unmatched["consuntivo"].abs().sum() > 100
+    ):
         with st.expander(f"❓ Non categorizzati ({len(unmatched)} conti)"):
-            df_um = unmatched[["codice_conto_display", "descrizione", "budget", "consuntivo", "delta"]].copy()
+            df_um = unmatched[
+                ["codice_conto_display", "descrizione", "budget", "consuntivo", "delta"]
+            ].copy()
             df_um.columns = ["Codice", "Descrizione", "Budget", "Consuntivo", "Delta"]
             fmt = _eur_fmt(["Budget", "Consuntivo", "Delta"])
-            st.dataframe(df_um.style.format(fmt), hide_index=True, use_container_width=True)
+            st.dataframe(
+                df_um.style.format(fmt), hide_index=True, use_container_width=True
+            )
 
 
 def render_download_button(
@@ -684,6 +755,7 @@ def render_download_button(
 # Data assembly
 # ---------------------------------------------------------------------------
 
+
 def assemble_voci_data(
     pf_data: PFData,
     societa: str,
@@ -699,7 +771,9 @@ def assemble_voci_data(
     # Index consuntivo for O(1) lookups
     cons_index: dict[tuple[str, int], float] = {}
     for _, row in df_consuntivo.iterrows():
-        cons_index[(str(row["voce_id"]), int(row["mese"]))] = float(row["importo_consuntivo"])
+        cons_index[(str(row["voce_id"]), int(row["mese"]))] = float(
+            row["importo_consuntivo"]
+        )
 
     # Filter voci by societa (societa_id IS NULL or matches)
     df_filtered = df_voci[
@@ -744,6 +818,7 @@ def assemble_voci_data(
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     anno, pf_data, societa, data_saldo, saldi_banca, scad_data = render_sidebar()
 
@@ -764,7 +839,14 @@ def main() -> None:
             except Exception as exc:
                 st.error(f"Errore caricamento voci da BigQuery: {exc}")
                 df_voci = pd.DataFrame(
-                    columns=["voce_id", "voce_label", "sezione", "categoria", "ord", "societa_id"]
+                    columns=[
+                        "voce_id",
+                        "voce_label",
+                        "sezione",
+                        "categoria",
+                        "ord",
+                        "societa_id",
+                    ]
                 )
 
             # Assemble unified voci_data
@@ -773,7 +855,9 @@ def main() -> None:
 
             render_header_metrics(saldi_banca, pf_data, scad_data)
             st.divider()
-            cashflow_rows = render_cashflow_section(pf_data, voci_data, saldi_banca, scad_data)
+            cashflow_rows = render_cashflow_section(
+                pf_data, voci_data, saldi_banca, scad_data
+            )
             st.divider()
             render_voci_section(voci_data, df_voci)
 
@@ -781,7 +865,9 @@ def main() -> None:
                 st.divider()
                 render_fornitori_section(scad_data)
 
-            render_download_button(societa, anno, cashflow_rows, voci_data, saldi_banca, scad_data)
+            render_download_button(
+                societa, anno, cashflow_rows, voci_data, saldi_banca, scad_data
+            )
 
     # ── Tab 2: BvA ──────────────────────────────────────────────────────────
     with tab_bva:

@@ -23,7 +23,10 @@ MODEL = "claude-haiku-4-5-20251001"
 BATCH_SIZE = 10
 
 DEFAULT_CONFIG = (
-    Path(__file__).resolve().parent.parent / "projects" / "HPAN25PIANO1" / "suppliers.yaml"
+    Path(__file__).resolve().parent.parent
+    / "projects"
+    / "HPAN25PIANO1"
+    / "suppliers.yaml"
 )
 
 
@@ -33,7 +36,9 @@ def load_config(path: Path) -> dict:
 
 
 def build_static_from_config(cfg: dict):
-    suppliers = [(s["code"], s["ragione_sociale"], s["scope"]) for s in cfg["suppliers"]]
+    suppliers = [
+        (s["code"], s["ragione_sociale"], s["scope"]) for s in cfg["suppliers"]
+    ]
     extras = [(c["code"], c["label"]) for c in cfg["extra_codes"]]
     valid_f = {s[0] for s in suppliers} | {c[0] for c in extras}
     valid_sub = set(cfg["valid_subfolders"])
@@ -43,7 +48,9 @@ def build_static_from_config(cfg: dict):
 
 
 _CFG = load_config(DEFAULT_CONFIG)
-SUPPLIERS, EXTRAS, VALID_F, VALID_SUB, SUPPLIERS_TEXT, EXTRAS_TEXT = build_static_from_config(_CFG)
+SUPPLIERS, EXTRAS, VALID_F, VALID_SUB, SUPPLIERS_TEXT, EXTRAS_TEXT = (
+    build_static_from_config(_CFG)
+)
 CUTOFF_DATE = _CFG["cutoff_date"]
 
 
@@ -82,23 +89,33 @@ def build_user_prompt(threads: list[dict]) -> str:
 
 
 def parse_response(raw: str, n_expected: int) -> list[dict]:
-    fallback = {"f_code": "NOISE", "subfolder": "04_comunicazioni", "confidence": "LOW", "reasoning": "parse fail"}
+    fallback = {
+        "f_code": "NOISE",
+        "subfolder": "04_comunicazioni",
+        "confidence": "LOW",
+        "reasoning": "parse fail",
+    }
     out = []
     for it in parse_json_batch(raw, n_expected):
-        if (it is None or not isinstance(it.get("f_code"), str)
-                or it["f_code"] not in VALID_F
-                or not isinstance(it.get("subfolder"), str)
-                or it["subfolder"] not in VALID_SUB
-                or it.get("confidence") not in ("HIGH", "MED", "LOW")
-                or not isinstance(it.get("reasoning"), str)):
+        if (
+            it is None
+            or not isinstance(it.get("f_code"), str)
+            or it["f_code"] not in VALID_F
+            or not isinstance(it.get("subfolder"), str)
+            or it["subfolder"] not in VALID_SUB
+            or it.get("confidence") not in ("HIGH", "MED", "LOW")
+            or not isinstance(it.get("reasoning"), str)
+        ):
             out.append(dict(fallback))
             continue
-        out.append({
-            "f_code": it["f_code"],
-            "subfolder": it["subfolder"],
-            "confidence": it["confidence"],
-            "reasoning": it["reasoning"][:200],
-        })
+        out.append(
+            {
+                "f_code": it["f_code"],
+                "subfolder": it["subfolder"],
+                "confidence": it["confidence"],
+                "reasoning": it["reasoning"][:200],
+            }
+        )
     return out
 
 
@@ -118,14 +135,18 @@ def main():
     ap.add_argument("--gm-index", required=True, type=Path)
     ap.add_argument("--admin-index", required=True, type=Path)
     ap.add_argument("--output", required=True, type=Path)
-    ap.add_argument("--limit", type=int, default=0, help="Cap on threads for smoke test (0 = all)")
+    ap.add_argument(
+        "--limit", type=int, default=0, help="Cap on threads for smoke test (0 = all)"
+    )
     args = ap.parse_args()
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
         print("ANTHROPIC_API_KEY not set — load .env or export it", file=sys.stderr)
         sys.exit(2)
 
-    threads = load_threads(args.gm_index, "gm") + load_threads(args.admin_index, "amministrazione")
+    threads = load_threads(args.gm_index, "gm") + load_threads(
+        args.admin_index, "amministrazione"
+    )
     threads.sort(key=lambda r: r["first_date"], reverse=True)
     if args.limit:
         threads = threads[: args.limit]
@@ -140,7 +161,13 @@ def main():
         msg = client.messages.create(
             model=MODEL,
             max_tokens=2048,
-            system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+            system=[
+                {
+                    "type": "text",
+                    "text": SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=[{"role": "user", "content": build_user_prompt(batch)}],
         )
         text = msg.content[0].text
@@ -158,9 +185,18 @@ def main():
         )
 
     fields = [
-        "mailbox", "thread_id", "first_date", "first_from", "first_subject",
-        "n_messages", "n_attachments", "drive_folder",
-        "f_code", "subfolder", "confidence", "reasoning",
+        "mailbox",
+        "thread_id",
+        "first_date",
+        "first_from",
+        "first_subject",
+        "n_messages",
+        "n_attachments",
+        "drive_folder",
+        "f_code",
+        "subfolder",
+        "confidence",
+        "reasoning",
     ]
     with args.output.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
@@ -169,7 +205,9 @@ def main():
             w.writerow({k: r.get(k, "") for k in fields})
 
     print(f"\nWrote {args.output} ({len(results)} rows)")
-    print(f"Tokens: in={total_in}, out={total_out}, cache_read={total_cache_read}, cache_create={total_cache_create}")
+    print(
+        f"Tokens: in={total_in}, out={total_out}, cache_read={total_cache_read}, cache_create={total_cache_create}"
+    )
 
 
 if __name__ == "__main__":

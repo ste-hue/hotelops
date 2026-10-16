@@ -77,7 +77,9 @@ def _existing_hashes(candidate_hashes: list[str]) -> set[str]:
     return found
 
 
-def preview_folder(input_dir: Path, societa: str = "INTUR") -> tuple[BatchPreview, list[dict], list[dict]]:
+def preview_folder(
+    input_dir: Path, societa: str = "INTUR"
+) -> tuple[BatchPreview, list[dict], list[dict]]:
     txt_files = _collect_txt_files(input_dir)
     rows = parse_rows_from_folder(input_dir, societa=societa)
 
@@ -154,7 +156,9 @@ def generate_cumulative_excel_from_bq(start_date: date, output_path: Path) -> di
         sql,
         job_config=bigquery.QueryJobConfig(
             query_parameters=[
-                bigquery.ScalarQueryParameter("start_date", "DATE", start_date.isoformat())
+                bigquery.ScalarQueryParameter(
+                    "start_date", "DATE", start_date.isoformat()
+                )
             ]
         ),
     ).result()
@@ -177,7 +181,11 @@ def generate_cumulative_excel_from_bq(start_date: date, output_path: Path) -> di
             pd.DataFrame(
                 [{"note": f"Nessun dato in f_accodamenti da {start_date.isoformat()}"}]
             ).to_excel(writer, index=False, sheet_name="Info")
-        return {"output": str(output_path), "rows": 0, "start_date": start_date.isoformat()}
+        return {
+            "output": str(output_path),
+            "rows": 0,
+            "start_date": start_date.isoformat(),
+        }
 
     write_excel(build_daily_from_bq(rows), build_detail_from_bq(rows), output_path)
 

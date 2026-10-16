@@ -62,4 +62,3 @@ def test_lineage_dispatch_errors_without_id_or_list(capsys):
         cli_module.cmd_lineage_dispatch(args)
     assert ei.value.code == 2
     assert "ERROR" in capsys.readouterr().err
-

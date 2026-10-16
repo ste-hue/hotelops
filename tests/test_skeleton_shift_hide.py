@@ -13,8 +13,15 @@ def _ws_con_anno(wb, nome: str):
     ws = wb.create_sheet(nome)
     ws["D1"] = 2026
     mesi = [
-        "APRILE", "MAGGIO", "GIUGNO", "LUGLIO", "AGOSTO",
-        "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE",
+        "APRILE",
+        "MAGGIO",
+        "GIUGNO",
+        "LUGLIO",
+        "AGOSTO",
+        "SETTEMBRE",
+        "OTTOBRE",
+        "NOVEMBRE",
+        "DICEMBRE",
     ]
     for i, m in enumerate(mesi):
         ws.cell(2, 4 + i, m)
@@ -44,8 +51,18 @@ def test_foglio_senza_anno_non_solleva_e_resta_intoccato():
     wb.remove(wb.active)
     ws = wb.create_sheet("DA MAPPARE1")  # titolo NON nella skip-list esatta
     mesi = [
-        "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO", "GIUGNO",
-        "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE",
+        "GENNAIO",
+        "FEBBRAIO",
+        "MARZO",
+        "APRILE",
+        "MAGGIO",
+        "GIUGNO",
+        "LUGLIO",
+        "AGOSTO",
+        "SETTEMBRE",
+        "OTTOBRE",
+        "NOVEMBRE",
+        "DICEMBRE",
     ]
     for i, m in enumerate(mesi):
         ws.cell(2, 3 + i, m)

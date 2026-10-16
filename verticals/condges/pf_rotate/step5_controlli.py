@@ -485,7 +485,7 @@ def verifica_controlli(wb: Workbook, *, periodo_chiuso: int) -> ControlReport:
         raise ValueError(f"Periodo chiuso {anno}-{mese:02d} non trovato nel master.")
     cutover_idx = ordered_mesi.index(periodo_chiuso)
     cutover_col = col_letters[cutover_idx]
-    tail_cols = col_letters[cutover_idx + 1:]
+    tail_cols = col_letters[cutover_idx + 1 :]
 
     R_S = layout.saldo_iniziale_row
     R_TE = layout.totale_entrate_row

@@ -134,6 +134,7 @@ def _detect_struttura(filepath: str) -> str:
 
 # ── CORRISPETTIVI ─────────────────────────────────────────────────────────────
 
+
 def _parse_corrispettivo_tes(fields: list[str]) -> dict:
     return {
         "tipo": "TES",
@@ -158,7 +159,9 @@ def _parse_corrispettivo_rig(fields: list[str]) -> dict:
         "progressivo": _parse_int(fields[8]) if len(fields) > 8 else 0,
         "conto_esolver": fields[14] if len(fields) > 14 else "",
         "valuta": fields[15] if len(fields) > 15 else "EUR",
-        "importo_lordo": _parse_decimal(fields[16]) if len(fields) > 16 else Decimal("0"),
+        "importo_lordo": _parse_decimal(fields[16])
+        if len(fields) > 16
+        else Decimal("0"),
         "aliquota_iva": fields[17] if len(fields) > 17 else "",
         "imponibile": _parse_decimal(fields[18]) if len(fields) > 18 else Decimal("0"),
         "imposta": _parse_decimal(fields[19]) if len(fields) > 19 else Decimal("0"),
@@ -226,6 +229,7 @@ def parse_corrispettivi(filepath: str) -> list[dict]:
 
 # ── MOVIMENTI ─────────────────────────────────────────────────────────────────
 
+
 def _parse_movimento_gen(fields: list[str]) -> dict:
     return {
         "tipo": "GEN",
@@ -235,8 +239,12 @@ def _parse_movimento_gen(fields: list[str]) -> dict:
         "progressivo": _parse_int(fields[8]) if len(fields) > 8 else 0,
         "conto_esolver": fields[10] if len(fields) > 10 else "",
         "codice_cliente": fields[12] if len(fields) > 12 else "",
-        "importo_dare": _parse_decimal(fields[18]) if len(fields) > 18 else Decimal("0"),
-        "importo_avere": _parse_decimal(fields[17]) if len(fields) > 17 else Decimal("0"),
+        "importo_dare": _parse_decimal(fields[18])
+        if len(fields) > 18
+        else Decimal("0"),
+        "importo_avere": _parse_decimal(fields[17])
+        if len(fields) > 17
+        else Decimal("0"),
         "descrizione": fields[22] if len(fields) > 22 else "",
         "metodo_pagamento": fields[-1].strip() if fields else "",
     }
@@ -314,14 +322,16 @@ def parse_movimenti(filepath: str) -> list[dict]:
         else:
             event_type = "movimento_generico"
 
-        events.append({
-            "type": event_type,
-            "struttura": struttura,
-            "gens": group_gens,
-            "par": par_rec,
-            "source_file": filepath,
-            "source_line": line_num,
-        })
+        events.append(
+            {
+                "type": event_type,
+                "struttura": struttura,
+                "gens": group_gens,
+                "par": par_rec,
+                "source_file": filepath,
+                "source_line": line_num,
+            }
+        )
         i = j
 
     logger.info("Movimenti %s: %d eventi da %s", struttura, len(events), filepath)
@@ -329,6 +339,7 @@ def parse_movimenti(filepath: str) -> list[dict]:
 
 
 # ── FATTURE ───────────────────────────────────────────────────────────────────
+
 
 def _parse_fattura_tes(fields: list[str]) -> dict:
     return {

@@ -47,7 +47,9 @@ def _cumulative_excel_bytes(start_date: date) -> tuple[dict, bytes | None]:
 
     Cloud-Run-safe: nessun path utente, il download avviene dai bytes in memoria.
     """
-    out = Path(tempfile.mkdtemp(prefix="accodamenti_xlsx_")) / "RACCOLTAACCODAMENTI.xlsx"
+    out = (
+        Path(tempfile.mkdtemp(prefix="accodamenti_xlsx_")) / "RACCOLTAACCODAMENTI.xlsx"
+    )
     result = generate_cumulative_excel_from_bq(start_date, out)
     data = out.read_bytes() if out.exists() else None
     return result, data
@@ -77,7 +79,9 @@ def render() -> None:
     )
     start_date = st.date_input("Data inizio cumulativo (BQ)", value=date(2026, 4, 3))
 
-    with st.expander("Cartella locale (solo dev, ignorata su Cloud Run)", expanded=False):
+    with st.expander(
+        "Cartella locale (solo dev, ignorata su Cloud Run)", expanded=False
+    ):
         local_dir = st.text_input("Path cartella .txt", value="").strip()
 
     if dropped_files:
@@ -140,18 +144,25 @@ def render() -> None:
     with st.expander("Azioni avanzate (opzionali)", expanded=False):
         a1, a2, a3 = st.columns(3)
         with a1:
-            if st.button("Solo anteprima overlap", disabled=effective_input_dir is None):
+            if st.button(
+                "Solo anteprima overlap", disabled=effective_input_dir is None
+            ):
                 input_dir = Path(effective_input_dir).expanduser()
                 if not input_dir.exists():
                     st.error(f"Cartella non trovata: {input_dir}")
                 else:
                     with st.spinner("Parsing + dedup preview su BQ..."):
-                        stats, _rows, new_rows = preview_folder(input_dir, societa=societa)
+                        stats, _rows, new_rows = preview_folder(
+                            input_dir, societa=societa
+                        )
                     st.session_state.acc_preview_new_rows = new_rows
                     st.session_state.acc_preview_stats = stats
         with a2:
             if st.button("Solo ingest nuove righe"):
-                if not st.session_state.acc_preview_new_rows or not st.session_state.acc_preview_stats:
+                if (
+                    not st.session_state.acc_preview_new_rows
+                    or not st.session_state.acc_preview_stats
+                ):
                     st.warning("Esegui prima 'Solo anteprima overlap'.")
                 else:
                     with st.spinner("Scrittura su BigQuery in corso..."):

@@ -67,8 +67,14 @@ def test_skip_writes_da_mappare_and_esclusi(minimal_pf_orti_bytes, tmp_path):
     # debiti negativi (convenzione reale export partite)
     scad_df = pd.DataFrame(
         [
-            {"codice_fornitore": c, "nome": f"Forn{c}", "totale": -1000.0,
-             "scaduto": 0.0, f"mese_{P(5)}": -1000.0, f"mese_{P(6)}": 0.0}
+            {
+                "codice_fornitore": c,
+                "nome": f"Forn{c}",
+                "totale": -1000.0,
+                "scaduto": 0.0,
+                f"mese_{P(5)}": -1000.0,
+                f"mese_{P(6)}": 0.0,
+            }
             for c in (100, 999, 264)
         ]
     )
@@ -131,15 +137,25 @@ def test_write_pf_scadenza_oltre_orizzonte_va_nel_secchio(minimal_pf_orti_bytes)
     from verticals.condges.pf_rotate.pf_writer import write_pf
 
     p_fuori = periodo(2027, 7)  # il fixture arriva a dicembre 2026
-    scad_df = pd.DataFrame([{
-        "codice_fornitore": 18, "nome": "Acqua Ausino",
-        "totale": -500.0, "scaduto": 0.0, f"mese_{p_fuori}": -500.0,
-    }])
+    scad_df = pd.DataFrame(
+        [
+            {
+                "codice_fornitore": 18,
+                "nome": "Acqua Ausino",
+                "totale": -500.0,
+                "scaduto": 0.0,
+                f"mese_{p_fuori}": -500.0,
+            }
+        ]
+    )
     out, summary = write_pf(
-        pf_bytes=minimal_pf_orti_bytes, scad_df=scad_df,
+        pf_bytes=minimal_pf_orti_bytes,
+        scad_df=scad_df,
         bucket_periodi=[p_fuori],
         fornitori_map={18: {"voce_id": "USCITE_UTENZE", "nome_pf": "Acqua - Ausino"}},
-        excluded=set(), scaduto_periodo=periodo(2026, 5), clear_codici={18},
+        excluded=set(),
+        scaduto_periodo=periodo(2026, 5),
+        clear_codici={18},
     )
     assert summary["oltre_orizzonte"] == {18: -500.0}
 
@@ -153,7 +169,9 @@ def test_apply_scadenzario_oltre_orizzonte_non_inquina_summary(
     altrimenti quella chiave si spaccia per una voce e gonfia il conteggio di
     'fornitori scritti' con importi che in realtà non sono finiti da nessuna
     parte nel foglio."""
-    p_fuori = periodo(2027, 7)  # il fixture (minimal_pf_orti_bytes) arriva a dicembre 2026
+    p_fuori = periodo(
+        2027, 7
+    )  # il fixture (minimal_pf_orti_bytes) arriva a dicembre 2026
     scad_df = pd.DataFrame(
         [
             {

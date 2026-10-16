@@ -54,7 +54,7 @@ def _alter_add_if_needed(
     ddl = (
         f"ALTER TABLE `{PROJECT}.{DATASET}.{table}` "
         f"ADD COLUMN IF NOT EXISTS {column} {col_type} "
-        f"OPTIONS(description=\"{description}\")"
+        f'OPTIONS(description="{description}")'
     )
     if dry_run:
         log.info("[DRY-RUN] %s", ddl)
@@ -86,6 +86,7 @@ def migrate(dry_run: bool = False) -> None:
 
     # 2. Add lineage_era to f_raw_objects (delegate to existing migration)
     from core.bq.load.migrate_add_lineage_era import migrate as migrate_era
+
     migrate_era(dry_run=dry_run)
 
     log.info("✓ Bulk migration complete")

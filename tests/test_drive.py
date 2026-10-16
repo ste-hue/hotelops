@@ -70,6 +70,7 @@ def test_create_shortcut_builds_shortcut_body_and_returns_id():
 
 # --- ensure_shared_with ---
 
+
 def test_ensure_shared_with_grants_reader_no_notification(monkeypatch):
     service = FakeDriveService()
     seen_subjects = []

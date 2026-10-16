@@ -65,16 +65,22 @@ _IMPORTANCE_ORD = {"DA_RIVEDERE": 0, "NORMALE": 1, "ALTA": 2}
 
 
 def classify_message(
-    mittente: str | None, subject: str | None, nomi_allegati: list[str],
+    mittente: str | None,
+    subject: str | None,
+    nomi_allegati: list[str],
     ruleset: Ruleset,
 ) -> dict:
     out = {
-        "stato": "NON_CLASSIFICATO", "primary_category": None,
-        "importance": "DA_RIVEDERE", "document_type": None, "matches": [],
+        "stato": "NON_CLASSIFICATO",
+        "primary_category": None,
+        "importance": "DA_RIVEDERE",
+        "document_type": None,
+        "matches": [],
     }
     try:
         matched = [
-            r for r in ruleset.rules
+            r
+            for r in ruleset.rules
             if _rule_matches(r, mittente or "", subject or "", nomi_allegati)
         ]
     except re.error as e:
@@ -141,34 +147,48 @@ def run_classify(dry_run: bool = False) -> dict:
     """
     from google.cloud import bigquery
 
-    job = client.query(sql, job_config=bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("v", "STRING", rs.version)]
-    ))
+    job = client.query(
+        sql,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ScalarQueryParameter("v", "STRING", rs.version)]
+        ),
+    )
     now = datetime.now()
     rows, per_stato = [], {}
     for r in job.result():
         esito = classify_message(r.mittente, r.subject, list(r.nomi or []), rs)
         per_stato[esito["stato"]] = per_stato.get(esito["stato"], 0) + 1
-        rows.append({
-            "msgid": r.msgid, "entity_id": r.entity_id, "stato": esito["stato"],
-            "primary_category": esito["primary_category"],
-            "importance": esito["importance"],
-            "document_type": esito["document_type"],
-            "matches": json.dumps(esito["matches"]),
-            "ruleset_version": rs.version, "classified_at": now,
-            "override_source": None, "override_note": None,
-            "hash_riga": make_hash(r.msgid, rs.version, ""),
-            "data_caricamento": now,
-        })
+        rows.append(
+            {
+                "msgid": r.msgid,
+                "entity_id": r.entity_id,
+                "stato": esito["stato"],
+                "primary_category": esito["primary_category"],
+                "importance": esito["importance"],
+                "document_type": esito["document_type"],
+                "matches": json.dumps(esito["matches"]),
+                "ruleset_version": rs.version,
+                "classified_at": now,
+                "override_source": None,
+                "override_note": None,
+                "hash_riga": make_hash(r.msgid, rs.version, ""),
+                "data_caricamento": now,
+            }
+        )
     validate_batch(rows, PecClassificazioneRow, context="f_pec_classificazioni")
     if not dry_run and rows:
         from core.bq.write import bq_write_validated
 
         bq_write_validated(
             F_PEC_CLASSIFICAZIONI,
-            [PecClassificazioneRow(**r) for r in rows], mode="append",
+            [PecClassificazioneRow(**r) for r in rows],
+            mode="append",
         )
-    report = {"ruleset_version": rs.version, "classificati": len(rows),
-              "per_stato": per_stato, "dry_run": dry_run}
+    report = {
+        "ruleset_version": rs.version,
+        "classificati": len(rows),
+        "per_stato": per_stato,
+        "dry_run": dry_run,
+    }
     log.info("classify: %s", report)
     return report

@@ -18,8 +18,18 @@ from openpyxl.worksheet.worksheet import Worksheet
 from verticals.condges.pf_rotate.excel_model import find_month_periods, require_periodo
 
 MONTHS_IT = [
-    "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO", "GIUGNO",
-    "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE",
+    "GENNAIO",
+    "FEBBRAIO",
+    "MARZO",
+    "APRILE",
+    "MAGGIO",
+    "GIUGNO",
+    "LUGLIO",
+    "AGOSTO",
+    "SETTEMBRE",
+    "OTTOBRE",
+    "NOVEMBRE",
+    "DICEMBRE",
 ]
 
 # Master "Piano Finanziario" sheet: forward months occupy cols 3..11.
@@ -89,9 +99,7 @@ def _detect_current_month_from_header(
         ) from e
 
 
-def _shift_value_row(
-    ws: Worksheet, row: int, first_col: int, last_col: int
-) -> None:
+def _shift_value_row(ws: Worksheet, row: int, first_col: int, last_col: int) -> None:
     """Shift VALUE cells one column left in ``row[first_col..last_col]``.
 
     Behavior per destination cell at (row, c) for c in [first_col, last_col - 1]:

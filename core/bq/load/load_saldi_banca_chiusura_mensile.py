@@ -31,7 +31,9 @@ from core.config import F_SALDI_BANCA_CHIUSURA_MENSILE
 from core.schemas import SaldoBancaChiusuraMensileRow, validate_batch
 
 DEFAULT_SOURCE = (
-    Path(__file__).resolve().parents[1] / "dimensioni" / "d_saldi_banca_chiusura_mensile.csv"
+    Path(__file__).resolve().parents[1]
+    / "dimensioni"
+    / "d_saldi_banca_chiusura_mensile.csv"
 )
 
 BQ_SCHEMA = (
@@ -117,7 +119,9 @@ def main() -> None:
 
     if args.dry_run:
         for r in raw:
-            logger.info(f"  {r['societa_id']} {r['data_riferimento']} {r['banca_id']}: {r['saldo_eur']:,.2f}")
+            logger.info(
+                f"  {r['societa_id']} {r['data_riferimento']} {r['banca_id']}: {r['saldo_eur']:,.2f}"
+            )
         logger.info("DRY RUN — nessuna scrittura")
         return
 
@@ -130,7 +134,9 @@ def main() -> None:
         schema=BQ_SCHEMA,
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
     )
-    job = client.load_table_from_json(raw, F_SALDI_BANCA_CHIUSURA_MENSILE, job_config=job_config)
+    job = client.load_table_from_json(
+        raw, F_SALDI_BANCA_CHIUSURA_MENSILE, job_config=job_config
+    )
     job.result()
     if job.errors:
         logger.error(f"BQ: {job.errors}")

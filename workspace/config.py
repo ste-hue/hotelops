@@ -9,7 +9,9 @@ DOMAIN = "panoramagroup.it"
 SCOPE_GMAIL_READ = "https://www.googleapis.com/auth/gmail.readonly"
 SCOPE_DRIVE_READ = "https://www.googleapis.com/auth/drive.readonly"
 SCOPE_DRIVE_FILE = "https://www.googleapis.com/auth/drive.file"
-SCOPE_ADMIN_DIRECTORY_RO = "https://www.googleapis.com/auth/admin.directory.user.readonly"
+SCOPE_ADMIN_DIRECTORY_RO = (
+    "https://www.googleapis.com/auth/admin.directory.user.readonly"
+)
 
 # Image extensions skipped during attachment extraction (noise reduction).
 SKIP_ATTACHMENT_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg", ".ico"}

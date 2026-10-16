@@ -46,15 +46,14 @@ def test_parse_file_skips_rows_with_missing_data_reg(monkeypatch, tmp_path):
             return [_Sheet()]
 
     monkeypatch.setattr(mod, "HAS_XLRD", True)
+
     class _XlrdStub:
         @staticmethod
         def open_workbook(_):
             return _Book()
 
     monkeypatch.setattr(mod, "xlrd", _XlrdStub, raising=False)
-    monkeypatch.setattr(
-        mod, "xl_date", lambda v: None if v == "BAD" else "2026-02-26"
-    )
+    monkeypatch.setattr(mod, "xl_date", lambda v: None if v == "BAD" else "2026-02-26")
 
     rows = mod.parse_file(tmp_path / "fake.xls", "ORTI", logging.getLogger("test"))
     assert len(rows) == 1

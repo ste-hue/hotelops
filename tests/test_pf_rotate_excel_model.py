@@ -183,9 +183,23 @@ def _ws_multi_anno():
     ws = wb.active
     ws["C1"] = 2026
     for i, nome in enumerate(
-        ["APRILE", "MAGGIO", "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE",
-         "OTTOBRE", "NOVEMBRE", "DICEMBRE", "GENNAIO", "FEBBRAIO", "MARZO",
-         "APRILE", "MAGGIO", "GIUGNO"]
+        [
+            "APRILE",
+            "MAGGIO",
+            "GIUGNO",
+            "LUGLIO",
+            "AGOSTO",
+            "SETTEMBRE",
+            "OTTOBRE",
+            "NOVEMBRE",
+            "DICEMBRE",
+            "GENNAIO",
+            "FEBBRAIO",
+            "MARZO",
+            "APRILE",
+            "MAGGIO",
+            "GIUGNO",
+        ]
     ):
         ws.cell(2, 3 + i, nome)
     return ws
@@ -193,17 +207,19 @@ def _ws_multi_anno():
 
 def test_find_month_periods_wrap_dic_gen():
     from verticals.condges.pf_rotate.excel_model import find_month_periods, periodo
+
     cols = find_month_periods(_ws_multi_anno())
     assert cols[periodo(2026, 4)] == 3
     assert cols[periodo(2026, 12)] == 11
-    assert cols[periodo(2027, 1)] == 12   # wrap: DIC→GEN incrementa l'anno
-    assert cols[periodo(2027, 4)] == 15   # APRILE 2027 ≠ APRILE 2026
-    assert cols[periodo(2026, 4)] == 3    # ...che resta al suo posto
+    assert cols[periodo(2027, 1)] == 12  # wrap: DIC→GEN incrementa l'anno
+    assert cols[periodo(2027, 4)] == 15  # APRILE 2027 ≠ APRILE 2026
+    assert cols[periodo(2026, 4)] == 3  # ...che resta al suo posto
     assert len(cols) == 15
 
 
 def test_find_month_periods_senza_anno_esplode():
     from verticals.condges.pf_rotate.excel_model import find_month_periods
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.cell(2, 3, "APRILE")  # nessun anno in riga 1

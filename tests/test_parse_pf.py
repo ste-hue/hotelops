@@ -17,8 +17,18 @@ from openpyxl import Workbook
 # ---------------------------------------------------------------------------
 
 MESI_IT = [
-    "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO", "GIUGNO",
-    "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE",
+    "GENNAIO",
+    "FEBBRAIO",
+    "MARZO",
+    "APRILE",
+    "MAGGIO",
+    "GIUGNO",
+    "LUGLIO",
+    "AGOSTO",
+    "SETTEMBRE",
+    "OTTOBRE",
+    "NOVEMBRE",
+    "DICEMBRE",
 ]
 
 
@@ -74,12 +84,12 @@ def _make_orti_wb() -> Workbook:
 
     # Entrate
     entrate = [
-        ("Entrate Hotel",        [700000] * 12),
-        ("Entrate Residence",    [50000] * 12),
-        ("Entrate CVM",          [10000] * 12),
+        ("Entrate Hotel", [700000] * 12),
+        ("Entrate Residence", [50000] * 12),
+        ("Entrate CVM", [10000] * 12),
         ("Entrate Supermercato", [5000] * 12),
-        ("Rientro Sospesi",      [0] * 12),
-        ("Caparre Intur",        [3000] * 12),
+        ("Rientro Sospesi", [0] * 12),
+        ("Caparre Intur", [3000] * 12),
     ]
     for row_idx, (label, vals) in enumerate(entrate, start=5):
         ws.cell(row=row_idx, column=1, value=label)
@@ -93,17 +103,17 @@ def _make_orti_wb() -> Workbook:
     salari_vals[2] = 18142.04  # March
 
     uscite = [
-        ("Salari e Stipendi",        salari_vals),
-        ("Utenze",                   [8000] * 12),
-        ("Materie Prime/Consumo",    [4000] * 12),
-        ("Tasse e Imposte",          [2000] * 12),
-        ("Commissioni Portali",      [1500] * 12),
-        ("Mutui e Finaziamenti",     [9000] * 12),  # Rosa typo
-        ("Consulenze",               [3000] * 12),
-        ("Godimento Beni di Terzi",  [5500] * 12),
-        ("Varie ed Eventuali",       [800] * 12),
-        ("Canoni e Servizi",         [600] * 12),
-        ("Deposito Fitto",           [0] * 12),
+        ("Salari e Stipendi", salari_vals),
+        ("Utenze", [8000] * 12),
+        ("Materie Prime/Consumo", [4000] * 12),
+        ("Tasse e Imposte", [2000] * 12),
+        ("Commissioni Portali", [1500] * 12),
+        ("Mutui e Finaziamenti", [9000] * 12),  # Rosa typo
+        ("Consulenze", [3000] * 12),
+        ("Godimento Beni di Terzi", [5500] * 12),
+        ("Varie ed Eventuali", [800] * 12),
+        ("Canoni e Servizi", [600] * 12),
+        ("Deposito Fitto", [0] * 12),
     ]
     for row_idx, (label, vals) in enumerate(uscite, start=14):
         ws.cell(row=row_idx, column=1, value=label)
@@ -147,11 +157,11 @@ def _make_intur_wb() -> Workbook:
         ws.cell(row=3, column=4 + i, value=mese)
 
     entrate_intur = [
-        ("Fitto Hotel",                [80000] * 12),
-        ("Fitto AR",                   [20000] * 12),
-        ("Ribaltamento Costi a Orti",  [5000] * 12),
-        ("Entrate Farmacia",           [3000] * 12),
-        ("Entrate Spiaggia",           [12000] * 12),
+        ("Fitto Hotel", [80000] * 12),
+        ("Fitto AR", [20000] * 12),
+        ("Ribaltamento Costi a Orti", [5000] * 12),
+        ("Entrate Farmacia", [3000] * 12),
+        ("Entrate Spiaggia", [12000] * 12),
     ]
     for row_idx, (label, vals) in enumerate(entrate_intur, start=5):
         ws.cell(row=row_idx, column=1, value=label)
@@ -159,10 +169,10 @@ def _make_intur_wb() -> Workbook:
             ws.cell(row=row_idx, column=4 + col_idx, value=v)
 
     uscite_intur = [
-        ("Salari e Stipendi",         [15000] * 12),
-        ("Utenze",                    [8000] * 12),
-        ("Mutui e Finanziamenti",     [9000] * 12),
-        ("Godimento Benidi Terzi",    [5500] * 12),  # INTUR typo
+        ("Salari e Stipendi", [15000] * 12),
+        ("Utenze", [8000] * 12),
+        ("Mutui e Finanziamenti", [9000] * 12),
+        ("Godimento Benidi Terzi", [5500] * 12),  # INTUR typo
         ("Caparre da Girocantare aOrti", [2000] * 12),
     ]
     for row_idx, (label, vals) in enumerate(uscite_intur, start=14):
@@ -185,6 +195,7 @@ def _make_intur_wb() -> Workbook:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def orti_bytes() -> BytesIO:
     return _wb_to_bytes(_make_orti_wb())
@@ -199,25 +210,30 @@ def intur_bytes() -> BytesIO:
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestParseORTI:
     def test_parse_orti_detects_societa(self, orti_bytes):
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(orti_bytes)
         assert result.societa == "ORTI"
 
     def test_parse_orti_anno(self, orti_bytes):
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(orti_bytes)
         assert result.anno == 2026
 
     def test_parse_orti_reads_data_saldo(self, orti_bytes):
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(orti_bytes)
         assert result.data_saldo == date(2026, 2, 28)
 
     def test_parse_orti_reads_voci_hotel_luglio(self, orti_bytes):
         """Entrate Hotel Luglio (month 7) = 700000."""
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(orti_bytes)
         assert "ENTRATE_HOTEL" in result.voci
         assert result.voci["ENTRATE_HOTEL"].importi[7] == 700000
@@ -225,23 +241,27 @@ class TestParseORTI:
     def test_parse_orti_reads_voci_salari_marzo(self, orti_bytes):
         """Salari Marzo (month 3) = 18142.04."""
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(orti_bytes)
         assert "USCITE_SALARI" in result.voci
         assert result.voci["USCITE_SALARI"].importi[3] == pytest.approx(18142.04)
 
     def test_parse_orti_reads_saldi_banca(self, orti_bytes):
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(orti_bytes)
         assert result.saldi_banca["MPS"] == pytest.approx(67724.67)
         assert result.saldi_banca["Intesa"] == pytest.approx(66922.12)
 
     def test_parse_orti_saldo_totale(self, orti_bytes):
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(orti_bytes)
         assert result.saldo_totale == pytest.approx(134646.79)
 
     def test_parse_orti_all_12_months_present(self, orti_bytes):
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(orti_bytes)
         hotel = result.voci["ENTRATE_HOTEL"]
         assert set(hotel.importi.keys()) == set(range(1, 13))
@@ -249,6 +269,7 @@ class TestParseORTI:
     def test_parse_orti_no_skip_labels_as_voci(self, orti_bytes):
         """'Totale Entrate' must not appear as a voce."""
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(orti_bytes)
         voce_ids = set(result.voci.keys())
         assert not any("TOTALE" in v for v in voce_ids)
@@ -256,18 +277,21 @@ class TestParseORTI:
     def test_parse_mutui_typo_matches(self, orti_bytes):
         """Rosa's typo 'Mutui e Finaziamenti' (missing 'n') must map to USCITE_MUTUI."""
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(orti_bytes)
         assert "USCITE_MUTUI" in result.voci
 
     def test_parse_orti_excel_label_preserved(self, orti_bytes):
         """excel_label on VoceRow must match the original cell text."""
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(orti_bytes)
         assert result.voci["ENTRATE_HOTEL"].excel_label == "Entrate Hotel"
 
     def test_parse_orti_voce_id_on_row(self, orti_bytes):
         """VoceRow.voce_id must equal the key in voci dict."""
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(orti_bytes)
         for voce_id, row in result.voci.items():
             assert row.voce_id == voce_id
@@ -276,22 +300,26 @@ class TestParseORTI:
 class TestParseINTUR:
     def test_parse_intur_detects_societa(self, intur_bytes):
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(intur_bytes)
         assert result.societa == "INTUR"
 
     def test_parse_intur_anno(self, intur_bytes):
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(intur_bytes)
         assert result.anno == 2026
 
     def test_parse_intur_reads_data_saldo(self, intur_bytes):
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(intur_bytes)
         assert result.data_saldo == date(2025, 10, 31)
 
     def test_parse_intur_fitto_hotel_and_ar_summed(self, intur_bytes):
         """'Fitto Hotel' + 'Fitto AR' both map to ENTRATE_AFFITTI_INTUR; amounts summed."""
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(intur_bytes)
         assert "ENTRATE_AFFITTI_INTUR" in result.voci
         # 80000 + 20000 = 100000 for every month
@@ -300,18 +328,21 @@ class TestParseINTUR:
     def test_parse_intur_godimento_beni_typo(self, intur_bytes):
         """'Godimento Benidi Terzi' (INTUR typo) maps to USCITE_GODIMENTO_BENI."""
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(intur_bytes)
         assert "USCITE_GODIMENTO_BENI" in result.voci
 
     def test_parse_intur_caparre_girocantare(self, intur_bytes):
         """'Caparre da Girocantare aOrti' maps to ENTRATE_CAPARRE_INTUR."""
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(intur_bytes)
         assert "ENTRATE_CAPARRE_INTUR" in result.voci
 
     def test_parse_intur_saldi_banca_col_c(self, intur_bytes):
         """INTUR saldi are in col C, not B."""
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(intur_bytes)
         assert result.saldi_banca["Banca Sella"] == pytest.approx(17317.96)
         assert result.saldi_banca["MPS"] == pytest.approx(37075.87)
@@ -343,6 +374,7 @@ class TestWarnings:
     def test_no_warnings_on_clean_orti(self, orti_bytes):
         """A well-formed ORTI file must produce no warnings."""
         from verticals.condges.parse_pf import parse_pf
+
         result = parse_pf(orti_bytes)
         assert result.warnings == []
 
@@ -350,6 +382,7 @@ class TestWarnings:
 # ---------------------------------------------------------------------------
 # Scadenzario Fornitori tests
 # ---------------------------------------------------------------------------
+
 
 def _make_scadenzario_wb() -> Workbook:
     """Build a minimal scadenzario workbook mirroring interrogazionesituazionesinteticascadenze.XLSX.
@@ -407,15 +440,17 @@ class TestParseScadenzario:
     def test_parse_scadenzario_totals(self, scadenzario_bytes):
         """totale_per_mese sums correctly across all fornitori."""
         from verticals.condges.parse_pf import parse_scadenzario
+
         result = parse_scadenzario(scadenzario_bytes)
         # apr=4, mag=5, giu=6
-        assert result.totale_per_mese[4] == pytest.approx(3000.0)   # 2000+1000
-        assert result.totale_per_mese[5] == pytest.approx(2500.0)   # 1500+1000
-        assert result.totale_per_mese[6] == pytest.approx(1500.0)   # 500+1000
+        assert result.totale_per_mese[4] == pytest.approx(3000.0)  # 2000+1000
+        assert result.totale_per_mese[5] == pytest.approx(2500.0)  # 1500+1000
+        assert result.totale_per_mese[6] == pytest.approx(1500.0)  # 500+1000
 
     def test_parse_scadenzario_suppliers(self, scadenzario_bytes):
         """Reads both fornitori; skips empty row."""
         from verticals.condges.parse_pf import parse_scadenzario
+
         result = parse_scadenzario(scadenzario_bytes)
         assert len(result.fornitori) == 2
         names = [f["fornitore"] for f in result.fornitori]
@@ -425,5 +460,6 @@ class TestParseScadenzario:
     def test_parse_scadenzario_scaduto(self, scadenzario_bytes):
         """scaduto_totale is the sum of all Scaduto values."""
         from verticals.condges.parse_pf import parse_scadenzario
+
         result = parse_scadenzario(scadenzario_bytes)
-        assert result.scaduto_totale == pytest.approx(1500.0)   # 1000+500
+        assert result.scaduto_totale == pytest.approx(1500.0)  # 1000+500

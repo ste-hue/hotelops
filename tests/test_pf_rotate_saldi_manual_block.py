@@ -25,8 +25,18 @@ def _build_orti_real_geometry() -> openpyxl.Workbook:
     pf["A1"] = "ORTI"  # C1 None → month-closed
     pf["B1"] = 2026
     mesi = [
-        "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO", "GIUGNO",
-        "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE",
+        "GENNAIO",
+        "FEBBRAIO",
+        "MARZO",
+        "APRILE",
+        "MAGGIO",
+        "GIUGNO",
+        "LUGLIO",
+        "AGOSTO",
+        "SETTEMBRE",
+        "OTTOBRE",
+        "NOVEMBRE",
+        "DICEMBRE",
     ]
     for i, m in enumerate(mesi):
         pf.cell(2, 7 + i, m)  # G(7)..R(18); APRILE = J(10)

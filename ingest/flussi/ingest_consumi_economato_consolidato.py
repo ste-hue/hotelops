@@ -39,8 +39,18 @@ SOCIETA_ID = "ORTI"
 
 # Nome mese italiano → numero (layout PowerBI usa "Data - Mese" testuale)
 MESI_IT = {
-    "gennaio": 1, "febbraio": 2, "marzo": 3, "aprile": 4, "maggio": 5, "giugno": 6,
-    "luglio": 7, "agosto": 8, "settembre": 9, "ottobre": 10, "novembre": 11, "dicembre": 12,
+    "gennaio": 1,
+    "febbraio": 2,
+    "marzo": 3,
+    "aprile": 4,
+    "maggio": 5,
+    "giugno": 6,
+    "luglio": 7,
+    "agosto": 8,
+    "settembre": 9,
+    "ottobre": 10,
+    "novembre": 11,
+    "dicembre": 12,
 }
 
 # Mapping codice reparto → dimensioni
@@ -258,8 +268,19 @@ def parse_file(
     records: list[dict] = []
     unknown_reparti: set[str] = set()
 
-    max_col = max(col_codice, col_desc, col_reparto, col_classe, col_cat,
-                  col_subcat, col_qtq, col_euro, col_anno, col_mese, col_data)
+    max_col = max(
+        col_codice,
+        col_desc,
+        col_reparto,
+        col_classe,
+        col_cat,
+        col_subcat,
+        col_qtq,
+        col_euro,
+        col_anno,
+        col_mese,
+        col_data,
+    )
 
     for row in rows_raw[header_idx + 1 :]:
         if not row or col_codice < 0 or len(row) <= max_col:
@@ -421,11 +442,14 @@ def main() -> None:
     parser.add_argument("--file", required=True, help="Path al file xlsx consolidato")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
-        "--raw-object-id", dest="raw_object_id", default=None,
+        "--raw-object-id",
+        dest="raw_object_id",
+        default=None,
         help="lineage FK — timbrato su ogni riga (passato da `hotelops promote`)",
     )
     parser.add_argument(
-        "--societa", default=None,
+        "--societa",
+        default=None,
         help="ignorato — societa derivata dal contenuto; accettato da `hotelops promote`",
     )
     args = parser.parse_args()

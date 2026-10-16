@@ -92,9 +92,7 @@ def register_raw_object(
     from core.lineage.schemas import PHASE4_GCS_CUTOFF
 
     lineage_era: str = (
-        "live"
-        if (raw_backend == "gcs" and now >= PHASE4_GCS_CUTOFF)
-        else "pre_phase4"
+        "live" if (raw_backend == "gcs" and now >= PHASE4_GCS_CUTOFF) else "pre_phase4"
     )
 
     # PipelineRun ContextVar is read by bq_write_validated for lineage fields;

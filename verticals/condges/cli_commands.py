@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from core.config import F_SALDI_BANCA_CHIUSURA_MENSILE, PROJECT, V_PIANO_FINANZIARIO_MENSILE
+from core.config import (
+    F_SALDI_BANCA_CHIUSURA_MENSILE,
+    PROJECT,
+    V_PIANO_FINANZIARIO_MENSILE,
+)
 from core.schemas import ChiusuraMensileRow, validate_batch
 
 # Banche attese per società (Esolver Cc#) — usato per saldo banca in `chiudi` / `saldo`
@@ -557,9 +561,7 @@ def cmd_chiudi(args):
     print(f"\n  ── SALDO BANCA al {last_day:02d}/{mese_chiuso:02d}/{anno} ──")
     totale_banca, saldo_detail = _compute_saldo_banca(societa, as_of_date)
     for r in saldo_detail:
-        method = (
-            "" if r.get("note") in ("ANCHOR", "MANUALE") else " (stima)"
-        )
+        method = "" if r.get("note") in ("ANCHOR", "MANUALE") else " (stima)"
         print(f"    {r['banca_id']:<12s} {fmt_eur(r['saldo'])}{method}")
     print(f"    {'TOTALE':<12s} {fmt_eur(totale_banca)}")
 

@@ -98,7 +98,9 @@ def test_multibank_write_stampa_raw_object_id(tmp_path, monkeypatch):
 
     monkeypatch.setattr(bqw, "bq_write_validated", fake_write)
     path = _make_scheda_xlsx(tmp_path, ORTI_MULTIBANK_ROWS)
-    n = mod.process_file(path, "ORTI", None, dry_run=False, raw_object_id="ro-lineage-1")
+    n = mod.process_file(
+        path, "ORTI", None, dry_run=False, raw_object_id="ro-lineage-1"
+    )
     assert n > 0
     assert all(r.raw_object_id == "ro-lineage-1" for r in captured["rows"])
 
@@ -111,7 +113,17 @@ def test_multibank_write_stampa_raw_object_id(tmp_path, monkeypatch):
 
 PASTED_MIXED_DATE_ROWS = [
     [datetime(2026, 1, 1), "PNC n 1", "SMS BANKING", 0, 3, -3, "", 1, "BANCA SELLA"],
-    [datetime(2026, 2, 1), "PNC n 3", "GC rata mutuo", 0, 6000, -6003, "", 1, "BANCA SELLA"],
+    [
+        datetime(2026, 2, 1),
+        "PNC n 3",
+        "GC rata mutuo",
+        0,
+        6000,
+        -6003,
+        "",
+        1,
+        "BANCA SELLA",
+    ],
     [datetime(2026, 5, 1), "PNC n 1", "bollo", 0, 25, -6028, "", 1, "BANCA SELLA"],
     ["13/01/2026", "PNC n 2", "incasso", 100, 0, -5928, "", 1, "BANCA SELLA"],
 ]
@@ -141,20 +153,67 @@ def test_multibank_native_xlsx_with_only_datetime_cells_is_not_swapped(tmp_path)
     path = _make_scheda_xlsx(tmp_path, rows_in)
     rows = parse_mastrino_multibank(path, "INTUR")
 
-    assert [r["data_registrazione"] for r in rows] == [date(2026, 2, 1), date(2026, 3, 1)]
+    assert [r["data_registrazione"] for r in rows] == [
+        date(2026, 2, 1),
+        date(2026, 3, 1),
+    ]
 
 
-def test_multibank_row_with_dropped_dare_cell_is_recovered_from_valuta_columns(tmp_path):
+def test_multibank_row_with_dropped_dare_cell_is_recovered_from_valuta_columns(
+    tmp_path,
+):
     # Causale lunga incollata: la cella vuota "Dare in UdC" sparisce e tutto slitta
     # a sinistra di una colonna. L'importo si recupera da "Dare/Avere in valuta".
     from ingest.flussi.ingest_scheda_contabile import parse_mastrino_multibank
 
-    normal = ["13/01/2026", "PNC n 1", "mov", None, "52,61", "100,00", None, 2,
-              "MONTE DEI PASCHI", "EUR", None, "52,61", None, "0 Centro"]
-    shifted_avere = ["14/01/2026", "PNC n 7", "Pagamento FT 1 FT 2 FT 3", "1103,51", "680,63",
-                     None, 2, "MONTE DEI PASCHI", "EUR", None, "1103,51", None, "0 Centro", None]
-    shifted_dare = ["15/01/2026", "PNC n 8", "Incasso FT 4 FT 5", "200,00", "880,63",
-                    None, 2, "MONTE DEI PASCHI", "EUR", "200,00", None, None, "0 Centro", None]
+    normal = [
+        "13/01/2026",
+        "PNC n 1",
+        "mov",
+        None,
+        "52,61",
+        "100,00",
+        None,
+        2,
+        "MONTE DEI PASCHI",
+        "EUR",
+        None,
+        "52,61",
+        None,
+        "0 Centro",
+    ]
+    shifted_avere = [
+        "14/01/2026",
+        "PNC n 7",
+        "Pagamento FT 1 FT 2 FT 3",
+        "1103,51",
+        "680,63",
+        None,
+        2,
+        "MONTE DEI PASCHI",
+        "EUR",
+        None,
+        "1103,51",
+        None,
+        "0 Centro",
+        None,
+    ]
+    shifted_dare = [
+        "15/01/2026",
+        "PNC n 8",
+        "Incasso FT 4 FT 5",
+        "200,00",
+        "880,63",
+        None,
+        2,
+        "MONTE DEI PASCHI",
+        "EUR",
+        "200,00",
+        None,
+        None,
+        "0 Centro",
+        None,
+    ]
     path = _make_scheda_xlsx(tmp_path, [normal, shifted_avere, shifted_dare])
     rows = parse_mastrino_multibank(path, "ORTI")
 

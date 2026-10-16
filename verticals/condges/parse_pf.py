@@ -71,7 +71,7 @@ _LABEL_MAP: dict[str, str] = {
     "materie prime / consumo": "USCITE_MATERIE_PRIME",
     "tasse e imposte": "USCITE_TASSE",
     "commissioni portali": "USCITE_COMMISSIONI",
-    "mutui e finaziamenti": "USCITE_MUTUI",       # Rosa's typo
+    "mutui e finaziamenti": "USCITE_MUTUI",  # Rosa's typo
     "mutui e finanziamenti": "USCITE_MUTUI",
     "consulenze": "USCITE_CONSULENZE",
     "godimento beni di terzi": "USCITE_GODIMENTO_BENI",
@@ -88,7 +88,7 @@ _SKIP_PATTERNS: list[re.Pattern] = [
     re.compile(r"^={3,}$"),
     re.compile(r"saldo mese preced", re.I),
     re.compile(r"cash flow", re.I),
-    re.compile(r"^saldo\b", re.I),            # e.g. "Saldo MPS" rows
+    re.compile(r"^saldo\b", re.I),  # e.g. "Saldo MPS" rows
     re.compile(r"^totale\b", re.I),
 ]
 
@@ -111,8 +111,18 @@ def _is_skip(label: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _MESI_IT = [
-    "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO", "GIUGNO",
-    "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE",
+    "GENNAIO",
+    "FEBBRAIO",
+    "MARZO",
+    "APRILE",
+    "MAGGIO",
+    "GIUGNO",
+    "LUGLIO",
+    "AGOSTO",
+    "SETTEMBRE",
+    "OTTOBRE",
+    "NOVEMBRE",
+    "DICEMBRE",
 ]
 _MESE_INDEX: dict[str, int] = {m: i + 1 for i, m in enumerate(_MESI_IT)}
 
@@ -133,6 +143,7 @@ def _find_month_columns(ws: Worksheet, header_row: int) -> dict[int, int]:
 # Anno detection
 # ---------------------------------------------------------------------------
 
+
 def _find_anno(ws: Worksheet) -> int:
     """Scan first 5 rows looking for an integer in the 2020-2030 range."""
     for row in ws.iter_rows(min_row=1, max_row=5, values_only=True):
@@ -147,6 +158,7 @@ def _find_anno(ws: Worksheet) -> int:
 # ---------------------------------------------------------------------------
 # Societa detection
 # ---------------------------------------------------------------------------
+
 
 def _find_societa(ws: Worksheet) -> str:
     """Look in A1 and A2 for ORTI / INTUR."""
@@ -163,9 +175,11 @@ def _find_societa(ws: Worksheet) -> str:
 # Data saldo detection
 # ---------------------------------------------------------------------------
 
+
 def _to_date(val: object) -> date | None:
     """Coerce a datetime or date value to date, return None otherwise."""
     from datetime import datetime as _dt
+
     if isinstance(val, _dt):
         return val.date()
     if isinstance(val, date):
@@ -190,6 +204,7 @@ def _find_data_saldo(ws: Worksheet, societa: str) -> date | None:
 # ---------------------------------------------------------------------------
 # Saldi banca detection
 # ---------------------------------------------------------------------------
+
 
 def _find_saldi_banca(ws: Worksheet) -> tuple[dict[str, float], float]:
     """Scan rows 30-45 for 'Saldo XXX' labels with an adjacent numeric value.
@@ -218,7 +233,9 @@ def _find_saldi_banca(ws: Worksheet) -> tuple[dict[str, float], float]:
         # "Saldo XXX" rows — skip non-banca labels
         if re.match(r"saldo\b", label_stripped, re.I):
             lower = label_stripped.lower()
-            if any(skip in lower for skip in ("periodo", "proiettato", "mese", "cumulat")):
+            if any(
+                skip in lower for skip in ("periodo", "proiettato", "mese", "cumulat")
+            ):
                 continue
             # Extract banca name: "Saldo MPS" -> "MPS", "Saldo Banca Sella" -> "Banca Sella"
             banca = re.sub(r"^saldo\s+", "", label_stripped, flags=re.I).strip()
@@ -240,6 +257,7 @@ def _find_saldi_banca(ws: Worksheet) -> tuple[dict[str, float], float]:
 # ---------------------------------------------------------------------------
 # Main parser
 # ---------------------------------------------------------------------------
+
 
 def parse_pf(source: BinaryIO | BytesIO | bytes) -> PFData:
     """Parse a Rosa Piano Finanziario Excel file.
@@ -308,7 +326,9 @@ def parse_pf(source: BinaryIO | BytesIO | bytes) -> PFData:
                 and abs(ws.cell(row=label_cell.row, column=c).value) > 1
             ]
             if nz:
-                warnings.append(f"Unknown voce label: '{label}' (values: {nz[:3]}{'…' if len(nz) > 3 else ''})")
+                warnings.append(
+                    f"Unknown voce label: '{label}' (values: {nz[:3]}{'…' if len(nz) > 3 else ''})"
+                )
             continue
 
         # Read amounts for each month
@@ -353,14 +373,24 @@ def parse_pf(source: BinaryIO | BytesIO | bytes) -> PFData:
 
 # Italian month abbreviation → month number (first 3 chars, lowercase)
 _MESI_ABBR: dict[str, int] = {
-    "gen": 1, "feb": 2, "mar": 3, "apr": 4, "mag": 5, "giu": 6,
-    "lug": 7, "ago": 8, "set": 9, "ott": 10, "nov": 11, "dic": 12,
+    "gen": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "mag": 5,
+    "giu": 6,
+    "lug": 7,
+    "ago": 8,
+    "set": 9,
+    "ott": 10,
+    "nov": 11,
+    "dic": 12,
 }
 
 
 @dataclass
 class ScadenzarioData:
-    fornitori: list[dict]          # [{fornitore, totale, scaduto, mese_4: x, ...}]
+    fornitori: list[dict]  # [{fornitore, totale, scaduto, mese_4: x, ...}]
     totale_per_mese: dict[int, float]  # {mese: totale_uscite}
     scaduto_totale: float
 

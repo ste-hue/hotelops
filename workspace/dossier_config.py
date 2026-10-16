@@ -14,7 +14,9 @@ DOSSIER_STATE_DIR = Path.home() / ".config" / "hotelops" / "dossier"
 
 CONFIDENCE_THRESHOLD = 0.6
 
-AMM_CEO_FOLDER_ID = "1S81cBxrzPW5NxuCSBoIszAcBuyk_ILr-"  # cartella CEO (vuota, struttura da definire)
+AMM_CEO_FOLDER_ID = (
+    "1S81cBxrzPW5NxuCSBoIszAcBuyk_ILr-"  # cartella CEO (vuota, struttura da definire)
+)
 
 TAXONOMY = [
     "01_Societario",
@@ -34,7 +36,7 @@ class DossierCompany:
     company_id: str
     display_name: str
     search_phrases: list[str] = field(default_factory=list)  # Drive fullText
-    gmail_terms: list[str] = field(default_factory=list)     # Gmail q
+    gmail_terms: list[str] = field(default_factory=list)  # Gmail q
     tax_code: str = ""
     drive_folder_id: str = ""
 

@@ -19,7 +19,20 @@ from openpyxl.utils import get_column_letter
 
 from verticals.condges.cashflow import CashflowRow
 
-MESI = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"]
+MESI = [
+    "Gen",
+    "Feb",
+    "Mar",
+    "Apr",
+    "Mag",
+    "Giu",
+    "Lug",
+    "Ago",
+    "Set",
+    "Ott",
+    "Nov",
+    "Dic",
+]
 
 # ── Style constants (clean, no yellow) ────────────────────────────────────────
 FONT_HEADER = Font(name="Arial", bold=True, size=11)
@@ -64,6 +77,7 @@ def _eur(ws, row: int, col: int, value, font=None):
 
 
 # ── Sheet 1: Proiezione Cashflow ──────────────────────────────────────────────
+
 
 def _build_cashflow_sheet(
     wb: Workbook,
@@ -184,6 +198,7 @@ def _build_cashflow_sheet(
 
 # ── Sheet 2: Dettaglio Voci ───────────────────────────────────────────────────
 
+
 def _build_dettaglio_sheet(
     wb: Workbook,
     societa: str,
@@ -283,9 +298,13 @@ def _build_dettaglio_sheet(
             md = mese_data.get(mese, {"previsione": 0, "budget": 0, "consuntivo": 0})
             base_col = 2 + m_idx * 3
 
-            prev_cell = _eur(ws, data_row, base_col, md["previsione"] or None, font=FONT_PREVISIONE)
+            prev_cell = _eur(
+                ws, data_row, base_col, md["previsione"] or None, font=FONT_PREVISIONE
+            )
             _eur(ws, data_row, base_col + 1, md["budget"] or None, font=FONT_NORMAL)
-            cons_cell = _eur(ws, data_row, base_col + 2, md["consuntivo"] or None, font=FONT_BOLD)
+            cons_cell = _eur(
+                ws, data_row, base_col + 2, md["consuntivo"] or None, font=FONT_BOLD
+            )
             _ = prev_cell, cons_cell  # used for formatting, referenced above
 
         data_row += 1
@@ -295,6 +314,7 @@ def _build_dettaglio_sheet(
 
 
 # ── Sheet 3: Fornitori ────────────────────────────────────────────────────────
+
 
 def _build_fornitori_sheet(wb: Workbook, fornitori: list[dict]):
     ws = wb.create_sheet("Fornitori")
@@ -362,6 +382,7 @@ def _build_fornitori_sheet(wb: Workbook, fornitori: list[dict]):
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
 
 def generate_tesoreria_excel(
     societa: str,

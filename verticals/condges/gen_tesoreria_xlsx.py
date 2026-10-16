@@ -37,7 +37,12 @@ import pandas as pd
 from verticals.condges.bq_tesoreria_core import fetch_consuntivo_df, fetch_voci_df
 from verticals.condges.cashflow import project_cashflow
 from verticals.condges.export_excel import generate_tesoreria_excel
-from verticals.condges.parse_pf import PFData, ScadenzarioData, parse_pf, parse_scadenzario
+from verticals.condges.parse_pf import (
+    PFData,
+    ScadenzarioData,
+    parse_pf,
+    parse_scadenzario,
+)
 from verticals.condges.scadenze_parse import (
     parse_scadenze,
     partite_df_to_scadenzario_data,
@@ -73,7 +78,9 @@ def assemble_voci_data(
 
     cons_index: dict[tuple[str, int], float] = {}
     for _, row in df_consuntivo.iterrows():
-        cons_index[(str(row["voce_id"]), int(row["mese"]))] = float(row["importo_consuntivo"])
+        cons_index[(str(row["voce_id"]), int(row["mese"]))] = float(
+            row["importo_consuntivo"]
+        )
 
     df_filtered = df_voci[
         df_voci["societa_id"].isna() | (df_voci["societa_id"] == societa)
@@ -120,7 +127,9 @@ def parse_scad_file(raw: bytes, tipo: str) -> ScadenzarioData:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Export Tesoreria Excel from PF (+ optional scadenzario).")
+    ap = argparse.ArgumentParser(
+        description="Export Tesoreria Excel from PF (+ optional scadenzario)."
+    )
     ap.add_argument("--pf", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--scad", type=Path, default=None)

@@ -47,7 +47,11 @@ def inspect_actor(client: ApifyClient, piattaforma: str, actor_id: str) -> None:
 
     name = actor.get("name") or actor.get("title") or "?"
     version_info = actor.get("versions") or []
-    latest = actor.get("taggedBuilds", {}).get("latest", {}) if actor.get("taggedBuilds") else {}
+    latest = (
+        actor.get("taggedBuilds", {}).get("latest", {})
+        if actor.get("taggedBuilds")
+        else {}
+    )
     latest_version = latest.get("versionNumber") or (
         version_info[-1].get("versionNumber") if version_info else "?"
     )
@@ -64,7 +68,7 @@ def inspect_actor(client: ApifyClient, piattaforma: str, actor_id: str) -> None:
         try:
             build = client.build(build_id).get()
             if build:
-                schema = (build.get("inputSchema") or {})
+                schema = build.get("inputSchema") or {}
                 if isinstance(schema, str):
                     # Some actors store it as a JSON string
                     try:
@@ -84,7 +88,7 @@ def inspect_actor(client: ApifyClient, piattaforma: str, actor_id: str) -> None:
             print("  input schema: NOT AVAILABLE")
         return
 
-    props = (schema.get("properties") or {})
+    props = schema.get("properties") or {}
     required = set(schema.get("required") or [])
     print(f"  input schema: {len(props)} field(s)")
 
@@ -107,7 +111,11 @@ def main(argv: list[str] | None = None) -> int:
 
     client = _get_client()
 
-    targets = {args.only.upper(): APIFY_ACTORS[args.only.upper()]} if args.only else APIFY_ACTORS
+    targets = (
+        {args.only.upper(): APIFY_ACTORS[args.only.upper()]}
+        if args.only
+        else APIFY_ACTORS
+    )
 
     for piattaforma, actor_id in targets.items():
         inspect_actor(client, piattaforma, actor_id)

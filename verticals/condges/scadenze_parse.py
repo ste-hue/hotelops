@@ -103,7 +103,9 @@ def parse_scadenze(
         )
 
     if not invoices:
-        return pd.DataFrame(columns=["codice_fornitore", "nome", "totale", "scaduto"]), []
+        return pd.DataFrame(
+            columns=["codice_fornitore", "nome", "totale", "scaduto"]
+        ), []
 
     supplier_data: dict[int, dict] = {}
     all_periods: set[int] = set()
@@ -230,5 +232,3 @@ def sintetica_list_to_scadenzario_data(
         totale_per_mese=totale_per_mese,
         scaduto_totale=scaduto_totale,
     )
-
-

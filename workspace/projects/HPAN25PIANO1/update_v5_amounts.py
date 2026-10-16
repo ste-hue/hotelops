@@ -29,7 +29,13 @@ AMOUNTS_JSON = Path("/tmp/hpan25/extracted_amounts.json")
 PARTITE_INTUR_XLSX = Path(
     os.environ.get(
         "HOTELOPS_HPAN25PIANO1_PARTITE_INTUR",
-        str(Path.home() / "Desktop" / "WORK" / "tmp" / "situazionepartitefornitoriINTUR.xlsx"),
+        str(
+            Path.home()
+            / "Desktop"
+            / "WORK"
+            / "tmp"
+            / "situazionepartitefornitoriINTUR.xlsx"
+        ),
     )
 ).expanduser()
 PARTITE_ORTI_XLSX = Path(
@@ -96,36 +102,89 @@ F_FOLDER_IDS = {
 # Manual amounts for files where pdftotext couldn't extract or where we need to add manually
 MANUAL_AMOUNTS = {
     # FATTURE (Hospitality from PDFs)
-    "HOSPITALITY PROJECT FT6 DEL 27012026.pdf":   ("F013", "FATTURA", 3416.00),
-    "HOSPITALITY PROJECT FT14 DEL 23022026.pdf":  ("F013", "FATTURA", 3416.00),
-    "HOSPITALITY PROJECT FT30 DEL 24042026.pdf":  ("F013", "FATTURA", 3416.00),
-    "ORTI SRL - HOSPITALITY PROJECT SALDO FT DEL 27012026.pdf": ("F013", "BONIFICO (saldo FT6)", 3416.60),
+    "HOSPITALITY PROJECT FT6 DEL 27012026.pdf": ("F013", "FATTURA", 3416.00),
+    "HOSPITALITY PROJECT FT14 DEL 23022026.pdf": ("F013", "FATTURA", 3416.00),
+    "HOSPITALITY PROJECT FT30 DEL 24042026.pdf": ("F013", "FATTURA", 3416.00),
+    "ORTI SRL - HOSPITALITY PROJECT SALDO FT DEL 27012026.pdf": (
+        "F013",
+        "BONIFICO (saldo FT6)",
+        3416.60,
+    ),
     # FATTURE mancanti da Esolver Lista (no PDF locale ma in registro INTUR)
-    "ILLUXIT FT 019-2026 del 16-04-2026 (Esolver Lista)":       ("F014", "FATTURA (Esolver)", 7869.00),   # imp 6450 + 22% IVA
-    "NESE FT 372-26 del 08-04-2026 (Esolver Lista)":            ("F021", "FATTURA (Esolver)", 4544.56),  # imp 3725.05 + 22% IVA
-    "OLIVA COPERTURE FT125 DEL 14 05 2026.pdf":                 ("F022", "FATTURA", 2257.00),     # FPR 125/26 nuova del 14/05
-
+    "ILLUXIT FT 019-2026 del 16-04-2026 (Esolver Lista)": (
+        "F014",
+        "FATTURA (Esolver)",
+        7869.00,
+    ),  # imp 6450 + 22% IVA
+    "NESE FT 372-26 del 08-04-2026 (Esolver Lista)": (
+        "F021",
+        "FATTURA (Esolver)",
+        4544.56,
+    ),  # imp 3725.05 + 22% IVA
+    "OLIVA COPERTURE FT125 DEL 14 05 2026.pdf": (
+        "F022",
+        "FATTURA",
+        2257.00,
+    ),  # FPR 125/26 nuova del 14/05
     # PREVENTIVI (categoria PREVENTIVO → cont. col 5/6 # Prev / € Prev)
-    "PORTEDI DIERRE Proforma N202 DEL 25022026.pdf":            ("F023", "PREVENTIVO", 24373.81),  # proforma
-    "2025-11-10_AMCN_Computo_Metrico_Edile.pdf":                ("F001", "PREVENTIVO", 375389.25),  # computo edile
-    "2026-04-16_FalegnameriaCuomo_Preventivo_Camere.pdf":       ("F011", "PREVENTIVO", 77836.00),   # 63800 imp + 22%
-    "2026-04-21_Illuxit_Preventivo.pdf":                        ("F014", "PREVENTIVO", 15822.42),   # 12969.20 + IVA
-    "2025-11-08_Santelia_Offerta_Lavori_Idro_Meccanico.pdf":    ("F027", "DOC STORICO (rev. superata da 27/11)", 86088.28),  # NON conta
-    "offerta_santelia_imp_meccanico_idrico.pdf":                ("F027", "PREVENTIVO", 115297.51),  # valido (rev. 27/11/2025)
-    "2026-01-07_METAL2000_Internorm_Serramenti_PVC.pdf":        ("F026", "PREVENTIVO (METAL2000)", 106647.10),  # METAL2000 = SALA, merged in F026
-    "2025-10-21_STE_Computo_Metrico_Elettrico.pdf":             ("F025", "PREVENTIVO", 124081.13),  # 101.705,84 imponibile + 22% IVA (Riepilogo Sub Categorie pag 23)
+    "PORTEDI DIERRE Proforma N202 DEL 25022026.pdf": (
+        "F023",
+        "PREVENTIVO",
+        24373.81,
+    ),  # proforma
+    "2025-11-10_AMCN_Computo_Metrico_Edile.pdf": (
+        "F001",
+        "PREVENTIVO",
+        375389.25,
+    ),  # computo edile
+    "2026-04-16_FalegnameriaCuomo_Preventivo_Camere.pdf": (
+        "F011",
+        "PREVENTIVO",
+        77836.00,
+    ),  # 63800 imp + 22%
+    "2026-04-21_Illuxit_Preventivo.pdf": (
+        "F014",
+        "PREVENTIVO",
+        15822.42,
+    ),  # 12969.20 + IVA
+    "2025-11-08_Santelia_Offerta_Lavori_Idro_Meccanico.pdf": (
+        "F027",
+        "DOC STORICO (rev. superata da 27/11)",
+        86088.28,
+    ),  # NON conta
+    "offerta_santelia_imp_meccanico_idrico.pdf": (
+        "F027",
+        "PREVENTIVO",
+        115297.51,
+    ),  # valido (rev. 27/11/2025)
+    "2026-01-07_METAL2000_Internorm_Serramenti_PVC.pdf": (
+        "F026",
+        "PREVENTIVO (METAL2000)",
+        106647.10,
+    ),  # METAL2000 = SALA, merged in F026
+    "2025-10-21_STE_Computo_Metrico_Elettrico.pdf": (
+        "F025",
+        "PREVENTIVO",
+        124081.13,
+    ),  # 101.705,84 imponibile + 22% IVA (Riepilogo Sub Categorie pag 23)
 }
 
 # Filesystem rows in Documents that are DUPLICATES of xlsx rows (same fattura, different naming)
 # Verified by reading the PDFs. Should be deleted from Documents to avoid double-count.
 DUPLICATE_FS_ROWS = {
     # Fatture
-    ("F005", "B&T FT470 DEL 27032026.pdf"),  # = xlsx FT V326-00470 (TD02 acconto €4,562.74)
+    (
+        "F005",
+        "B&T FT470 DEL 27032026.pdf",
+    ),  # = xlsx FT V326-00470 (TD02 acconto €4,562.74)
     ("F019", "MARINO FT26 DEL 03042026.pdf"),  # = xlsx FT FPR 4/26 (€2,002)
     ("F020", "MIELE GIUSEPPE FT887 DEL 31032026.pdf"),  # = xlsx FT S/887 (€10,857.37)
     ("F022", "OLIVA COPERTURE FT26 DEL 07012026.PDF"),  # = xlsx FT FPR 2/26 (€3,294)
     # Preventivi — filesystem dupes of xlsx PREVENTIVO rows
-    ("F011", "2026-04-16_FalegnameriaCuomo_Preventivo_Camere.pdf"),  # = xlsx Prev PREV-2026-04-16 €63,800
+    (
+        "F011",
+        "2026-04-16_FalegnameriaCuomo_Preventivo_Camere.pdf",
+    ),  # = xlsx Prev PREV-2026-04-16 €63,800
     ("F014", "2026-04-21_Illuxit_Preventivo.pdf"),  # = xlsx Prev PV010.26 €15,822.42
     # F017 LAUDATO AUTOGRU is a preventivo not fattura — relabel rather than delete
 }
@@ -227,7 +286,9 @@ def main():
             existing_amt = docs.cell(r, 8).value
             if existing_amt is None and amt is not None:
                 docs.cell(r, 8).value = amt
-                docs.cell(r, 2).value = cat  # also update category (FATTURA → PREVENTIVO, etc.)
+                docs.cell(
+                    r, 2
+                ).value = cat  # also update category (FATTURA → PREVENTIVO, etc.)
                 manual_updated += 1
         else:
             new_r = docs.max_row + 1
@@ -242,7 +303,7 @@ def main():
 
     # Re-label LAUDATO AUTOGRU as PREVENTIVO (not fattura)
     relabeled = 0
-    for (cod, fn) in RELABEL_AS_PREVENTIVO:
+    for cod, fn in RELABEL_AS_PREVENTIVO:
         if (cod, fn) in docs_idx:
             r = docs_idx[(cod, fn)]
             docs.cell(r, 2).value = "PREVENTIVO"
@@ -250,7 +311,7 @@ def main():
 
     # Delete known FS duplicate rows (same fattura as xlsx, different naming)
     rows_to_delete = []
-    for (cod, fn) in DUPLICATE_FS_ROWS:
+    for cod, fn in DUPLICATE_FS_ROWS:
         if (cod, fn) in docs_idx:
             rows_to_delete.append(docs_idx[(cod, fn)])
     for r in sorted(rows_to_delete, reverse=True):
@@ -274,7 +335,11 @@ def main():
         cod = docs.cell(r, 1).value
         fn = docs.cell(r, 5).value
         if cod == "F019" and fn:
-            if "SANTELIA" in str(fn).upper() or "FALEGNAMERIA" in str(fn).upper() or "CUOMO" in str(fn).upper():
+            if (
+                "SANTELIA" in str(fn).upper()
+                or "FALEGNAMERIA" in str(fn).upper()
+                or "CUOMO" in str(fn).upper()
+            ):
                 obsolete_to_delete.append(r)
     # Delete in reverse to preserve row indices
     for r in reversed(obsolete_to_delete):
@@ -283,7 +348,8 @@ def main():
 
     # ── Add missing ROMANO FT13 row ──
     has_ft13 = any(
-        docs.cell(r, 1).value == "F024" and "FT13" in str(docs.cell(r, 5).value or "").upper()
+        docs.cell(r, 1).value == "F024"
+        and "FT13" in str(docs.cell(r, 5).value or "").upper()
         for r in range(2, docs.max_row + 1)
     )
     if not has_ft13:
@@ -293,7 +359,9 @@ def main():
         docs.cell(new_r, 3).value = "Drive filesystem"
         docs.cell(new_r, 4).value = "06_FATTURE_LAVORI_HOTEL"
         docs.cell(new_r, 5).value = "ROMANO GAETANO FT13 DEL 29 04 2026.PDF"
-        docs.cell(new_r, 8).value = 3100.00  # placeholder — user said ~€3,100, will be verified
+        docs.cell(
+            new_r, 8
+        ).value = 3100.00  # placeholder — user said ~€3,100, will be verified
         print("  Added ROMANO FT13 placeholder €3,100 (will be verified)")
 
     # ── Phase 3: add new F034..F037 rows in Tracking_Fornitori (if missing) ──
@@ -315,7 +383,9 @@ def main():
     if new_codes_to_add and totale_row:
         # AVOID insert_rows (breaks hyperlinks). Instead: cache TOTALE, write new codes
         # in rows currently occupied by TOTALE, then place TOTALE below them.
-        totale_values = [track.cell(totale_row, c).value for c in range(1, track.max_column + 1)]
+        totale_values = [
+            track.cell(totale_row, c).value for c in range(1, track.max_column + 1)
+        ]
         # Clear TOTALE row
         for c in range(1, track.max_column + 1):
             track.cell(totale_row, c).value = None
@@ -343,6 +413,7 @@ def main():
 
     # ── Phase 4: recompute # Fatt and € Fatt per F-code from Documents ──
     from collections import defaultdict
+
     counts = defaultdict(int)
     sums = defaultdict(float)
     has_unknown_amt = defaultdict(bool)
@@ -370,27 +441,28 @@ def main():
     # Dedup: F001 has BOTH "FATTURA (xlsx) FT FPR 31/26" AND "FATTURA A.M.C.N. SRL FT31 DEL 26 03 2026.PDF"
     # which is the SAME fattura. Keep "FATTURA (xlsx)" with amount, but don't double-count filesystem row.
     def extract_ft_num(fname):
-        s = str(fname).upper().replace('_', ' ')  # treat _ as space for tokenization
-        pre = re.split(r'\s+DEL\s+', s, maxsplit=1)[0]
+        s = str(fname).upper().replace("_", " ")  # treat _ as space for tokenization
+        pre = re.split(r"\s+DEL\s+", s, maxsplit=1)[0]
         # Strategy 1: FT/FPR directly stuck to alphanumeric (most reliable)
-        m = re.search(r'\b(?:FT|FPR)([A-Z0-9]+)', pre)
+        m = re.search(r"\b(?:FT|FPR)([A-Z0-9]+)", pre)
         if m:
             captured = m.group(1)
             # If captured ends with digits, prefer trailing digits (SDI codes like IT00126V0001851 → 1851)
-            trail = re.search(r'\d+$', captured)
-            if trail and len(trail.group(0)) >= 3 and re.search(r'[A-Z]', captured):
-                return trail.group(0).lstrip('0') or trail.group(0)
-            return captured.lstrip('0') or captured
+            trail = re.search(r"\d+$", captured)
+            if trail and len(trail.group(0)) >= 3 and re.search(r"[A-Z]", captured):
+                return trail.group(0).lstrip("0") or trail.group(0)
+            return captured.lstrip("0") or captured
         # Strategy 2: FT/FPR keyword followed by space + token
-        cleaned = re.sub(r'\b(FATTURA\s+N\.?|FT|FPR|F\.T\.|FATT\.|N\.)\b\s*', ' ', pre)
+        cleaned = re.sub(r"\b(FATTURA\s+N\.?|FT|FPR|F\.T\.|FATT\.|N\.)\b\s*", " ", pre)
         # Strip only 2-digit year suffix /YY (not 3+ digit FT numbers)
-        cleaned = re.sub(r'/\d{2}\b', '', cleaned)
-        digits = re.findall(r'\d+', cleaned)
-        if not digits: return None
+        cleaned = re.sub(r"/\d{2}\b", "", cleaned)
+        digits = re.findall(r"\d+", cleaned)
+        if not digits:
+            return None
         for d in reversed(digits):
             if not (len(d) == 4 and 2020 <= int(d) <= 2030):
-                return d.lstrip('0') or d
-        return digits[-1].lstrip('0') or digits[-1]
+                return d.lstrip("0") or d
+        return digits[-1].lstrip("0") or digits[-1]
 
     counts = defaultdict(int)
     sums = defaultdict(float)
@@ -401,16 +473,20 @@ def main():
         cat = docs.cell(r, 2).value
         fn = docs.cell(r, 5).value
         amt = docs.cell(r, 8).value
-        if not cod or not cat: continue
+        if not cod or not cat:
+            continue
         cat_s = str(cat).upper()
-        if "FATTURA" not in cat_s: continue
-        if "BONIFICO" in cat_s: continue
+        if "FATTURA" not in cat_s:
+            continue
+        if "BONIFICO" in cat_s:
+            continue
         ft = extract_ft_num(fn) or str(fn)[:30]
         fatt_rows.append((cod, cat_s, fn, ft, amt))
 
     # Prefer "FATTURA (xlsx)" over filesystem for amount
     # Strategy: group by (cod, ft), pick the row with non-None amount preferring xlsx
     from collections import OrderedDict
+
     groups = OrderedDict()
     for cod, cat_s, fn, ft, amt in fatt_rows:
         k = (cod, ft)
@@ -422,7 +498,8 @@ def main():
         # Pick entry: prefer one with non-None amount; if multiple, prefer xlsx
         best = None
         for cat_s, fn, amt in entries:
-            if amt is None: continue
+            if amt is None:
+                continue
             if best is None or "XLSX" in cat_s:
                 best = (cat_s, fn, amt)
         if best is None:
@@ -441,7 +518,8 @@ def main():
         cod = docs.cell(r, 1).value
         cat = docs.cell(r, 2).value
         amt = docs.cell(r, 8).value
-        if not cod or not cat: continue
+        if not cod or not cat:
+            continue
         cat_s = str(cat).upper()
         if "PREVENTIVO" not in cat_s and "PROFORMA" not in cat_s:
             continue
@@ -478,8 +556,10 @@ def main():
         # Status (col 12)
         contr_n = track.cell(r, 7).value or 0
         notes = []
-        if has_unknown_amt.get(cod): notes.append("€? fatt")
-        if prev_unknown.get(cod): notes.append("€? prev")
+        if has_unknown_amt.get(cod):
+            notes.append("€? fatt")
+        if prev_unknown.get(cod):
+            notes.append("€? prev")
         note = f" ({', '.join(notes)})" if notes else ""
         if n > 0 and (np > 0 or contr_n > 0):
             status = "COMPLETO" + note
@@ -496,7 +576,9 @@ def main():
         tot_prev = sum((track.cell(r, 6).value or 0) for r in track_rows.values())
         tot_contr = sum((track.cell(r, 8).value or 0) for r in track_rows.values())
         tot_fatt = sum((track.cell(r, 10).value or 0) for r in track_rows.values())
-        tot_max = sum((track.cell(r, 11).value or 0) for r in track_rows.values())  # MAX-per-row aggregato
+        tot_max = sum(
+            (track.cell(r, 11).value or 0) for r in track_rows.values()
+        )  # MAX-per-row aggregato
         track.cell(totale_row, 6).value = tot_prev if tot_prev else None
         track.cell(totale_row, 8).value = tot_contr if tot_contr else None
         track.cell(totale_row, 10).value = tot_fatt if tot_fatt else None
@@ -516,10 +598,30 @@ def main():
         oos.cell(1, c).fill = PatternFill("solid", fgColor="FFD9D9D9")
 
     oos_data = [
-        ("DI GIULIO SRL", "DI GIULIO SRL 577 DEL 30 04 2026.PDF", 58.00, "Centralina irrigazione — giardino/esterno"),
-        ("LEROY MERLIN", "LEROY MERLIN FT11228 DEL 24 04 2026.PDF", 349.39, "Fioriere — outdoor, intestate PANORAMA COMPANY"),
-        ("OMBRELLONI LETTINI ITALIA SRL", "OMBRELLONI LETTINI ITALIA SRL FT23 DEL 22 04 2026.PDF", None, "Spiaggia — altro progetto HPAN25SPIAGGIA"),
-        ("OMBRELLONI LETTINI ITALIA SRL", "OMBRELLONI LETTINI ITALIA SRL FT30 DEL 12 05 2026.PDF", None, "Spiaggia — altro progetto HPAN25SPIAGGIA"),
+        (
+            "DI GIULIO SRL",
+            "DI GIULIO SRL 577 DEL 30 04 2026.PDF",
+            58.00,
+            "Centralina irrigazione — giardino/esterno",
+        ),
+        (
+            "LEROY MERLIN",
+            "LEROY MERLIN FT11228 DEL 24 04 2026.PDF",
+            349.39,
+            "Fioriere — outdoor, intestate PANORAMA COMPANY",
+        ),
+        (
+            "OMBRELLONI LETTINI ITALIA SRL",
+            "OMBRELLONI LETTINI ITALIA SRL FT23 DEL 22 04 2026.PDF",
+            None,
+            "Spiaggia — altro progetto HPAN25SPIAGGIA",
+        ),
+        (
+            "OMBRELLONI LETTINI ITALIA SRL",
+            "OMBRELLONI LETTINI ITALIA SRL FT30 DEL 12 05 2026.PDF",
+            None,
+            "Spiaggia — altro progetto HPAN25SPIAGGIA",
+        ),
     ]
     for i, (fornitore, fn, amt, motivo) in enumerate(oos_data, start=2):
         oos.cell(i, 1).value = fornitore
@@ -539,50 +641,88 @@ def main():
     open_docs_per_fc = {}
     if partite_xlsx.exists():
         from openpyxl import load_workbook as lwb
+
         pwb = lwb(partite_xlsx, data_only=True)
-        pws = pwb['Foglio1']
+        pws = pwb["Foglio1"]
         HPAN_LOCAL = {
-            'A.M.C.N': 'F001', 'ABC FLOOR': 'F002', 'AMAZON': 'F004', 'Amazon': 'F004',
-            'B & T': 'F005', 'SICIGNANO': 'F007', 'CHIANESE': 'F008', 'CG SERVICE': 'F008',
-            'CENTRO CSC': 'F009', 'DOMUS': 'F010', 'CUOMO': 'F011', 'FALEGNAMERIA': 'F011',
-            'F.L.A.B': 'F012', 'HOSPITALITY': 'F013', 'ILLUXIT': 'F014', 'INDEL': 'F015',
-            'ITX': 'F016', 'LAUDATO': 'F017', 'MARIGLIANO': 'F018', 'MARINO LUIGI': 'F019',
-            'MIELE': 'F020', 'NESE': 'F021', 'OLIVA': 'F022', 'PORTEDI': 'F023', 'DIERRE': 'F023',
-            'ROMANO GAETANO': 'F024', 'S.T.E': 'F025', 'SALA': 'F026', 'METAL 2000': 'F029',
-            'SANTELIA': 'F027', 'VDA': 'F028', 'GRANATO': 'F030', 'SKLUM': 'F031',
-            'ORILIA': 'F032', 'ELECTRA': 'F033', 'NINNI': 'F034', 'OCEANO': 'F035',
-            'INNOVA': 'F036', 'IWIRD': 'F037', 'IRWID': 'F037', 'PISACANE': 'F003',
-            'CAPONE': 'F006',
+            "A.M.C.N": "F001",
+            "ABC FLOOR": "F002",
+            "AMAZON": "F004",
+            "Amazon": "F004",
+            "B & T": "F005",
+            "SICIGNANO": "F007",
+            "CHIANESE": "F008",
+            "CG SERVICE": "F008",
+            "CENTRO CSC": "F009",
+            "DOMUS": "F010",
+            "CUOMO": "F011",
+            "FALEGNAMERIA": "F011",
+            "F.L.A.B": "F012",
+            "HOSPITALITY": "F013",
+            "ILLUXIT": "F014",
+            "INDEL": "F015",
+            "ITX": "F016",
+            "LAUDATO": "F017",
+            "MARIGLIANO": "F018",
+            "MARINO LUIGI": "F019",
+            "MIELE": "F020",
+            "NESE": "F021",
+            "OLIVA": "F022",
+            "PORTEDI": "F023",
+            "DIERRE": "F023",
+            "ROMANO GAETANO": "F024",
+            "S.T.E": "F025",
+            "SALA": "F026",
+            "METAL 2000": "F029",
+            "SANTELIA": "F027",
+            "VDA": "F028",
+            "GRANATO": "F030",
+            "SKLUM": "F031",
+            "ORILIA": "F032",
+            "ELECTRA": "F033",
+            "NINNI": "F034",
+            "OCEANO": "F035",
+            "INNOVA": "F036",
+            "IWIRD": "F037",
+            "IRWID": "F037",
+            "PISACANE": "F003",
+            "CAPONE": "F006",
         }
+
         def _fc(s):
-            s = str(s or '').upper()
+            s = str(s or "").upper()
             for p, c in HPAN_LOCAL.items():
-                if p.upper() in s: return c
+                if p.upper() in s:
+                    return c
             return None
-        for r in range(2, pws.max_row+1):
+
+        for r in range(2, pws.max_row + 1):
             forn = pws.cell(r, 12).value
             saldo = pws.cell(r, 26).value
             docref = pws.cell(r, 19).value
             fc = _fc(forn)
             if fc and isinstance(saldo, (int, float)) and saldo != 0:
                 open_per_fc[fc] = open_per_fc.get(fc, 0) + abs(saldo)
-                open_docs_per_fc.setdefault(fc, []).append(str(docref or '')[:30])
+                open_docs_per_fc.setdefault(fc, []).append(str(docref or "")[:30])
 
     # ORTI partite: only relevant for F013 HOSPITALITY (and possibly F029 SALA?)
     # Other matches in ORTI are FALSE POSITIVES (different suppliers with similar names)
     if partite_orti_xlsx.exists():
         from openpyxl import load_workbook as lwb
+
         owb = lwb(partite_orti_xlsx, data_only=True)
-        ows = owb['Foglio1']
-        for r in range(2, ows.max_row+1):
+        ows = owb["Foglio1"]
+        for r in range(2, ows.max_row + 1):
             forn = ows.cell(r, 12).value
             saldo = ows.cell(r, 26).value
             docref = ows.cell(r, 19).value
             # Only HOSPITALITY PROJECT SRL is a real HPAN25 fornitore in ORTI partite
-            if forn and 'HOSPITALITY PROJECT' in str(forn).upper():
+            if forn and "HOSPITALITY PROJECT" in str(forn).upper():
                 if isinstance(saldo, (int, float)) and saldo != 0:
-                    open_per_fc['F013'] = open_per_fc.get('F013', 0) + abs(saldo)
-                    open_docs_per_fc.setdefault('F013', []).append(f"{str(docref or '')[:30]} (ORTI)")
+                    open_per_fc["F013"] = open_per_fc.get("F013", 0) + abs(saldo)
+                    open_docs_per_fc.setdefault("F013", []).append(
+                        f"{str(docref or '')[:30]} (ORTI)"
+                    )
 
     # Preserve manual columns (Lavoro Finito?, Note) from existing Chiusura before rebuild
     prev_finito = {}
@@ -603,10 +743,24 @@ def main():
         del wb["Chiusura_Fornitori"]
 
     chs = wb.create_sheet("Chiusura_Fornitori")
-    headers = ["Cod", "Fornitore", "Macro", "Scope",
-               "€ Preventivo", "€ Fatturato", "€ Consuntivo", "Scostamento",
-               "€ Pagato", "€ Da Pagare", "€ Da Fatturare",
-               "Lavoro Finito?", "Stato Operativo", "Ultima Evidenza", "Prossima Azione", "Note"]
+    headers = [
+        "Cod",
+        "Fornitore",
+        "Macro",
+        "Scope",
+        "€ Preventivo",
+        "€ Fatturato",
+        "€ Consuntivo",
+        "Scostamento",
+        "€ Pagato",
+        "€ Da Pagare",
+        "€ Da Fatturare",
+        "Lavoro Finito?",
+        "Stato Operativo",
+        "Ultima Evidenza",
+        "Prossima Azione",
+        "Note",
+    ]
     for c, h in enumerate(headers, start=1):
         cell = chs.cell(1, c)
         cell.value = h
@@ -619,8 +773,8 @@ def main():
         if cod == "F029":  # merged into F026
             continue
         tr = track_rows[cod]
-        ep = track.cell(tr, 6).value or 0      # € Preventivo
-        ef = track.cell(tr, 10).value or 0     # € Consuntivo (= Fatturato)
+        ep = track.cell(tr, 6).value or 0  # € Preventivo
+        ef = track.cell(tr, 10).value or 0  # € Consuntivo (= Fatturato)
         e_aperto = open_per_fc.get(cod, 0)
         e_pagato = max(0, ef - e_aperto) if ef else 0
         e_da_pagare = e_aperto if e_aperto > 0 else 0
@@ -634,12 +788,22 @@ def main():
             evidenza = "Tutte fatture pagate"
         note_auto = "(ORTI)" if cod == "F013" else ""
         note = note_auto or prev_note_manual.get(cod, "")
-        cockpit_rows.append({
-            "cod": cod, "nome": track.cell(tr, 2).value or "",
-            "macro": track.cell(tr, 3).value or "", "scope": track.cell(tr, 4).value or "",
-            "ep": ep, "ef": ef, "pagato": e_pagato, "dapagare": e_da_pagare,
-            "dafatt": e_da_fatt, "finito": finito, "evidenza": evidenza, "note": note,
-        })
+        cockpit_rows.append(
+            {
+                "cod": cod,
+                "nome": track.cell(tr, 2).value or "",
+                "macro": track.cell(tr, 3).value or "",
+                "scope": track.cell(tr, 4).value or "",
+                "ep": ep,
+                "ef": ef,
+                "pagato": e_pagato,
+                "dapagare": e_da_pagare,
+                "dafatt": e_da_fatt,
+                "finito": finito,
+                "evidenza": evidenza,
+                "note": note,
+            }
+        )
 
     # Write rows. Colonne (16):
     #  E € Preventivo (val) | F € Fatturato (val) | G € Consuntivo (formula, vuoto finché non finito)
@@ -652,50 +816,66 @@ def main():
         chs.cell(r, 2).value = d["nome"]
         chs.cell(r, 3).value = d["macro"]
         chs.cell(r, 4).value = d["scope"]
-        chs.cell(r, 5).value = d["ep"] or None                             # E € Preventivo
-        chs.cell(r, 6).value = d["ef"] or None                             # F € Fatturato
-        chs.cell(r, 7).value = f'=IF(L{r}="SI",F{r},"")'                   # G € Consuntivo — vuoto finché non finito
-        chs.cell(r, 8).value = f'=IF(G{r}="","",G{r}-E{r})'                # H Scostamento — vuoto finché no consuntivo
-        chs.cell(r, 9).value = d["pagato"] or None                         # I € Pagato
-        chs.cell(r, 10).value = d["dapagare"] or None                      # J € Da Pagare
-        chs.cell(r, 11).value = f'=IF(L{r}="SI",0,MAX(E{r}-F{r},0))'       # K € Da Fatturare
-        chs.cell(r, 12).value = d["finito"] or None                        # L Lavoro Finito? (manuale)
-        chs.cell(r, 13).value = (                                          # M Stato Operativo
+        chs.cell(r, 5).value = d["ep"] or None  # E € Preventivo
+        chs.cell(r, 6).value = d["ef"] or None  # F € Fatturato
+        chs.cell(
+            r, 7
+        ).value = f'=IF(L{r}="SI",F{r},"")'  # G € Consuntivo — vuoto finché non finito
+        chs.cell(
+            r, 8
+        ).value = (
+            f'=IF(G{r}="","",G{r}-E{r})'  # H Scostamento — vuoto finché no consuntivo
+        )
+        chs.cell(r, 9).value = d["pagato"] or None  # I € Pagato
+        chs.cell(r, 10).value = d["dapagare"] or None  # J € Da Pagare
+        chs.cell(r, 11).value = f'=IF(L{r}="SI",0,MAX(E{r}-F{r},0))'  # K € Da Fatturare
+        chs.cell(r, 12).value = d["finito"] or None  # L Lavoro Finito? (manuale)
+        chs.cell(r, 13).value = (  # M Stato Operativo
             f'=IF(AND(F{r}=0,E{r}=0),"SCOPERTO",'
             f'IF(AND(F{r}=0,E{r}>0),"SOLO IMPEGNO",'
             f'IF(AND(J{r}>0,K{r}>0),"LAVORI IN CORSO",'
             f'IF(J{r}>0,"DA PAGARE",'
             f'IF(K{r}>0,"DA FATTURARE","CHIUSO")))))'
         )
-        chs.cell(r, 14).value = d["evidenza"] or None                      # N Ultima Evidenza
-        chs.cell(r, 15).value = (                                          # O Prossima Azione
+        chs.cell(r, 14).value = d["evidenza"] or None  # N Ultima Evidenza
+        chs.cell(r, 15).value = (  # O Prossima Azione
             f'=IF(M{r}="DA PAGARE","Verificare bonifico / pagare",'
             f'IF(M{r}="DA FATTURARE","Sollecitare fattura saldo",'
             f'IF(M{r}="LAVORI IN CORSO","Attendere completamento + saldo",'
             f'IF(M{r}="SOLO IMPEGNO","Avviare lavori o annullare ordine",'
             f'IF(M{r}="SCOPERTO","Verificare se serve","—")))))'
         )
-        chs.cell(r, 16).value = d["note"] or None                          # P Note
+        chs.cell(r, 16).value = d["note"] or None  # P Note
         row += 1
     last_row = row - 1
 
     # Dropdown SI/PARZIALE/NO su Lavoro Finito? (col L)
     from openpyxl.worksheet.datavalidation import DataValidation
+
     dv = DataValidation(type="list", formula1='"SI,PARZIALE,NO"', allow_blank=True)
     chs.add_data_validation(dv)
     dv.add(f"L2:L{last_row}")
 
     # Conditional formatting colori su Stato Operativo (col M)
     from openpyxl.formatting.rule import CellIsRule
+
     cf_colors = {
-        "CHIUSO": "FFA5D6A7", "DA PAGARE": "FFFFE082", "DA FATTURARE": "FFFFAB91",
-        "LAVORI IN CORSO": "FFFFD54F", "SOLO IMPEGNO": "FF90CAF9", "SCOPERTO": "FFE0E0E0",
+        "CHIUSO": "FFA5D6A7",
+        "DA PAGARE": "FFFFE082",
+        "DA FATTURARE": "FFFFAB91",
+        "LAVORI IN CORSO": "FFFFD54F",
+        "SOLO IMPEGNO": "FF90CAF9",
+        "SCOPERTO": "FFE0E0E0",
     }
     for txt, color in cf_colors.items():
         chs.conditional_formatting.add(
             f"M2:M{last_row}",
-            CellIsRule(operator="equal", formula=[f'"{txt}"'],
-                       fill=PatternFill("solid", fgColor=color)))
+            CellIsRule(
+                operator="equal",
+                formula=[f'"{txt}"'],
+                fill=PatternFill("solid", fgColor=color),
+            ),
+        )
 
     # Totale row
     chs.cell(row, 1).value = "TOTALE"
@@ -708,10 +888,10 @@ def main():
     # Column widths (16 colonne)
     widths = [6, 30, 11, 28, 12, 12, 12, 11, 11, 11, 12, 13, 16, 26, 30, 20]
     for i, w in enumerate(widths, start=1):
-        chs.column_dimensions[chr(64+i)].width = w
+        chs.column_dimensions[chr(64 + i)].width = w
 
     print("\n── Chiusura_Fornitori sheet built ──")
-    print(f"  Rows: {row-2} F-codes + 1 totale")
+    print(f"  Rows: {row - 2} F-codes + 1 totale")
 
     # ── Phase 8: rebuild Summary sheet ──
     summ = wb["Summary"]
@@ -733,7 +913,9 @@ def main():
         tt = track.cell(r, 11).value or 0
         macro = track.cell(r, 3).value or "—"
         nome = track.cell(r, 2).value or cod
-        s_prev += ep; s_fatt += ef; s_total += tt
+        s_prev += ep
+        s_fatt += ef
+        s_total += tt
         macro_prev[macro] += ep
         macro_fatt[macro] += ef
         if ep == 0 and ef == 0:
@@ -758,7 +940,11 @@ def main():
         (5, "IMPEGNO — Σ preventivi/contratti (€ Prev)", s_prev),
         (6, "COMPETENZA — Σ fatture emesse (€ Fatt)", s_fatt),
         (7, "CASSA — Σ realmente pagato (€ Pagato)", s_pagato),
-        (9, "TOTALE PROGETTO — Pagato + Da Pagare + Da Fatturare (consuntivo-aware)", s_total),
+        (
+            9,
+            "TOTALE PROGETTO — Pagato + Da Pagare + Da Fatturare (consuntivo-aware)",
+            s_total,
+        ),
         (10, "  ├─ già pagato (CASSA)", s_pagato),
         (11, "  ├─ fatturato da pagare (€ Da Pagare)", s_dapagare),
         (12, "  └─ impegnato da fatturare (€ Da Fatturare)", s_dafatturare),
@@ -788,7 +974,9 @@ def main():
 
     # Scoperti
     rr += 1
-    summ.cell(rr, 1).value = f"Fornitori SCOPERTI (zero preventivi + zero fatture): {len(scoperti)}"
+    summ.cell(
+        rr, 1
+    ).value = f"Fornitori SCOPERTI (zero preventivi + zero fatture): {len(scoperti)}"
     summ.cell(rr, 1).font = bold
     rr += 1
     for sc in scoperti:
@@ -800,8 +988,12 @@ def main():
     summ.column_dimensions["C"].width = 20
 
     print("\n── Summary rebuilt ──")
-    print(f"  IMPEGNO €{s_prev:,.0f} | COMPETENZA €{s_fatt:,.0f} | CASSA €{s_pagato:,.0f}")
-    print(f"  TOTALE IMPEGNO €{s_total:,.0f} | Budget residuo €{BUDGET_TARGET_EUR - s_total:,.0f}")
+    print(
+        f"  IMPEGNO €{s_prev:,.0f} | COMPETENZA €{s_fatt:,.0f} | CASSA €{s_pagato:,.0f}"
+    )
+    print(
+        f"  TOTALE IMPEGNO €{s_total:,.0f} | Budget residuo €{BUDGET_TARGET_EUR - s_total:,.0f}"
+    )
     print(f"  Scoperti: {len(scoperti)} ({', '.join(s.split()[0] for s in scoperti)})")
 
     wb.save(V5_PATH)
@@ -819,7 +1011,9 @@ def main():
         st = track.cell(r, 12).value or ""
         s_str = f"€{s:,.0f}" if s else "-"
         print(f"{cod:<6} {nome:<32} {n!s:<4} {s_str:>12} {st}")
-    print(f"\nTOTALE € Fatt: €{sum((track.cell(r, 10).value or 0) for r in track_rows.values()):,.2f}")
+    print(
+        f"\nTOTALE € Fatt: €{sum((track.cell(r, 10).value or 0) for r in track_rows.values()):,.2f}"
+    )
 
 
 if __name__ == "__main__":

@@ -438,14 +438,26 @@ class TestGeneraPf:
 
     def test_quadratura_ignora_fornitori_in_credito(self):
         # un fornitore in puro credito (totale positivo) non rompe la quadratura
-        scad_df = pd.DataFrame([
-            {"codice_fornitore": 92, "nome": "AMALFI", "totale": -100.0,
-             "scaduto": 0.0, "mese_6": -100.0},
-            {"codice_fornitore": 1602, "nome": "TV CREDITO", "totale": 221.91,
-             "scaduto": 221.91},
-        ])
-        fornitori = {92: {"voce_id": "USCITE_MATERIE_PRIME",
-                          "nome_pf": "Amalfi sei esse"}}
+        scad_df = pd.DataFrame(
+            [
+                {
+                    "codice_fornitore": 92,
+                    "nome": "AMALFI",
+                    "totale": -100.0,
+                    "scaduto": 0.0,
+                    "mese_6": -100.0,
+                },
+                {
+                    "codice_fornitore": 1602,
+                    "nome": "TV CREDITO",
+                    "totale": 221.91,
+                    "scaduto": 221.91,
+                },
+            ]
+        )
+        fornitori = {
+            92: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": "Amalfi sei esse"}
+        }
         _, report = genera_pf(
             pf_prev_bytes=_pf_precedente_bytes(),
             scad_df=scad_df,
@@ -461,10 +473,16 @@ class TestGeneraPf:
         assert quadr["esito"] == "OK"  # 100 owed, 100 written, credito ignorato
 
     def test_codice_nome_skip_nome_pf_vuoto(self):
-        scad_df = pd.DataFrame([
-            {"codice_fornitore": 19, "nome": "AMAZON EU S.A R.L.",
-             "totale": -50.0, "scaduto": -50.0},
-        ])
+        scad_df = pd.DataFrame(
+            [
+                {
+                    "codice_fornitore": 19,
+                    "nome": "AMAZON EU S.A R.L.",
+                    "totale": -50.0,
+                    "scaduto": -50.0,
+                },
+            ]
+        )
         # nome_pf vuoto -> blocco A scrive il nome export -> check NON deve flaggare
         fornitori = {19: {"voce_id": "USCITE_MATERIE_PRIME", "nome_pf": ""}}
         _, report = genera_pf(

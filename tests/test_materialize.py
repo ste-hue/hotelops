@@ -14,31 +14,69 @@ from verticals.condges.materialize_reconciliation import (
 # -- Helpers to build synthetic datahub structures ----------------------------
 
 BANK_COLS = [
-    "id_movimento", "societa_id", "business_unit_id", "funzione_id",
-    "location_id", "oggetto_id", "banca_id", "data_operazione",
-    "data_valuta", "descrizione", "divisa", "importo_debito",
-    "importo_credito", "importo_netto", "data_ingresso",
+    "id_movimento",
+    "societa_id",
+    "business_unit_id",
+    "funzione_id",
+    "location_id",
+    "oggetto_id",
+    "banca_id",
+    "data_operazione",
+    "data_valuta",
+    "descrizione",
+    "divisa",
+    "importo_debito",
+    "importo_credito",
+    "importo_netto",
+    "data_ingresso",
 ]
 
 MATCH_COLS = [
-    "bank_id", "bank_date", "bank_desc", "bank_amount",
-    "bank_file", "bank_row", "ledger_id", "ledger_date",
-    "ledger_desc", "ledger_amount", "ledger_file", "score",
+    "bank_id",
+    "bank_date",
+    "bank_desc",
+    "bank_amount",
+    "bank_file",
+    "bank_row",
+    "ledger_id",
+    "ledger_date",
+    "ledger_desc",
+    "ledger_amount",
+    "ledger_file",
+    "score",
 ]
 
 NO_MATCH_COLS = [
-    "bank_id", "bank_date", "bank_desc", "bank_amount",
-    "bank_file", "bank_row",
+    "bank_id",
+    "bank_date",
+    "bank_desc",
+    "bank_amount",
+    "bank_file",
+    "bank_row",
 ]
 
 RUNS_COLS = [
-    "run_id", "societa", "conto", "date_from", "date_to", "status",
-    "auto_rate", "started_at", "completed_at", "duration_seconds",
-    "bank_transactions", "auto_matches",
+    "run_id",
+    "societa",
+    "conto",
+    "date_from",
+    "date_to",
+    "status",
+    "auto_rate",
+    "started_at",
+    "completed_at",
+    "duration_seconds",
+    "bank_transactions",
+    "auto_matches",
 ]
 
 DECISION_COLS = [
-    "bank_id", "ledger_id", "decision", "decided_by", "decided_at", "note",
+    "bank_id",
+    "ledger_id",
+    "decision",
+    "decided_by",
+    "decided_at",
+    "note",
 ]
 
 
@@ -97,8 +135,9 @@ def _setup_run(
 
     # metrics.json
     with open(run_dir / "metrics.json", "w") as f:
-        json.dump({"run_id": run_id, "status": "completed",
-                    "completed_at": completed_at}, f)
+        json.dump(
+            {"run_id": run_id, "status": "completed", "completed_at": completed_at}, f
+        )
 
     if auto_rows is not None:
         _write_csv(run_dir / "matches_auto.csv", MATCH_COLS, auto_rows)
@@ -115,14 +154,22 @@ def _setup_run(
         w = csv.DictWriter(f, fieldnames=RUNS_COLS)
         if not exists:
             w.writeheader()
-        w.writerow({
-            "run_id": run_id, "societa": "INTUR", "conto": "SELLA",
-            "date_from": "2025-01-01", "date_to": "2025-01-31",
-            "status": "completed", "auto_rate": "0.5",
-            "started_at": completed_at, "completed_at": completed_at,
-            "duration_seconds": "1.0", "bank_transactions": "1",
-            "auto_matches": "1",
-        })
+        w.writerow(
+            {
+                "run_id": run_id,
+                "societa": "INTUR",
+                "conto": "SELLA",
+                "date_from": "2025-01-01",
+                "date_to": "2025-01-31",
+                "status": "completed",
+                "auto_rate": "0.5",
+                "started_at": completed_at,
+                "completed_at": completed_at,
+                "duration_seconds": "1.0",
+                "bank_transactions": "1",
+                "auto_matches": "1",
+            }
+        )
 
 
 def _setup_decisions(datahub: Path, rows: list[dict]):
@@ -131,6 +178,7 @@ def _setup_decisions(datahub: Path, rows: list[dict]):
 
 
 # -- Unit tests: _compute_status ----------------------------------------------
+
 
 def test_compute_status_pending():
     assert _compute_status("Pending", None) == "Pending"
@@ -185,14 +233,25 @@ def test_bank_fact_auto_match(tmp_path):
     """Bank fact with auto match -> AutoMatched, candidate populated."""
     _setup_bank_facts(tmp_path, [_make_bank_row("BK002")])
     _setup_run(
-        tmp_path, run_id="run001", completed_at="2025-01-25T10:00:00",
-        auto_rows=[{
-            "bank_id": "BK002", "ledger_id": "LED099",
-            "score": "0.8500", "bank_date": "", "bank_desc": "",
-            "bank_amount": "", "bank_file": "", "bank_row": "",
-            "ledger_date": "", "ledger_desc": "", "ledger_amount": "",
-            "ledger_file": "",
-        }],
+        tmp_path,
+        run_id="run001",
+        completed_at="2025-01-25T10:00:00",
+        auto_rows=[
+            {
+                "bank_id": "BK002",
+                "ledger_id": "LED099",
+                "score": "0.8500",
+                "bank_date": "",
+                "bank_desc": "",
+                "bank_amount": "",
+                "bank_file": "",
+                "bank_row": "",
+                "ledger_date": "",
+                "ledger_desc": "",
+                "ledger_amount": "",
+                "ledger_file": "",
+            }
+        ],
     )
 
     summary = materialize_reconciliation_state(str(tmp_path), today=FIXED_TODAY)
@@ -211,14 +270,24 @@ def test_auto_match_plus_confirm(tmp_path):
     """Auto match + confirm decision -> Confirmed."""
     _setup_bank_facts(tmp_path, [_make_bank_row("BK003")])
     _setup_run(
-        tmp_path, run_id="run001", completed_at="2025-01-25T10:00:00",
+        tmp_path,
+        run_id="run001",
+        completed_at="2025-01-25T10:00:00",
         auto_rows=[_auto_row("BK003", "LED100", "0.9000")],
     )
-    _setup_decisions(tmp_path, [{
-        "bank_id": "BK003", "ledger_id": "LED100",
-        "decision": "confirm", "decided_by": "user",
-        "decided_at": "2025-01-26T12:00:00", "note": "",
-    }])
+    _setup_decisions(
+        tmp_path,
+        [
+            {
+                "bank_id": "BK003",
+                "ledger_id": "LED100",
+                "decision": "confirm",
+                "decided_by": "user",
+                "decided_at": "2025-01-26T12:00:00",
+                "note": "",
+            }
+        ],
+    )
 
     summary = materialize_reconciliation_state(str(tmp_path), today=FIXED_TODAY)
 
@@ -235,14 +304,24 @@ def test_auto_match_plus_reject(tmp_path):
     """Auto match + reject decision -> Rejected."""
     _setup_bank_facts(tmp_path, [_make_bank_row("BK004")])
     _setup_run(
-        tmp_path, run_id="run001", completed_at="2025-01-25T10:00:00",
+        tmp_path,
+        run_id="run001",
+        completed_at="2025-01-25T10:00:00",
         auto_rows=[_auto_row("BK004", "LED101", "0.7000")],
     )
-    _setup_decisions(tmp_path, [{
-        "bank_id": "BK004", "ledger_id": "LED101",
-        "decision": "reject", "decided_by": "user",
-        "decided_at": "2025-01-26T14:00:00", "note": "wrong match",
-    }])
+    _setup_decisions(
+        tmp_path,
+        [
+            {
+                "bank_id": "BK004",
+                "ledger_id": "LED101",
+                "decision": "reject",
+                "decided_by": "user",
+                "decided_at": "2025-01-26T14:00:00",
+                "note": "wrong match",
+            }
+        ],
+    )
 
     summary = materialize_reconciliation_state(str(tmp_path), today=FIXED_TODAY)
 
@@ -256,21 +335,32 @@ def test_multiple_decisions_last_wins(tmp_path):
     """Confirm then reject -> last decision (reject) wins."""
     _setup_bank_facts(tmp_path, [_make_bank_row("BK005")])
     _setup_run(
-        tmp_path, run_id="run001", completed_at="2025-01-25T10:00:00",
+        tmp_path,
+        run_id="run001",
+        completed_at="2025-01-25T10:00:00",
         auto_rows=[_auto_row("BK005", "LED102", "0.8000")],
     )
-    _setup_decisions(tmp_path, [
-        {
-            "bank_id": "BK005", "ledger_id": "LED102",
-            "decision": "confirm", "decided_by": "user",
-            "decided_at": "2025-01-26T10:00:00", "note": "",
-        },
-        {
-            "bank_id": "BK005", "ledger_id": "LED102",
-            "decision": "reject", "decided_by": "user",
-            "decided_at": "2025-01-27T10:00:00", "note": "changed mind",
-        },
-    ])
+    _setup_decisions(
+        tmp_path,
+        [
+            {
+                "bank_id": "BK005",
+                "ledger_id": "LED102",
+                "decision": "confirm",
+                "decided_by": "user",
+                "decided_at": "2025-01-26T10:00:00",
+                "note": "",
+            },
+            {
+                "bank_id": "BK005",
+                "ledger_id": "LED102",
+                "decision": "reject",
+                "decided_by": "user",
+                "decided_at": "2025-01-27T10:00:00",
+                "note": "changed mind",
+            },
+        ],
+    )
 
     summary = materialize_reconciliation_state(str(tmp_path), today=FIXED_TODAY)
 
@@ -285,12 +375,16 @@ def test_multiple_runs_latest_wins(tmp_path):
 
     # Older run
     _setup_run(
-        tmp_path, run_id="run_old", completed_at="2025-01-20T10:00:00",
+        tmp_path,
+        run_id="run_old",
+        completed_at="2025-01-20T10:00:00",
         auto_rows=[_auto_row("BK006", "LED_OLD", "0.6000")],
     )
     # Newer run
     _setup_run(
-        tmp_path, run_id="run_new", completed_at="2025-01-25T10:00:00",
+        tmp_path,
+        run_id="run_new",
+        completed_at="2025-01-25T10:00:00",
         auto_rows=[_auto_row("BK006", "LED_NEW", "0.9500")],
     )
 
@@ -306,7 +400,9 @@ def test_review_match_stays_pending_with_candidate(tmp_path):
     """Bank fact in matches_review -> Pending but with candidate info."""
     _setup_bank_facts(tmp_path, [_make_bank_row("BK007", ingresso="2025-01-10")])
     _setup_run(
-        tmp_path, run_id="run001", completed_at="2025-01-25T10:00:00",
+        tmp_path,
+        run_id="run001",
+        completed_at="2025-01-25T10:00:00",
         review_rows=[
             _review_row("BK007", "LED_A", "0.4000"),
             _review_row("BK007", "LED_B", "0.5500"),
@@ -329,7 +425,10 @@ def test_empty_datahub(tmp_path):
     summary = materialize_reconciliation_state(str(tmp_path), today=FIXED_TODAY)
     assert summary["total"] == 0
     assert summary["counts"] == {
-        "Pending": 0, "AutoMatched": 0, "Confirmed": 0, "Rejected": 0,
+        "Pending": 0,
+        "AutoMatched": 0,
+        "Confirmed": 0,
+        "Rejected": 0,
     }
 
 
@@ -338,26 +437,51 @@ def test_output_has_all_columns(tmp_path):
     _setup_bank_facts(tmp_path, [_make_bank_row("BK008")])
     materialize_reconciliation_state(str(tmp_path), today=FIXED_TODAY)
 
-    output = (tmp_path / "meta" / "actions" / "reconcile_banca"
-              / "materialized" / "reconciliation_transactions_v1.csv")
+    output = (
+        tmp_path
+        / "meta"
+        / "actions"
+        / "reconcile_banca"
+        / "materialized"
+        / "reconciliation_transactions_v1.csv"
+    )
     with open(output, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         assert list(reader.fieldnames) == [
-            "bank_id", "societa_id", "banca_id", "data_operazione", "importo",
-            "descrizione_banca", "candidate_ledger_id", "candidate_score",
-            "confirmed_ledger_id", "status", "first_seen_at", "confirmed_at",
-            "is_pending", "is_confirmed", "days_pending",
+            "bank_id",
+            "societa_id",
+            "banca_id",
+            "data_operazione",
+            "importo",
+            "descrizione_banca",
+            "candidate_ledger_id",
+            "candidate_score",
+            "confirmed_ledger_id",
+            "status",
+            "first_seen_at",
+            "confirmed_at",
+            "is_pending",
+            "is_confirmed",
+            "days_pending",
         ]
 
 
 # -- Helpers ------------------------------------------------------------------
 
+
 def _auto_row(bank_id: str, ledger_id: str, score: str) -> dict:
     return {
-        "bank_id": bank_id, "ledger_id": ledger_id, "score": score,
-        "bank_date": "", "bank_desc": "", "bank_amount": "",
-        "bank_file": "", "bank_row": "",
-        "ledger_date": "", "ledger_desc": "", "ledger_amount": "",
+        "bank_id": bank_id,
+        "ledger_id": ledger_id,
+        "score": score,
+        "bank_date": "",
+        "bank_desc": "",
+        "bank_amount": "",
+        "bank_file": "",
+        "bank_row": "",
+        "ledger_date": "",
+        "ledger_desc": "",
+        "ledger_amount": "",
         "ledger_file": "",
     }
 
@@ -367,7 +491,13 @@ def _review_row(bank_id: str, ledger_id: str, score: str) -> dict:
 
 
 def _read_output(datahub: Path) -> list[dict]:
-    output = (datahub / "meta" / "actions" / "reconcile_banca"
-              / "materialized" / "reconciliation_transactions_v1.csv")
+    output = (
+        datahub
+        / "meta"
+        / "actions"
+        / "reconcile_banca"
+        / "materialized"
+        / "reconciliation_transactions_v1.csv"
+    )
     with open(output, "r", encoding="utf-8") as f:
         return list(csv.DictReader(f))

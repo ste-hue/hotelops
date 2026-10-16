@@ -20,6 +20,4 @@ def validate_columns(
     """
     missing = required - set(found)
     if missing:
-        raise SchemaViolationError(
-            f"{context}: missing columns {sorted(missing)}"
-        )
+        raise SchemaViolationError(f"{context}: missing columns {sorted(missing)}")

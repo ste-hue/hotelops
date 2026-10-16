@@ -161,26 +161,48 @@ def test_find_prefix_and_extract():
 
 
 def test_build_reservation_rows():
-    recs = [{
-        "id": 4402425, "license_code": "it-sa-84010-panorama-beach",
-        "spot_type": "umbrella", "spot_name": "7", "status": 1,
-        "seasonal": 0, "deleted": 0, "online": 1, "hotel": "",
-        "hotel_room": None, "start_date": 1592524800, "end_date": 1592524800,
-        "beds": 2, "chairs": 0, "first_name": "Jessica", "last_name": "Neely",
-        "email": "jess@example.com", "phone_area_code": None,
-        "phone_number": "6128192966", "list_total": None, "paid_total": None,
-        "gross_booking_value": 35, "discount": None, "channel": "",
-        "invoice_number": None, "invoice_company": None,
-        "utm_source": None, "utm_medium": None, "utm_campaign": None,
-        "created_at": 1652133848, "updated_at": None,
-    }]
+    recs = [
+        {
+            "id": 4402425,
+            "license_code": "it-sa-84010-panorama-beach",
+            "spot_type": "umbrella",
+            "spot_name": "7",
+            "status": 1,
+            "seasonal": 0,
+            "deleted": 0,
+            "online": 1,
+            "hotel": "",
+            "hotel_room": None,
+            "start_date": 1592524800,
+            "end_date": 1592524800,
+            "beds": 2,
+            "chairs": 0,
+            "first_name": "Jessica",
+            "last_name": "Neely",
+            "email": "jess@example.com",
+            "phone_area_code": None,
+            "phone_number": "6128192966",
+            "list_total": None,
+            "paid_total": None,
+            "gross_booking_value": 35,
+            "discount": None,
+            "channel": "",
+            "invoice_number": None,
+            "invoice_company": None,
+            "utm_source": None,
+            "utm_medium": None,
+            "utm_campaign": None,
+            "created_at": 1652133848,
+            "updated_at": None,
+        }
+    ]
     rows = build_reservation_rows(recs, "dump.json", "raw-1", _NOW)
     assert len(rows) == 1
     r = rows[0]
     assert r.id == 4402425
     assert r.societa_id == "INTUR"
     assert r.business_unit_id == "LIDO"
-    assert r.oggetto_id == "7"          # spot_name
+    assert r.oggetto_id == "7"  # spot_name
     assert r.online is True
     assert r.seasonal is False
     assert r.start_date.year == 2020
@@ -190,12 +212,20 @@ def test_build_reservation_rows():
 
 
 def test_build_cash_flow_rows_negative():
-    recs = [{
-        "id": 3055414, "reservation_id": 4402426, "method": None,
-        "amount": "-35.00", "date": 1591786050, "receipt_id": None,
-        "invoice_id": None, "deleted": 1, "created_at": 1652133848,
-        "updated_at": None,
-    }]
+    recs = [
+        {
+            "id": 3055414,
+            "reservation_id": 4402426,
+            "method": None,
+            "amount": "-35.00",
+            "date": 1591786050,
+            "receipt_id": None,
+            "invoice_id": None,
+            "deleted": 1,
+            "created_at": 1652133848,
+            "updated_at": None,
+        }
+    ]
     rows = build_cash_flow_rows(recs, "dump.json", "raw-1", _NOW)
     c = rows[0]
     assert c.amount == -35.0
@@ -205,15 +235,23 @@ def test_build_cash_flow_rows_negative():
 
 
 def test_build_spot_rows():
-    recs = [{
-        "id": 1394619, "uuid": "abc", "name": "7", "type": "umbrella",
-        "sector": 0, "price_list_id": None, "pos_x": 617, "pos_y": 73,
-        "element_type": "passerella",
-    }]
+    recs = [
+        {
+            "id": 1394619,
+            "uuid": "abc",
+            "name": "7",
+            "type": "umbrella",
+            "sector": 0,
+            "price_list_id": None,
+            "pos_x": 617,
+            "pos_y": 73,
+            "element_type": "passerella",
+        }
+    ]
     rows = build_spot_rows(recs, "dump.json", "raw-1", _NOW)
     s = rows[0]
     assert s.id == 1394619
-    assert s.oggetto_id == "7"          # name
+    assert s.oggetto_id == "7"  # name
     assert s.type == "umbrella"
     assert s.business_unit_id == "LIDO"
 
@@ -221,8 +259,15 @@ def test_build_spot_rows():
 def test_ingest_file_dry_run(tmp_path):
     dump = {
         "it-sa-84010-panorama-beach_reservations": {
-            "columns": ["id", "spot_name", "start_date", "seasonal",
-                        "deleted", "online", "gross_booking_value"],
+            "columns": [
+                "id",
+                "spot_name",
+                "start_date",
+                "seasonal",
+                "deleted",
+                "online",
+                "gross_booking_value",
+            ],
             "rows": [[1, "7", 1592524800, 0, 0, 1, 35]],
         },
         "it-sa-84010-panorama-beach_cash_flows": {

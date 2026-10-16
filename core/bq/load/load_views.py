@@ -50,7 +50,7 @@ def _dependency_order(views: dict[str, str]) -> list[str]:
         if name in seen:
             return
         if name in stack:
-            cycle = " -> ".join(stack[stack.index(name):] + (name,))
+            cycle = " -> ".join(stack[stack.index(name) :] + (name,))
             raise ValueError(f"Cyclic view dependency: {cycle}")
         for dep in sorted(deps[name]):
             visit(dep, stack + (name,))

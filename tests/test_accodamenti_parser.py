@@ -9,7 +9,9 @@ import logging
 from core.parsers.accodamenti import parse_movimenti
 
 
-def _gen_line(*, conto="", dare="0", avere="0", progressivo=1, data="01042026", desc=""):
+def _gen_line(
+    *, conto="", dare="0", avere="0", progressivo=1, data="01042026", desc=""
+):
     """Build a pipe-delimited GEN line matching Esolver accodamenti format."""
     fields = [""] * 23
     fields[0] = "GEN"
@@ -168,8 +170,10 @@ def test_parse_movimenti_unknown_struttura_logs_warning(tmp_path, caplog):
         events = parse_movimenti(str(path))
     assert len(events) == 1
     assert events[0]["struttura"] == "unknown"
-    assert any("prefisso" in rec.message.lower() or "unknown" in rec.message.lower()
-               for rec in caplog.records)
+    assert any(
+        "prefisso" in rec.message.lower() or "unknown" in rec.message.lower()
+        for rec in caplog.records
+    )
 
 
 def test_detect_struttura_promotion_tempfile_prefix(tmp_path):

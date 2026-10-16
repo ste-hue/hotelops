@@ -430,9 +430,7 @@ def _repair_dropped_cell(fields: list) -> list:
     return fields[:3] + [dare, avere] + fields[4:]
 
 
-def parse_mastrino_multibank(
-    filepath: Path, societa_id: str
-) -> list[dict]:
+def parse_mastrino_multibank(filepath: Path, societa_id: str) -> list[dict]:
     """Parse multi-bank Esolver mastrino (CSV or XLSX).
 
     Returns one entry per movement row, with banca_id resolved via
@@ -468,8 +466,12 @@ def parse_mastrino_multibank(
                 "banca_id": banca_id,
                 "dare": dare,
                 "avere": avere,
-                "causale": str(fields[2]).strip() if len(fields) > 2 and fields[2] is not None else "",
-                "rif_registrazione": str(fields[1]).strip() if len(fields) > 1 and fields[1] is not None else "",
+                "causale": str(fields[2]).strip()
+                if len(fields) > 2 and fields[2] is not None
+                else "",
+                "rif_registrazione": str(fields[1]).strip()
+                if len(fields) > 1 and fields[1] is not None
+                else "",
             }
         )
 
@@ -736,7 +738,9 @@ def process_file(
         daily_saldi = extract_daily_saldi(rows)
         log.info(f"Extracted {len(daily_saldi)} end-of-day saldi")
 
-        return write_saldi_to_bq(daily_saldi, societa_id, banca_id, dry_run, raw_object_id=raw_object_id)
+        return write_saldi_to_bq(
+            daily_saldi, societa_id, banca_id, dry_run, raw_object_id=raw_object_id
+        )
 
 
 def main():
@@ -789,7 +793,9 @@ def main():
         if not societa:
             log.error(f"Cannot infer societa from {filepath.name}. Use --societa.")
             sys.exit(1)
-        total = process_file(filepath, societa, banca, args.dry_run, raw_object_id=args.raw_object_id)
+        total = process_file(
+            filepath, societa, banca, args.dry_run, raw_object_id=args.raw_object_id
+        )
 
     elif args.dir:
         dirpath = Path(args.dir)
@@ -828,7 +834,9 @@ def main():
             if not societa:
                 log.warning(f"Skipping {filepath.name}: cannot infer societa")
                 continue
-            n = process_file(filepath, societa, banca, args.dry_run, raw_object_id=args.raw_object_id)
+            n = process_file(
+                filepath, societa, banca, args.dry_run, raw_object_id=args.raw_object_id
+            )
             total += n
 
     log.info(f"Total saldi written: {total}")

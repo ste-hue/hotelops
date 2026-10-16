@@ -307,7 +307,9 @@ def _parse_xlsx_saldi(rows_iter, header: tuple, logger: logging.Logger) -> list[
         entries.append(
             {
                 "codice_conto": codice,
-                "descrizione": str(row[i_descr] or "").strip() if i_descr is not None else "",
+                "descrizione": str(row[i_descr] or "").strip()
+                if i_descr is not None
+                else "",
                 "dare": num(row, i_dare),
                 "avere": num(row, i_avere),
             }
@@ -328,7 +330,9 @@ def _parse_xlsx_saldi(rows_iter, header: tuple, logger: logging.Logger) -> list[
                 "codice_conto": code,
                 "descrizione": e["descrizione"],
                 "tipo_conto": "CE" if is_ce else "SP",
-                "sezione": ("Ricavi" if top in ("47", "53") else "Costi") if is_ce else "",
+                "sezione": ("Ricavi" if top in ("47", "53") else "Costi")
+                if is_ce
+                else "",
                 "dare": e["dare"],
                 "avere": e["avere"],
                 "saldo": e["dare"] - e["avere"],

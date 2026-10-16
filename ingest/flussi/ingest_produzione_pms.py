@@ -18,6 +18,7 @@ Usage:
     python -m ingest.flussi.ingest_produzione_pms --file <xlsx> --raw-object-id <id>
     python -m ingest.flussi.ingest_produzione_pms --file <xlsx> --dry-run
 """
+
 from __future__ import annotations
 
 import argparse
@@ -122,8 +123,11 @@ def parse_xlsx(path: Path) -> tuple[tuple[str, set[int]], list[dict]]:
 
     # Applied filters = last row whose first cell starts with 'Applied filters'
     filter_text = next(
-        (str(r[0]) for r in reversed(rows)
-         if r and r[0] and str(r[0]).startswith("Applied filters")),
+        (
+            str(r[0])
+            for r in reversed(rows)
+            if r and r[0] and str(r[0]).startswith("Applied filters")
+        ),
         "",
     )
     period = parse_applied_filters(filter_text)
@@ -151,11 +155,13 @@ def parse_xlsx(path: Path) -> tuple[tuple[str, set[int]], list[dict]]:
                 continue
             if not isinstance(val, (int, float)):
                 continue
-            data_rows.append({
-                "data": d.date(),
-                "classe": classe,
-                "importo": Decimal(str(val)),
-            })
+            data_rows.append(
+                {
+                    "data": d.date(),
+                    "classe": classe,
+                    "importo": Decimal(str(val)),
+                }
+            )
 
     _, anni = period
     fuori = {r["data"].year for r in data_rows} - anni
@@ -186,19 +192,21 @@ def build_rows(
         d = r["data"]
         anno = d.year
         societa = "INTUR" if d < OPERATIONS_CUTOVER_DATE else "ORTI"
-        out.append({
-            "societa_id": societa,
-            "business_unit_id": bu,
-            "data": d,
-            "anno": anno,
-            "mese": d.month,
-            "classe": r["classe"],
-            "importo_imponibile": r["importo"],
-            "file_sorgente": file_name,
-            "hash_riga": make_hash(bu, str(d.year), d.isoformat(), r["classe"]),
-            "raw_object_id": raw_object_id,
-            "data_caricamento": now,
-        })
+        out.append(
+            {
+                "societa_id": societa,
+                "business_unit_id": bu,
+                "data": d,
+                "anno": anno,
+                "mese": d.month,
+                "classe": r["classe"],
+                "importo_imponibile": r["importo"],
+                "file_sorgente": file_name,
+                "hash_riga": make_hash(bu, str(d.year), d.isoformat(), r["classe"]),
+                "raw_object_id": raw_object_id,
+                "data_caricamento": now,
+            }
+        )
     return out
 
 
@@ -233,8 +241,12 @@ def ingest_file(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Ingest Daily Production Report → f_produzione_pms")
-    ap.add_argument("--file", required=True, type=Path, help="xlsx Daily Production Report (classe)")
+    ap = argparse.ArgumentParser(
+        description="Ingest Daily Production Report → f_produzione_pms"
+    )
+    ap.add_argument(
+        "--file", required=True, type=Path, help="xlsx Daily Production Report (classe)"
+    )
     ap.add_argument(
         "--raw-object-id",
         default=None,

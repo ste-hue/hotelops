@@ -61,39 +61,93 @@ def _xlsx_text(data: bytes) -> str:
 
 # Regole per categoria: (categoria, [regex]) — il PRIMO pattern e' quello "forte".
 CATEGORY_RULES: list[tuple[str, list[str]]] = [
-    ("07_Legale_Ispezioni", [
-        r"guardia di finanza", r"antimafia", r"procura della repubblica",
-        r"diffida", r"contenzioso", r"atto di citazione", r"ricorso",
-    ]),
-    ("05_Immobili_Catasto", [
-        r"visura catastale", r"\bparticella\b", r"\bsubalterno\b",
-        r"\bfoglio\s+\d+", r"planimetri", r"categoria catastale",
-    ]),
-    ("02_Fiscale", [
-        r"\bF24\b", r"codice tributo", r"agenzia delle entrate",
-        r"dichiarazione dei redditi", r"\bIVA\b.*versamento", r"cartella di pagamento",
-    ]),
-    ("03_Bilanci", [
-        r"bilancio (di esercizio|d'esercizio|al \d)", r"stato patrimoniale",
-        r"conto economico", r"nota integrativa", r"bilancino",
-    ]),
-    ("01_Societario", [
-        r"verbale di assemblea", r"\bstatuto\b", r"camera di commercio",
-        r"visura (ordinaria|storica)", r"consiglio di amministrazione",
-        r"nomina (amministratore|del liquidatore)", r"convocazione.*assemblea",
-    ]),
-    ("04_Banche_Finanza", [
-        r"contratto di (conto corrente|mutuo|leasing)", r"piano di ammortamento",
-        r"\bfido\b", r"garanzia fideiussoria", r"fideiussione",
-    ]),
-    ("06_Personale", [
-        r"\bTFR\b", r"contratto di (lavoro|assunzione)", r"busta paga",
-        r"neoassunt", r"previdenza complementare", r"\bINPS\b",
-    ]),
-    ("08_Contratti", [
-        r"contratto di sviluppo", r"capitolato", r"concessione demaniale",
-        r"contratto di (fornitura|appalto|servizio)", r"condizioni generali di contratto",
-    ]),
+    (
+        "07_Legale_Ispezioni",
+        [
+            r"guardia di finanza",
+            r"antimafia",
+            r"procura della repubblica",
+            r"diffida",
+            r"contenzioso",
+            r"atto di citazione",
+            r"ricorso",
+        ],
+    ),
+    (
+        "05_Immobili_Catasto",
+        [
+            r"visura catastale",
+            r"\bparticella\b",
+            r"\bsubalterno\b",
+            r"\bfoglio\s+\d+",
+            r"planimetri",
+            r"categoria catastale",
+        ],
+    ),
+    (
+        "02_Fiscale",
+        [
+            r"\bF24\b",
+            r"codice tributo",
+            r"agenzia delle entrate",
+            r"dichiarazione dei redditi",
+            r"\bIVA\b.*versamento",
+            r"cartella di pagamento",
+        ],
+    ),
+    (
+        "03_Bilanci",
+        [
+            r"bilancio (di esercizio|d'esercizio|al \d)",
+            r"stato patrimoniale",
+            r"conto economico",
+            r"nota integrativa",
+            r"bilancino",
+        ],
+    ),
+    (
+        "01_Societario",
+        [
+            r"verbale di assemblea",
+            r"\bstatuto\b",
+            r"camera di commercio",
+            r"visura (ordinaria|storica)",
+            r"consiglio di amministrazione",
+            r"nomina (amministratore|del liquidatore)",
+            r"convocazione.*assemblea",
+        ],
+    ),
+    (
+        "04_Banche_Finanza",
+        [
+            r"contratto di (conto corrente|mutuo|leasing)",
+            r"piano di ammortamento",
+            r"\bfido\b",
+            r"garanzia fideiussoria",
+            r"fideiussione",
+        ],
+    ),
+    (
+        "06_Personale",
+        [
+            r"\bTFR\b",
+            r"contratto di (lavoro|assunzione)",
+            r"busta paga",
+            r"neoassunt",
+            r"previdenza complementare",
+            r"\bINPS\b",
+        ],
+    ),
+    (
+        "08_Contratti",
+        [
+            r"contratto di sviluppo",
+            r"capitolato",
+            r"concessione demaniale",
+            r"contratto di (fornitura|appalto|servizio)",
+            r"condizioni generali di contratto",
+        ],
+    ),
 ]
 
 

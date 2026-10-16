@@ -8,6 +8,7 @@ Parser_module della source MOOLTY_FBSPIAGGIA_INTUR_APPEND, invocato
 da `hotelops promote`:
     python -m ingest.flussi.ingest_spiaggia_fb --file X.xlsx --raw-object-id Y
 """
+
 from __future__ import annotations
 
 import argparse
@@ -113,8 +114,7 @@ def valida_export_moolty(path: Path) -> tuple[bool, str]:
             header = {str(c).strip().lower() for c in row if c is not None}
         if not {"data", "entrata", "descrizione"} <= header:
             return False, (
-                "non sembra un report Moolty: header senza "
-                "Data/Entrata/Descrizione"
+                "non sembra un report Moolty: header senza Data/Entrata/Descrizione"
             )
         viste: dict = {}
         n = 0
@@ -197,28 +197,30 @@ def build_fb_rows(
             str(entrata),
         )
 
-        out.append(SpiaggiaFbOrdineRow(
-            societa_id=SOCIETA,
-            business_unit_id=BUSINESS_UNIT,
-            location_id=LOCATION,
-            oggetto_id=None,
-            funzione_id=None,
-            data_ora=data_ora,
-            data=data,
-            metodo=metodo,
-            entrata=entrata,
-            uscita=uscita,
-            pagato=pagato,
-            rata=rata,
-            causale=causale,
-            descrizione=descrizione,
-            ordine_id=ordine_id,
-            mese_report=mese_report,
-            raw_object_id=raw_object_id,
-            file_sorgente=file_name,
-            hash_riga=hash_riga,
-            data_caricamento=now,
-        ))
+        out.append(
+            SpiaggiaFbOrdineRow(
+                societa_id=SOCIETA,
+                business_unit_id=BUSINESS_UNIT,
+                location_id=LOCATION,
+                oggetto_id=None,
+                funzione_id=None,
+                data_ora=data_ora,
+                data=data,
+                metodo=metodo,
+                entrata=entrata,
+                uscita=uscita,
+                pagato=pagato,
+                rata=rata,
+                causale=causale,
+                descrizione=descrizione,
+                ordine_id=ordine_id,
+                mese_report=mese_report,
+                raw_object_id=raw_object_id,
+                file_sorgente=file_name,
+                hash_riga=hash_riga,
+                data_caricamento=now,
+            )
+        )
 
     return out
 
@@ -252,8 +254,12 @@ def ingest_file(
         return {"fb_ordini": 0}
 
     bq_write_validated(F_SPIAGGIA_FB_ORDINI, new_rows, mode="append")
-    log.info("OK fb_ordini → %s : %d righe nuove (su %d totali)",
-             F_SPIAGGIA_FB_ORDINI, len(new_rows), len(rows))
+    log.info(
+        "OK fb_ordini → %s : %d righe nuove (su %d totali)",
+        F_SPIAGGIA_FB_ORDINI,
+        len(new_rows),
+        len(rows),
+    )
     return {"fb_ordini": len(new_rows)}
 
 
@@ -265,7 +271,9 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    counts = ingest_file(args.file, raw_object_id=args.raw_object_id, dry_run=args.dry_run)
+    counts = ingest_file(
+        args.file, raw_object_id=args.raw_object_id, dry_run=args.dry_run
+    )
     log.info("Totale: %s", counts)
 
 

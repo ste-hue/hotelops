@@ -1,4 +1,5 @@
 """Tests for produzione PMS ingest: schema + parser + snapshot."""
+
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
@@ -51,13 +52,17 @@ def test_pre_cutover_must_be_intur():
     ProduzioneRow(**_row(data=date(2025, 3, 31), anno=2025, mese=3, societa_id="INTUR"))
     # 2025-03-31 labelled ORTI → reject
     with pytest.raises(ValueError, match="cutover"):
-        ProduzioneRow(**_row(data=date(2025, 3, 31), anno=2025, mese=3, societa_id="ORTI"))
+        ProduzioneRow(
+            **_row(data=date(2025, 3, 31), anno=2025, mese=3, societa_id="ORTI")
+        )
 
 
 def test_post_cutover_must_be_orti():
     ProduzioneRow(**_row(data=date(2025, 4, 1), anno=2025, mese=4, societa_id="ORTI"))
     with pytest.raises(ValueError, match="cutover"):
-        ProduzioneRow(**_row(data=date(2025, 4, 1), anno=2025, mese=4, societa_id="INTUR"))
+        ProduzioneRow(
+            **_row(data=date(2025, 4, 1), anno=2025, mese=4, societa_id="INTUR")
+        )
 
 
 def test_anno_mese_must_match_data():
@@ -99,13 +104,17 @@ def test_parse_applied_filters_multi_anno():
 
 def test_parse_applied_filters_negazione_complemento():
     # Export Power BI 2026-09-24: "CodiceHotel is not X or Y" → BU = complemento
-    txt = FILTER_HOTEL.replace("CodiceHotel is PANORAMAHT", "CodiceHotel is not HOMEHOLIDAY or PANORAMAHT")
+    txt = FILTER_HOTEL.replace(
+        "CodiceHotel is PANORAMAHT", "CodiceHotel is not HOMEHOLIDAY or PANORAMAHT"
+    )
     assert parse_applied_filters(txt) == ("RESIDENCE", {2026})
 
 
 def test_parse_applied_filters_negazione_ambigua_esplode():
     # Esclusa una sola struttura su tre: complemento non univoco → errore, mai default
-    txt = FILTER_HOTEL.replace("CodiceHotel is PANORAMAHT", "CodiceHotel is not PANORAMAHT")
+    txt = FILTER_HOTEL.replace(
+        "CodiceHotel is PANORAMAHT", "CodiceHotel is not PANORAMAHT"
+    )
     with pytest.raises(ValueError, match="ambigu"):
         parse_applied_filters(txt)
 
@@ -144,20 +153,35 @@ def test_parse_applied_filters_rejects_two_hotel_or():
 def test_parse_applied_filters_rejects_mese_filter():
     # Export parziale (Mese filtrato): la DELETE SNAPSHOT copre (BU, anno) intero
     # e cancellerebbe i mesi fuori filtro (caso 2026-07-15)
-    txt = FILTER_HOTEL.replace(
-        "Anno is 2026", "Mese is giugno or luglio\nAnno is 2026"
-    )
+    txt = FILTER_HOTEL.replace("Anno is 2026", "Mese is giugno or luglio\nAnno is 2026")
     with pytest.raises(ValueError, match="Mese"):
         parse_applied_filters(txt)
 
 
 def test_detect_classe_columns_hotel_with_blank():
     # HOTEL header has a blank col at index 1
-    header = ("Classe", None, "01ROOM", "02FB", "03PARK", "07DIV", "11FITTO",
-              "80AFFITT", "99ACC", "Total")
+    header = (
+        "Classe",
+        None,
+        "01ROOM",
+        "02FB",
+        "03PARK",
+        "07DIV",
+        "11FITTO",
+        "80AFFITT",
+        "99ACC",
+        "Total",
+    )
     cols = detect_classe_columns(header)
-    assert cols == {2: "01ROOM", 3: "02FB", 4: "03PARK", 5: "07DIV",
-                    6: "11FITTO", 7: "80AFFITT", 8: "99ACC"}
+    assert cols == {
+        2: "01ROOM",
+        3: "02FB",
+        4: "03PARK",
+        5: "07DIV",
+        6: "11FITTO",
+        7: "80AFFITT",
+        8: "99ACC",
+    }
 
 
 def test_detect_classe_columns_cvm_no_blank():
@@ -174,14 +198,20 @@ def _make_class_xlsx(path, codice_hotel="PANORAMAHT", anno=2026):
     ws.append(["Classe", None, "01ROOM", "02FB", "Total"])
     ws.append(["Data", "Importo", "Importo", "Importo", "Importo"])
     ws.append([datetime(anno, 4, 15), None, 8000.0, 500.0, 8500.0])
-    ws.append([datetime(anno, 4, 16), None, 9000.0, None, 9000.0])     # 02FB vuoto
-    ws.append([datetime(anno, 4, 17), None, -43.0, 120.0, 77.0])        # negativo
+    ws.append([datetime(anno, 4, 16), None, 9000.0, None, 9000.0])  # 02FB vuoto
+    ws.append([datetime(anno, 4, 17), None, -43.0, 120.0, 77.0])  # negativo
     ws.append(["Total", None, 16957.0, 620.0, 17577.0])
     ws.append([None, None, None, None, None])
-    ws.append([
-        f"Applied filters:\nCodiceHotel is {codice_hotel}\n"
-        f"Descrizione is Imponibile\nAnno is {anno}", None, None, None, None,
-    ])
+    ws.append(
+        [
+            f"Applied filters:\nCodiceHotel is {codice_hotel}\n"
+            f"Descrizione is Imponibile\nAnno is {anno}",
+            None,
+            None,
+            None,
+            None,
+        ]
+    )
     wb.save(path)
 
 
@@ -194,9 +224,9 @@ def test_parse_xlsx_unpivot(tmp_path):
     # 15: 2 classi, 16: 1 (02FB None skipped), 17: 2 → 5 righe; Total escluso
     assert len(rows) == 5
     keys = {(r["data"].isoformat(), r["classe"]) for r in rows}
-    assert ("2026-04-16", "02FB") not in keys      # cella vuota skippata
+    assert ("2026-04-16", "02FB") not in keys  # cella vuota skippata
     neg = [r for r in rows if r["classe"] == "01ROOM" and r["data"].day == 17]
-    assert neg[0]["importo"] == Decimal("-43.0")   # negativo tenuto
+    assert neg[0]["importo"] == Decimal("-43.0")  # negativo tenuto
 
 
 def test_parse_xlsx_excludes_total_column_and_row(tmp_path):
@@ -213,12 +243,14 @@ def test_build_rows_derives_societa_and_hash(tmp_path):
     period, raw = parse_xlsx(p)
     out = build_rows(period, raw, p.name, raw_object_id="ro-1")
     r = out[0]
-    assert r["societa_id"] == "ORTI"               # 2026 → post-cutover
+    assert r["societa_id"] == "ORTI"  # 2026 → post-cutover
     assert r["business_unit_id"] == "HOTEL"
     assert r["anno"] == 2026 and r["mese"] == 4
     assert r["raw_object_id"] == "ro-1"
     # hash deterministico su (bu, anno, data, classe)
-    assert r["hash_riga"] == make_hash("HOTEL", "2026", r["data"].isoformat(), r["classe"])
+    assert r["hash_riga"] == make_hash(
+        "HOTEL", "2026", r["data"].isoformat(), r["classe"]
+    )
 
 
 def test_build_rows_pre_cutover_is_intur(tmp_path):
@@ -239,10 +271,16 @@ def _make_two_year_xlsx(path, codice_hotel="PANORAMAHT"):
     ws.append([datetime(2025, 5, 10), None, 7000.0, 400.0, 7400.0])
     ws.append([datetime(2026, 4, 15), None, 8000.0, 500.0, 8500.0])
     ws.append(["Total", None, 15000.0, 900.0, 15900.0])
-    ws.append([
-        f"Applied filters:\nCodiceHotel is {codice_hotel}\n"
-        "Anno is 2026 or 2025\nDescrizione is Imponibile", None, None, None, None,
-    ])
+    ws.append(
+        [
+            f"Applied filters:\nCodiceHotel is {codice_hotel}\n"
+            "Anno is 2026 or 2025\nDescrizione is Imponibile",
+            None,
+            None,
+            None,
+            None,
+        ]
+    )
     wb.save(path)
 
 
@@ -261,6 +299,7 @@ def test_two_year_file_anno_per_riga(tmp_path):
         )
     # il batch valida contro lo schema (anno/mese coerenti con data)
     from core.schemas import validate_batch
+
     validate_batch(out, ProduzioneRow, context="test 2 anni")
 
 
@@ -273,10 +312,15 @@ def test_two_year_file_rejects_data_fuori_filtro(tmp_path):
     ws.append(["Classe", None, "01ROOM", "Total"])
     ws.append(["Data", "Importo", "Importo", "Importo"])
     ws.append([datetime(2024, 7, 1), None, 100.0, 100.0])
-    ws.append([
-        "Applied filters:\nCodiceHotel is PANORAMAHT\n"
-        "Anno is 2026 or 2025\nDescrizione is Imponibile", None, None, None,
-    ])
+    ws.append(
+        [
+            "Applied filters:\nCodiceHotel is PANORAMAHT\n"
+            "Anno is 2026 or 2025\nDescrizione is Imponibile",
+            None,
+            None,
+            None,
+        ]
+    )
     wb.save(p)
     with pytest.raises(ValueError, match="fuori dagli anni"):
         parse_xlsx(p)

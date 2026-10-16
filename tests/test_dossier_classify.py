@@ -37,20 +37,25 @@ def _xlsx_bytes(text: str) -> bytes:
 
 def test_extract_pdf():
     assert "VERBALE DI ASSEMBLEA" in extract_text(
-        "x.pdf", _pdf_bytes("VERBALE DI ASSEMBLEA"), "application/pdf")
+        "x.pdf", _pdf_bytes("VERBALE DI ASSEMBLEA"), "application/pdf"
+    )
 
 
 def test_extract_docx():
     got = extract_text(
-        "x.docx", _docx_bytes("destinazione del TFR"),
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        "x.docx",
+        _docx_bytes("destinazione del TFR"),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
     assert "destinazione del TFR" in got
 
 
 def test_extract_xlsx():
     got = extract_text(
-        "x.xlsx", _xlsx_bytes("Richiesta Antimafia"),
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        "x.xlsx",
+        _xlsx_bytes("Richiesta Antimafia"),
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
     assert "Richiesta Antimafia" in got
 
 
