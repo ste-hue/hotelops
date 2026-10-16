@@ -76,7 +76,7 @@ def test_intake_no_source_skips_classification_event(monkeypatch, tmp_path) -> N
         lambda **kw: captured["events"].append(kw) or "ev-1",
     )
     f = _fixture_xlsx(tmp_path)
-    result = intake_file(f, source_name=None, actor="test")
+    intake_file(f, source_name=None, actor="test")
     # Only RAW_INGESTED — no SOURCE_RESOLVED, no DETECTED
     types = [ev["event_type"] for ev in captured["events"]]
     assert types == ["RAW_INGESTED"]

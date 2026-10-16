@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import csv
 import subprocess
-import sys
 from pathlib import Path
 
 RCLONE_REMOTE = "mywork"
@@ -127,16 +126,16 @@ def main():
     print(f"  Skipped (NOISE):          {rows_skip_noise}")
     print(f"  Routed:                   {rows_route}")
     print(f"  Errors:                   {rows_err}")
-    print(f"\nBy destination (f_code → count):")
+    print("\nBy destination (f_code → count):")
     for code in sorted(by_dest):
         print(f"  {code:24s} → {len(by_dest[code])}")
     if errors:
-        print(f"\nErrors:")
+        print("\nErrors:")
         for tid, msg in errors[:10]:
             print(f"  {tid}: {msg}")
 
     if not args.apply:
-        print(f"\nTo apply: re-run with --apply")
+        print("\nTo apply: re-run with --apply")
 
 
 if __name__ == "__main__":

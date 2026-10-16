@@ -6,7 +6,6 @@ import pytest
 
 from core.lineage.source_resolver import (
     InvalidRegistry,
-    SourceRegistry,
     load_registry,
 )
 

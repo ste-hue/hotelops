@@ -1,7 +1,6 @@
 """Tests for XLSX movimenti contabili parser."""
 
 import openpyxl
-import pytest
 from pathlib import Path
 
 

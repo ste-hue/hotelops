@@ -5,7 +5,7 @@ End-to-end stamping into f_banche_movimenti is covered separately via
 production smoke (Task 5 verify step), not here (avoids BQ dependency).
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 
 def test_invoke_parser_passes_raw_object_id_in_cmd(monkeypatch):

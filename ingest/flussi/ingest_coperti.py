@@ -380,7 +380,6 @@ def parse_mensa_dipendenti(
     ts_now: datetime,
 ) -> list[dict]:
     """Parse 'Mensa Dipendenti' sheet (long format: timestamp, tipo_pasto, pax)."""
-    header = [str(c).strip().lower() if c else "" for c in all_rows[0]]
     records = []
     for row_idx, row in enumerate(all_rows[1:]):
         if not row or not row[0]:

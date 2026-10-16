@@ -13,10 +13,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-# Worktree root: parent of ingest/ where this file lives.
-# Used to set subprocess CWD so python -m resolves modules from the correct tree.
-_WORKTREE_ROOT = str(Path(__file__).parent.parent.resolve())
-
 from core.lineage.policy_gate import (
     PolicyViolation,
     enforce_loop_target_gate_at_promotion,
@@ -29,6 +25,10 @@ from core.lineage.raw_manifest import (
 from core.lineage.raw_storage import GCSBackend
 from core.lineage.source_resolver import load_registry
 from core.pipeline_run import PipelineRun
+
+# Worktree root: parent of ingest/ where this file lives.
+# Used to set subprocess CWD so python -m resolves modules from the correct tree.
+_WORKTREE_ROOT = str(Path(__file__).parent.parent.resolve())
 
 log = logging.getLogger(__name__)
 

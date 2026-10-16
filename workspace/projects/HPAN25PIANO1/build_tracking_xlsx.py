@@ -22,7 +22,6 @@ import csv
 import json
 import re
 import subprocess
-import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -600,7 +599,7 @@ def write_xlsx(out_path: Path, source_xlsx: Path, data: dict, docs: list[dict], 
     ws_s = wb.create_sheet("Summary", 0)
     ws_s["A1"] = "HPAN25PIANO1 — Camere Primo Piano · Tracking Master"
     ws_s["A1"].font = Font(bold=True, size=14)
-    ws_s["A3"] = f"Budget target:"
+    ws_s["A3"] = "Budget target:"
     ws_s["B3"] = BUDGET_TARGET_EUR
     ws_s["B3"].number_format = money_fmt
 

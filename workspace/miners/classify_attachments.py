@@ -54,7 +54,6 @@ DOCUMENT_EXT = {".doc", ".docx", ".odt"}
 
 def stage1_classify(filename: str) -> str | None:
     """Return category or None if ambiguous (needs Stage 2)."""
-    name = filename.lower()
     ext = Path(filename).suffix.lower()
     if ext in SKIP_EXT:
         return "SKIP"
@@ -215,7 +214,6 @@ def main():
 
     if ambiguous_idx:
         client = anthropic.Anthropic()
-        total_in = total_out = 0
         for i in range(0, len(ambiguous_idx), BATCH_SIZE):
             batch = ambiguous_idx[i : i + BATCH_SIZE]
             texts = [(f.name, pdftotext_excerpt(f)) for _, f in batch]
@@ -241,7 +239,7 @@ def main():
             w.writerow(r)
 
     final = Counter(r["category_final"] or "EMPTY" for r in rows)
-    print(f"\nFinal category breakdown:")
+    print("\nFinal category breakdown:")
     for k in sorted(final, key=lambda x: -final[x]):
         print(f"  {k:18s} {final[k]:>4}")
     print(f"\nWrote {args.output} ({len(rows)} rows)")

@@ -256,7 +256,7 @@ def main():
     for r in sorted(rows_to_delete, reverse=True):
         docs.delete_rows(r, 1)
 
-    print(f"\n── Documents updates ──")
+    print("\n── Documents updates ──")
     print(f"  Updated existing (€None → €amount): {len(updated_existing)}")
     print(f"  Appended new FATTURA rows:          {len(appended_new)}")
     print(f"  Manual additions (Hospitality+Proforma): {manual_added}")
@@ -294,7 +294,7 @@ def main():
         docs.cell(new_r, 4).value = "06_FATTURE_LAVORI_HOTEL"
         docs.cell(new_r, 5).value = "ROMANO GAETANO FT13 DEL 29 04 2026.PDF"
         docs.cell(new_r, 8).value = 3100.00  # placeholder — user said ~€3,100, will be verified
-        print(f"  Added ROMANO FT13 placeholder €3,100 (will be verified)")
+        print("  Added ROMANO FT13 placeholder €3,100 (will be verified)")
 
     # ── Phase 3: add new F034..F037 rows in Tracking_Fornitori (if missing) ──
     existing_codes = set()
@@ -305,7 +305,6 @@ def main():
             existing_codes.add(c)
             track_rows[c] = r
 
-    last_data_row = max(track_rows.values())
     totale_row = None
     for r in range(2, track.max_row + 1):
         if track.cell(r, 1).value == "TOTALE":
@@ -711,7 +710,7 @@ def main():
     for i, w in enumerate(widths, start=1):
         chs.column_dimensions[chr(64+i)].width = w
 
-    print(f"\n── Chiusura_Fornitori sheet built ──")
+    print("\n── Chiusura_Fornitori sheet built ──")
     print(f"  Rows: {row-2} F-codes + 1 totale")
 
     # ── Phase 8: rebuild Summary sheet ──
@@ -749,7 +748,6 @@ def main():
     s_total = s_pagato + s_dapagare + s_dafatturare
 
     bold = Font(bold=True)
-    title_fill = PatternFill("solid", fgColor="FF2E5BBA")
     summ.cell(1, 1).value = "HPAN25PIANO1 — Camere Primo Piano · Tracking Master"
     summ.cell(1, 1).font = Font(bold=True, size=13)
     summ.cell(3, 1).value = "Budget target"
@@ -801,7 +799,7 @@ def main():
     summ.column_dimensions["B"].width = 18
     summ.column_dimensions["C"].width = 20
 
-    print(f"\n── Summary rebuilt ──")
+    print("\n── Summary rebuilt ──")
     print(f"  IMPEGNO €{s_prev:,.0f} | COMPETENZA €{s_fatt:,.0f} | CASSA €{s_pagato:,.0f}")
     print(f"  TOTALE IMPEGNO €{s_total:,.0f} | Budget residuo €{BUDGET_TARGET_EUR - s_total:,.0f}")
     print(f"  Scoperti: {len(scoperti)} ({', '.join(s.split()[0] for s in scoperti)})")
@@ -810,7 +808,7 @@ def main():
     print(f"\nSaved: {V5_PATH}")
 
     # Final summary
-    print(f"\n── Tracking_Fornitori (post-update) ──")
+    print("\n── Tracking_Fornitori (post-update) ──")
     print(f"{'Cod':<6} {'Nome':<32} {'#F':<4} {'€ Fatt':>12} {'Status'}")
     print("-" * 90)
     for cod in sorted(track_rows.keys()):

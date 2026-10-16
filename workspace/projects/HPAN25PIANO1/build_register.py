@@ -353,17 +353,17 @@ def main():
     gap_etere = BUDGET_TARGET_EUR - max(total_impegno, total_competenza)
 
     print(f"\n{'━' * 64}")
-    print(f"  HPAN25PIANO1 — Registro documenti CapEx")
+    print("  HPAN25PIANO1 — Registro documenti CapEx")
     print(f"{'━' * 64}\n")
 
-    print(f"Per CATEGORIA:")
+    print("Per CATEGORIA:")
     for cat in ("PREVENTIVO", "CONTRATTO", "FATTURA"):
         print(f"  {cat:15s} €{by_cat[cat]:>14,.0f}")
     print(f"  {'─' * 30}")
     print(f"  IMPEGNO totale  €{total_impegno:>14,.0f}  (preventivi + contratti)")
     print(f"  COMPETENZA      €{total_competenza:>14,.0f}  (fatture)")
 
-    print(f"\nPer MACRO budget × categoria:")
+    print("\nPer MACRO budget × categoria:")
     macros = sorted(set(m for m, _ in by_macro_cat.keys()))
     print(f"  {'Macro':<22s} {'Prev':>12s} {'Contr':>12s} {'Fatt':>12s}")
     for m in macros:
@@ -376,7 +376,7 @@ def main():
     print(f"  Documentato (max impegno/competenza): €{max(total_impegno, total_competenza):,.0f}")
     print(f"  Mancante 'nell'etere':                €{gap_etere:,.0f}  ({gap_etere/BUDGET_TARGET_EUR*100:.0f}%)")
 
-    print(f"\nPer FORNITORE (top 15 by max IMPEGNO+COMPETENZA):")
+    print("\nPer FORNITORE (top 15 by max IMPEGNO+COMPETENZA):")
     sorted_forn = sorted(by_fornitore.items(), key=lambda kv: -(max(kv[1]["PREVENTIVO"] + kv[1]["CONTRATTO"], kv[1]["FATTURA"])))[:15]
     print(f"  {'Cod':<8s} {'Ragione sociale':<35s} {'Macro':<14s} {'Prev':>10s} {'Fatt':>10s}")
     for cod, d in sorted_forn:

@@ -1,6 +1,16 @@
 """Tests per le funzioni pure del builder artifact bilancini (v1: solo numeri veri)."""
 
-from verticals.condges.build_bilancini_artifact import build_payload, compute_delta
+import pytest
+
+from verticals.condges.build_bilancini_artifact import (
+    PUSH_ENV_VARS,
+    build_payload,
+    compute_delta,
+    load_push_env,
+    payload_to_csv,
+    push_to_kv,
+    render_html,
+)
 
 
 def test_compute_delta_first_month_is_ytd():
@@ -44,16 +54,6 @@ def test_build_payload_includes_gruppi_descriptions():
 
 
 # ---------- push KV (flag --push) ----------
-
-import pytest
-
-from verticals.condges.build_bilancini_artifact import (
-    PUSH_ENV_VARS,
-    load_push_env,
-    push_to_kv,
-    payload_to_csv,
-    render_html,
-)
 
 PUSH_ENV = {
     "CLOUDFLARE_API_TOKEN": "tok-test",

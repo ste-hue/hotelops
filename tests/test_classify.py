@@ -5,10 +5,8 @@ Uses tmp_path for all file I/O.
 """
 
 import csv
-import re
 from pathlib import Path
 
-import pytest
 
 from ingest.classify import (
     LIFECYCLE_APPEND,

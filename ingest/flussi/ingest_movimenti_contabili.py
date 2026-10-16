@@ -192,7 +192,6 @@ def parse_file(filepath: Path, societa_id: str, logger: logging.Logger) -> list[
         row = ws.row_values(r)
 
         id_doc = int(row[0]) if isinstance(row[0], float) else None
-        id_mov = int(row[1]) if isinstance(row[1], float) else None
         num_progr = int(row[2]) if isinstance(row[2], float) else None
         gruppo_doc = str(row[3]).strip() if row[3] else None
         anno = int(row[4]) if isinstance(row[4], float) else None

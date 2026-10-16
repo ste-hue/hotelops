@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 import yaml
@@ -124,7 +123,7 @@ def list_files(folder: str) -> list[str]:
         ["rclone", "lsf", f"{RCLONE_REMOTE}:{PROJECT}/{folder}", "--files-only"],
         capture_output=True, text=True, check=True,
     )
-    return [l for l in r.stdout.strip().splitlines() if l]
+    return [line for line in r.stdout.strip().splitlines() if line]
 
 
 def list_dest_files(folder: str) -> set[str]:
@@ -134,7 +133,7 @@ def list_dest_files(folder: str) -> set[str]:
             ["rclone", "lsf", f"{RCLONE_REMOTE}:{PROJECT}/{folder}", "--files-only"],
             capture_output=True, text=True, check=True,
         )
-        return {l for l in r.stdout.strip().splitlines() if l}
+        return {line for line in r.stdout.strip().splitlines() if line}
     except subprocess.CalledProcessError:
         return set()
 
@@ -214,7 +213,7 @@ def main():
         ["rclone", "lsf", f"{RCLONE_REMOTE}:{PROJECT}/", "--files-only", "--max-depth", "1"],
         capture_output=True, text=True,
     )
-    root_files = [l for l in r.stdout.splitlines() if l]
+    root_files = [line for line in r.stdout.splitlines() if line]
     root_preventivi = [f for f in root_files if "offerta" in f.lower() or "preventivo" in f.lower()]
     if root_preventivi:
         print(f"\n── root preventivi ({len(root_preventivi)}) → */01_preventivi/")

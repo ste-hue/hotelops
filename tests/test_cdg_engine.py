@@ -1,7 +1,11 @@
 """Tests for CDG computation engine."""
 
 import pandas as pd
-from verticals.condges.cdg_engine import compute_ce_cascade, compute_indicatori
+from verticals.condges.cdg_engine import (
+    compute_ce_cascade,
+    compute_indicatori,
+    compute_proiezione_anno,
+)
 
 
 def _make_consuntivo():
@@ -127,9 +131,6 @@ class TestIndicatori:
         result = compute_indicatori(cascade, tipo_df)
         # BEP giorno = (875k / 1M) * 365 = 319.4
         assert result["bep_giorno"] == 319
-
-
-from verticals.condges.cdg_engine import compute_proiezione_anno
 
 
 class TestProiezioneAnno:
