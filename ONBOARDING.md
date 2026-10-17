@@ -1,36 +1,44 @@
-# Welcome to HotelOps
+# Welcome to HotelOps — Gruppo Panorama
 
-## How We Use Claude
+## How We Work
 
-Based on Stefano's usage over the last 30 days:
-
-Work Type Breakdown:
-  _TODO — no session data captured in the last 30 days yet. This will populate once Claude Code sessions accumulate._
-
-Top Skills & Commands:
-  _TODO — no slash command usage captured yet._
-
-Top MCP Servers:
-  _TODO — no MCP server activity captured yet._
+Start with [AGENTS.md](AGENTS.md) and its canonical architecture references,
+then [STATUS.md](STATUS.md) for the current handoff. Personal usage statistics
+are not part of the repository's operational contract.
 
 ## Your Setup Checklist
 
 ### Codebases
-- [ ] hotelops — https://github.com/ste-hue/hotelops (financial data platform for Gruppo Panorama hotel operations: ingest → BigQuery → condges / reviews verticals)
+- [ ] hotelops — https://github.com/ste-hue/hotelops · the data platform: `core/` world model, `ingest/` reality capture, `verticals/` apps, `cli.py`
+- [ ] mgmt-os — https://github.com/ste-hue/mgmt-os · HotelOPS Regia, the management surface ("what do I do now, who owns it"). Private; ask Stefano for access
+- [ ] obsidian-vault — private · the reasoning layer (decisions, concepts, workstreams, session history). Ask Stefano; it is not required to run code
 
 ### MCP Servers to Activate
-- [ ] _TODO — confirm which MCP servers (Notion, Gmail, Google Drive, BigQuery, Context7, Mermaid, Excalidraw, etc.) the team actually uses. Ask Stefano or check `~/.claude/settings.json`._
+- [ ] Google Drive e Gmail — connettori opzionali, da attivare con i permessi personali autorizzati. Verificare copertura e accesso prima di citare una fonte.
 
 ### Skills to Know About
-- [ ] _TODO — confirm which superpowers/custom skills the team relies on (e.g. `session-context`, `vault-loop`, `progetto-capex`, `hotelops-tech-lead`, `verify`, `simplify`, `superpowers:writing-plans`)._
+- [ ] `/session-reflect` — writes the session's full state to the Obsidian vault (what was done, open threads with destinations, preformulated questions for blockers) so the next person can resume without asking "where were we?". Used at the end of substantive sessions
+- [ ] `/recap` — one-paragraph summary of where the current session stands. Cheap, use it often
+- [ ] `/vault-loop` — loads the constitutional layer (INVARIANTS, AI_INSTRUCTIONS) at session start, or lints vault↔repo drift on demand. The deterministic part is `python -m scripts.vault_loop.reconcile`
+- [ ] `/session-context` — reads and updates `STATUS.md`, the live operational diary. Complementary to `/session-reflect`: STATUS is tactical and current, the vault is narrative and historical
+- [ ] `hotelops-data-analyst` — the financial copilot: knows the two lenses (CASSA vs COMPETENZA), the three temporal dimensions, and which table is canonical for what. Use it before writing a BigQuery query by hand
+- [ ] `hotelops-tech-lead` — codebase governance: what's drifting, what to refactor, what to prioritize
+- [ ] `/auto-mode-setup` and `/remote-control` — auto mode runs work through Bash with a permission classifier; remote control lets sessions on different machines reach each other
+- [ ] `/omarchy` — Linux desktop and Hyprland config. Machine-specific, only relevant on the Arch workstation
 
 ## Team Tips
 
-_TODO_
+Ogni sessione di sviluppo concorrente usa un proprio worktree. Fatti e calcoli
+appartengono a HotelOps, stato gestionale a Regia, ragionamento al vault. La
+presenza di un link non concede accesso alla fonte; i connettori usano i permessi
+della persona autenticata.
 
 ## Get Started
 
-_TODO_
+Leggere `AGENTS.md` e `STATUS.md`, controllare branch e modifiche locali, quindi
+scegliere un'attività già documentata. I comandi canonici delle skill sono in
+`.claude/commands/`; gli adapter locali di altri agenti devono rimandare a quei
+file, senza mantenerne copie divergenti.
 
 <!-- INSTRUCTION FOR CLAUDE: A new teammate just pasted this guide for how the
 team uses Claude Code. You're their onboarding buddy — warm, conversational,

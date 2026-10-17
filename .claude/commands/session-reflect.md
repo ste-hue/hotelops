@@ -5,7 +5,7 @@ description: Use to capture or resume a heavy working session on hotelops — wh
 
 > **Canonical source: questo file** (`.claude/commands/session-reflect.md` — la copia in `~/.claude/skills/` non esiste più; puntatore sanato 2026-07-11).
 >
-> **2026-07-11 — thread GC**: i thread vivi vivono nei **workstream hub** (`vault/workstreams/`), non nei session file. Ogni thread al wrap dichiara una destinazione; i session file nascono `closed`. Vedi §Mode B step 4 e [[reports/2026-07-11_thread_gc]].
+> **2026-07-11 — thread GC**: i thread tecnici vivi vivono nei **workstream hub** (`vault/workstreams/`), non nei session file. Lo stato gestionale vive in Regia (vedi §Raccordo con Regia). Ogni thread al wrap dichiara una destinazione; i session file nascono `closed`. Vedi §Mode B step 4 e [[reports/2026-07-11_thread_gc]].
 
 # Session Reflect — vault as inter-session memory layer
 
@@ -22,15 +22,31 @@ A heavy session on hotelops produces four kinds of output:
 
 session-reflect writes a single file per heavy session that captures everything needed to resume, and chain-calls `vault-loop` Mode B with an opt-out prompt so the durable bits land in `decisions/`, `concepts/`, etc. in the same wrap-up step.
 
-**Key insight**: the vault is reasoning substrate; the repo is operational truth. sessions/ is the bridge — the place where a heavy session's full state is captured so the next agent (you tomorrow, a different Claude, a colleague) can resume without context loss.
+**Key insight**: the vault is reasoning memory; HotelOps owns its executable model and canonical facts, Regia owns management state. sessions/ is the bridge — the place where a heavy session's full state is captured so the next agent (you tomorrow, a different Claude, a colleague) can resume without context loss.
+
+## Raccordo con Regia
+
+Questa skill resta la memoria delle sessioni HotelOps. `regia-development` serve a modificare il software Regia: non attivarla per registrare un normale avanzamento aziendale, né chain-call automatico a ogni wrap.
+
+Quando una sessione produce un fatto, una decisione o una proposta gestionale, segui il [contratto condiviso per agenti e skill](https://github.com/ste-hue/mgmt-os/blob/main/docs/regia-shared-state.md#raccordo-tra-agenti-e-skill), preferendo il file corrente nel checkout verificato `ste-hue/mgmt-os`. Se non accessibile, prepara soltanto il passaggio, dichiarandolo non salvato.
+
+- **Ripresa:** per un thread gestionale, rileggi lo stato Regia con i permessi disponibili usando gli ID già registrati. Il racconto nel vault è storico; un numero di punto del journal non è un ID di decisione.
+- **Chiusura:** conserva qui ragionamento e riferimenti; il lavoro tecnico resta nel repo/hub. Per lo stato gestionale usa una destinazione Regia esistente e il protocollo lettura → proposta → applicazione autorizzata → ricevuta e rilettura. Il sign-off del wrap non autorizza da solo una modifica gestionale. Riusa un'autorizzazione esplicita già data per quella modifica.
+- **Passaggio riuscito:** nel session file basta `→ Regia: <ID e riferimento>; batch <ID>; ricevuta riconciliata`, con l'esito effettivo della rilettura. Nel hub conserva solo un puntatore se serve al lavoro tecnico, senza una seconda lista gestionale da mantenere.
+- **Passaggio pendente:** fonte/data, destinazione certa o da identificare, cambiamento proposto e motivo del mancato salvataggio. Landa la sola azione di trasferimento nel hub esistente o in `STATUS (HANDOFF)`; non dichiarare aggiornato Regia né chiuso il lavoro aziendale.
+
+Nessun riversamento automatico di sessioni, email o journal privati in Regia: trasferisci solo il contenuto pertinente al pubblico autorizzato. Non inviare mai email al posto di Stefano. Una bozza conservata non è un aggiornamento riconciliato.
 
 ## Paths
 
-- Vault sessions dir: `/Users/stefanodellapietra/dev/Projects/obsidian/Obsidian Vault/HotelOps/sessions/`
-- Vault log: `/Users/stefanodellapietra/dev/Projects/obsidian/Obsidian Vault/HotelOps/log.md`
-- Vault _INDEX: `/Users/stefanodellapietra/dev/Projects/obsidian/Obsidian Vault/HotelOps/sessions/_INDEX.md` (auto-regenerated, never edit manually)
-- Repo root: `/Users/stefanodellapietra/dev/Projects/hotelops/` (used by Mode A for git cross-check)
-- Repo STATUS: `/Users/stefanodellapietra/dev/Projects/hotelops/STATUS.md`
+`$VAULT` = la cartella `HotelOps/` dentro l'Obsidian Vault. Oggi (Linux): `~/Documents/Obsidian Vault/HotelOps/`; sul Mac era `~/dev/Projects/obsidian/Obsidian Vault/HotelOps/`. Se il path non esiste, cercalo invece di assumerlo:
+`find ~/Documents ~/dev -maxdepth 5 -type d -path '*Obsidian Vault/HotelOps'`
+
+- Vault sessions dir: `$VAULT/sessions/`
+- Vault log: `$VAULT/log.md`
+- Vault _INDEX: `$VAULT/sessions/_INDEX.md` (auto-regenerated, never edit manually)
+- Workstream hubs: `$VAULT/workstreams/`
+- Repo root: la working directory hotelops (`git rev-parse --show-toplevel`); `STATUS.md` alla radice (used by Mode A for git cross-check)
 
 ## Two modes
 
@@ -41,13 +57,14 @@ Triggers: "where were we", "riprendiamo", "dove eravamo", "carica ultima session
 Steps:
 
 1. **Read `vault/workstreams/_INDEX.md` + the relevant hub(s)** — dai 2026-07-11 i fronti sono la memoria di ripresa primaria: ogni hub ha "Dove sono / Prossimo passo / Thread aperti" curati.
-2. List `vault/sessions/*.md` sorted by date descending and read the most recent file (frontmatter `status` is normally `closed` — the narrative is still the richest context for "cosa è successo l'ultima volta"). A file still in `open-threads` = thread non landati (drift): surface it.
+2. List `vault/sessions/*.md` sorted by date descending and read the most recent file (frontmatter `status` is normally `closed` — the narrative is still the richest context for "cosa è successo l'ultima volta"). A file still in `open-threads` = thread non landati (drift): surface it. Poi confronta con `log.md`: l'ultima entry `session | <slug>` deve avere il suo file in `sessions/`; se manca, segnalalo (wrap interrotto a metà: il log è stato scritto, il file no).
 3. Compute gap = days between today and the session file's date.
 4. **If gap > 3 days**: cross-check git. Run `git log --since=<session-date> --oneline` in the repo. Optionally `git log --since=<session-date> --name-only --pretty=format: | sort -u` to get file activity. For each item in the session's §Open threads, check whether files mentioned in the thread have commits since — surface this as **factual data only** (e.g., "0 commits touching that file"), never as interpretation ("thread resolved"). The user reads the data and decides.
 5. Surface to user in **≤6 lines total**, format roughly:
    ```
    Last session: <date> · <slug>
    [If gap>3d:] ⚠️ stale Nd · M commits since: <category summary>
+   [If drift:] ⚠️ <file ancora open-threads | entry log senza file>
    Open threads: <count> · top: <thread #1>
    Next move: <top item from §Next moves>
    If stuck on <X>: ask <person> "<exact question>" (from §Blockers)
@@ -60,14 +77,14 @@ Triggers: "wrap up", "salva sessione", "save session", "fine sessione", "chiudia
 
 Steps:
 
-1. **Propose a slug** from session content (snake_case_lower, 2-5 words, e.g. `kernel_closure_planning`). Ask user to confirm or override before writing.
+1. **Propose a slug** from session content (snake_case_lower, 2-5 words, e.g. `kernel_closure_planning`). Va nell'header della bozza: un solo sign-off copre slug e contenuto (step 3), niente round-trip separato per lo slug.
 2. **Choose verbosity** based on content density:
    - Light/tactical session (1 fix, no decisions) → tight, ~30-60 lines, bullets only, Summary 1 sentence
    - Balanced session (1 decision, 2-3 threads) → ~60-100 lines, occasional prose
    - Heavy/meta session (multiple decisions, deep design) → ~100-200 lines, prose where it carries weight
    - **Escape phrases** "wrap rapido" / "quick wrap" force tight even if content is heavy
-3. **Write** `vault/sessions/<YYYY-MM-DD>_<slug>.md` using the template below.
-4. **Landa i thread nei workstream hub (stesso turno)**: ogni item di §Open threads deve dichiarare una **destinazione** — `→ [[workstreams/<FRONTE>]]` (e aggiorni il hub: checkbox in "Thread aperti", refresh di "Dove sono/Prossimo passo" se serve; hub nuovo solo se nasce un fronte nuovo), `→ STATUS (HANDOFF)` per azioni manuali di Stefano, oppure **drop esplicito** con motivo. Il session file nasce con `status: closed`; `open-threads` si usa SOLO se restano thread genuinamente non landabili (atteso: quasi mai). Un thread senza destinazione non esiste.
+3. **Draft → show → write** `vault/sessions/<YYYY-MM-DD>_<slug>.md` using the template below. Mostra la bozza intera (slug compreso), scrivi solo dopo il sign-off; se Stefano cambia lo slug, cambia anche `id:` e il nome file.
+4. **Landa ogni thread nella sua destinazione (stesso turno)**: `→ [[workstreams/<FRONTE>]]` per lavoro tecnico (aggiorna il hub esistente; uno nuovo solo per un nuovo fronte tecnico), `→ Regia: <ID e riferimento>` per stato gestionale effettivamente riconciliato secondo §Raccordo con Regia, `→ STATUS (HANDOFF)` per azioni manuali, oppure **drop esplicito** con motivo. Un passaggio a Regia pendente lascia l'azione di trasferimento nel hub/STATUS, non una seconda attività gestionale. Il session file nasce con `status: closed`; questo chiude il wrap, non il lavoro nelle destinazioni. Usa `open-threads` solo per thread senza destinazione praticabile. Un thread senza destinazione non esiste.
 5. **Auto-flip prior session** (residuale): se esiste ancora un file precedente in `open-threads` i cui thread sono stati risolti o landati, flippalo a `closed` con nota `> Threads resolved in [[YYYY-MM-DD_<this-slug>]]`.
 6. **Regenerate** `vault/sessions/_INDEX.md` from scratch by scanning all `sessions/*.md` files and their frontmatter. Format described in §Index file convention. **Warn se i file 🟡 superano 5** — è il segnale che i thread non stanno atterrando nei hub (drift del meccanismo).
 7. **Append log entry** to `vault/log.md`:
@@ -83,11 +100,11 @@ Steps:
    [yes] / skip
    ```
    Default is yes (enter). If yes, invoke vault-loop Mode B reading §Key insights of the just-written file. If skip, done.
-9. **δ — soft prompt on wrap signals**: this is separate from explicit trigger phrases. If during normal conversation (no explicit "wrap up") the user signals end-of-session (says "buonanotte", "abbiamo finito", "ci sentiamo domani", closes a topic with no continuation), the agent MAY propose **once**: "Stiamo per chiudere — vuoi un session-reflect?" Soft suggestion, no auto-fire. If user says no or doesn't respond, drop it.
+9. **Soft prompt on wrap signals**: this is separate from explicit trigger phrases. If during normal conversation (no explicit "wrap up") the user signals end-of-session (says "buonanotte", "abbiamo finito", "ci sentiamo domani", closes a topic with no continuation), the agent MAY propose **once**: "Stiamo per chiudere — vuoi un session-reflect?" Soft suggestion, no auto-fire. If user says no or doesn't respond, drop it.
 
 **OKF Lite**: `id:` e `authority: historical` sono obbligatori nel frontmatter (dal 2026-07-17): senza, il file fallisce VAL-E-004 al linter post-migrazione. Lo slug dell'id è il filename senza data, lowercase, `_`→`-`.
 
-**Never auto-write.** Always show the draft after step 3, get sign-off, then write. The vault is Stefano's reasoning substrate, not a write target.
+**Never auto-write.** Step 3 is the single sign-off (slug + content together); write only after it. The vault is Stefano's reasoning substrate, not a write target.
 
 ## Template (Mode B output)
 
@@ -132,7 +149,7 @@ Skip if no decisions.
 
 ## Open threads (carry over)
 
-Things started but not finished. `[ ]` checkboxes so they read as actionable. Each item needs enough context that a fresh agent understands what to do without re-reading the whole session — **and each item ends with its destination**: `→ [[workstreams/<FRONTE>]]` (landato nel hub nello stesso wrap), `→ STATUS (HANDOFF)`, o `→ drop: <motivo>`. Il session file è narrativa; la liveness vive nel hub.
+Things started but not finished. `[ ]` checkboxes so they read as actionable. Each item needs enough context that a fresh agent understands what to do without re-reading the whole session — **and each item ends with its destination**: hub tecnico, Regia con ID/ricevuta, STATUS (HANDOFF), oppure drop motivato, secondo Mode B step 4. Il session file è narrativa; lo stato corrente vive nella destinazione. Un passaggio gestionale non riuscito resta esplicitamente pendente.
 
 Bad: `[ ] fix the bug`
 Good: `[ ] Apply fix to concepts/INFRASTRUCTURE_VS_LOOPS.md:17 — remove Streamlit/CLI from Infrastructure row (it duplicates Apps row) → [[workstreams/KERNEL_TOOLING]]`
@@ -164,7 +181,7 @@ Links to previous sessions, decisions, concepts, reports, commits, journal entri
 
 ## Index file convention
 
-`vault/sessions/_INDEX.md` is **auto-regenerated** by the skill in Mode B step 5. Never edit manually — changes will be overwritten next wrap-up.
+`vault/sessions/_INDEX.md` is **auto-regenerated** by the skill in Mode B step 6. Never edit manually — changes will be overwritten next wrap-up.
 
 Generation rule: scan all `sessions/*.md` files, read frontmatter, produce table with **all open-threads files + last 10 closed files**, newest first.
 
@@ -192,7 +209,8 @@ Closed older than the last 10 are not listed here but still exist in the directo
 ## Relationship to other skills
 
 - **`session-context`** — manages `repo/STATUS.md`: short, recent, in-flight. session-reflect is richer and lives in the vault. session-context can still fire if Stefano wants STATUS.md updated; they don't overlap (different files).
-- **`vault-loop` Mode B** — **subsumed by chain-call** from session-reflect step 7 with opt-out. Standalone vault-loop Mode B only fires on triggers "capture" / "cattura" / "loop chiusura" — used rarely, when Stefano wants vault capture WITHOUT writing a session file.
+- **`regia-development`** — sviluppo del prodotto Regia, non memoria HotelOps né prerequisito per usare il motore. Entrambe le skill rimandano al contratto condiviso di §Raccordo con Regia.
+- **`vault-loop` Mode B** — **subsumed by chain-call** from session-reflect Mode B step 8 with opt-out. Standalone vault-loop Mode B only fires on triggers "capture" / "cattura" / "loop chiusura" — used rarely, when Stefano wants vault capture WITHOUT writing a session file.
 - **`vault-loop` Mode A** (bootstrap) — unchanged, standalone. Reads constitutional layer (INVARIANTS, AI_INSTRUCTIONS).
 - **`vault-loop` Mode C** (lint) — unchanged, standalone. On-demand drift check.
 - **`journal/`** — narrative breakthroughs (e.g., "Discovering the HotelOps Kernel"). A session can produce both a journal entry (epiphany) and a session file (bookkeeping). They don't replace each other.
@@ -202,7 +220,7 @@ Closed older than the last 10 are not listed here but still exist in the directo
 - **Don't reflect every chat.** Operational-only sessions (single bug fix, single CLI run) don't need reflection — they should go straight to commit. session-reflect is for sessions where carry-over exists.
 - **Don't duplicate `vault-loop` Mode B in the session file.** §Key insights flags durable bits with `→ candidate for vault`; the chain-call extracts them. Don't restate full decision content inside the session file.
 - **Don't auto-write.** Always propose, get sign-off, then write. Same for chain-call to vault-loop — opt-out prompt mandatory.
-- **Don't write fake confidence.** If unsure whether a thread is open or closed, leave it 🟡 and surface as open. §Blockers/questions exists exactly to surface uncertainty.
+- **Don't write fake confidence.** Declare uncertainty in the destination item or pending transfer. `open-threads` means a thread has no practical destination; an open business activity or a pending transfer already landed in a hub/STATUS does not reopen the wrap. §Blockers/questions keeps the uncertainty visible.
 - **Don't write placeholder sections.** If a section has no content, skip it entirely. Never "No decisions this session." just absence.
 - **Don't bloat tactical sessions.** A 20-minute bug fix wrap should produce ~30 lines, not 100. Match verbosity to content density. Heavy meta-sessions (>200 lines) are legitimate exceptions, not the norm.
 - **Don't interpret git data on stale resume.** Mode A step 4 surfaces git facts ("0 commits touching that file") never interpretations ("thread done"). The user reads facts and decides.
@@ -211,12 +229,12 @@ Closed older than the last 10 are not listed here but still exist in the directo
 ## When this skill might be wrong for the moment
 
 - User is in the middle of debugging — wait until the debug resolves before reflecting.
-- User explicitly says "no, just continue" to a δ soft prompt — respect that, drop it.
-- Mode A: if no open-threads files exist, say so and start fresh — don't read closed files unsolicited.
-- Mode A with gap > 3 days but user is mid-conversation already (not resuming) — don't fire β cross-check uninvited.
+- User explicitly says "no, just continue" to the step 9 soft prompt — respect that, drop it.
+- Mode A: the most recent file being `closed` is normal, not a signal — read it anyway for the narrative. The drift signals are a file still `open-threads` or a log entry without file: surface them, never resolve them silently.
+- Mode A with gap > 3 days but user is mid-conversation already (not resuming) — don't fire the step 4 git cross-check uninvited.
 
 ## One-line compression
 
-> Mode A — Resume: read most recent open-threads file; if gap >3d, cross-check git (facts only); surface ≤6 lines.
-> Mode B — Reflect: write sessions/<date>_<slug>.md (template, skip-if-empty, match verbosity); **landa ogni thread nel suo workstream hub / STATUS / drop esplicito — file nasce closed**; auto-flip prior session if resolved; regenerate _INDEX (warn 🟡>5); append log; chain-call vault-loop Mode B with opt-out [yes]/skip.
-> δ soft prompt on wrap signals: agent may suggest once, never auto-fires.
+> Mode A — Resume: hub(s) first, then the most recent session file (closed is normal); check open-threads leftovers + log↔file; if gap >3d, cross-check git (facts only); surface ≤6 lines.
+> Mode B — Reflect: draft → sign-off → write sessions/<date>_<slug>.md (skip-if-empty, match verbosity); **thread tecnici nel hub, stato gestionale in Regia con ricevuta, trasferimenti pendenti nel hub/STATUS, oppure drop motivato — file nasce closed**; auto-flip prior session if resolved; regenerate _INDEX (warn 🟡>5); append log; chain-call vault-loop Mode B with opt-out [yes]/skip.
+> Soft prompt on wrap signals (Mode B step 9): agent may suggest once, never auto-fires.
