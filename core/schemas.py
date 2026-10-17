@@ -1132,6 +1132,39 @@ class CopertoGiornalieroRow(BaseModel):
     raw_object_id: Optional[str] = None
 
 
+# ── drive inventory (spec 2026-10-17 drive-agent-friendly) ─────────────────
+
+
+class DriveInventoryRow(BaseModel):
+    """Schema for f_drive_inventory: una fotografia al giorno dell'albero Drive.
+
+    SNAPSHOT con natural_key (snapshot_date, file_id). md5/sha256 sono NULL per
+    i file nativi Google (Docs, Sheets), che l'API non hashsa. raw_object_id è
+    il join per hash con f_raw_objects.content_hash (stesso MD5 sugli stessi
+    byte): NULL = file non tracciato dalla lineage.
+    """
+
+    snapshot_date: date
+    file_id: str
+    name: str
+    mime_type: str
+    size_bytes: Optional[int] = None
+    md5: Optional[str] = None
+    sha256: Optional[str] = None
+    modified_time: Optional[datetime] = None
+    created_time: Optional[datetime] = None
+    owner_email: Optional[str] = None
+    parent_id: Optional[str] = None
+    path: str
+    root_key: str
+    is_folder: bool = False
+    is_shortcut: bool = False
+    shortcut_target_id: Optional[str] = None
+    perm_anyone: bool = False
+    perm_outside_domain: list[str] = Field(default_factory=list)
+    raw_object_id: Optional[str] = None
+
+
 # ── projects (event-sourced Step 1) ──────────────────────────────────────────
 
 

@@ -486,6 +486,47 @@ def cmd_drop(args):
 # ── Lineage subcommands (Phase 1 — additive) ──────────────────────────────────
 
 
+def cmd_drive(args):
+    """Drive: status (viste), manifest (render cartella), inventory (giro)."""
+    import json as _json
+
+    if args.drive_cmd == "status":
+        from core import drive_health
+
+        h = drive_health.compute(query)
+        if args.json:
+            print(
+                _json.dumps(
+                    drive_health.to_json(h), ensure_ascii=False, indent=2, default=str
+                )
+            )
+        else:
+            print(drive_health.render_text(h, top=args.top))
+        return
+    if args.drive_cmd == "manifest":
+        from core.drive_manifest import render_manifest
+
+        md = render_manifest(query, args.folder)
+        if args.out:
+            from pathlib import Path
+
+            Path(args.out).write_text(md, encoding="utf-8")
+            print(f"scritto {args.out}")
+        else:
+            print(md)
+        return
+    if args.drive_cmd == "inventory":
+        import sys as _sys
+
+        from ingest import drive_inventory
+
+        argv = ["--dry-run"] if args.dry_run else []
+        for r in args.root or []:
+            argv += ["--root", r]
+        _sys.argv = ["ingest.drive_inventory", *argv]
+        drive_inventory.main()
+
+
 def cmd_intake(args):
     """Register a file in the lineage layer (no canonical write)."""
     from pathlib import Path
@@ -1312,6 +1353,19 @@ def main():
     add_pf_genera(sub)
 
     # ── Lineage subcommands (Phase 1) ──────────────────────────────────────
+    # drive: inventario e controlli (spec 2026-10-17 drive-agent-friendly)
+    p_drive = sub.add_parser("drive", help="Drive: stato inventario, manifest cartella, inventario")
+    drive_sub = p_drive.add_subparsers(dest="drive_cmd", required=True)
+    p_ds = drive_sub.add_parser("status", help="Le quattro viste v_drive_* (duplicati, permessi, radice, lineage)")
+    p_ds.add_argument("--json", action="store_true")
+    p_ds.add_argument("--top", type=int, default=10, help="Righe mostrate per controllo (testo)")
+    p_dm = drive_sub.add_parser("manifest", help="Render Markdown di una cartella dall'inventario")
+    p_dm.add_argument("--folder", required=True, help="ID cartella Drive")
+    p_dm.add_argument("--out", default=None, help="File di destinazione (default stdout)")
+    p_di = drive_sub.add_parser("inventory", help="Esegue il giro inventario (= python -m ingest.drive_inventory)")
+    p_di.add_argument("--root", action="append")
+    p_di.add_argument("--dry-run", action="store_true")
+
     p_intake = sub.add_parser(
         "intake",
         help="Lineage: registra un file (raw blob + RAW_INGESTED event)",
@@ -1478,6 +1532,7 @@ def main():
         "chiudi": cmd_chiudi,
         "saldo": cmd_saldo,
         "health": cmd_health,
+        "drive": cmd_drive,
         "previsione": cmd_previsione,
         "prev": cmd_previsione,
         "voci": cmd_voci,

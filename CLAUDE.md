@@ -54,6 +54,7 @@ cli.py      <- `hotelops` CLI
 **Layer chiave (concetti — il dettaglio file-per-file è nel codice):**
 - `core/schemas.py` — Pydantic + `validate_batch()`. `core/bq/write.py::bq_write_validated` è **l'unico writer** (append/snapshot). **Ogni write BQ passa da qui** (gate I1/I9).
 - `core/config.py` — table IDs (`F_*`/`D_*`/`V_*`), `PROJECT`/`DATASET`. ⚠️ **`V_PROGETTO_VOCI_STATO` = costante orfana**: la vista non esiste in BQ né ha SQL nel repo (era Task 9 del piano *Projects event-sourced Step 1*, mai landato — vedi STATUS "Projects event-sourced Step 1", deferred). Non è una vista deployabile (`core/bq/views/` non la contiene).
+- `core/drive_map.yaml` — template pubblico vuoto; ID di radici/cartelle nel file privato `HOTELOPS_DRIVE_MAP`; `f_drive_inventory` = proposta di inventario (hash, permessi, join per MD5 con `f_raw_objects`), non ancora pronta per attivazione. Blocchi nella spec `docs/superpowers/specs/2026-10-17-drive-agent-friendly-design.md`.
 - `core/lineage/` — per-raw-object lineage: `SourceDefinition` (registry `core/source_registry.yaml`, **grammar 4-part** `<SYSTEM>_<DATASET>_<SOCIETA>_<LIFECYCLE>`), state machine (RAW_ONLY→…→PROMOTED), policy gate (invariante **`loop_targets==[] ⇔ RAW_ONLY`**). Tabelle `f_raw_objects`/`f_lineage_events`, bucket `gs://hotelops-raw` (Object Versioning).
 
 **ingest/** — target model: `hotelops intake` (→ `f_raw_objects` con URI gs://) + `hotelops promote` (→ canonical via gate). Parser in `ingest/flussi/`.
@@ -89,6 +90,9 @@ hotelops promote --raw-object-id Y          # Promuovi → canonical
 hotelops lineage Y                          # Ispeziona identità + eventi
 python -m ingest.drive_fetch --source-name X [--file-id ID]   # Pull da Drive vivo
 hotelops deploy-views [--dry-run]           # Deploy viste da core/bq/views/
+python -m ingest.drive_fetch --all [--dry-run]   # Acquisizione Drive→lineage; AUTO soltanto, guard actor per sorgenti classificate
+hotelops drive status [--json]              # Draft inventario: viste v_drive_*; deployment non attestato
+hotelops drive manifest --folder <id>       # Manifest Markdown di una cartella, generato da f_drive_inventory
 hotelops manifest [--table T]               # Snapshot catalogo BQ → core/bq/manifest.yaml (subset)
 
 # reviews

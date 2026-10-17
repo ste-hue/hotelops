@@ -85,7 +85,18 @@ def test_main_apre_un_pipeline_run_col_nome_del_job(monkeypatch, tmp_path):
     monkeypatch.setattr("core.pipeline_run.PipelineRun", FakeRun)
     f = tmp_path / "x.xlsx"
     f.write_bytes(b"x")
-    monkeypatch.setattr(df, "fetch_drive_file", lambda *a, **k: f)
+    # --all (spec 2026-10-17): elenco via API + MD5 dal metadato, download solo
+    # per gli hash assenti. Qui: un candidato, hash nuovo, download finto.
+    monkeypatch.setattr(df, "_drive_service", lambda key_path: object())
+    monkeypatch.setattr(
+        df,
+        "list_candidates",
+        lambda svc, sd: [
+            df.DriveCandidate(file_id="fid", name="x.xlsx", mime_type="x", md5="h")
+        ],
+    )
+    monkeypatch.setattr(df, "_bq_hash_exists", lambda md5: False)
+    monkeypatch.setattr(df, "_download", lambda svc, fid, dest, export_mime=None: f)
     monkeypatch.setattr(
         "ingest.intake.intake_file",
         lambda *a, **k: SimpleNamespace(

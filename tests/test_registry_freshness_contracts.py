@@ -46,6 +46,7 @@ def test_auto_solo_dove_esiste_un_job():
         "PEC_MAILBOX_INTUR_APPEND": "pec_fetch",
         "PEC_MAILBOX_ORTI_APPEND": "pec_fetch",
         "PEC_MAILBOX_VIGNA_APPEND": "pec_fetch",
+        "DRIVE_INVENTORY_GROUP_SNAPSHOT": "drive_inventory",
     }
     auto = {
         sd.source_name: sd.acquisition.job
