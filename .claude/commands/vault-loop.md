@@ -8,8 +8,8 @@ description: Keeps Stefano's Obsidian vault (reasoning substrate) and the hotelo
 ## Why this skill exists
 
 Stefano's operational substrate has two layers:
-- **Code repo** (`~/dev/Projects/hotelops/`) — operational truth: BigQuery, pipelines, Streamlit apps, CLI.
-- **Obsidian vault** (`~/dev/projects/obsidian/Obsidian Vault/hotelops/`) — reasoning
+- **Code repo** (la working directory hotelops) — operational truth: BigQuery, pipelines, Streamlit apps, CLI.
+- **Obsidian vault** (`$VAULT`, vedi §Paths) — reasoning
   substrate: invariants, decisions, canonical ontology, agent operating manual.
 
 Agents that skip the vault drift off the invariants and invent answers. Agents that treat
@@ -22,9 +22,11 @@ confuse them.
 
 ## Paths
 
-- Vault root: `/Users/stefanodellapietra/dev/Projects/obsidian/Obsidian Vault/HotelOps/`
-  (git repo privato `ste-hue/obsidian-vault`, branch `master`; la casing conta fuori da macOS)
-- Repo root: `/Users/stefanodellapietra/dev/Projects/hotelops/`
+`$VAULT` = la cartella `HotelOps/` dentro l'Obsidian Vault. Oggi (Linux): `~/Documents/Obsidian Vault/HotelOps/`; sul Mac era `~/dev/Projects/obsidian/Obsidian Vault/HotelOps/`. Se il path non esiste, cercalo invece di assumerlo:
+`find ~/Documents ~/dev -maxdepth 5 -type d -path '*Obsidian Vault/HotelOps'`
+
+- Vault root: `$VAULT`; verificare separatamente se è un checkout Git e se la replica è aggiornata, senza dedurlo dal percorso. La casing conta fuori da macOS.
+- Repo root: la working directory hotelops (`git rev-parse --show-toplevel`)
 
 ## Mode selection
 
