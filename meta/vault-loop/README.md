@@ -13,9 +13,9 @@ VAULT_LOOP_PATH_VAULT=/elsewhere/Vault python -m scripts.vault_loop.reconcile
 
 - Sources: `sources.yaml` (names and watched paths only, nothing private).
 - State: `--state` dir, default `.hotelops_state/vault_loop/` (gitignored):
-  `checkpoint.json`, `findings.json` (durable, never deleted, `open`/`resolved`),
+  `state.json` (atomic authoritative bundle), `checkpoint.json`, `findings.json` (durable, never deleted, `open`/`resolved`),
   `last_report.md`.
-- Exit code: `0` CURRENT · `1` findings or NOT VERIFIED · `2` a source was unavailable.
+- Exit code: `0` CURRENT · `1` findings · `2` a source was unavailable · `3` incomplete checks or dirty snapshots.
 - Read-only everywhere. It never edits vault, repos or GitHub.
 
 Statuses: `CURRENT` · `DRIFT DETECTED` (mechanical contradiction) · `REVIEW REQUIRED`
@@ -39,9 +39,36 @@ present but commented out: enabling it is a decision, not a side-effect.
 
 Prerequisites before the first cloud run:
 
-1. The vault working tree must be committed and pushed (today 14 files are
-   modified locally; the cloud sees only `origin/master`).
-2. A fine-grained PAT (read-only, `mgmt-os` contents) stored as the secret
-   `MGMT_OS_READ_TOKEN` in the vault repo — or drop mgmt-os from the cloud run.
+1. Confirm the authoritative vault is committed and pushed; the runner only sees the remote
+   snapshot. A historical count of local edits is not a current sync check.
+2. A fine-grained PAT (read-only contents for `mgmt-os`, `mutui-tracker` and
+   `panorama-businessplan`) stored as the secret
+   `MGMT_OS_READ_TOKEN` in the vault repo. If the audit scope changes, update both
+   the source registry and the checkouts explicitly; missing access is not an
+   empty source or a completed audit.
 3. Copy `vault-loop.yml` to `.github/workflows/` of the vault repo and run it once
    by hand (`workflow_dispatch`).
+
+## Failure and evidence boundaries
+
+A missing vault subdirectory, unreadable note, unavailable cross-repo target,
+dirty dependency or unreachable revision holds dependent checkpoints. No
+date-window fallback over missing history. Findings resolve only after their exact
+check completes on clean snapshots; uncommitted notes cannot acknowledge a repo
+revision. The first historical baseline also requires a clean vault. Historical
+amendments remain visible against the unchanged hash baseline. Generic filenames
+and unrelated PR numbers are not evidence that a commit was captured.
+
+State writes are serialized with a local lock and committed as one atomic bundle.
+The split JSON files and report are compatibility exports; a subsequent run restores
+them from `state.json` after an interrupted export. Corrupt state stops the run,
+never resets the baseline. Keep state/report private; regex redaction is not a
+guarantee that arbitrary confidential prose is safe to publish. Runtime/BQ checks
+remain explicitly NOT VERIFIED and outside the mechanical overall status.
+
+The cloud template is restricted to the private vault repo, distinguishes an
+authenticated missing state branch from failed access, and fails incomplete audits.
+A report created by the current invocation is required before upload/persistence;
+a crash with exit 1 cannot reuse a prior report as if it were a completed audit.
+No schedule or deployment is enabled by this template. This tool detects drift;
+it does not semantically reconcile or automatically edit business decisions.

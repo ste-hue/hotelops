@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Vault Loop — incremental, deterministic reconciliation (Mode C subset).
 
 Read-only on every source. State (checkpoint, findings, last report) lives in a
@@ -13,14 +12,17 @@ and REVIEW REQUIRED where a human or agent must decide.
 from __future__ import annotations
 
 import argparse
+import copy
+import fcntl
 import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import yaml
@@ -84,7 +86,7 @@ class Finding:
 
     @property
     def id(self) -> str:
-        raw = "|".join([self.check, self.source, self.path, self.claim])
+        raw = f"{self.check}|{self.source}|{self.path}|{self.claim}"
         return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
@@ -103,7 +105,7 @@ class CheckResult:
 
 def _git(path: Path, *args: str) -> str:
     out = subprocess.run(
-        ["git", "-C", str(path), *args], capture_output=True, text=True
+        ["git", "-C", str(path), *args], check=False, capture_output=True, text=True
     )
     if out.returncode != 0:
         raise RuntimeError(out.stderr.strip() or f"git {' '.join(args)} failed")
@@ -154,6 +156,11 @@ def resolve(src: Source) -> Source:
     try:
         if not src.path.is_dir():
             raise RuntimeError("path does not exist")
+        if not src.root.is_dir():
+            raise RuntimeError("configured source subdirectory does not exist")
+        top = Path(_git(src.path, "rev-parse", "--show-toplevel").strip()).resolve()
+        if top != src.path.resolve():
+            raise RuntimeError("source is not a repository root")
         src.sha = _git(src.path, "rev-parse", "HEAD").strip()
         src.dirty = bool(_git(src.path, "status", "--porcelain").strip())
         src.available = True
@@ -170,10 +177,7 @@ def iter_notes(src: Source, *, include_skipped: bool = False):
         rel = p.relative_to(root)
         if not include_skipped and rel.parts and rel.parts[0] in src.skip_dirs:
             continue
-        try:
-            yield rel.as_posix(), p.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
+        yield rel.as_posix(), p.read_text(encoding="utf-8")
 
 
 def _is_archived(rel: str, src: Source) -> bool:
@@ -200,6 +204,14 @@ def check_vault_repo_pointers(vault: Source, repos: list[Source]) -> CheckResult
     res = CheckResult(
         "vault-repo-pointers", CURRENT, [vault.name] + [r.name for r in repos]
     )
+    if any(not r.available for r in repos):
+        return CheckResult(
+            res.id,
+            SOURCE_UNAVAILABLE,
+            res.sources,
+            note="pointer targets incomplete: a tracked repo is unavailable",
+            completed=False,
+        )
     roots = [r.path for r in repos if r.available]
     for rel, text in iter_notes(vault):
         seen: set[str] = set()
@@ -226,7 +238,7 @@ def check_vault_repo_pointers(vault: Source, repos: list[Source]) -> CheckResult
     return res
 
 
-_INV_HEADING_RE = re.compile(r"^### I(\d+)\.", re.M)
+_INV_HEADING_RE = re.compile(r"^### I(\d+)\.", re.MULTILINE)
 _INV_CLAIM_RE = re.compile(r"\bI1\s*[–\-—]\s*I(\d+)\b")
 
 
@@ -235,10 +247,12 @@ def check_invariant_range_claims(vault: Source, hotelops: Source) -> CheckResult
     inv = hotelops.path / "docs" / "architecture" / "INVARIANTS.md"
     if not inv.exists():
         res.status, res.note = NOT_VERIFIED, "INVARIANTS.md not found in hotelops"
+        res.completed = False
         return res
     numbers = [int(n) for n in _INV_HEADING_RE.findall(inv.read_text(encoding="utf-8"))]
     if not numbers:
         res.status, res.note = NOT_VERIFIED, "no `### In.` headings in INVARIANTS.md"
+        res.completed = False
         return res
     top = max(numbers)
     for rel, text in iter_notes(vault):
@@ -363,32 +377,21 @@ def check_arch_changes_unreflected(
         res.note = "no watch_paths configured"
         return res
     if since_sha:
+        _git(repo.path, "merge-base", "--is-ancestor", since_sha, "HEAD")
         rng = [f"{since_sha}..HEAD"]
     else:
         rng = [f"--since={window_days} days ago"]
-    try:
-        log = _git(
-            repo.path, "log", "--format=%H%x1f%cs%x1f%s", *rng, "--", *repo.watch_paths
-        )
-    except RuntimeError as exc:
-        # checkpoint sha may be unreachable after a force-push: fall back to the window
-        res.note = f"range {rng[0]} unusable ({exc}); used {window_days}-day window"
-        log = _git(
-            repo.path,
-            "log",
-            "--format=%H%x1f%cs%x1f%s",
-            f"--since={window_days} days ago",
-            "--",
-            *repo.watch_paths,
-        )
+    log = _git(
+        repo.path, "log", "--format=%H%x1f%cs%x1f%s", *rng, "--", *repo.watch_paths
+    )
     for sha7 in reexamine or []:
         try:
             log += (
                 "\n"
                 + _git(repo.path, "log", "-1", "--format=%H%x1f%cs%x1f%s", sha7).strip()
             )
-        except RuntimeError:
-            continue  # commit gone (rewritten history): the stored finding resolves
+        except RuntimeError as exc:
+            raise RuntimeError("unresolved finding commit is unavailable") from exc
     corpus = _note_corpus(vault)
     by_key: dict[str, dict] = {}
     for line in log.splitlines():
@@ -417,11 +420,17 @@ def check_arch_changes_unreflected(
         mentioned = False
         for line in corpus:
             low = line.lower()
-            if key.startswith("PR#") and key[2:] in line:
-                if repo.name == "hotelops" or needle_repo in low:
-                    mentioned = True
-                    break
-            if any(fn.lower() in low for fn in e["files"] if len(fn) > 6):
+            if (
+                key.startswith("PR#")
+                and re.search(re.escape(key[2:]) + r"(?!\d)", line)
+                and needle_repo in low
+            ):
+                mentioned = True
+                break
+            if (
+                re.search(r"(?<![0-9a-f])" + e["sha"] + r"[0-9a-f]*(?![0-9a-f])", low)
+                and needle_repo in low
+            ):
                 mentioned = True
                 break
         if not mentioned:
@@ -497,14 +506,19 @@ def check_archived_content_modified(
             )
         )
     for rel in baseline:
-        if rel not in current and _is_archived(rel, vault):
+        match = _DATE_PREFIX_RE.match(Path(rel).name)
+        historical = _is_archived(rel, vault) or (
+            match is not None
+            and (today - date.fromisoformat(match.group(1))).days >= age_days
+        )
+        if rel not in current and historical:
             res.findings.append(
                 Finding(
                     check=res.id,
                     source=vault.name,
                     authority="vault history",
                     path=rel,
-                    claim="archived note deleted",
+                    claim="historical note deleted",
                     correction="restore or record the deletion in log.md",
                     status=REVIEW_REQUIRED,
                     severity="HIGH",
@@ -588,18 +602,18 @@ def coverage_not_verified() -> CheckResult:
 
 def load_json(p: Path, default):
     if p.exists():
-        try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return default
+        value = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise ValueError("invalid reconciliation state: expected object")
+        return value
     return default
 
 
 def merge_findings(
-    previous: dict, current: list[Finding], checked_sources: set[str], now: str
+    previous: dict, current: list[Finding], checked_checks: set[str], now: str
 ) -> dict:
-    """Stable IDs; never delete. Resolve only findings whose source was actually checked."""
-    out = dict(previous)
+    """Stable IDs; resolve only after the exact check completed on verified snapshots."""
+    out = copy.deepcopy(previous)
     seen = set()
     for f in current:
         seen.add(f.id)
@@ -615,7 +629,7 @@ def merge_findings(
     for fid, rec in out.items():
         if fid in seen or rec.get("state") != "open":
             continue
-        if rec.get("source") in checked_sources:
+        if rec.get("check") in checked_checks:
             rec["state"] = "resolved"
             rec["resolved_at"] = now
     return out
@@ -632,6 +646,16 @@ _SECRET_RE = re.compile(
 def scrub(text: str) -> tuple[str, int]:
     scrubbed, n = _SECRET_RE.subn("[REDACTED]", text)
     return scrubbed, n
+
+
+def _scrub_values(value):
+    if isinstance(value, str):
+        return scrub(value)[0]
+    if isinstance(value, dict):
+        return {k: _scrub_values(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_scrub_values(v) for v in value]
+    return value
 
 
 def render_report(run: dict) -> str:
@@ -716,7 +740,7 @@ def render_report(run: dict) -> str:
 # ── Orchestration ─────────────────────────────────────────────────────────
 
 
-def run_reconcile(
+def _run_reconcile(
     config_path: Path,
     state_dir: Path,
     *,
@@ -724,16 +748,28 @@ def run_reconcile(
     window_days: int | None = None,
 ) -> dict:
     cfg, sources = load_config(config_path)
-    today = today or datetime.now(timezone.utc).date()
+    today = today or datetime.now(UTC).date()
     window = window_days or int(cfg.get("first_run_window_days", 30))
     age_days = int(cfg.get("decision_age_days", 30))
-    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    now = datetime.now(UTC).replace(microsecond=0).isoformat()
 
     state_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint = load_json(
-        state_dir / "checkpoint.json", {"sources": {}, "vault_hashes": {}}
+    bundle_path = state_dir / "state.json"
+    bundle = load_json(bundle_path, {})
+    if bundle_path.exists() and not bundle:
+        raise ValueError("invalid reconciliation state bundle: empty object")
+    checkpoint = (
+        bundle.get("checkpoint")
+        if bundle
+        else load_json(
+            state_dir / "checkpoint.json", {"sources": {}, "vault_hashes": {}}
+        )
     )
-    previous_findings = load_json(state_dir / "findings.json", {})
+    previous_findings = (
+        bundle.get("findings") if bundle else load_json(state_dir / "findings.json", {})
+    )
+    if not isinstance(checkpoint, dict) or not isinstance(previous_findings, dict):
+        raise TypeError("invalid reconciliation state bundle")
 
     for s in sources.values():
         resolve(s)
@@ -747,7 +783,22 @@ def run_reconcile(
     def guard(fn, *args, cid: str, srcs: list[str]):
         try:
             out = fn(*args)
-            results.extend(out if isinstance(out, tuple) else [out])
+            checked = list(out) if isinstance(out, tuple) else [out]
+            results.extend(checked)
+            for result in checked:
+                if any(
+                    sources[name].dirty for name in result.sources if name in sources
+                ):
+                    result.completed = False
+                    result.status = worst([result.status, NOT_VERIFIED])
+                    result.note = (
+                        result.note + "; " if result.note else ""
+                    ) + "dependent working tree dirty: checkpoint and resolutions held"
+                if not result.completed or result.status in (
+                    NOT_VERIFIED,
+                    SOURCE_UNAVAILABLE,
+                ):
+                    failed_sources.update(result.sources)
         except Exception as exc:  # noqa: BLE001 — a crashing check must not fake a result
             results.append(
                 CheckResult(
@@ -766,7 +817,7 @@ def run_reconcile(
             vault,
             repos,
             cid="vault-repo-pointers",
-            srcs=[vault.name],
+            srcs=[vault.name] + [r.name for r in repos],
         )
         guard(check_wikilinks, vault, cid="wikilinks", srcs=[vault.name])
         if hotelops and hotelops.available:
@@ -776,6 +827,16 @@ def run_reconcile(
                 hotelops,
                 cid="invariant-range-claims",
                 srcs=[vault.name, hotelops.name],
+            )
+        else:
+            failed_sources.add(vault.name)
+            results.append(
+                CheckResult(
+                    "invariant-range-claims",
+                    SOURCE_UNAVAILABLE,
+                    [vault.name, "hotelops"],
+                    completed=False,
+                )
             )
         for repo in repos:
             if repo.available:
@@ -814,6 +875,7 @@ def run_reconcile(
             srcs=[vault.name],
         )
     else:
+        failed_sources.update(sources)
         current_hashes = {}
         for cid in (
             "vault-repo-pointers",
@@ -846,12 +908,14 @@ def run_reconcile(
     coverage = coverage_not_verified()
 
     # Checkpoint: advance only clean, available sources whose checks all completed.
-    checked_sources: set[str] = set()
+    checked_checks = {
+        r.id
+        for r in results
+        if r.completed and r.status not in (NOT_VERIFIED, SOURCE_UNAVAILABLE)
+    }
     source_rows = []
     for s in sources.values():
         advanced = s.available and not s.dirty and s.name not in failed_sources
-        if s.available and s.name not in failed_sources:
-            checked_sources.add(s.name)
         note = (
             s.error
             if not s.available
@@ -861,12 +925,16 @@ def run_reconcile(
             note = (note + "; " if note else "") + "a check failed: checkpoint held"
         if advanced:
             checkpoint["sources"][s.name] = {"sha": s.sha, "verified_at": now}
-            if s.name == "vault" and current_hashes:
+            if s.name == "vault" and not any(
+                r.id == "archived-content-modified" and r.findings for r in results
+            ):
                 checkpoint["vault_hashes"] = current_hashes
         source_rows.append(
             {
                 "name": s.name,
-                "status": s.status,
+                "status": NOT_VERIFIED
+                if s.available and (s.dirty or s.name in failed_sources)
+                else s.status,
                 "sha": s.sha,
                 "dirty": s.dirty,
                 "checkpoint_advanced": advanced,
@@ -874,18 +942,16 @@ def run_reconcile(
                 "authority": s.authority,
             }
         )
-    if (
-        vault
-        and vault.available
-        and not checkpoint.get("vault_hashes")
-        and current_hashes
-    ):
-        # first run on a dirty vault: record a baseline so the next run can compare, but keep the SHA held
-        checkpoint["vault_hashes"] = current_hashes
-
     all_findings = [f for r in results for f in r.findings]
-    merged = merge_findings(previous_findings, all_findings, checked_sources, now)
-    overall = worst([s.status for s in sources.values()] + [r.status for r in results])
+    merged = _scrub_values(
+        merge_findings(previous_findings, all_findings, checked_checks, now)
+    )
+    source_rows = _scrub_values(source_rows)
+    overall = worst(
+        [s["status"] for s in source_rows]
+        + [r.status for r in results]
+        + [f["status"] for f in merged.values() if f["state"] == "open"]
+    )
 
     run = {
         "run_at": now,
@@ -899,16 +965,47 @@ def run_reconcile(
     }
     checkpoint["last_run_at"] = now
     checkpoint["last_overall"] = overall
-    (state_dir / "checkpoint.json").write_text(
-        json.dumps(checkpoint, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    (state_dir / "findings.json").write_text(
-        json.dumps(merged, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
     report = render_report(run)
-    (state_dir / "last_report.md").write_text(report, encoding="utf-8")
+    # One atomic authoritative bundle: exports can be regenerated after a crash.
+    _atomic_write(
+        state_dir / "state.json",
+        json.dumps(
+            {"checkpoint": checkpoint, "findings": merged, "report": report},
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+    )
+    _atomic_write(
+        state_dir / "checkpoint.json",
+        json.dumps(checkpoint, indent=2, sort_keys=True) + "\n",
+    )
+    _atomic_write(
+        state_dir / "findings.json", json.dumps(merged, indent=2, sort_keys=True) + "\n"
+    )
+    _atomic_write(state_dir / "last_report.md", report)
     run["report"] = report
     return run
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".vault-loop-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def run_reconcile(config_path: Path, state_dir: Path, **kwargs) -> dict:
+    state_dir.mkdir(parents=True, exist_ok=True)
+    with (state_dir / ".lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _run_reconcile(config_path, state_dir, **kwargs)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -934,6 +1031,8 @@ def main(argv: list[str] | None = None) -> int:
         print(run["report"])
     if run["overall"] == SOURCE_UNAVAILABLE:
         return 2
+    if run["overall"] == NOT_VERIFIED:
+        return 3
     return 0 if run["overall"] == CURRENT else 1
 
 
