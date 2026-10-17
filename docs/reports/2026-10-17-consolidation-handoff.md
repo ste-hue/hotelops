@@ -33,13 +33,15 @@ published; the canonical commands remain in Git.
 
 ## Remaining work and boundaries
 
-- Drive single-writer/inventory: keep as a draft pending review fixes. The
+- Drive single-writer/inventory: [draft PR #155](https://github.com/ste-hue/hotelops/pull/155). The
   review found incomplete snapshot semantics on same-day re-runs, overlapping
   roots and missing completeness evidence; these are merge blockers, not a
   completed deployment. Identity/permissions, DDL, views and job deployment
-  remain separate activation steps.
+  remain separate activation steps. The final commit passes 42 focused tests;
+  the broader local suite has documented baseline/dependency limitations.
 - Vault Loop: [PR #153](https://github.com/ste-hue/hotelops/pull/153), reviewed
   replacement for the orphaned fix; 29 focused tests, Ruff and diff checks pass.
+  GitHub test and automated review checks also passed on `6d53a64`.
   Code is proposed, not merged; no real-vault audit or schedule activation.
 - Budget: complete and validate the two working budgets, confirm HotelCube
   mappings and loading method, then verify the entered monthly values. The
@@ -60,3 +62,12 @@ workflow and the existence of a handoff, not its confidential business payload.
 A push of code to `main` triggers `.github/workflows/deploy-hub.yml`.
 Documentation-only consolidation can land independently; code PRs and explicit
 runtime activation must not be mistaken for already deployed functionality.
+
+## Local preservation and checkout handoff
+
+Original unpublished commit history and superseded review copies are retained
+on local archive/consolidation branches; they must not be pushed indiscriminately.
+The public Drive draft is a single sanitized commit over the remote baseline.
+Regia was switched to `main` and fast-forwarded to `7e4e0af`, with a clean tree.
+After this documentation lands, the HotelOps primary checkout can follow remote
+`main`; open code work remains in #153 and #155, not hidden on local main.
