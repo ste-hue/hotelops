@@ -160,11 +160,48 @@ def test_dormant_vince_su_tutto():
 def test_auto_job_down():
     a = ac(mode="AUTO", owner="job", job="ingest_coperti")
     assert (
-        status_for(fc(cadence="daily"), a, date(2026, 9, 8), date(2026, 9, 9), False)
+        status_for(fc(cadence="daily"), a, date(2026, 9, 1), date(2026, 9, 9), False)
         == "JOB_DOWN"
     )
     assert (
-        status_for(fc(cadence="daily"), a, date(2026, 9, 8), date(2026, 9, 9), None)
+        status_for(fc(cadence="daily"), a, date(2026, 9, 1), date(2026, 9, 9), None)
+        == "JOB_DOWN"
+    )
+
+
+def test_auto_dati_in_regola_senza_ricevuta():
+    """Canonical fresca ma nessun run in f_pipeline_runs: il job gira, manca la ricevuta."""
+    a = ac(mode="AUTO", owner="job", job="drive_fetch:RT")
+    assert (
+        status_for(fc(cadence="daily"), a, date(2026, 9, 8), date(2026, 9, 9), False)
+        == "NO_RECEIPT"
+    )
+    assert (
+        status_for(fc(cadence="monthly"), a, date(2026, 8, 31), date(2026, 9, 9), None)
+        == "NO_RECEIPT"
+    )
+
+
+def test_auto_adhoc_senza_ricevuta_decide_il_dato_recente():
+    """Per adhoc la copertura è OK per definizione: conta solo un dato nella finestra del job."""
+    a = ac(mode="AUTO", owner="job", job="pec_fetch")
+    assert (
+        status_for(fc(cadence="adhoc"), a, None, date(2026, 9, 9), False) == "JOB_DOWN"
+    )
+    assert (
+        status_for(fc(cadence="adhoc"), a, date(2026, 9, 3), date(2026, 9, 9), False)
+        == "JOB_DOWN"
+    )
+    assert (
+        status_for(fc(cadence="adhoc"), a, date(2026, 9, 8), date(2026, 9, 9), False)
+        == "NO_RECEIPT"
+    )
+
+
+def test_auto_dati_fermi_senza_ricevuta_resta_job_down():
+    a = ac(mode="AUTO", owner="job", job="ingest_coperti")
+    assert (
+        status_for(fc(cadence="daily"), a, date(2026, 8, 1), date(2026, 9, 9), False)
         == "JOB_DOWN"
     )
 
@@ -243,5 +280,9 @@ def test_azione_auto():
     assert action_for(s, "JOB_DOWN", None) == "→ controlla il job ingest_coperti"
     assert action_for(s, "DATA_STUCK", None) == (
         "→ job ingest_coperti verde, dati fermi: controlla la fonte Google Sheet Scarico Coperti"
+    )
+    assert action_for(s, "NO_RECEIPT", None) == (
+        "→ dati in regola, nessun run di ingest_coperti in f_pipeline_runs: "
+        "l'immagine del job scrive la ricevuta?"
     )
     assert action_for(s, "OK", None) is None
