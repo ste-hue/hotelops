@@ -20,9 +20,12 @@ sceglie definizioni gestionali ancora aperte.
 - La **definizione di controllo** (su quale base temporale leggere il consuntivo, da quale fonte) non è
   scritta da nessuna parte nel repo. Si deduce, non si trova.
 - Il **calcolo è tecnicamente disponibile** da `f_bilancino` via `v_ce_mensile_bilancino` (COMPETENZA,
-  YTD cumulato → mese per differenza), ma il 2026 ORTI in BigQuery arriva al 30/09 (settembre parziale
-  del 25/09 poi sostituito dal mese chiuso, PR #151 con il PDF dei bilanci provvisori come controllo
-  incrociato); ottobre non c'è e INTUR settembre va verificato.
+  YTD cumulato → mese per differenza). Settembre è **già acquisito** per entrambe le società: ORTI
+  2026-09 185 righe (`raw 0cac12f0`), INTUR 2026-09 153 righe (`raw 28d25435`), promossi il 16/10 con
+  DELETE del parziale del 25/09 e verificati conto per conto contro i PDF provvisori
+  (`docs/reports/2026-10-16-bilanci-provvisori-30-09-estrazione-pdf.md`, nota in
+  `2026-10-17-regia-ripristino-e-allineamento.md`). Ottobre è mese aperto: gli export «al 15/10» non
+  sono un mese chiuso e non vanno promossi come tale. Verifica diretta su BigQuery non rifatta oggi.
 - Il canale alternativo (`v_budget_vs_consuntivo` / `hotelops bva`, da prima nota) è **inutilizzabile**:
   prima nota ricavi ORTI 2026 = 0 in BQ (workstream CDG, thread 2026-09-24), il consuntivo non filtra i
   conti patrimoniali (`actuals` legge tutta `f_movimenti_contabili` senza `tipo_conto='CE'`), il budget
@@ -35,7 +38,7 @@ Legenda: *fonte autorevole* = dove nasce il dato; *accesso headless* = come lo l
 
 | Modulo | Fonte autorevole | Natura / dimensione | Periodo e frequenza | Calcoli esistenti | Superficie | Accesso headless | Limiti di copertura noti |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **Bilancini** | Esolver «Bilancio di verifica» → `f_bilancino` (SNAPSHOT, sorgenti `ESOLVER_BILANCINO_{ORTI,INTUR}_SNAPSHOT`, cadenza mensile, mode SEMI) | COMPETENZA, saldo cumulato YTD a segno-bilancio (ricavi <0, costi >0) | mensile, mese chiuso | `v_ce_mensile_bilancino` (mese per differenza, `categoria_ce`/`tipo_costo` via `d_categorie_conti`); `build_bilancini_artifact.py` (KPI ricavi/costi/margine YTD e mese, albero per prefisso) | edge `bilancini.panorama-host.com` (Access OTP); hub = link | `/data.json`, `/data.csv` sull'edge (per conto × mese: saldo YTD e delta) | 2026 ORTI al 30/09 (PR #151); INTUR agosto in BQ, 30/09 da verificare; ~147 conti «Da definire» in `d_categorie_conti`; promozione manuale con `--mese` quando il filename non ha l'anno |
+| **Bilancini** | Esolver «Bilancio di verifica» → `f_bilancino` (SNAPSHOT, sorgenti `ESOLVER_BILANCINO_{ORTI,INTUR}_SNAPSHOT`, cadenza mensile, mode SEMI) | COMPETENZA, saldo cumulato YTD a segno-bilancio (ricavi <0, costi >0) | mensile, mese chiuso | `v_ce_mensile_bilancino` (mese per differenza, `categoria_ce`/`tipo_costo` via `d_categorie_conti`); `build_bilancini_artifact.py` (KPI ricavi/costi/margine YTD e mese, albero per prefisso) | edge `bilancini.panorama-host.com` (Access OTP); hub = link | `/data.json`, `/data.csv` sull'edge (per conto × mese: saldo YTD e delta) | 2026 ORTI e INTUR al 30/09 (settembre promosso il 16/10, controllo incrociato PDF); ottobre aperto; ~147 conti «Da definire» in `d_categorie_conti`; promozione manuale con `--mese` quando il filename non ha l'anno |
 | **F&B** | HotelCube economato → `f_consumi_economato`; Power BI → `f_ricavi_fb` (Produzione Netta mensile), `f_vendite_fb`; Sheet coperti → `f_coperti_giornalieri` | COMPETENZA gestionale, netto IVA | mensile (consumi, ricavi), giornaliero (coperti, vendite) | `v_fb_kpi` (food cost % per bucket breakfast/ristorante/bar, €/pasto, YoY), `v_fb_ricavi`, `v_fb_consumi`, `v_fb_pasti`, `v_fb_modello_mensile` | pagina hub «Food & Beverage» (`fb_dashboard.py`, Streamlit) | solo BigQuery (nessun edge) | economato al 01/07, RistoCube 17/08, Moolty 27/09, vendite/corrispettivi al 06/07 (`health`, STATUS 18/10 in PR #156). Non è un CE: è food cost, non incidenza costi totale |
 | **Canone ORTI→INTUR** | BP Solo Terzo (inputs nel secret `canone-model-inputs`) + osservati BQ (`canone_fonti.py`: `f_produzione_pms`, `f_bilancino`, `f_saldi_banca_chiusura_mensile`) | IPOTESI (BP, COMPETENZA annua) accanto a OSSERVATO (COMPETENZA/CASSA) | annuale 2026–2031; refresh job `canone-push` 09:30 | `canone_sim.py`: EBITDA ante canone = ricavi × (1 − incidenza), banda min INTUR / max ORTI, DSCR; `canone_fonti.py` legge ricavi/costi/canone dal bilancino dell'ultimo mese | edge `canone.panorama-host.com`; hub = link | nessuno: il KV ha solo la chiave `html` | **gira ancora al 62 %** (61 % dal 2030): la pagina mostra uno scenario non più adottato (decisione 16/10); mutui «non collegati: i piani vivono nell'app Mutui, qui valgono le rate annue copiate nel BP» |
 | **Mutui** | app `mutui-tracker` (Worker + KV, `mutui.panorama-host.com`) | IMPEGNO (piani di ammortamento) + scenario Piano Industriale | contrattuale | ammortamenti, simulatore, scenario (fuori repo) | edge; hub = link | snapshot KV del Worker, **non BigQuery** | in BQ i mutui esistono solo come **cassa** (voce PF `USCITE_MUTUI`, ramo BANCHE «PAGAMENTO RATA») e in `v_condges_banca_dettaglio`; interessi 750305 **non mappati** (#83, stop deliberato per non duplicare la rata) |
@@ -84,6 +87,13 @@ sessione vault e nota STATUS in PR #156, non ancora su main):**
 | Esclusi per costruzione | ammortamenti (73), oneri finanziari (75), imposte (77), canone intercompany, il fitto escluso sopra |
 | Natura | **ipotesi di piano** («costi di piano mai sotto il 65 %»), base annuale, adottata in via provvisoria finché la scheda costi per famiglia non mostra dove nascerebbero i 3 punti |
 
+**Due regole, non un semaforo.** La decisione del 16–18/10 fissa un **minimo prudenziale di piano**
+(«costi di piano mai sotto il 65 %»: il BP non può assumere un'efficienza non dimostrata). La domanda di
+Stefano riguarda un **massimo da controllare a consuntivo** («i costi restano entro il 65 %?»). Stessa
+grandezza, due usi: il primo vincola chi scrive il piano, il secondo misura chi lo esegue. Il contratto in
+§6 espone il rapporto osservato e lascia la soglia fuori dalla vista proprio perché le due regole possono
+avere valori e periodi diversi (il floor è annuale; il controllo potrebbe essere YTD).
+
 **Non deciso (e qui non si sceglie):**
 
 1. **Base temporale del controllo**: mese singolo (volatile, stagionale), progressivo YTD (ciò che il bilancino
@@ -112,7 +122,7 @@ semaforo misura una definizione scelta dall'agente.
 
 | # | Lacuna | Tipo | Dove si chiude |
 | --- | --- | --- | --- |
-| 1 | Dati: bilancini ORTI/INTUR **settembre pieno** e ottobre; lista A di `health` (vendite, corrispettivi, acquisti, movimenti ORTI) | ingest, manuale | export Esolver/Power BI → `hotelops intake/promote` (contratto freshness già nel registry) |
+| 1 | Dati: bilancino di **ottobre** quando il mese chiude (settembre è già in BQ, vedi §1); lista A di `health` (vendite, corrispettivi, acquisti, movimenti ORTI) serve al BvA e al canale prima nota, **non** al rapporto dal bilancino | ingest, manuale | export Esolver/Power BI → `hotelops intake/promote` (contratto freshness già nel registry) |
 | 2 | Contratto scritto del 65 % (i quattro punti di §4) | decisione Stefano | questo documento → `docs/architecture/` o ADR quando confermato |
 | 3 | Vista canonica `v_incidenza_costi_orti` (COMPETENZA, bilancino): ricavi totali, costi operativi, incidenza mese e YTD, flag mese parziale, esclusioni esplicite per conto | 1 vista + test | `core/bq/views/` (I8: la regola sta nella vista, non in Regia né in Streamlit) |
 | 4 | `d_categorie_conti`: ~147 conti «Da definire» (134 k ORTI / 83 k INTUR sul 2026) | dimensione | prerequisito per leggere l'incidenza **per famiglia**, non per il totale |
@@ -135,6 +145,21 @@ Nessuna di queste richiede una nuova tabella dei fatti né un secondo piano dei 
 | Copertura | la riga dice da sola se il mese è chiuso, parziale o assente; `comparable=false` in Regia quando il bersaglio non c'è (stesso contratto di `regia-mappa-budget.md` §6) |
 | Dettaglio autorevole | link alla pagina Bilancini (`bilancini.panorama-host.com`, Access) e `/data.json` per il drill per conto; il motore economico resta in HotelOps |
 | Cosa NON fa Regia | non ricalcola costi da conti, non applica esclusioni, non decide la soglia |
+
+Contratto della vista `v_incidenza_costi_orti` (colonne e regole), così come andrà scritto nel SQL e nei test:
+
+| Regola | Specifica |
+| --- | --- |
+| Grana | una riga per (`societa_id`, `anno`, `mese`); solo ORTI finché il perimetro non cambia, ma la colonna resta |
+| Unità | euro netti IVA a segno gestionale (ricavi > 0, costi > 0, da `v_ce_mensile_bilancino.importo`); rapporti come frazione 0–1 (`0.65`), mai percentuale già moltiplicata |
+| Numeratore | `costi_operativi` = somma dei conti CE con classe 55–71, esclusi i conti elencati in una CTE `esclusi` (`65.11.01`, e il conto del fitto Angelina una volta confermato); `costi_totali_ce` = tutti i costi CE, esposto accanto |
+| Denominatore | `ricavi_totali` = somma di `sezione = 'Ricavi'` del bilancino, tutte le BU |
+| Periodo | `*_mese` dal delta del bilancino; `*_ytd` = **rapporto delle somme** gennaio→mese (`SUM(costi)/SUM(ricavi)`), mai media dei rapporti mensili |
+| Nulli | `SAFE_DIVIDE` con `NULLIF(ricavi, 0)`: ricavi zero o assenti → rapporto `NULL`, non 0 né ∞; un mese senza bilancino non produce riga, non eredita il precedente |
+| Copertura | `mese_parziale` (bilancino caricato prima della fine del mese, stessa regola di `canone_fonti._parziale`), `n_conti_esclusi`, `n_conti_da_definire` (conti CE senza categoria), `ultimo_mese_disponibile` |
+| Aggiornamento | `letto_il` = `MAX(data_ingresso)` del bilancino di quel mese; nessuno scheduler: la vista cambia quando cambia `f_bilancino` |
+| Soglia | **assente**. Nessuna colonna `semaforo`, `stato` o costante 0,65 |
+| Test | fixture a segni bilancino con canone e fitto presenti; caso ricavi zero; caso YTD ≠ media dei mesi; caso mese parziale |
 
 Dipendenza lato mgmt-os: estendere il vocabolario `METRICS` (oggi solo ricavi) e il collector `actuals.py`
 con una query sulla vista. È lavoro di Regia, da fare **dopo** la vista e il contratto.
@@ -230,9 +255,10 @@ mese, `categoria_ce`/`tipo_costo`); `v_fb_kpi` (food cost per bucket); `v_previs
 **Solo proposto (non implementato, non deciso):** vista `v_incidenza_costi_orti` (§6, issue #157) e il contratto
 dell'indicatore `orti.cost_ratio` (+ `orti.operating_costs`, `orti.revenue_total`); nessuna soglia nella vista.
 
-**Dipendenze:** (1) risposta di Stefano a §7; (2) ingest bilancini ORTI/INTUR settembre pieno e ottobre (lista A/B
-di `health`); (3) lato mgmt-os, estensione di `METRICS` in `mgmt/domain.py` e di `actuals.py` — **dopo** la vista;
-(4) la soglia, quando decisa, entra in Regia come bersaglio importato (`kind=budget`), non come costante.
+**Dipendenze:** (1) risposta di Stefano a §7; (2) ottobre quando chiude (settembre è già in BQ); (3) lato mgmt-os, estensione di `METRICS` in `mgmt/domain.py` e di `actuals.py` — **dopo** la vista;
+(4) la soglia, quando decisa, entra in Regia come bersaglio importato (`kind=budget`), non come costante;
+(5) floor di piano e massimo di controllo restano due regole distinte, mai lo stesso semaforo; i prompt che
+leggono l'indicatore ricevono fonte, periodo e copertura dalla riga e dichiarano quando il confronto non è possibile.
 
 **Non fare in Regia:** ricalcolare costi da conti, applicare esclusioni intercompany, leggere il BP come consuntivo.
 
