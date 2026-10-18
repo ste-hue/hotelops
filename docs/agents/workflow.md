@@ -8,6 +8,10 @@ Questo è un adattamento locale del workflow, non una seconda costituzione.
 Per dominio, ingest e memoria restano canoniche le skill HotelOps e `vault-loop`;
 Pocock copre la meccanica engineering. I risultati di `research` destinati al repo
 vanno in `docs/reports/`, rispettando la separazione tra tecnico e privato.
+Le skill attivabili dal modello (tra cui `research`, `domain-modeling`,
+`code-review` e `tdd`) restano dentro l'incarico, il team e i permessi assegnati;
+l'attivazione non li amplia. Anche `domain-modeling` segue i puntatori e i limiti
+di `domain.md`, senza duplicare le fonti canoniche.
 
 ## Team e assegnazione
 
@@ -74,6 +78,10 @@ Limiti / servizi non verificati / mutazioni esterne:
 PR / CI / prossimo risultato verificabile:
 ```
 
+Gli stati nel template descrivono l'incarico engineering. Le label descrivono
+il triage e i verdetti di thread; gli stati dei dati e del dominio mantengono
+i loro contratti. Nessuna transizione aggiorna automaticamente gli altri piani.
+
 Il claim termina con completamento o riassegnazione registrata dal coordinatore;
 non scade per presunzione. In caso di collisione fermare le modifiche sovrapposte.
 Distinguere implementato, revisionato, integrato, pubblicato e verificato live.
@@ -88,3 +96,6 @@ l'installazione e verificare la disponibilità effettiva. Le skill omonime local
 non vengono sovrascritte da questa configurazione.
 L'installazione è per utente/macchina: versionare questi documenti non installa
 il plugin sugli altri computer o in CI.
+Nei prompt trasmessi da Herdr scrivere «usa la skill `mattpocock-skills:...`»
+e verificare il caricamento effettivo; una forma slash può arrivare come testo
+del prompt invece di essere interpretata dalla TUI.
