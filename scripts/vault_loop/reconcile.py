@@ -261,6 +261,15 @@ def check_invariant_range_claims(vault: Source, hotelops: Source) -> CheckResult
 
 
 _WIKILINK_RE = re.compile(r"\[\[([^\]\|#]+)(?:#[^\]\|]*)?(?:\|[^\]]*)?\]\]")
+# Attachment suffixes a [[link]] can carry: those targets are not notes. Any other dot
+# belongs to the note name itself (e.g. a version or amount in the title), so it stays in scope.
+_ATTACHMENT_SUFFIXES = frozenset(
+    {
+        "png", "jpg", "jpeg", "gif", "svg", "webp", "avif", "bmp", "ico",
+        "pdf", "canvas", "base", "excalidraw", "xlsx", "xls", "csv", "json",
+        "mp4", "mov", "mp3", "m4a", "wav", "zip",
+    }
+)
 
 
 def check_wikilinks(vault: Source) -> tuple[CheckResult, CheckResult]:
@@ -290,8 +299,8 @@ def check_wikilinks(vault: Source) -> tuple[CheckResult, CheckResult]:
             stem = Path(target).name
             if stem.lower().endswith(".md"):
                 stem = stem[:-3]
-            elif "." in stem:  # images, canvases, bases: out of scope
-                continue
+            elif stem.rsplit(".", 1)[-1].lower() in _ATTACHMENT_SUFFIXES:
+                continue  # attachment, not a note
             matches = index.get(stem.lower(), [])
             if not matches:
                 broken.findings.append(

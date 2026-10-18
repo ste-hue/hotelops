@@ -325,6 +325,22 @@ def test_pointer_and_link_checks(world):
     assert by_check["broken-wikilinks"] == ["[[NOWHERE]] has no target note"]
 
 
+# 9b. a dot in a link target is part of a note name unless it is an attachment type
+def test_dotted_link_targets(world):
+    v = world["vault"]
+    (v / "concepts" / "SPEC_V1.2.md").write_text("a note whose name carries a dot\n")
+    (v / "INDEX.md").write_text(
+        "[[concepts/SPEC_V1.2]] resolves, [[concepts/SPEC_V9.9]] does not, "
+        "[[diagram.canvas]] and [[chart.png]] are attachments\n"
+    )
+    commit_all(world["vault_root"], "dotted targets")
+    claims = [
+        f["claim"] for f in open_findings(run(world), "broken-wikilinks")
+    ]
+    # the existing dotted note is found, the missing one is reported, attachments stay out
+    assert claims == ["[[concepts/SPEC_V9.9]] has no target note"]
+
+
 # 10. no credentials or sensitive strings leak into the report
 def test_report_is_scrubbed():
     f = vl.Finding(
