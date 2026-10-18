@@ -27,8 +27,8 @@ Prima di agganciare, rispondi a due domande — determinano tutto:
    - Regola: il valore del hub è il **dato vivo**. Streamlit ti dà dato→schermo gratis; un frontend bespoke ha bisogno di un layer API (BQ→endpoint→frontend) = lavoro vero. Scegli bespoke solo per superfici *brand/vetrina*, non per strumenti dati.
 
 2. **Chi la vede?** (audience)
-   - *Sola lettura, ok per la direzione* → registrala in `app.py` (entrypoint unico) e concedi l'audience aggiungendo l'`id` al grant giusto in `verticals/hub/roles.py::_GRANTS`.
-   - *Scrittura o roba interna* (ingest, edit previsioni, note operative) → **solo `app.py`**, grant ristretto. Le superfici di scrittura sono admin-only per costruzione (vedi pagina Ingest).
+   - *Sola lettura, ok per la direzione* → una riga `HubApp(...)` in `verticals/hub/registry.py` (unica fonte di verità: `app.py` costruisce nav e Home dal registry) e concedi l'audience aggiungendo l'`id` al grant giusto in `verticals/hub/roles.py::_GRANTS`.
+   - *Scrittura o roba interna* (ingest, edit previsioni, note operative) → stessa riga nel registry con `sensitive=True`, grant ristretto e re-check in `render()`. Le superfici di scrittura sono admin-only per costruzione (vedi pagina Ingest).
 
 ## A — Vista Streamlit (il caso comune)
 
@@ -68,14 +68,19 @@ La pagina del hub resta **sottile**.
    `brand_header("Food & Beverage")`. Mai un `st.title` grezzo per superfici
    direttore-facing.
 
-3. **Registra** in `verticals/hub/app.py`:
+3. **Registra** in `verticals/hub/registry.py` (non in `app.py`: dal 2026-06-12 `app.py` è
+   registry-driven e crea una `st.Page` per ogni app concessa, con `url_path = id`):
 
    ```python
-   from verticals.hub.pages_ import <nome>            # in cima
-   st.Page(<nome>.render, title="...", icon="...", url_path="<unico>")  # in st.navigation([...])
+   from verticals.hub.pages_ import <nome>            # import in cima a registry.py
+   HubApp("<id>", "<Titolo>", "<icona>", "<Finanza|Operations|Sistema>", "page", <nome>.render, "<sottotitolo>")
+   # se scrive dati o mostra dati riservati: sensitive=True
    ```
 
-   `url_path` **deve essere unico tra tutte le pagine** (vedi §Trappole). L'audience viene controllata a runtime via `roles.py::_GRANTS` — aggiungi l'`id` dell'app al grant corretto.
+   L'`id` **deve essere unico** (è anche l'`url_path`; `registry.validate()` fallisce a import se duplicato).
+   L'audience viene controllata a runtime via `roles.py::_GRANTS` — aggiungi l'`id` al grant corretto; le app
+   `sensitive=True` non si ereditano per gruppo (Invariante S1), vanno nominate. Stesso contratto di
+   `add-new-vertical` §Mount nel hub.
 
 4. **Card freshness** (se è una superficie top-level): estendi
    `verticals/hub/freshness.py::carica_freshness()` con la query che misura la freschezza
@@ -164,7 +169,7 @@ Usa B2 solo per superfici brand/vetrina. Per uno strumento dati, §A vince sempr
   script, non la repo root. L'entrypoint `app.py` bootstrappa il path in testa
   (`sys.path.insert(0, parents[2])`) prima degli import `verticals.*`. Le pagine in
   `pages_/` non ne hanno bisogno (le importa l'entrypoint).
-- **"Multiple Pages... URL pathnames must be unique"**: `st.Page` inferisce l'URL dal nome
+- **"Multiple Pages... URL pathnames must be unique"** (storico, pre-registry): `st.Page` inferisce l'URL dal nome
   della callable; quattro `render` omonime collidono. Passa sempre `url_path="…"` esplicito e
   unico.
 - **`set_page_config` può essere chiamato una volta sola**: se è dentro un `render()` montato,
@@ -180,7 +185,7 @@ Usa B2 solo per superfici brand/vetrina. Per uno strumento dati, §A vince sempr
 
 - [ ] Tipo deciso (vista A / embed B1 / front-door B2) e audience decisa (admin / +viewer)
 - [ ] `render()` senza `set_page_config`; logica nel vertical, pagina sottile
-- [ ] `pages_/<nome>.py` con degrado; registrata con `url_path` unico in `app.py`; audience in `roles.py::_GRANTS`
+- [ ] `pages_/<nome>.py` con degrado; riga `HubApp` con `id` unico in `registry.py` (mai `st.Page` a mano in `app.py`); audience in `roles.py::_GRANTS`
 - [ ] `brand_header`/token Panorama, niente colori hardcoded
 - [ ] BQ-only, `@st.cache_data(ttl=300)`, errore esplicito se BQ giù
 - [ ] (se top-level) card freshness in `freshness.py` + `home.py`

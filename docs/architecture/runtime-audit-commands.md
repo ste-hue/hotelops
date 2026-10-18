@@ -88,3 +88,9 @@ default N → error), enabling nothing.
 | 56 | `grep` artifacts for secret-shaped strings | No-secrets check | ✅ none found |
 
 **Failures / access gaps encountered:** Cloud Run API disabled on 4 adjacent projects (conclusive for Cloud Run absence); MCP `workers_get_worker_code` schema error; R2 not enabled (403). No permission denials on hotelops-suite or the Cloudflare account.
+
+## Addendum 2026-10-18 — lettura corretta del versioning GCS (read-only)
+
+| # | Command | Why | Outcome |
+|---|---|---|---|
+| 57 | `gcloud storage buckets describe gs://hotelops-raw --format="value(versioning_enabled)"` | Object Versioning del raw bucket. **Il campo in `gcloud storage` è `versioning_enabled`**; `versioning.enabled` è il nome nella JSON API/`gsutil` e in `gcloud storage` risolve a vuoto (un vuoto non è una prova negativa) | ✅ `True` (Google Cloud SDK 583.0.0, 2026-10-18 ~09:45 UTC). Stessa describe: `location: EU` (multi-region), `uniform_bucket_level_access: true`, `public_access_prevention: enforced`, `soft_delete_policy` 604800 s, Autoclass terminal ARCHIVE dal 2026-05-05 |
