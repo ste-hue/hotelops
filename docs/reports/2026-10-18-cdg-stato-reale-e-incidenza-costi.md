@@ -2,8 +2,9 @@
 
 **Data:** 2026-10-18 · **Perimetro di questa lettura:** repo `hotelops` (main `e5630b9`), vault Obsidian
 (concetti, architettura, decisioni, workstream — non le sessioni), mgmt-os `7e4e0af` in sola lettura.
-**Non verificato:** BigQuery (token gcloud scaduto, login interattivo non possibile in sessione agente).
-Ogni numero di copertura dati qui sotto viene da `STATUS.md`, dalle issue o dal vault, non da query eseguite oggi.
+**BigQuery:** interrogato in sola lettura la sera del 18/10 dopo il login di Stefano (copertura di `f_bilancino`,
+identità dei conti di classe 65, rapporto osservato: §4-bis). Il resto dei numeri di copertura viene da `STATUS.md`,
+issue e vault.
 
 Questo documento è un inventario e un contratto proposto. Non attiva soglie, non cambia viste, non
 sceglie definizioni gestionali ancora aperte.
@@ -25,7 +26,8 @@ sceglie definizioni gestionali ancora aperte.
   DELETE del parziale del 25/09 e verificati conto per conto contro i PDF provvisori
   (`docs/reports/2026-10-16-bilanci-provvisori-30-09-estrazione-pdf.md`, nota in
   `2026-10-17-regia-ripristino-e-allineamento.md`). Ottobre è mese aperto: gli export «al 15/10» non
-  sono un mese chiuso e non vanno promossi come tale. Verifica diretta su BigQuery non rifatta oggi.
+  sono un mese chiuso e non vanno promossi come tale. **Verificato su BigQuery il 18/10 sera**: ORTI e INTUR
+  2026-06…2026-09, un raw object per mese, settembre caricato il 16/10 (ORTI 185 righe, INTUR 153).
 - Il canale alternativo (`v_budget_vs_consuntivo` / `hotelops bva`, da prima nota) è **inutilizzabile**:
   prima nota ricavi ORTI 2026 = 0 in BQ (workstream CDG, thread 2026-09-24), il consuntivo non filtra i
   conti patrimoniali (`actuals` legge tutta `f_movimenti_contabili` senza `tipo_conto='CE'`), il budget
@@ -103,16 +105,45 @@ avere valori e periodi diversi (il floor è annuale; il controllo potrebbe esser
 2. **Fonte del consuntivo**: bilancino (COMPETENZA, mese chiuso, disponibile) oppure prima nota + fatture
    (`v_ce_macro_mensile`, oggi rotta sul 2026). La decisione 22/06 «f_bilancino = CE backbone» risponde già,
    ma va scritta nel contratto.
-3. **Identità di 65010590**: la sessione del 18/10 lo chiama «fitto Angelina»; il mapping Gasparotto nel repo
-   (`ingest_gasparotto.py`) lo chiama «Canoni locazione CVM SDP». Il fitto Angelina è intercompany dal 2026
-   (decisione vault `2026-09-04_Fitto_Angelina_a_INTUR`), il fitto CVM no. Vanno nominati i conti esatti dei
-   due fitti e detto quali escludere.
+3. **Identità di 65010590 — risolta sul dato, aperta sull'intenzione.** Nel bilancino ORTI al 30/09
+   `65.01.05.90` = «Canoni locazione CVM SDP» (100.000 €) e `65.01.05.91` = «Canoni locazione Angelina
+   Residence» (60.000 €, intercompany: INTUR porta lo stesso conto con segno opposto). La sessione del 18/10
+   scrive «65010590 = fitto Angelina»: **il codice e il nome non coincidono**. Se l'intenzione è escludere
+   l'intercompany (coerente con la decisione del 16/10 e con `2026-09-04_Fitto_Angelina_a_INTUR`), il conto da
+   escludere è `65010591`; se è escludere il canone CVM, è `65010590` ma la motivazione va scritta (il
+   locatore SDP non è una società del gruppo). Stefano deve dire quale.
 4. **Due perimetri nello stesso dominio.** Il BvA del 26/09 conta gli interessi mutui e il POS (144 k) tra i
    costi fuori budget; il 65 % di piano è a livello EBITDA e li esclude. Entrambi legittimi, mai riconciliati
    per iscritto: la vista deve esporre il livello (operativo vs totale) come colonna, non sceglierlo.
 5. **Trattamento dei mesi parziali** e della quota «di cui altri ricavi hotel — quota di raccordo»
    (813 k nel BP 2026, etichettata `COMPOSIZIONE DA VERIFICARE`): nel consuntivo non esiste, quindi il
    denominatore osservato e quello di piano non sono la stessa cosa finché il piano non è per centro.
+
+### 4-bis. Rapporto osservato (bilancino ORTI, COMPETENZA, progressivo YTD) — evidenza, non semaforo
+
+Query eseguita il 18/10 sera su `f_bilancino`, segni gestionali, rapporto = somma costi / somma ricavi dall'inizio
+dell'anno. Nessuna soglia applicata; le tre colonne a destra sono le tre letture possibili della definizione.
+
+| YTD al | Ricavi totali | Costi 55–71 | Canone 651101 | CVM 65010590 | Angelina 65010591 | Classe 75 | escl. canone+Angelina | escl. canone+CVM | escl. solo canone | totale CE / ricavi |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 2026-06 | 1.730.541 | 1.042.048 | 0 | 50.000 | 0 | 100.392 | 0,602 | 0,573 | 0,602 | 0,660 |
+| 2026-07 | 2.496.779 | 1.921.974 | 400.000 | 100.000 | 60.000 | 121.685 | 0,586 | 0,570 | 0,610 | 0,819 |
+| 2026-08 | 3.495.011 | 2.372.761 | 400.000 | 100.000 | 60.000 | 143.952 | 0,547 | 0,536 | 0,565 | 0,720 |
+| 2026-09 | 4.322.453 | 2.954.318 | 600.000 | 100.000 | 60.000 | 168.353 | **0,531** | 0,522 | 0,545 | 0,722 |
+
+Letture che contano più dei decimali:
+
+- A gennaio–marzo il rapporto YTD sta sopra 2,0 (hotel chiuso, costi fissi): un controllo **mensile o YTD di
+  inizio anno** non dice nulla sul 65 %, che è una grandezza annuale. È il motivo per cui §4.1 va deciso, non dedotto.
+- Al 30/09 il rapporto ante canone sta a 0,53–0,55 contro il 0,56 di agosto del memo 25/09; l'atterraggio annuo
+  verso 0,65 dipende dal Q4 di costi fissi e dalle registrazioni che il bilancino provvisorio non ha ancora.
+- Il **bilancino provvisorio non contiene ammortamenti (73) né imposte (77)**: la sola classe «sotto EBITDA»
+  presente è la 75 (oneri finanziari, 168 k). Il confronto con il 66,3 % del bilancio 2025 depositato va fatto a
+  dicembre, sul bilancino di chiusura.
+- Il canone registrato a settembre è 600 k su 1,0 M annuo: la colonna «totale CE / ricavi» (0,72) include il
+  canone ed è la lettura standalone che il consolidato elimina.
+- Conti CE ORTI 2026-09 senza categoria in `d_categorie_conti`: **30 conti, 333 k in valore assoluto**. Non
+  toccano il rapporto totale (che non usa la categoria), toccano la lettura per famiglia.
 
 **Disponibilità tecnica ≠ definizione gestionale.** Con le quattro righe sopra chiuse, il calcolo è una vista
 di ~40 righe su `v_ce_mensile_bilancino` (filtro classi + esclusioni + rapporto). Senza, qualsiasi
@@ -167,10 +198,10 @@ con una query sulla vista. È lavoro di Regia, da fare **dopo** la vista e il co
 ## 7. La domanda minima per Stefano
 
 > **Il 65 % del CdG si legge sul progressivo YTD del bilancino ORTI (mese chiuso, COMPETENZA), con costi =
-> classi 55–71 meno il canone 651101 e meno il fitto Angelina — e il conto del fitto Angelina è 65010590 o
-> un altro?**
+> classi 55–71 meno il canone 651101 e meno il fitto Angelina `65010591` — oppure volevi escludere il canone CVM
+> `65010590`, che non è intercompany?**
 
-Una risposta sì/no più un codice conto chiude §4.1–4.3 e sblocca la vista (§4.4 si risolve esponendo entrambi i livelli). L'atterraggio annuo e la
+Una risposta sì/no più la scelta tra i due conti chiude §4.1–4.3 e sblocca la vista (§4.4 si risolve esponendo entrambi i livelli). L'atterraggio annuo e la
 scheda per famiglia restano nel perimetro di #148.
 
 ## 8. Vault Obsidian: cosa è stale rispetto a questo stato
