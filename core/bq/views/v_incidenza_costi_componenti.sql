@@ -23,7 +23,15 @@
 --   Motivo: un conto presente in m-1 e assente in m (o viceversa) puo' essere un giroconto, un
 --   livello saltato dal parser o uno snapshot incompleto: non e' distinguibile dal dato, quindi il
 --   mese non si deriva. I conteggi n_conti_solo_* restano visibili per spiegare il NULL.
---   mese_parziale = il bilancino e' stato caricato prima della fine del mese a cui si riferisce.
+--   acquisito_prima_di_fine_mese = il bilancino e' stato caricato prima della fine del mese a cui si
+--   riferisce: segnale di acquisizione anticipata. Un caricamento successivo NON prova chiusura o
+--   completezza contabile: l'idoneita' al controllo e' un'altra cosa e non e' dedotta qui.
+--
+-- COMPONENTI NOMINATI: un conto ASSENTE dallo snapshot non vale zero. Per canone, Angelina, CVM e
+--   servizi bancari/POS la vista espone <comp>_presente (TRUE se almeno una riga del conto esiste nello
+--   snapshot, anche con saldo 0) e il valore <comp>_ytd e' NULL quando il conto e' assente. Un conto
+--   presente con saldo 0 (dare/avere movimentati) resta 0 e presente. Il modulo Python propaga
+--   NULL -> non valutabile per ogni perimetro che richiede quel componente.
 --
 -- CONTI DICHIARATI (CTE regole, versione 2026-10-18 — cambiare qui, con test e nota nel contratto):
 --   651101   canone affitto ramo d'azienda ORTI -> INTUR (intercompany; escluso per decisione 16/10)
@@ -82,11 +90,21 @@ agg AS (
     CAST(SUBSTR(mese, 6, 2) AS INT64) AS mm,
     SUM(IF(sezione = 'Ricavi', importo, 0))                                        AS ricavi_totali_ytd,
     SUM(IF(sezione = 'Costi' AND classe BETWEEN '55' AND '71', importo, 0))        AS costi_55_71_ytd,
-    SUM(IF(componente = 'canone_651101', importo, 0))                              AS canone_651101_ytd,
-    SUM(IF(componente = 'angelina_65010591', importo, 0))                          AS angelina_65010591_ytd,
-    SUM(IF(componente = 'cvm_65010590', importo, 0))                               AS cvm_65010590_ytd,
-    SUM(IF(classe = '75' AND componente = 'servizi_bancari_75', importo, 0))       AS servizi_bancari_75_ytd,
-    SUM(IF(classe = '75' AND componente IS NULL, importo, 0))                      AS oneri_finanziari_75_ytd,
+    COUNTIF(componente = 'canone_651101') > 0                                      AS canone_651101_presente,
+    IF(COUNTIF(componente = 'canone_651101') > 0,
+       SUM(IF(componente = 'canone_651101', importo, 0)), NULL)                    AS canone_651101_ytd,
+    COUNTIF(componente = 'angelina_65010591') > 0                                  AS angelina_65010591_presente,
+    IF(COUNTIF(componente = 'angelina_65010591') > 0,
+       SUM(IF(componente = 'angelina_65010591', importo, 0)), NULL)                AS angelina_65010591_ytd,
+    COUNTIF(componente = 'cvm_65010590') > 0                                       AS cvm_65010590_presente,
+    IF(COUNTIF(componente = 'cvm_65010590') > 0,
+       SUM(IF(componente = 'cvm_65010590', importo, 0)), NULL)                     AS cvm_65010590_ytd,
+    COUNTIF(classe = '75' AND componente = 'servizi_bancari_75') > 0               AS servizi_bancari_75_presente,
+    IF(COUNTIF(classe = '75' AND componente = 'servizi_bancari_75') > 0,
+       SUM(IF(classe = '75' AND componente = 'servizi_bancari_75', importo, 0)), NULL) AS servizi_bancari_75_ytd,
+    COUNTIF(classe = '75' AND componente IS NULL) > 0                              AS oneri_finanziari_75_presente,
+    IF(COUNTIF(classe = '75' AND componente IS NULL) > 0,
+       SUM(IF(classe = '75' AND componente IS NULL, importo, 0)), NULL)            AS oneri_finanziari_75_ytd,
     SUM(IF(sezione = 'Costi' AND classe IN ('73', '77'), importo, 0))              AS amm_imposte_73_77_ytd,
     SUM(IF(sezione = 'Costi', importo, 0))                                         AS costi_totali_ce_ytd,
     COUNT(*)                                                                       AS n_conti_ce,
@@ -144,13 +162,20 @@ SELECT
   costi_totali_ce_ytd,
   IF(mese_derivabile, ricavi_totali_ytd       - COALESCE(p_ricavi, 0),       NULL) AS delta_ricavi_totali,
   IF(mese_derivabile, costi_55_71_ytd         - COALESCE(p_costi_55_71, 0),  NULL) AS delta_costi_55_71,
-  IF(mese_derivabile, canone_651101_ytd       - COALESCE(p_canone, 0),       NULL) AS delta_canone_651101,
-  IF(mese_derivabile, angelina_65010591_ytd   - COALESCE(p_angelina, 0),     NULL) AS delta_angelina_65010591,
-  IF(mese_derivabile, cvm_65010590_ytd        - COALESCE(p_cvm, 0),          NULL) AS delta_cvm_65010590,
-  IF(mese_derivabile, servizi_bancari_75_ytd  - COALESCE(p_servizi, 0),      NULL) AS delta_servizi_bancari_75,
-  IF(mese_derivabile, oneri_finanziari_75_ytd - COALESCE(p_oneri, 0),        NULL) AS delta_oneri_finanziari_75,
+  -- componenti nominati: a gennaio il delta e' lo YTD; negli altri mesi derivabili lo stesso dominio di
+  -- conti garantisce presenza in entrambi gli snapshot, quindi p_* non e' NULL se *_ytd non lo e'.
+  IF(mese_derivabile, canone_651101_ytd       - IF(mm = 1, 0, p_canone),     NULL) AS delta_canone_651101,
+  IF(mese_derivabile, angelina_65010591_ytd   - IF(mm = 1, 0, p_angelina),   NULL) AS delta_angelina_65010591,
+  IF(mese_derivabile, cvm_65010590_ytd        - IF(mm = 1, 0, p_cvm),        NULL) AS delta_cvm_65010590,
+  IF(mese_derivabile, servizi_bancari_75_ytd  - IF(mm = 1, 0, p_servizi),    NULL) AS delta_servizi_bancari_75,
+  IF(mese_derivabile, oneri_finanziari_75_ytd - IF(mm = 1, 0, p_oneri),      NULL) AS delta_oneri_finanziari_75,
   IF(mese_derivabile, amm_imposte_73_77_ytd   - COALESCE(p_amm, 0),          NULL) AS delta_amm_imposte_73_77,
   IF(mese_derivabile, costi_totali_ce_ytd     - COALESCE(p_costi_tot, 0),    NULL) AS delta_costi_totali_ce,
+  canone_651101_presente,
+  angelina_65010591_presente,
+  cvm_65010590_presente,
+  servizi_bancari_75_presente,
+  oneri_finanziari_75_presente,
   mese_derivabile,
   NOT mese_derivabile AS mese_non_derivabile,
   mese_prec_adiacente,
@@ -160,5 +185,5 @@ SELECT
   n_conti_da_definire,
   n_ricavi_da_definire,
   letto_il,
-  SAFE.PARSE_DATE('%Y-%m-%d', SUBSTR(letto_il, 1, 10)) < LAST_DAY(DATE(anno, mm, 1)) AS mese_parziale
+  SAFE.PARSE_DATE('%Y-%m-%d', SUBSTR(letto_il, 1, 10)) < LAST_DAY(DATE(anno, mm, 1)) AS acquisito_prima_di_fine_mese
 FROM fin

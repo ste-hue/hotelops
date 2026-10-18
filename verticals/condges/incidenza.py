@@ -14,6 +14,7 @@ arrotondato, non valutabile ≠ entro limite. Periodo e perimetro: non decisi (q
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from enum import Enum
 
@@ -71,7 +72,8 @@ NATURA_DEL_PONTE: dict[Perimetro, Natura] = {
 
 @dataclass(frozen=True)
 class Componenti:
-    """Una riga della vista per un periodo. ``None`` = non disponibile (mese non derivabile o assente)."""
+    """Una riga della vista per un periodo. ``None`` = non disponibile: mese non derivabile, oppure conto
+    ASSENTE dallo snapshot (la vista lo espone come NULL, mai come 0: un conto presente con saldo 0 è 0)."""
 
     ricavi_totali: float | None
     costi_55_71: float | None
@@ -112,22 +114,31 @@ class Limite:
     def __post_init__(self) -> None:
         if self.verso != "max":
             raise ValueError(f"verso non supportato: {self.verso!r} (solo 'max')")
+        if not _finito(self.valore):
+            raise ValueError(f"limite non finito: {self.valore!r}")
+
+
+def _finito(v: float | None) -> bool:
+    """True solo per un numero reale finito. None, NaN e ±inf sono 'non disponibile'."""
+    return v is not None and isinstance(v, (int, float)) and math.isfinite(v)
 
 
 def numeratore(c: Componenti, perimetro: Perimetro, natura: Natura) -> float | None:
     """Costi del perimetro. None se un componente richiesto manca (mese non derivabile)."""
     if perimetro is None or natura is None:
         raise ValueError("perimetro e natura sono obbligatori: nessun default")
-    if c.costi_55_71 is None:
+    if not _finito(c.costi_55_71):
         return None
-    tot = c.costi_55_71
+    tot = float(c.costi_55_71)
     for nome in _ESCLUSIONI[perimetro]:
         v = getattr(c, nome)
-        if v is None:
+        if not _finito(
+            v
+        ):  # conto assente (NULL) o valore non finito: nessuna evidenza che sia zero
             return None
         tot -= v
     if natura is Natura.NATURA:
-        if c.servizi_bancari_75 is None:
+        if not _finito(c.servizi_bancari_75):
             return None
         tot += c.servizi_bancari_75
     return tot
@@ -141,15 +152,16 @@ def rapporto(
     if periodo is None:
         raise ValueError("periodo obbligatorio: nessun default")
     num = numeratore(c, perimetro, natura)
-    if num is None or c.ricavi_totali is None or c.ricavi_totali == 0:
+    if num is None or not _finito(c.ricavi_totali) or c.ricavi_totali == 0:
         return None
-    return num / c.ricavi_totali
+    r = num / c.ricavi_totali
+    return r if _finito(r) else None
 
 
 def valuta(r: float | None, limite: Limite) -> str:
     """Esito rispetto al limite, senza arrotondare: 'oltre' | 'al_limite' | 'entro' | 'non_valutabile'.
     Un rapporto non determinabile non è mai 'entro'."""
-    if r is None:
+    if not _finito(r):  # None, NaN, ±inf: mai 'entro'
         return "non_valutabile"
     if r > limite.valore:
         return "oltre"

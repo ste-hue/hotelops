@@ -137,6 +137,32 @@ def test_limite_solo_verso_max():
         Limite(0.65, "min", "x", "y")
 
 
+@pytest.mark.parametrize("v", [float("nan"), float("inf"), float("-inf")])
+def test_limite_non_finito_rifiutato(v):
+    with pytest.raises(ValueError):
+        Limite(v, "max", "x", "y")
+
+
+@pytest.mark.parametrize("r", [float("nan"), float("inf"), float("-inf"), None])
+def test_rapporto_non_finito_mai_entro(r):
+    assert valuta(r, LIMITE_65) == "non_valutabile"
+
+
+def test_componenti_non_finiti_non_determinabili():
+    nan = float("nan")
+    q5, cl, yt = Perimetro.Q5_SOLO_CANONE, Natura.CLASSE, Periodo.YTD
+    assert rapporto(Componenti(nan, 100.0, 0.0, 0.0, 0.0, 0.0, 0.0), q5, cl, yt) is None
+    assert (
+        rapporto(Componenti(1000.0, nan, 0.0, 0.0, 0.0, 0.0, 0.0), q5, cl, yt) is None
+    )
+    assert (
+        rapporto(Componenti(1000.0, 800.0, nan, 0.0, 0.0, 0.0, 0.0), q5, cl, yt) is None
+    )
+    inf = Componenti(1000.0, 800.0, 0.0, 0.0, 0.0, float("inf"), 0.0)
+    assert rapporto(inf, q5, Natura.NATURA, yt) is None
+    assert rapporto(inf, q5, cl, yt) == 0.8
+
+
 # ───────────────────────── SQL della vista: eseguito su BigQuery con fixture inline ─────────────────────────
 
 
@@ -204,6 +230,13 @@ FIXTURE_BILANCINO = [
     _riga("T9", "2026-01", "55.01.01", "Costi", 50),
     _riga("T9", "2026-02", "47.91.01", "Ricavi", -220),
     _riga("T9", "2026-02", "55.01.01", "Costi", 90),
+    # T11 conto escluso PRESENTE con saldo zero (movimentato dare=avere): vale 0, non NULL
+    _riga("T11", "2026-01", "47.91.01", "Ricavi", -1000),
+    _riga("T11", "2026-01", "55.01.01", "Costi", 400),
+    _riga("T11", "2026-01", "65.11.01", "Costi", 0, dare=500, avere=500),
+    # T12 conto escluso ASSENTE dallo snapshot: NULL, non zero
+    _riga("T12", "2026-01", "47.91.01", "Ricavi", -1000),
+    _riga("T12", "2026-01", "55.01.01", "Costi", 400),
     # T10 snapshot parziale (caricato prima della fine del mese)
     _riga("T10", "2026-09", "47.91.01", "Ricavi", -100, letto="2026-09-25"),
     _riga("T10", "2026-09", "55.01.01", "Costi", 50, letto="2026-09-25"),
@@ -312,6 +345,14 @@ def test_t6_esclusioni_e_nature(righe_fixture):
         and r["cvm_65010590_ytd"] == 150
     )
     assert r["servizi_bancari_75_ytd"] == 85 and r["oneri_finanziari_75_ytd"] == 200
+    flags = (
+        "canone_651101_presente",
+        "angelina_65010591_presente",
+        "cvm_65010590_presente",
+        "servizi_bancari_75_presente",
+        "oneri_finanziari_75_presente",
+    )
+    assert all(r[k] is True for k in flags)
     assert r["amm_imposte_73_77_ytd"] == 50
     assert r["costi_totali_ce_ytd"] == 4270 + 85 + 200 + 50
     c = Componenti.da_riga(r, Periodo.YTD)
@@ -343,13 +384,42 @@ def test_t9_adiacenti_stesso_dominio_derivabile(righe_fixture):
     assert feb["delta_ricavi_totali"] == 120 and feb["delta_costi_55_71"] == 40
     gen = righe_fixture[("T9", "2026-01")]
     assert gen["mese_derivabile"] is True and gen["delta_costi_55_71"] == 50
+    assert (
+        gen["canone_651101_ytd"] is None and gen["delta_canone_651101"] is None
+    )  # assente: NULL, non 0
 
 
 @pytest.mark.bq
-def test_t10_mese_parziale(righe_fixture):
+def test_t10_acquisito_prima_di_fine_mese(righe_fixture):
     r = righe_fixture[("T10", "2026-09")]
-    assert r["mese_parziale"] is True
-    assert righe_fixture[("T9", "2026-02")]["mese_parziale"] is False
+    assert r["acquisito_prima_di_fine_mese"] is True
+    assert righe_fixture[("T9", "2026-02")]["acquisito_prima_di_fine_mese"] is False
+
+
+@pytest.mark.bq
+def test_t11_conto_escluso_presente_con_saldo_zero(righe_fixture):
+    r = righe_fixture[("T11", "2026-01")]
+    assert r["canone_651101_presente"] is True and r["canone_651101_ytd"] == 0
+    c = Componenti.da_riga(r, Periodo.YTD)
+    assert numeratore(c, Perimetro.Q5_SOLO_CANONE, Natura.CLASSE) == 400
+    assert rapporto(c, Perimetro.Q5_SOLO_CANONE, Natura.CLASSE, Periodo.YTD) == 0.4
+
+
+@pytest.mark.bq
+def test_t12_conto_escluso_assente_non_vale_zero(righe_fixture):
+    """SQL -> da_riga -> rapporto: il canone assente arriva come NULL; i perimetri che lo escludono non sono
+    valutabili; R0 (nessuna esclusione) resta calcolabile."""
+    r = righe_fixture[("T12", "2026-01")]
+    assert r["canone_651101_presente"] is False and r["canone_651101_ytd"] is None
+    assert r["angelina_65010591_ytd"] is None and r["servizi_bancari_75_ytd"] is None
+    c = Componenti.da_riga(r, Periodo.YTD)
+    assert c.canone_651101 is None
+    q5 = rapporto(c, Perimetro.Q5_SOLO_CANONE, Natura.CLASSE, Periodo.YTD)
+    assert q5 is None and valuta(q5, LIMITE_65) == "non_valutabile"
+    assert rapporto(c, Perimetro.R0_STANDALONE_PIENO, Natura.CLASSE, Periodo.YTD) == 0.4
+    assert (
+        rapporto(c, Perimetro.R0_STANDALONE_PIENO, Natura.NATURA, Periodo.YTD) is None
+    )  # servizi 75 assenti
 
 
 @pytest.mark.bq
@@ -377,6 +447,15 @@ def test_smoke_dato_reale_orti_set_2026(bq_client):
     for k, v in attesi.items():
         assert abs(r[k] - v) <= 2, (k, r[k], v)
     assert r["n_conti_ce"] == 106 and r["n_conti_da_definire"] == 30
+    assert all(
+        r[k] is True
+        for k in (
+            "canone_651101_presente",
+            "angelina_65010591_presente",
+            "cvm_65010590_presente",
+            "servizi_bancari_75_presente",
+        )
+    )
     # agosto → settembre: 7 conti spariti e 4 nuovi → il mese di settembre NON è derivabile
     assert r["n_conti_solo_prec"] == 7 and r["n_conti_solo_corr"] == 4
     assert r["mese_derivabile"] is False and r["delta_costi_55_71"] is None
