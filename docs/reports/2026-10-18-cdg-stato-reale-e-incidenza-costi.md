@@ -145,6 +145,40 @@ Letture che contano più dei decimali:
 - Conti CE ORTI 2026-09 senza categoria in `d_categorie_conti`: **30 conti, 333 k in valore assoluto**. Non
   toccano il rapporto totale (che non usa la categoria), toccano la lettura per famiglia.
 
+### 4-ter. Canone e fitti intercompany: contratto, competenza, cassa, piano — quattro numeri che non si sommano
+
+Riconciliazione richiesta dal coordinamento del 18/10. Fonti: atto e decisioni nel vault
+(`relationships/INTUR_ORTI`, `decisions/2026-07-25`, `2026-09-04`, `2026-09-25`), memo repo
+`docs/reports/2026-08-16-riconciliazione-canone-2026.md` e `2026-09-25-canone-2026-e-scaletta.md`,
+`f_bilancino` e `f_movimenti_contabili` letti il 18/10 mattina. **I chiarimenti di Stefano del 18/10
+(09:23–09:25) sono in un canale privato non disponibile a questa sessione**: nulla di quanto segue li recepisce.
+
+| Grandezza | Canone ramo d'azienda ORTI → INTUR | Fitto Angelina Residence | Fitto CVM |
+| --- | --- | --- | --- |
+| **Contratto vigente** | Atto Malafronte rep. 2246 del 01/04/2025: **600.000 + IVA/anno** (floor). Prima annualità effettiva 2025: 886.885,25 + 120.000 Angelina = 1.006.885 (addendum/conguagli). **Atto integrativo per la scaletta: non firmato** | 120.000/anno a INTUR nel 2026; dal 2027 al proprietario terzo (decisione 04/09). **Contratto scritto mancante su entrambe le sponde** | locatore «SDP» nel piano dei conti; arretrati 2025 verso Panorama Company 446.425,69 (residuo 346.425,69 fuori PF, decisione 14/08) |
+| **Competenza, bilancino YTD 30/09/2026** | ORTI 65.11.01 **600.000**; INTUR 53.01.33 **600.000** (simmetrico) | ORTI 65.01.05.91 **60.000** (una semestralità); INTUR porta **−60.000 sullo stesso conto di costo**, non su un conto ricavo 53.x | ORTI 65.01.05.90 **100.000** (50k giu + 50k lug) |
+| **Cassa 2026** | ORTI → INTUR: 244.000 (13/07) + 244.000 (31/07) = 488.000 IVA inclusa; terza tranche 244.000 il 21/09 (movimenti banca, workstream CASH_PF). INTUR 110301 registra **551.750 a luglio** (488k + 60k Angelina + ricorrente), **niente a settembre** nella prima nota ingerita (aggiornata al 05/10) | 60.000 il 15/07 (FT 1 R); seconda semestralità **non incassata** al 30/09 | acconti 100.000 (giu–lug) |
+| **Piano** | 2026 = 1.000.000 + IVA (decisione 25/09, «nessuno storno»); scalette 2027+: fascicolo MPS 1.200/1.445/1.520, memo 25/09 1.100/1.300/1.380/1.440, Romita 1.200/1.400, cruscotto 1.000/1.185/1.235/1.280: **nessuna è contratto** | 120.000 a INTUR fino al 2028 nel modello canone (`_ANGELINA_FINO_AL`), «almeno» per decisione | nel BP dentro «altri costi ORTI» |
+
+Cosa non va equiparato:
+
+- **Annuale ≠ YTD.** 1.000.000 di piano e 600.000 di competenza al 30/09 non sono in contrasto: mancano le
+  fatture di Q4 (400.000 netti a dicembre, memo 25/09). Un controllo YTD che legge 600 k come «canone
+  dell'anno» sbaglia di 400 k.
+- **Netto ≠ IVA inclusa.** 1.218.918 per cassa (PF) = 1.000.000 × 1,22 ≈ 1.220.000: la cassa quadra con il
+  piano al lordo, la competenza al netto. Nel bilancino l'IVA non c'è.
+- **Contratto ≠ piano.** Il contratto vigente dice 600.000 + IVA; il 2025 effettivo 886.885 e il 2026 a 1,0 M
+  sono addendum e decisioni, non l'atto. Finché l'atto integrativo non è firmato, «canone contrattuale 2026»
+  è una frase senza documento: nel contratto della vista l'esclusione del conto 65.11.01 non dipende
+  dall'importo, quindi la vista non ne risente.
+- **Due anomalie contabili da portare al commercialista, non da correggere nei dati**: (a) INTUR registra il
+  fitto Angelina come costo negativo su 65.01.05.91 invece che come ricavo (ricavi INTUR sottostimati di
+  60 k, costi pure); (b) la terza tranche del canone (21/09, 244 k) non compare sul conto 110301 di INTUR
+  nella prima nota ingerita fino al 05/10, mentre la competenza (600 k) sì: o è registrata su altro conto o
+  manca. Entrambe non toccano il rapporto ORTI ante canone.
+- **Versioni.** La prima nota ORTI in BQ si ferma a giugno 2026 (lista A di `health`): i pagamenti del canone
+  lato ORTI non sono verificabili dal mastrino 330301 in BQ, solo dai movimenti banca e dal lato INTUR.
+
 **Disponibilità tecnica ≠ definizione gestionale.** Con le quattro righe sopra chiuse, il calcolo è una vista
 di ~40 righe su `v_ce_mensile_bilancino` (filtro classi + esclusioni + rapporto). Senza, qualsiasi
 semaforo misura una definizione scelta dall'agente.
