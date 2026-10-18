@@ -147,37 +147,64 @@ Letture che contano più dei decimali:
 
 ### 4-ter. Canone e fitti intercompany: contratto, competenza, cassa, piano — quattro numeri che non si sommano
 
-Riconciliazione richiesta dal coordinamento del 18/10. Fonti: atto e decisioni nel vault
-(`relationships/INTUR_ORTI`, `decisions/2026-07-25`, `2026-09-04`, `2026-09-25`), memo repo
-`docs/reports/2026-08-16-riconciliazione-canone-2026.md` e `2026-09-25-canone-2026-e-scaletta.md`,
-`f_bilancino` e `f_movimenti_contabili` letti il 18/10 mattina. **I chiarimenti di Stefano del 18/10
-(09:23–09:25) sono in un canale privato non disponibile a questa sessione**: nulla di quanto segue li recepisce.
+Riconciliazione richiesta dal coordinamento del 18/10, rivista dopo le sue correzioni. Fonti: vault
+(`relationships/INTUR_ORTI`, `decisions/2026-07-25`, `2026-09-04`, `2026-09-25`) e memo repo
+`docs/reports/2026-08-16-riconciliazione-canone-2026.md`, `2026-09-25-canone-2026-e-scaletta.md` per contratto e
+piano; `f_bilancino`, `f_movimenti_contabili`, `f_banche_movimenti` letti il 18/10 mattina per competenza e cassa.
+**L'atto notarile non è stato letto direttamente**: ciò che è scritto come «contratto» è ricostruito da vault e
+memo. **I chiarimenti di Stefano del 18/10 (09:23–09:25) sono in un canale privato non disponibile a questa
+sessione**: nulla di quanto segue li recepisce.
 
 | Grandezza | Canone ramo d'azienda ORTI → INTUR | Fitto Angelina Residence | Fitto CVM |
 | --- | --- | --- | --- |
-| **Contratto vigente** | Atto Malafronte rep. 2246 del 01/04/2025: **600.000 + IVA/anno** (floor). Prima annualità effettiva 2025: 886.885,25 + 120.000 Angelina = 1.006.885 (addendum/conguagli). **Atto integrativo per la scaletta: non firmato** | 120.000/anno a INTUR nel 2026; dal 2027 al proprietario terzo (decisione 04/09). **Contratto scritto mancante su entrambe le sponde** | locatore «SDP» nel piano dei conti; arretrati 2025 verso Panorama Company 446.425,69 (residuo 346.425,69 fuori PF, decisione 14/08) |
-| **Competenza, bilancino YTD 30/09/2026** | ORTI 65.11.01 **600.000**; INTUR 53.01.33 **600.000** (simmetrico) | ORTI 65.01.05.91 **60.000** (una semestralità); INTUR porta **−60.000 sullo stesso conto di costo**, non su un conto ricavo 53.x | ORTI 65.01.05.90 **100.000** (50k giu + 50k lug) |
-| **Cassa 2026** | ORTI → INTUR: 244.000 (13/07) + 244.000 (31/07) = 488.000 IVA inclusa; terza tranche 244.000 il 21/09 (movimenti banca, workstream CASH_PF). INTUR 110301 registra **551.750 a luglio** (488k + 60k Angelina + ricorrente), **niente a settembre** nella prima nota ingerita (aggiornata al 05/10) | 60.000 il 15/07 (FT 1 R); seconda semestralità **non incassata** al 30/09 | acconti 100.000 (giu–lug) |
-| **Piano** | 2026 = 1.000.000 + IVA (decisione 25/09, «nessuno storno»); scalette 2027+: fascicolo MPS 1.200/1.445/1.520, memo 25/09 1.100/1.300/1.380/1.440, Romita 1.200/1.400, cruscotto 1.000/1.185/1.235/1.280: **nessuna è contratto** | 120.000 a INTUR fino al 2028 nel modello canone (`_ANGELINA_FINO_AL`), «almeno» per decisione | nel BP dentro «altri costi ORTI» |
+| **Contratto** (ricostruito da vault/memo, atto non letto) | atto rep. 2246 del 01/04/2025: 600.000 + IVA/anno; prima annualità effettiva 2025 886.885,25 + 120.000 Angelina = 1.006.885; atto integrativo per la scaletta non risulta firmato | 120.000/anno a INTUR nel 2026; dal 2027 al proprietario terzo (decisione 04/09). Il vault dice «contratto scritto mancante», ma la causale del bonifico del 15/07 cita «contratto n 000679»: da verificare, non da dedurre | locatore «SDP» nel piano dei conti; arretrati 2025 verso Panorama Company 446.425,69 (residuo 346.425,69 fuori PF, decisione 14/08) |
+| **Competenza, bilancino YTD 30/09/2026** (consuntivo) | ORTI 65.11.01 **600.000**; INTUR 53.01.33 **600.000** (simmetrico) | ORTI 65.01.05.91 **60.000**; INTUR **−60.000 sullo stesso conto di costo**, non su un conto ricavo | ORTI 65.01.05.90 **100.000** (50k giu + 50k lug) |
+| **Cassa osservata 2026** (`f_banche_movimenti` al 09/10) | ORTI → INTUR **3 × 244.000** (13/07, 31/07, 21/09) = **732.000** IVA inclusa, +1 € di spese per bonifico; INTUR MPS accredita 3 × 244.000. Prima nota INTUR (110301) mostra solo luglio; prima nota ORTI in BQ ferma a giugno | **60.000** il 15/07 (ORTI MPS → INTUR Sella); seconda semestralità non osservata al 09/10 | acconti 100.000 (giu–lug, memo 16/08) |
+| **Previsione annua** (piano, PF) | 1.000.000 + IVA (decisione 25/09); PF di Rosa: 1.218.918 totale 2026 = 732.000 osservati + 486.918 proiettati a dicembre. 1.000.000 × 1,22 = 1.220.000: **differenza 1.082 da spiegare**, non «quadra». Scalette 2027+ (fascicolo MPS, memo 25/09, Romita, cruscotto) sono ipotesi, non contratto | 120.000 a INTUR fino al 2028 nel modello canone, «almeno» per decisione | nel BP dentro «altri costi ORTI» |
 
-Cosa non va equiparato:
+Regole di lettura (senza rettificare nulla):
 
-- **Annuale ≠ YTD.** 1.000.000 di piano e 600.000 di competenza al 30/09 non sono in contrasto: mancano le
-  fatture di Q4 (400.000 netti a dicembre, memo 25/09). Un controllo YTD che legge 600 k come «canone
-  dell'anno» sbaglia di 400 k.
-- **Netto ≠ IVA inclusa.** 1.218.918 per cassa (PF) = 1.000.000 × 1,22 ≈ 1.220.000: la cassa quadra con il
-  piano al lordo, la competenza al netto. Nel bilancino l'IVA non c'è.
-- **Contratto ≠ piano.** Il contratto vigente dice 600.000 + IVA; il 2025 effettivo 886.885 e il 2026 a 1,0 M
-  sono addendum e decisioni, non l'atto. Finché l'atto integrativo non è firmato, «canone contrattuale 2026»
-  è una frase senza documento: nel contratto della vista l'esclusione del conto 65.11.01 non dipende
-  dall'importo, quindi la vista non ne risente.
-- **Due anomalie contabili da portare al commercialista, non da correggere nei dati**: (a) INTUR registra il
-  fitto Angelina come costo negativo su 65.01.05.91 invece che come ricavo (ricavi INTUR sottostimati di
-  60 k, costi pure); (b) la terza tranche del canone (21/09, 244 k) non compare sul conto 110301 di INTUR
-  nella prima nota ingerita fino al 05/10, mentre la competenza (600 k) sì: o è registrata su altro conto o
-  manca. Entrambe non toccano il rapporto ORTI ante canone.
-- **Versioni.** La prima nota ORTI in BQ si ferma a giugno 2026 (lista A di `health`): i pagamenti del canone
-  lato ORTI non sono verificabili dal mastrino 330301 in BQ, solo dai movimenti banca e dal lato INTUR.
+- **Consuntivo YTD ≠ previsione annua.** 600.000 di competenza al 30/09 è il consuntivo; 1.000.000 è la
+  previsione dell'anno. La differenza (400.000) è attesa dal piano e dal memo del 25/09, **non è competenza
+  accertata né fattura emessa** finché non compare nel bilancino.
+- **Netto ≠ IVA inclusa.** La cassa osservata (732.000) corrisponde a 600.000 × 1,22; la competenza è al netto.
+  Il totale PF resta una proiezione finché i pagamenti non sono osservati.
+- **Contratto ≠ piano.** Nel contratto della vista l'esclusione del conto 65.11.01 non dipende dall'importo, quindi
+  la vista non risente di quale scaletta verrà firmata.
+- **Due riscontri da chiarire col commercialista, senza rettifiche nei dati**: (a) INTUR registra il fitto
+  Angelina come costo negativo su 65.01.05.91 invece che come ricavo; (b) il terzo bonifico del canone (21/09)
+  è nei movimenti banca di entrambe le sponde ma non sul conto 110301 di INTUR nella prima nota ingerita al 05/10.
+- **Versioni.** Prima nota ORTI in BQ al 30/06; INTUR al 05/10; banche al 09/10; bilancini al 30/09.
+
+### 4-quater. Prospetto ponte: i componenti e le varianti del rapporto (ORTI, bilancino YTD 30/09/2026)
+
+Componenti già identificati, tutti dal bilancino (COMPETENZA, segni gestionali). Nessuna variante è «quella giusta»:
+la scelta è di Stefano. «Intercompany» da solo non autorizza un'esclusione dal rapporto standalone di ORTI, che
+paga quei canoni davvero; l'eliminazione è un'operazione del consolidato.
+
+| Componente | Conto / classi | ORTI YTD 09 | INTUR YTD 09 | Note |
+| --- | --- | ---: | ---: | --- |
+| Ricavi totali (sezione Ricavi) | 47.*, 53.* | 4.322.453 | 790.186 | INTUR include il canone 600.000 come ricavo |
+| Costi classi 55–71 | 55…71 | 2.954.318 | 771.706 | INTUR include −60.000 su 65.01.05.91 |
+| di cui canone ramo d'azienda | 65.11.01 | 600.000 | — | ricavo INTUR 53.01.33 |
+| di cui fitto Angelina | 65.01.05.91 | 60.000 | −60.000 | registrato come costo negativo in INTUR |
+| di cui fitto CVM SDP | 65.01.05.90 | 100.000 | — | locatore terzo |
+| Oneri finanziari | 75.* | 168.353 | 60.552 | ammortamenti (73) e imposte (77) assenti nel provvisorio |
+| Costi totali CE | tutte le classi | 3.122.671 | 832.258 | |
+
+| Variante | Numeratore | ORTI standalone | Rapporto |
+| --- | --- | ---: | ---: |
+| A | costi 55–71, nessuna esclusione | 2.954.318 | 0,683 |
+| B | A − canone 65.11.01 | 2.354.318 | 0,545 |
+| C | B − Angelina 65.01.05.91 | 2.294.318 | 0,531 |
+| D | B − CVM 65.01.05.90 | 2.254.318 | 0,522 |
+| E | B − Angelina − CVM | 2.194.318 | 0,508 |
+| F | costi totali CE (canone incluso, oneri finanziari inclusi) | 3.122.671 | 0,722 |
+| G | consolidato ORTI + INTUR, canone e Angelina eliminati da entrambe le sponde, costi 55–71 | 3.126.024 / 4.512.639 | 0,693 (indicativo: le due anomalie contabili non sono rettificate) |
+
+Periodo: progressivo gennaio–settembre 2026, mese chiuso 30/09, bilancini provvisori. Il floor di piano del 16/10
+corrisponde per costruzione alla variante **C** (classi 55–71 ante canone e ante fitto intercompany) su base
+**annuale**; il controllo a consuntivo può usare un'altra variante o un altro periodo: è questo che Stefano deve dire.
 
 **Disponibilità tecnica ≠ definizione gestionale.** Con le quattro righe sopra chiuse, il calcolo è una vista
 di ~40 righe su `v_ce_mensile_bilancino` (filtro classi + esclusioni + rapporto). Senza, qualsiasi
