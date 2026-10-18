@@ -114,6 +114,10 @@ Do not run `pip install -e` from a git worktree. It can break the editable insta
 
 ## Agent Artifacts
 
+For coordinated engineering, read `docs/agents/workflow.md` and the `Agent skills`
+section in `CLAUDE.md`. The existing four-agent team owns delegation; generic
+skills do not authorize extra agents, destructive worktree changes, or deployment.
+
 `CLAUDE.md` remains the richer Claude Code boot file. Do not turn AGENTS.md into a
 clone of it. If another tool needs instructions, prefer a short tool-specific
 entrypoint that references `AGENTS.md` and `docs/architecture/INVARIANTS.md`
