@@ -13,13 +13,14 @@ sceglie definizioni gestionali ancora aperte.
 
 > «Come vedo se i costi restano entro il 65% dei ricavi?»
 
-**Oggi non si vede, e non per mancanza di codice: per mancanza di dati ingeriti e di un contratto scritto.**
+**Stato al 18/10:** il limite è deciso (massimo 65 %, §4); settembre è in BigQuery per entrambe le società; la base
+tecnica regge (§5-bis). Non si vede ancora perché mancano **due scelte** (periodo di confronto, esclusioni dei due
+fitti) e la vista che le applica. *La prima stesura di questa sezione parlava di dati mancanti e di definizione
+assente: superata nella stessa giornata, testo conservato sotto come storico.*
 
-- La **definizione di piano** del 65% esiste ed è stata confermata da Stefano (decisione vault
-  `2026-10-16_Incidenza_Costi_ORTI_65`, confermata il 18/10 — vedi §4). È una definizione **ORTI, annuale,
-  ante canone intercompany, a livello EBITDA**.
-- La **definizione di controllo** (su quale base temporale leggere il consuntivo, da quale fonte) non è
-  scritta da nessuna parte nel repo. Si deduce, non si trova.
+- La **definizione di piano** del 65% (decisione vault `2026-10-16_Incidenza_Costi_ORTI_65`): **ORTI, annuale,
+  ante canone intercompany, a livello EBITDA**. Il **limite di controllo** è deciso il 18/10 (massimo 65 %, §4);
+  restano periodo ed esclusioni.
 - Il **calcolo è tecnicamente disponibile** da `f_bilancino` via `v_ce_mensile_bilancino` (COMPETENZA,
   YTD cumulato → mese per differenza). Settembre è **già acquisito** per entrambe le società: ORTI
   2026-09 185 righe (`raw 0cac12f0`), INTUR 2026-09 153 righe (`raw 28d25435`), promossi il 16/10 con
@@ -102,7 +103,7 @@ osservato nel 2025 non è una tolleranza; esattamente 65 % = al limite. Confront
 Rapporto non determinabile o copertura insufficiente = **non valutabile**, mai «entro limite». Valore e verso non
 sono più da scegliere. Il floor di piano del 16/10 resta un concetto distinto.
 
-**Non deciso (e qui non si sceglie):**
+**Ancora da decidere (Stefano) — valore e verso del limite NON sono fra questi:**
 
 1. **Base temporale del controllo**: mese singolo (volatile, stagionale), progressivo YTD (ciò che il bilancino
    dà nativamente), o atterraggio annuo previsto (richiede un forecast che non esiste in BQ). Il 65 % di piano
@@ -111,7 +112,7 @@ sono più da scegliere. Il floor di piano del 16/10 resta un concetto distinto.
 2. **Fonte del consuntivo**: bilancino (COMPETENZA, mese chiuso, disponibile) oppure prima nota + fatture
    (`v_ce_macro_mensile`, oggi rotta sul 2026). La decisione 22/06 «f_bilancino = CE backbone» risponde già,
    ma va scritta nel contratto.
-3. **Identità di 65010590 — risolta sul dato, aperta sull'intenzione.** Nel bilancino ORTI al 30/09
+3. **Esclusione dei due fitti (identità dei conti risolta il 18/10 su BigQuery).** Nel bilancino ORTI al 30/09
    `65.01.05.90` = «Canoni locazione CVM SDP» (100.000 €) e `65.01.05.91` = «Canoni locazione Angelina
    Residence» (60.000 €, intercompany: INTUR porta lo stesso conto con segno opposto). La sessione del 18/10
    scrive «65010590 = fitto Angelina»: **il codice e il nome non coincidono**. Se l'intenzione è escludere
@@ -283,6 +284,7 @@ Contratto della vista `v_incidenza_costi_orti` (colonne e regole), così come an
 | Denominatore | `ricavi_totali` = somma di `sezione = 'Ricavi'` del bilancino, tutte le BU |
 | Periodo | `*_mese` dal delta del bilancino; `*_ytd` = **rapporto delle somme** gennaio→mese (`SUM(costi)/SUM(ricavi)`), mai media dei rapporti mensili |
 | Nulli | `SAFE_DIVIDE` con `NULLIF(ricavi, 0)`: ricavi zero o assenti → rapporto `NULL`, non 0 né ∞; un mese senza bilancino non produce riga, non eredita il precedente |
+| Adiacenza (mai un cumulato spacciato per mese) | `*_mese` si calcola **solo** se esiste il bilancino del mese precedente (o se il mese è gennaio); altrimenti `*_mese = NULL` e `mese_non_derivabile = TRUE`. Le colonne `*_ytd` vengono sempre dal saldo YTD diretto del bilancino, mai dalla somma dei mesi. Il controllo del 18/10 (§5-bis) trova zero buchi oggi, ma la regola sta nel SQL, non nell'assunzione |
 | Copertura | `mese_parziale` (bilancino caricato prima della fine del mese, stessa regola di `canone_fonti._parziale`), `n_conti_esclusi`, `n_conti_da_definire` (conti CE senza categoria), `ultimo_mese_disponibile` |
 | Aggiornamento | `letto_il` = `MAX(data_ingresso)` del bilancino di quel mese; nessuno scheduler: la vista cambia quando cambia `f_bilancino` |
 | Soglia nella vista | **assente**. Nessuna colonna `semaforo`, `stato` o costante 0,65: la vista produce il rapporto, il confronto col target versionato avviene a valle |
