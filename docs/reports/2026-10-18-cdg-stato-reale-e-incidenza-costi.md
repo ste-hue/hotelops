@@ -96,6 +96,12 @@ grandezza, due usi: il primo vincola chi scrive il piano, il secondo misura chi 
 §6 espone il rapporto osservato e lascia la soglia fuori dalla vista proprio perché le due regole possono
 avere valori e periodi diversi (il floor è annuale; il controllo potrebbe essere YTD).
 
+**Deciso il 18/10 alle 10:17 (Stefano, registrato in [hotelops#157](https://github.com/ste-hue/hotelops/issues/157#issuecomment-6247553610)):**
+il 65 % è il **massimo** dell'incidenza costi/ricavi a consuntivo. Sopra il 65 % = superamento e allarme; il 66 %
+osservato nel 2025 non è una tolleranza; esattamente 65 % = al limite. Confronto sul rapporto **non arrotondato**.
+Rapporto non determinabile o copertura insufficiente = **non valutabile**, mai «entro limite». Valore e verso non
+sono più da scegliere. Il floor di piano del 16/10 resta un concetto distinto.
+
 **Non deciso (e qui non si sceglie):**
 
 1. **Base temporale del controllo**: mese singolo (volatile, stagionale), progressivo YTD (ciò che il bilancino
@@ -157,10 +163,22 @@ sessione**: nulla di quanto segue li recepisce.
 
 | Grandezza | Canone ramo d'azienda ORTI → INTUR | Fitto Angelina Residence | Fitto CVM |
 | --- | --- | --- | --- |
-| **Contratto** (ricostruito da vault/memo, atto non letto) | atto rep. 2246 del 01/04/2025: 600.000 + IVA/anno; prima annualità effettiva 2025 886.885,25 + 120.000 Angelina = 1.006.885; atto integrativo per la scaletta non risulta firmato | 120.000/anno a INTUR nel 2026; dal 2027 al proprietario terzo (decisione 04/09). Il vault dice «contratto scritto mancante», ma la causale del bonifico del 15/07 cita «contratto n 000679»: da verificare, non da dedurre | locatore «SDP» nel piano dei conti; arretrati 2025 verso Panorama Company 446.425,69 (residuo 346.425,69 fuori PF, decisione 14/08) |
+| **Contratto** (ricostruito da vault/memo, atto non letto) | atto rep. 2246 del 01/04/2025: 600.000 + IVA/anno; prima annualità effettiva 2025 886.885,25 + 120.000 Angelina = 1.006.885; atto integrativo per la scaletta non risulta firmato | 120.000/anno a INTUR nel 2026; dal 2027 al proprietario terzo (decisione 04/09). Il vault dice «contratto scritto mancante», ma la causale del bonifico del 15/07 cita un numero di contratto: da verificare, non da dedurre | locatore «SDP» nel piano dei conti; arretrati 2025 verso Panorama Company 446.425,69 (residuo 346.425,69 fuori PF, decisione 14/08) |
 | **Competenza, bilancino YTD 30/09/2026** (consuntivo) | ORTI 65.11.01 **600.000**; INTUR 53.01.33 **600.000** (simmetrico) | ORTI 65.01.05.91 **60.000**; INTUR **−60.000 sullo stesso conto di costo**, non su un conto ricavo | ORTI 65.01.05.90 **100.000** (50k giu + 50k lug) |
 | **Cassa osservata 2026** (`f_banche_movimenti` al 09/10) | ORTI → INTUR **3 × 244.000** (13/07, 31/07, 21/09) = **732.000** IVA inclusa, +1 € di spese per bonifico; INTUR MPS accredita 3 × 244.000. Prima nota INTUR (110301) mostra solo luglio; prima nota ORTI in BQ ferma a giugno | **60.000** il 15/07 (ORTI MPS → INTUR Sella); seconda semestralità non osservata al 09/10 | acconti 100.000 (giu–lug, memo 16/08) |
 | **Previsione annua** (piano, PF) | 1.000.000 + IVA (decisione 25/09); PF di Rosa: 1.218.918 totale 2026 = 732.000 osservati + 486.918 proiettati a dicembre. 1.000.000 × 1,22 = 1.220.000: **differenza 1.082 da spiegare**, non «quadra». Scalette 2027+ (fascicolo MPS, memo 25/09, Romita, cruscotto) sono ipotesi, non contratto | 120.000 a INTUR fino al 2028 nel modello canone, «almeno» per decisione | nel BP dentro «altri costi ORTI» |
+
+**Canoni annuali comunicati da Stefano il 18/10 (in conversazione, riportati dal coordinamento) contro il bilancino YTD:**
+
+| Rapporto | Annuo comunicato | Natura | Bilancino ORTI YTD 30/09 | Raccordo |
+|---|---:|---|---:|---|
+| Ramo d'azienda ORTI → INTUR (atto 04/04/2025) | 732.000 lordo IVA = **600.000 netto** | contratto vigente | 600.000 (65.11.01) | **coincide**: competenza = contratto annuo; cassa 3 × 244.000 = 732.000 = contratto pagato per intero al 21/09. Il 1.000.000 del piano richiede addendum/fatture non ancora nei dati |
+| Angelina Residence ORTI → INTUR (sublocazione, esente IVA art. 10) | 120.000 | contratto | 60.000 (65.01.05.91) | **una semestralità**; la seconda non è né registrata né incassata al 09/10 |
+| CVM ORTI → Panorama Company (sublocazione, esente IVA art. 10) | 150.000 | contratto | 100.000 (65.01.05.90 «CVM SDP») | **da raccordare**: 100.000 in due tranche (giu, lug) non è 9/12 di 150.000 (112.500) né un multiplo semplice; sotto Panorama Company c'è una locazione separata verso un privato (12.000/anno, no IVA) che **non** si aggiunge ai costi ORTI |
+| Farmacia Barela (fitto attivo INTUR) | 45.000 lordo IVA | contratto | INTUR 47.95.01 ricavi farmacia 27.664 YTD | 45.000/1,22 = 36.885 netto/anno → 27.664 a settembre ≈ 9/12: **coerente** |
+
+Residuo 1.082 del PF: 1.218.918 = 732.000 osservati + 486.918 nella riga di dicembre; 486.918 / 1,22 = 399.113 netti
+contro i 400.000 attesi (differenza 887 netti). La riga va verificata nel master di Rosa; non è un errore di cassa.
 
 Regole di lettura (senza rettificare nulla):
 
@@ -224,6 +242,22 @@ semaforo misura una definizione scelta dall'agente.
 
 Nessuna di queste richiede una nuova tabella dei fatti né un secondo piano dei conti.
 
+### 5-bis. Verifica tecnica di `v_ce_mensile_bilancino` (query del 18/10, sola lettura)
+
+Punti sollevati dal coordinamento: `LAG` per conto senza controllo di adiacenza del mese, `COALESCE(…, 0)` sul primo
+snapshot, segno dei conti non mappati.
+
+| Controllo | Esito |
+|---|---|
+| Copertura mesi 2026 | ORTI e INTUR: tutti i 9 mesi gennaio–settembre presenti (CE) |
+| Buchi di mese per conto (presente in m e m+2, assente in m+1) | **0** su 113 conti ORTI e 66 INTUR: il `LAG` non salta mai un mese |
+| Conti che compaiono per la prima volta dopo gennaio | 71 ORTI, 36 INTUR: il primo delta vale l'intero YTD, corretto perché il bilancino omette i conti a saldo zero (il saldo precedente era 0) |
+| Somma dei mesi gennaio–settembre (vista) = saldo YTD diretto (`f_bilancino` 2026-09) | **106 conti su 106, scarto 0,00** |
+| Segno dei non mappati («Da definire», 30 conti) | tutti in sezione Costi: `importo` positivo = costo, coerente; nessun ricavo non mappato |
+
+Conclusione: la base è affidabile per derivare mese e YTD **finché la copertura resta contigua**; il contratto della
+vista deve comunque esporre `mese_parziale` e fallire in modo visibile se un mese manca (non dedurre, non riempire).
+
 ## 6. Raccordo verso Regia — contratto proposto (non implementato)
 
 | Campo | Valore proposto |
@@ -231,7 +265,8 @@ Nessuna di queste richiede una nuova tabella dei fatti né un secondo piano dei 
 | Indicatore | `orti.cost_ratio` — incidenza costi operativi ORTI; accanto `orti.operating_costs` e `orti.revenue_total` così il rapporto è ricalcolabile |
 | Perimetro | ORTI, tutte le BU, ante canone, classi 55–71 con esclusioni **esplicitate per conto nella vista** |
 | Dimensione | COMPETENZA (bilancino). Non si mischia con la cassa del PF né con il BP |
-| Periodo | mese chiuso e progressivo YTD, entrambi esposti; **nessuna soglia** finché §4.1 non è deciso. La soglia, quando c'è, è un bersaglio `kind=budget` importato in Regia come gli altri, non una costante nella vista |
+| Periodo | mese chiuso e progressivo YTD, entrambi esposti; quale dei due si confronta col limite è il punto §4.1, ancora aperto |
+| Limite | **0,65, verso massimo** (deciso 18/10): vive come **target versionato** nel contratto di controllo (bersaglio importato in Regia, `kind=budget`), **mai come costante nelle query contabili**. Confronto sul rapporto non arrotondato; casi di confine: 0,65 = al limite, 0,651 = oltre, 0,66 = oltre. Rapporto `NULL` o copertura insufficiente = **non valutabile**, mai «entro limite» |
 | Fonte | BigQuery `v_incidenza_costi_orti` (da creare) ← `v_ce_mensile_bilancino` ← `f_bilancino` |
 | Aggiornamento | al promote del bilancino mensile (SEMI, Stefano); la vista espone `letto_il` / `data_ingresso` e `mese_parziale` |
 | Copertura | la riga dice da sola se il mese è chiuso, parziale o assente; `comparable=false` in Regia quando il bersaglio non c'è (stesso contratto di `regia-mappa-budget.md` §6) |
@@ -250,20 +285,22 @@ Contratto della vista `v_incidenza_costi_orti` (colonne e regole), così come an
 | Nulli | `SAFE_DIVIDE` con `NULLIF(ricavi, 0)`: ricavi zero o assenti → rapporto `NULL`, non 0 né ∞; un mese senza bilancino non produce riga, non eredita il precedente |
 | Copertura | `mese_parziale` (bilancino caricato prima della fine del mese, stessa regola di `canone_fonti._parziale`), `n_conti_esclusi`, `n_conti_da_definire` (conti CE senza categoria), `ultimo_mese_disponibile` |
 | Aggiornamento | `letto_il` = `MAX(data_ingresso)` del bilancino di quel mese; nessuno scheduler: la vista cambia quando cambia `f_bilancino` |
-| Soglia | **assente**. Nessuna colonna `semaforo`, `stato` o costante 0,65 |
+| Soglia nella vista | **assente**. Nessuna colonna `semaforo`, `stato` o costante 0,65: la vista produce il rapporto, il confronto col target versionato avviene a valle |
 | Test | fixture a segni bilancino con canone e fitto presenti; caso ricavi zero; caso YTD ≠ media dei mesi; caso mese parziale |
 
 Dipendenza lato mgmt-os: estendere il vocabolario `METRICS` (oggi solo ricavi) e il collector `actuals.py`
 con una query sulla vista. È lavoro di Regia, da fare **dopo** la vista e il contratto.
 
-## 7. La domanda minima per Stefano
+## 7. Cosa resta a Stefano (dopo la decisione del 18/10)
 
-> **Il 65 % del CdG si legge sul progressivo YTD del bilancino ORTI (mese chiuso, COMPETENZA), con costi =
-> classi 55–71 meno il canone 651101 e meno il fitto Angelina `65010591` — oppure volevi escludere il canone CVM
-> `65010590`, che non è intercompany?**
+Valore e verso del limite sono decisi (massimo 65 %). Restano **due** punti, da leggere sul ponte conto per conto
+(`docs/reports/2026-10-18-cdg-ponte-conti-65.md`):
 
-Una risposta sì/no più la scelta tra i due conti chiude §4.1–4.3 e sblocca la vista (§4.4 si risolve esponendo entrambi i livelli). L'atterraggio annuo e la
-scheda per famiglia restano nel perimetro di #148.
+1. **Periodo di confronto**: progressivo YTD, mese singolo o atterraggio annuo. Il 2025 al 66,3 % è annuale; il
+   progressivo di settembre sta a 0,51–0,55 e salirà con il Q4.
+2. **Esclusioni**: il canone 65.11.01 è escluso per decisione del 16/10; per il fitto Angelina (65.01.05.91,
+   intercompany, nel MASTER sottratto dopo) e per la sublocazione CVM (65.01.05.90, da Panorama Company, nel MASTER
+   dentro i costi) serve una scelta esplicita. Il ponte mostra i tre rapporti che ne risultano.
 
 ## 8. Vault Obsidian: cosa è stale rispetto a questo stato
 
@@ -344,10 +381,10 @@ mese, `categoria_ce`/`tipo_costo`); `v_fb_kpi` (food cost per bucket); `v_previs
 (CASSA, ancora osservata vs saldi proiettati); `v_budget_canonical`; edge Bilancini con `/data.json` e `/data.csv`
 (per conto × mese, Access OTP). Il canone come fatto: conti 65.11.01 (ORTI) / 53.01.33 (INTUR) nel bilancino.
 
-**Solo proposto (non implementato, non deciso):** vista `v_incidenza_costi_orti` (§6, issue #157) e il contratto
+**Deciso il 18/10:** limite massimo 0,65, verso ≤, non arrotondato; non valutabile ≠ entro limite (registrato in #157). **Solo proposto (non implementato):** vista `v_incidenza_costi_orti` (§6, issue #157) e il contratto
 dell'indicatore `orti.cost_ratio` (+ `orti.operating_costs`, `orti.revenue_total`); nessuna soglia nella vista.
 
-**Dipendenze:** (1) risposta di Stefano a §7; (2) ottobre quando chiude (settembre è già in BQ); (3) lato mgmt-os, estensione di `METRICS` in `mgmt/domain.py` e di `actuals.py` — **dopo** la vista;
+**Dipendenze:** (1) risposta di Stefano a §7 (periodo ed esclusioni; il verso è deciso); (2) ottobre quando chiude (settembre è già in BQ); (3) lato mgmt-os, estensione di `METRICS` in `mgmt/domain.py` e di `actuals.py` — **dopo** la vista;
 (4) la soglia, quando decisa, entra in Regia come bersaglio importato (`kind=budget`), non come costante;
 (5) floor di piano e massimo di controllo restano due regole distinte, mai lo stesso semaforo; i prompt che
 leggono l'indicatore ricevono fonte, periodo e copertura dalla riga e dichiarano quando il confronto non è possibile.
