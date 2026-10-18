@@ -236,7 +236,12 @@ Il massimo 65 % è deciso (18/10). Mancano due scelte; ciascuna riga dice cosa s
 | Q2 · solo intercompany ORTI–INTUR, per natura | Angelina | servizi bancari/POS dentro | 0,550 |
 | Q3 · tutti i fitti verso il gruppo familiare | Angelina + CVM | per classe | 0,508 |
 | Q4 · tutti i fitti, per natura | Angelina + CVM | dentro | 0,527 |
-| Q5 · nessun fitto escluso, per natura | — | dentro | 0,564 |
+| Q5 · Angelina e CVM inclusi, canone ramo escluso, per natura | — (solo il canone 65.11.01) | dentro | 0,564 |
+| R0 · riferimento standalone pieno: canone, Angelina e CVM inclusi, per natura | nessuna | dentro | 0,702 |
+
+Nota: tutte le Q escludono già il canone 65.11.01 (decisione 16/10); R0 è solo il riferimento standalone con il
+canone dentro (3.036.458 / 4.322.454). Escludere un rapporto infragruppo da ORTI standalone produce un indicatore
+ante-canone/ante-fitto, non un consolidato. Il rapporto non è limitato a 0–1 (gennaio–marzo supera 2).
 
 Raccomandazione tecnica (non decisione): P1 come lettura corrente con nota di non confrontabilità, P3 come
 confronto col limite quando esiste il forecast; Q2 è la variante più vicina alla natura dei costi e alla decisione
