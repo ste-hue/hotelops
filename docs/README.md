@@ -11,6 +11,7 @@ docs/
 ├── procedures/                  ← runbook tecnici, "come si fa X"
 ├── protocols/                   ← protocolli operativi condivisi
 ├── adr/                         ← Architecture Decision Records (numerati)
+├── agents/                      ← configurazione skill e coordinamento engineering
 └── superpowers/                 ← plans/specs per task grossi
 ```
 

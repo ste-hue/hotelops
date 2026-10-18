@@ -4,6 +4,10 @@ Le skill di [Matt Pocock](https://github.com/mattpocock/skills) usano i file
 `issue-tracker.md`, `triage-labels.md` e `domain.md` in questa directory.
 Le istruzioni dell'utente e gli invarianti del repository prevalgono sulle
 ricette generiche. Le skill non attribuiscono diritti sui sistemi operativi.
+Questo è un adattamento locale del workflow, non una seconda costituzione.
+Per dominio, ingest e memoria restano canoniche le skill HotelOps e `vault-loop`;
+Pocock copre la meccanica engineering. I risultati di `research` destinati al repo
+vanno in `docs/reports/`, rispettando la separazione tra tecnico e privato.
 
 ## Team e assegnazione
 
@@ -32,9 +36,14 @@ Il trasporto non fornisce monitoraggio continuo o scheduler.
 4. Implementare con `implement`, `tdd` o `diagnosing-bugs` secondo necessità.
    Verificare comportamento e contratti; controlli proporzionati al cambiamento.
    Per soli documenti bastano diff e riferimenti, senza test artificiali.
+   Non fare `pip install -e` nel worktree. Verificare che interpreter e import
+   dei moduli interessati risolvano il codice di quel worktree, non l'editable
+   install del checkout principale; altrimenti i test non provano il branch.
 5. Consegnare SHA immutabile al revisore. Verificare separatamente requisiti e
    standard; un solo revisore può svolgere i due controlli in sequenza.
    Nuove modifiche richiedono review del nuovo diff.
+   Il workflow CI `claude-code-review.yml` e le sue verifiche restano invariati;
+   la review locale Pocock non li sostituisce e non introduce un secondo gate CI.
 6. Preparare PR con problema, risultato, controlli reali e limiti (`pr`).
    Il coordinatore verifica diff e CI; merge e deploy seguono l'autorizzazione
    specifica del task, non sono impliciti nella label.
@@ -76,3 +85,5 @@ copie manuali aggiuntive delle stesse skill. In Claude preferire il namespace
 selezionare la skill del plugin dal catalogo. Ricaricare le sessioni libere dopo
 l'installazione e verificare la disponibilità effettiva. Le skill omonime locali
 non vengono sovrascritte da questa configurazione.
+L'installazione è per utente/macchina: versionare questi documenti non installa
+il plugin sugli altri computer o in CI.

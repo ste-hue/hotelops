@@ -14,6 +14,9 @@ dal vault o dai sistemi operativi.
 - Etichettare: `gh issue edit NUMERO --repo ste-hue/hotelops --add-label 'LABEL'`.
 - Chiudere solo il risultato effettivamente verificato, collegando prove e PR.
 
+Se la issue è risolta da una PR, collegarla con la closing reference pertinente
+e lasciare la chiusura al merge. Non chiuderla quando si apre la PR.
+
 **PRs as a request surface: no.** La PR consegna una modifica; la issue conserva
 obiettivo e criteri. Verificare il tipo perché issue e PR condividono i numeri.
 
