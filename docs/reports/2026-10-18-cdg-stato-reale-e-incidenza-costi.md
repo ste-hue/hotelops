@@ -28,7 +28,8 @@ assente: superata nella stessa giornata, testo conservato sotto come storico.*
   (`docs/reports/2026-10-16-bilanci-provvisori-30-09-estrazione-pdf.md`, nota in
   `2026-10-17-regia-ripristino-e-allineamento.md`). Ottobre è mese aperto: gli export «al 15/10» non
   sono un mese chiuso e non vanno promossi come tale. **Verificato su BigQuery il 18/10 mattina**: ORTI e INTUR
-  2026-06…2026-09, un raw object per mese, settembre caricato il 16/10 (ORTI 185 righe, INTUR 153).
+  2026-01…2026-09, un raw object per mese (la prima query era filtrata da giugno; la copertura completa è §5-bis),
+  settembre caricato il 16/10 (ORTI 185 righe, INTUR 153).
 - Il canale alternativo (`v_budget_vs_consuntivo` / `hotelops bva`, da prima nota) è **inutilizzabile**:
   prima nota ricavi ORTI 2026 = 0 in BQ (workstream CDG, thread 2026-09-24), il consuntivo non filtra i
   conti patrimoniali (`actuals` legge tutta `f_movimenti_contabili` senza `tipo_conto='CE'`), il budget
@@ -84,7 +85,7 @@ sessione vault e nota STATUS in PR #156, non ancora su main):**
 | Elemento | Definizione |
 | --- | --- |
 | Perimetro società | **ORTI** (INTUR non si muove: il canone è un ricavo per lei a prescindere) |
-| Numeratore | costi operativi = **classi Esolver 55–71**, con la classe 65 **esclusi 651101** (canone affitto ramo d'azienda a INTUR) **e 65010590** |
+| Numeratore | costi operativi = **classi Esolver 55–71**, con la classe 65 **esclusi 651101** (canone affitto ramo d'azienda a INTUR) **e 65010590** — *formulazione del 18/10 mattina, superata: 65010590 è il CVM, il fitto Angelina è 65010591; l'esclusione dei fitti è ancora da scegliere (§4.3, ponte §7)* |
 | Denominatore | **totale ricavi ORTI**, tutte le BU (camere + altri ricavi hotel + Angelina + CVM + spiaggia ospiti + affitti), non i soli ricavi camere |
 | Posizione nel CE | **ante canone**: equivalente a margine EBITDA ante canone = 35 % |
 | Esclusi per costruzione | ammortamenti (73), oneri finanziari (75), imposte (77), canone intercompany, il fitto escluso sopra |
@@ -282,13 +283,13 @@ Contratto della vista `v_incidenza_costi_orti` (colonne e regole), così come an
 | Unità | euro netti IVA a segno gestionale (ricavi > 0, costi > 0, da `v_ce_mensile_bilancino.importo`); rapporti come frazione 0–1 (`0.65`), mai percentuale già moltiplicata |
 | Numeratore | `costi_operativi` = somma dei conti CE con classe 55–71, esclusi i conti elencati in una CTE `esclusi` (`65.11.01`, e il conto del fitto Angelina una volta confermato); `costi_totali_ce` = tutti i costi CE, esposto accanto |
 | Denominatore | `ricavi_totali` = somma di `sezione = 'Ricavi'` del bilancino, tutte le BU |
-| Periodo | `*_mese` dal delta del bilancino; `*_ytd` = **rapporto delle somme** gennaio→mese (`SUM(costi)/SUM(ricavi)`), mai media dei rapporti mensili |
+| Periodo (regola unica) | `*_ytd` = somme **dal saldo YTD diretto dello stesso snapshot** (`SUM(saldo costi) / SUM(saldo ricavi)` del mese m), mai somma dei mesi né media di rapporti; `*_mese` = `saldo(m) − saldo(m−1)` per conto, solo se lo snapshot m−1 esiste per la società (vedi Adiacenza); rapporto mensile = somma dei delta costi / somma dei delta ricavi |
 | Nulli | `SAFE_DIVIDE` con `NULLIF(ricavi, 0)`: ricavi zero o assenti → rapporto `NULL`, non 0 né ∞; un mese senza bilancino non produce riga, non eredita il precedente |
-| Adiacenza (mai un cumulato spacciato per mese) | `*_mese` si calcola **solo** se esiste il bilancino del mese precedente (o se il mese è gennaio); altrimenti `*_mese = NULL` e `mese_non_derivabile = TRUE`. Le colonne `*_ytd` vengono sempre dal saldo YTD diretto del bilancino, mai dalla somma dei mesi. Il controllo del 18/10 (§5-bis) trova zero buchi oggi, ma la regola sta nel SQL, non nell'assunzione |
+| Adiacenza (mai un cumulato spacciato per mese) | `*_mese` si calcola **solo** se esiste lo snapshot della società per m−1 (o se m è gennaio); altrimenti `*_mese = NULL` e `mese_non_derivabile = TRUE`. Conto presente in m e assente in m−1 con snapshot m−1 esistente → saldo precedente 0: **evidenza** = il parser (`ingest/flussi/ingest_bilancino.py`, righe 190 e 252) scarta una riga solo se dare, avere e saldo sono tutti zero, quindi un conto assente non ha avuto movimenti nell'anno fino a m−1; il flag `conto_nuovo_nel_mese` lo rende visibile. Il controllo del 18/10 (§5-bis) trova zero buchi oggi, ma la regola sta nel SQL |
 | Copertura | `mese_parziale` (bilancino caricato prima della fine del mese, stessa regola di `canone_fonti._parziale`), `n_conti_esclusi`, `n_conti_da_definire` (conti CE senza categoria), `ultimo_mese_disponibile` |
 | Aggiornamento | `letto_il` = `MAX(data_ingresso)` del bilancino di quel mese; nessuno scheduler: la vista cambia quando cambia `f_bilancino` |
 | Soglia nella vista | **assente**. Nessuna colonna `semaforo`, `stato` o costante 0,65: la vista produce il rapporto, il confronto col target versionato avviene a valle |
-| Test | fixture a segni bilancino con canone e fitto presenti; caso ricavi zero; caso YTD ≠ media dei mesi; caso mese parziale |
+| Test del contratto (fixture, non prova BQ) | (1) primo snapshot tardivo: società con solo 2026-06 → `*_ytd` valorizzato, `*_mese = NULL`; (2) salto mese: 07 e 09 senza 08 → settembre `*_mese = NULL`, YTD valorizzato; (3) cambio anno: 2026-12 e 2027-01 → gennaio `*_mese = saldo`, nessun delta cross-anno; (4) ricavo non mappato in `d_categorie_conti` → resta nel denominatore per sezione, segno corretto, contato in `n_conti_da_definire`; (5) ricavi zero/NULL/assenti → rapporto `NULL`; (6) canone e fitti presenti → esclusioni per conto applicate e sommate in `costi_esclusi`; (7) conto nuovo nel mese con snapshot m−1 presente → delta = saldo, flag acceso. Separato: verifica BQ autorizzata sul dato reale |
 
 Dipendenza lato mgmt-os: estendere il vocabolario `METRICS` (oggi solo ricavi) e il collector `actuals.py`
 con una query sulla vista. È lavoro di Regia, da fare **dopo** la vista e il contratto.

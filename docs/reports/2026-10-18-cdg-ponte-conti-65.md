@@ -15,10 +15,10 @@ periodo di confronto e perimetro/esclusioni. Questa tabella **propone** l'inclus
 |---|---|---|
 | Sezione Ricavi (classi 47, 53) → denominatore «ricavi totali», tutte le BU | decisione vault 2026-10-16 (Romita: «TOTALE RICAVI») | DENOMINATORE |
 | Classi 55–71 → costi operativi | decisione 16/10 + sessione 18/10 («classi 55–71») | INCLUSO |
-| `65.11.01` canone affitto ramo d'azienda → escluso | decisione 16/10 («ante canone»); MASTER costi65 `ORTI!R18` sottrae il canone dopo il margine | ESCLUSO |
-| `65.01.05.91` fitto Angelina → nel MASTER sottratto dopo (`ORTI!R19`) | MASTER costi65; sessione 18/10 scriveva «65010590 (fitto Angelina)», codice errato | DA DECIDERE |
-| `65.01.05.90` sublocazione CVM da Panorama Company → nel MASTER resta dentro i costi | MASTER costi65 (nessuna riga lo sottrae); non è ORTI–INTUR | DA DECIDERE |
-| Classi 73, 75, 77 → sotto EBITDA | «margine EBITDA ante canone = 35 %»; nel bilancino provvisorio esiste solo la 75 | ESCLUSO |
+| `65.11.01` canone affitto ramo d'azienda → escluso | decisione 16/10 («ante canone»); MASTER costi65 riga 18 del foglio `ORTI` sottrae il canone dopo il margine | ESCLUSO |
+| `65.01.05.91` fitto Angelina → nel MASTER sottratto dopo (riga 19 del foglio `ORTI`) | MASTER costi65; sessione 18/10 scriveva «65010590 (fitto Angelina)», codice errato | DA DECIDERE |
+| `65.01.05.90` sublocazione CVM da Panorama Company → nel MASTER non c'è una riga che lo sottragga | **inferenza** dall'assenza di una riga separata nel MASTER costi65: non prova come sia composto l'input aggregato dei costi; non è ORTI–INTUR | DA DECIDERE |
+| Classi 73, 75, 77 → sotto EBITDA **per classe** (regola storica di piano) | «margine EBITDA ante canone = 35 %»; nel bilancino provvisorio esiste solo la 75 | ESCLUSO nella regola storica; **per natura** la classe 75 si spacca (vedi §2-bis) |
 | Conti senza `categoria_ce` (⚠ «Da definire») | `d_categorie_conti` incompleta (30 conti CE ORTI) | inclusione per classe, categoria da completare |
 
 ## 2. Totali che ne risultano (YTD 30/09/2026, euro)
@@ -38,16 +38,52 @@ Le tre letture stanno fra 0,51 e 0,55 al 30/09: **sotto il massimo 0,65 su base 
 stato dichiarato pensando all'anno (il 2025 chiuso al 66,3 % è annuale) e il Q4 porta costi fissi senza ricavi.
 Finché il periodo non è deciso, il rapporto YTD non è «entro limite»: è **non valutabile rispetto al limite annuale**.
 
+## 2-bis. Classe 75 per natura: oneri finanziari veri e servizi bancari/POS
+
+La classe Esolver non prova la natura. OIC 12 (§65 e schema CE) colloca commissioni bancarie, costi POS e servizi
+di incasso tra i **costi per servizi (B7)**, gli interessi tra gli **oneri finanziari (C17)**, l'imposta di bollo
+tra gli **oneri diversi di gestione (B14)**. Conti ORTI di classe 75 al 30/09/2026:
+
+| Conto | Intestazione | YTD set | Natura (OIC 12) | Regola storica di piano (classi 55–71) | Proposta di controllo operativo |
+|---|---|---:|---|---|---|
+| 75.03.05 | Interessi passivi su mutui | 85.330 | onere finanziario (C17) | fuori | **fuori** |
+| 75.03.51 | Oneri finanziari diversi | 882 | onere finanziario (C17) | fuori | **fuori** |
+| 75.90.02 | Commissioni su transato POS – MPS | 79.512 | servizio di incasso (B7) | fuori | **dentro** (da decidere) |
+| 75.01.90 | Commissioni Nexi | 153 | servizio di incasso (B7) | fuori | dentro (da decidere) |
+| 75.01.98 | Spese bancarie | 1.998 | servizio bancario (B7) | fuori | dentro (da decidere) |
+| 75.01.07 / .91 / .92 / .94 | Commissioni e spese bancarie, bonifici, SEPA, remote banking | 269 | servizio bancario (B7) | fuori | dentro (da decidere) |
+| 75.01.97 | Imposta di bollo c/c | 210 | onere diverso di gestione (B14) | fuori | dentro (da decidere) |
+| **Totale classe 75** | | **168.354** | di cui finanziari veri **86.212**, servizi/oneri di gestione **82.142** | | |
+
+Sensibilità aritmetica (non una riclassificazione approvata): includere il solo 75.90.02 alza il rapporto YTD di
+**+1,84 punti**; includere tutti gli 82.142 € di natura operativa di **+1,90 punti**. Il MASTER costi65 riproduce
+la regola storica (classi 55–71): se il controllo operativo adotta la natura, il confronto con il 65 % di piano
+cambia base e va detto.
+
+## 2-ter. Matrice delle varianti (ORTI, YTD 30/09/2026) — periodo e perimetro ancora da scegliere
+
+Numeratore base = classi 55–71 meno canone 65.11.01 (deciso) = 2.354.316. Denominatore = 4.322.454.
+
+| Perimetro fitti \ natura | Regola storica (solo classi 55–71) | + servizi bancari/POS di classe 75 (82.142) |
+|---|---:|---:|
+| B · Angelina e CVM inclusi | 0,545 | 0,564 |
+| C · Angelina esclusa, CVM incluso (= MASTER) | 0,531 | 0,550 |
+| D · CVM escluso, Angelina inclusa | 0,522 | 0,541 |
+| E · entrambi esclusi | 0,508 | 0,527 |
+
+Tutte le celle sono progressive gennaio–settembre; nessuna è confrontabile col massimo 65 % finché il **periodo**
+non è scelto (§7).
+
 ## 3. Ponte verso il MASTER costi65 e verso l'EBITDA dopo i fitti
 
 | Riga del MASTER (`ORTI`) | Cosa contiene | Equivalente nel bilancino |
 |---|---|---|
 | `C14` ricavi totali | somma delle BU, netti IVA | sezione Ricavi (classi 47 + 53) |
 | `C16 = C14 × Assunzioni!C37` (0,65) | **costi operativi previsti come quota dei ricavi**, non osservati | classi 55–71 senza 65.11.01 e senza 65.01.05.91 (variante C) |
-| `R17` margine ante canone | ricavi − costi operativi | ricavi − variante C |
-| `R18` canone INTUR | sottratto dopo | `65.11.01` |
-| `R19` fitto Angelina | sottratto dopo | `65.01.05.91` |
-| `R20 = R17 − R18 − R19` | EBITDA dopo i fitti intercompany | ricavi − classi 55–71 (tutte, CVM incluso) |
+| riga 17 (margine ante canone) | ricavi − costi operativi | ricavi − variante C |
+| riga 18 (canone INTUR) | sottratto dopo | `65.11.01` |
+| riga 19 (fitto Angelina) | sottratto dopo | `65.01.05.91` |
+| riga 20 = riga 17 − 18 − 19 | EBITDA dopo i fitti intercompany | ricavi − classi 55–71 (tutte, CVM incluso) |
 
 Il MASTER è uno **scenario** (il 65 % è un input): serve alla sostenibilità, non misura lo sforamento. L'indicatore
 osservato è un'altra cosa e vive nel bilancino.
@@ -179,3 +215,29 @@ il budget 2026 in BigQuery lascia fuori 525 k di costi reali (`BVA_PERIMETRO`, 2
 Il ponte sopra non dipende dal budget: dipende solo dal bilancino e dalla lista di esclusioni. I file
 `mappature_codici.json` e `riclassifica.yaml` citati come infrastruttura: non trovati nei repo hotelops, mgmt-os,
 obsidian-vault né nel vault vivo (ricerca del 18/10): non vanno presentati come esistenti.
+
+## 7. Le due scelte residue, in forma leggibile
+
+Il massimo 65 % è deciso (18/10). Mancano due scelte; ciascuna riga dice cosa si vedrebbe oggi e cosa comporta.
+
+**Scelta 1 — periodo di confronto**
+
+| Opzione | Cosa confronta col 65 % | Oggi (30/09) | Conseguenza |
+|---|---|---|---|
+| P1 · progressivo YTD | somma costi / somma ricavi da gennaio al mese chiuso | 0,51–0,56 secondo il perimetro | leggibile ogni mese; sottostima il limite annuale fino a settembre (stagionalità: gennaio–marzo > 2,0, poi scende); serve una nota «non confrontabile col limite annuale prima di dicembre» o un limite YTD per mese |
+| P2 · mese singolo | costi del mese / ricavi del mese | settembre ≈ 0,66 (827 k ricavi, 548 k costi 55–71 netti canone, dal delta) | reattivo ma volatile; un mese di chiusura stagionale è sempre «rosso» |
+| P3 · atterraggio annuo | YTD + previsione dei mesi restanti | non disponibile: nessun forecast di costi in BigQuery | è l'unico coerente con il 65 % di piano, ma richiede il budget per centro (#148) |
+
+**Scelta 2 — perimetro del numeratore**
+
+| Opzione | Esclusioni oltre al canone 65.11.01 | Natura classe 75 | Rapporto YTD oggi |
+|---|---|---|---:|
+| Q1 · regola di piano (MASTER) | Angelina | per classe (fuori) | 0,531 |
+| Q2 · solo intercompany ORTI–INTUR, per natura | Angelina | servizi bancari/POS dentro | 0,550 |
+| Q3 · tutti i fitti verso il gruppo familiare | Angelina + CVM | per classe | 0,508 |
+| Q4 · tutti i fitti, per natura | Angelina + CVM | dentro | 0,527 |
+| Q5 · nessun fitto escluso, per natura | — | dentro | 0,564 |
+
+Raccomandazione tecnica (non decisione): P1 come lettura corrente con nota di non confrontabilità, P3 come
+confronto col limite quando esiste il forecast; Q2 è la variante più vicina alla natura dei costi e alla decisione
+del 16/10 (intercompany escluso, canone CVM verso terzi dentro). Stefano sceglie.
