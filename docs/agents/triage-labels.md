@@ -20,3 +20,5 @@ avvia agenti e non autorizza merge, deploy o scritture sui dati.
 
 Applicare `triage` solo alle issue indicate nell'incarico, senza riclassificare
 automaticamente l'intero backlog al primo uso.
+Nei commenti prodotti da `triage`, mantenere l'indicazione di generazione AI
+prevista dalla skill per rendere visibile la provenienza.

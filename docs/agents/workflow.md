@@ -18,7 +18,8 @@ diverso dall'autore. Non creare altri agenti, merger o sotto-team automaticament
 `implement-spec`, `research` e `code-review` devono usare i membri disponibili;
 in assenza di capacità, eseguire in sequenza o segnalare il limite al coordinatore.
 
-GitHub conserva incarichi e prove; Herdr trasporta messaggi tra sessioni esistenti.
+GitHub conserva incarichi e prove; Herdr è il terminale locale che ospita le sessioni
+e permette al coordinatore di scambiare messaggi con gli agenti già aperti.
 Prima dell'invio verificare ambiente Herdr, identità del destinatario, stato e
 prompt: non sovrascrivere bozze o dialoghi, né interrompere lavoro non concordato.
 Il trasporto non fornisce monitoraggio continuo o scheduler.

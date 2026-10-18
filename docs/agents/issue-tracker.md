@@ -26,7 +26,8 @@ collegare gli eventuali documenti già in `docs/superpowers/specs/` o
 
 Per task figli usare sub-issue e dipendenze GitHub quando disponibili; altrimenti
 task list nel padre e `Part of: owner/repo#N` / `Blocked by: owner/repo#N` nel figlio.
-`wayfinder` riusa la mappa esistente. Un blocker risulta risolto da prove correnti,
+`wayfinder` riusa una mappa se esiste; una mappa nuova e le relative label si
+creano solo nell'incarico che ne richiede l'uso. Un blocker risulta risolto da prove correnti,
 non dalla sola memoria della sessione.
 
 Le sessioni condividono l'account GitHub: l'assignee `@me` non distingue gli agenti.
