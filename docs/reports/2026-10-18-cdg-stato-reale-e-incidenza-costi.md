@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-18 · **Perimetro di questa lettura:** repo `hotelops` (main `e5630b9`), vault Obsidian
 (concetti, architettura, decisioni, workstream — non le sessioni), mgmt-os `7e4e0af` in sola lettura.
-**BigQuery:** interrogato in sola lettura la sera del 18/10 dopo il login di Stefano (copertura di `f_bilancino`,
+**BigQuery:** interrogato in sola lettura la mattina del 18/10 (ore 09 Europe/Rome) dopo il login di Stefano; la prima stesura, poche ore prima, era senza accesso (copertura di `f_bilancino`,
 identità dei conti di classe 65, rapporto osservato: §4-bis). Il resto dei numeri di copertura viene da `STATUS.md`,
 issue e vault.
 
@@ -26,7 +26,7 @@ sceglie definizioni gestionali ancora aperte.
   DELETE del parziale del 25/09 e verificati conto per conto contro i PDF provvisori
   (`docs/reports/2026-10-16-bilanci-provvisori-30-09-estrazione-pdf.md`, nota in
   `2026-10-17-regia-ripristino-e-allineamento.md`). Ottobre è mese aperto: gli export «al 15/10» non
-  sono un mese chiuso e non vanno promossi come tale. **Verificato su BigQuery il 18/10 sera**: ORTI e INTUR
+  sono un mese chiuso e non vanno promossi come tale. **Verificato su BigQuery il 18/10 mattina**: ORTI e INTUR
   2026-06…2026-09, un raw object per mese, settembre caricato il 16/10 (ORTI 185 righe, INTUR 153).
 - Il canale alternativo (`v_budget_vs_consuntivo` / `hotelops bva`, da prima nota) è **inutilizzabile**:
   prima nota ricavi ORTI 2026 = 0 in BQ (workstream CDG, thread 2026-09-24), il consuntivo non filtra i
@@ -121,7 +121,7 @@ avere valori e periodi diversi (il floor è annuale; il controllo potrebbe esser
 
 ### 4-bis. Rapporto osservato (bilancino ORTI, COMPETENZA, progressivo YTD) — evidenza, non semaforo
 
-Query eseguita il 18/10 sera su `f_bilancino`, segni gestionali, rapporto = somma costi / somma ricavi dall'inizio
+Query eseguita il 18/10 mattina su `f_bilancino`, segni gestionali, rapporto = somma costi / somma ricavi dall'inizio
 dell'anno. Nessuna soglia applicata; le tre colonne a destra sono le tre letture possibili della definizione.
 
 | YTD al | Ricavi totali | Costi 55–71 | Canone 651101 | CVM 65010590 | Angelina 65010591 | Classe 75 | escl. canone+Angelina | escl. canone+CVM | escl. solo canone | totale CE / ricavi |
