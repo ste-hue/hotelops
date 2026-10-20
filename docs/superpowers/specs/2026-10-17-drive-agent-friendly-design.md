@@ -55,6 +55,8 @@ without those fields are excluded. All inventory checks and manifests use this
 selection; `v_drive_coverage` reports the same observation per root. Health
 compares coverage with the current map, reports observation age, and returns
 unavailable checks explicitly. A read does not renew the observation's date.
+Malformed private-map YAML or structure is rejected by the loader as ValueError:
+health reports unverifiable coverage, while inventory stops before any effects.
 
 ## Visibility and provenance
 
