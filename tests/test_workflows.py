@@ -88,3 +88,133 @@ def test_il_deploy_del_hub_stampa_il_rollback_prima_di_toccare_il_servizio():
     assert indice_piano < indice_deploy, (
         "la revisione da cui tornare si legge PRIMA del deploy: dopo è già cambiata"
     )
+
+
+# ── I passi come programmi, non come stringhe ───────────────────────────────
+# Un controllo verificato per sottostringhe può essere verde e non bloccare
+# niente: `exit 1` presente nel testo non dice che venga raggiunto. Qui lo
+# script viene estratto dal YAML ed ESEGUITO, con `gh` e `gcloud` finti.
+# Nessuna rete, nessun servizio, nessun token.
+
+import os
+import subprocess
+import tempfile
+
+
+def script_del_passo(nome_file: str, job: str, pezzo_del_nome: str) -> str:
+    passi = carica(nome_file)["jobs"][job]["steps"]
+    for passo in passi:
+        if pezzo_del_nome in str(passo.get("name", "")) and "run" in passo:
+            return passo["run"]
+    raise AssertionError(f"{nome_file}/{job}: nessun passo con «{pezzo_del_nome}» e un `run`")
+
+
+def esegui(script: str, finti: dict, ambiente: dict):
+    """Esegue lo script con i comandi finti davanti al PATH.
+
+    Ritorna (codice, output unito, righe scritte in GITHUB_ENV).
+    """
+    with tempfile.TemporaryDirectory() as dir_temp:
+        for nome, corpo in finti.items():
+            percorso = os.path.join(dir_temp, nome)
+            with open(percorso, "w", encoding="utf-8") as f:
+                f.write(corpo)
+            os.chmod(percorso, 0o755)
+        github_env = os.path.join(dir_temp, "github_env")
+        open(github_env, "w", encoding="utf-8").close()
+        esito = subprocess.run(
+            ["bash", "-c", script],
+            env={
+                "PATH": f"{dir_temp}:{os.environ['PATH']}",
+                "GITHUB_ENV": github_env,
+                **ambiente,
+            },
+            capture_output=True,
+            text=True,
+        )
+        with open(github_env, encoding="utf-8") as f:
+            esportate = f.read()
+    return esito.returncode, esito.stdout + esito.stderr, esportate
+
+
+GH_FINTO = """#!/usr/bin/env bash
+if [ -n "${FINTO_GH_ERRORE:-}" ]; then
+  echo "$FINTO_GH_ERRORE" >&2
+  exit 1
+fi
+printf '%s' "${FINTO_CONCLUSIONI:-}"
+"""
+
+GCLOUD_FINTO = """#!/usr/bin/env bash
+printf '%s' "${FINTO_DISTRIBUZIONE:-}"
+"""
+
+AMBIENTE_GATE = {"GITHUB_REPOSITORY": "ste-hue/hotelops", "GITHUB_SHA": "f" * 40}
+
+
+def gate(**extra):
+    script = script_del_passo("deploy-hub.yml", "test-sullo-stesso-sha", "La suite è passata")
+    return esegui(script, {"gh": GH_FINTO}, {**AMBIENTE_GATE, **extra})
+
+
+@pytest.mark.parametrize(
+    "caso,conclusioni,atteso_bloccato",
+    [
+        ("nessuna run su questo commit", "", True),
+        ("solo una run fallita", "failure", True),
+        ("fallita e annullata", "failure,cancelled", True),
+        ("riuscita su questo commit", "success", False),
+        ("riuscita insieme a una fallita", "failure,success", False),
+    ],
+)
+def test_il_cancello_blocca_davvero(caso, conclusioni, atteso_bloccato):
+    codice, output, _ = gate(FINTO_CONCLUSIONI=conclusioni)
+    bloccato = codice != 0
+    assert bloccato is atteso_bloccato, f"{caso}: codice {codice}, output:\n{output}"
+    if bloccato:
+        assert "FERMO" in output
+        # L'istruzione deve essere eseguibile: `test` non ha workflow_dispatch,
+        # quindi non si "lancia" — si riesegue, o si fa partire con push/PR.
+        assert "Re-run" in output or "riesegui" in output
+        assert "pull request" in output
+    else:
+        assert "OK" in output
+
+
+def test_un_errore_dell_api_non_e_un_via_libera():
+    codice, output, _ = gate(FINTO_GH_ERRORE="HTTP 503: upstream", FINTO_CONCLUSIONI="success")
+    assert codice != 0, "con l'API in errore il deploy è passato comunque"
+    assert "non ho potuto verificare" in output
+    assert "503" in output
+
+
+def rollback(distribuzione):
+    script = script_del_passo("deploy-hub.yml", "deploy", "Piano di rollback")
+    return esegui(script, {"gcloud": GCLOUD_FINTO}, {"FINTO_DISTRIBUZIONE": distribuzione})
+
+
+def test_il_piano_di_rollback_accetta_solo_la_forma_che_sa_ripristinare():
+    # Caso buono: un solo target, al 100%, con un nome.
+    codice, output, esportate = rollback("hotelops-hub-00092-t8f,100")
+    assert codice == 0, output
+    assert "ROLLBACK_REVISION=hotelops-hub-00092-t8f" in esportate
+    assert "update-traffic hotelops-hub" in output
+    assert "--to-revisions=hotelops-hub-00092-t8f=100" in output
+
+
+@pytest.mark.parametrize(
+    "caso,distribuzione",
+    [
+        ("nessun target", ""),
+        ("traffico diviso", "hotelops-hub-00092-t8f,50\nhotelops-hub-00091-abc,50"),
+        ("tre target", "a,34\nb,33\nc,33"),
+        ("nome vuoto", ",100"),
+        ("percentuale non intera al 100", "hotelops-hub-00092-t8f,90"),
+    ],
+)
+def test_il_piano_di_rollback_si_ferma_su_cio_che_non_sa_ricostruire(caso, distribuzione):
+    codice, output, esportate = rollback(distribuzione)
+    assert codice != 0, f"{caso}: non si è fermato. output:\n{output}"
+    assert "FERMO prima del deploy" in output, caso
+    # Niente mezze misure: non deve lasciare un rollback sbagliato nell'ambiente.
+    assert "ROLLBACK_REVISION" not in esportate, caso

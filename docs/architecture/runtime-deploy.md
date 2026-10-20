@@ -23,10 +23,16 @@ PR pubblicava senza dirlo e senza guardare un piano. Ora il workflow ha il solo
 2. Lanciare `deploy-hub` a mano (Actions → deploy-hub → Run workflow) sul ramo
    o sul tag che si vuole pubblicare.
 3. Il workflow si ferma da sé se non trova una esecuzione **conclusa e
-   riuscita** di `test` per quel `head_sha`. Il messaggio dice cosa fare.
-4. Prima di toccare il servizio stampa **la revisione che sta servendo
-   traffico adesso** e il comando per tornarci: è il piano di rollback, letto
-   prima e non ricostruito dopo.
+   riuscita** di `test` per quel `head_sha`, e si ferma anche se non riesce a
+   interrogare l'API: non sapere non è un via libera. Attenzione: `test` parte
+   su push su `main` e sulle pull request e **non ha un `workflow_dispatch`**,
+   quindi non esiste un «lancia test» da premere. Le due vie sono riusare la
+   run già esistente per quel commit (Actions → test → Re-run) oppure portare
+   il commit su `main` o in una pull request, dove `test` parte da sé.
+4. Prima di toccare il servizio legge **tutta la distribuzione del traffico** e
+   stampa il comando per tornare indietro: è il piano di rollback, letto prima
+   e non ricostruito dopo. Si **ferma prima del deploy** se la distribuzione non
+   è esattamente un target al 100% con un nome — vedi sotto.
 5. Dopo il deploy verifica che il cancello IAP risponda ancora `302` a una GET
    anonima.
 
@@ -40,7 +46,23 @@ ridistribuire niente:
       --to-revisions=<REVISIONE>=100
 
 `<REVISIONE>` è quella stampata dal passo «Piano di rollback» della run che ha
-pubblicato. Se quella run non è a portata di mano:
+pubblicato.
+
+**Perché il workflow si ferma su un traffico diviso.** `--to-revisions=<rev>=100`
+non riporta allo stato precedente un servizio che serviva traffico su più
+revisioni: lo porta in uno stato nuovo, mai esistito. Prima leggeva solo il
+primo target e forzava comunque il 100%, quindi con uno split prometteva un
+ritorno che non era un ritorno, e con nessun target esportava un rollback
+vuoto senza accorgersene. Ora pretende la forma che sa ripristinare — un solo
+target, al 100%, con un nome — e altrimenti si ferma **prima** del deploy
+stampando la distribuzione osservata. In quel caso si rilascia a mano e si
+ripristina con un solo comando che elenca tutte le revisioni:
+
+    gcloud run services update-traffic hotelops-hub \
+      --project=hotelops-suite --region=europe-west1 \
+      --to-revisions=<REV_A>=50,<REV_B>=50
+
+Se quella run non è a portata di mano:
 
     gcloud run revisions list --service=hotelops-hub \
       --project=hotelops-suite --region=europe-west1 \
@@ -74,5 +96,13 @@ precedente va annotata prima di partire.
 `tests/test_workflows.py` verifica sui file versionati, senza chiamare nessun
 servizio: che nessun workflow di deploy parta su `push` o a orologio; che il
 deploy del hub dipenda da un cancello ancorato a `head_sha` con conclusione
-riuscita e che sappia fallire; che il piano di rollback venga letto **prima**
-del deploy. Sono le classi di guasto già incontrate, non la forma dei file.
+riuscita; che il piano di rollback venga letto **prima** del deploy.
+
+Quei controlli però guardavano il testo degli script, e un controllo verificato
+per sottostringhe può essere verde senza bloccare niente: `exit 1` presente nel
+testo non dice che venga raggiunto. Quindi i due passi vengono **estratti dal
+YAML ed eseguiti** con `gh` e `gcloud` finti, senza rete e senza token, sulle
+classi di guasto: nessuna run su quel commit, run fallita, run riuscita,
+errore dell'API; e per il rollback un solo target al 100%, nessun target,
+traffico diviso in due o in tre, nome vuoto, percentuale diversa da 100. Sono
+le classi di guasto già incontrate, non la forma dei file.

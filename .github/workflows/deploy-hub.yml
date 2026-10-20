@@ -31,16 +31,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          CONCLUSIONI=$(gh api \
+          ERRORE=$(mktemp)
+          # Un errore dell'API non è un via libera: se non so rispondere, fermo.
+          if ! CONCLUSIONI=$(gh api \
             "repos/${GITHUB_REPOSITORY}/actions/workflows/test.yml/runs?head_sha=${GITHUB_SHA}&status=completed&per_page=100" \
-            --jq '[.workflow_runs[].conclusion] | join(",")')
+            --jq '[.workflow_runs[].conclusion] | join(",")' 2>"$ERRORE"); then
+            echo "FERMO: non ho potuto verificare lo stato dei test su ${GITHUB_SHA}." >&2
+            sed -n '1,3p' "$ERRORE" >&2 || true
+            exit 1
+          fi
           echo "run di test concluse su questo SHA: ${CONCLUSIONI:-nessuna}"
           case ",${CONCLUSIONI}," in
             *,success,*)
               echo "OK: suite verde su questo commit." ;;
             *)
               echo "FERMO: nessuna esecuzione riuscita del workflow test su ${GITHUB_SHA}." >&2
-              echo "       Lancia 'test' su questo commit e ripeti il dispatch." >&2
+              # `test` parte su push su main e sulle pull request, e NON ha un
+              # workflow_dispatch: non esiste un "lancia test" da premere.
+              echo "       Il workflow 'test' non si lancia a mano: riesegui la run di 'test'" >&2
+              echo "       già esistente per questo commit (Actions -> test -> Re-run), oppure" >&2
+              echo "       porta questo commit su main o in una pull request, dove 'test' parte da sé." >&2
               exit 1 ;;
           esac
 
@@ -60,15 +70,34 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      # Il rollback è un dato, non una procedura da ricostruire a posteriori:
-      # la revisione che serve stamparla è quella che sta servendo traffico ORA,
-      # e si legge PRIMA di toccare il servizio.
-      - name: Piano di rollback (revisione corrente)
+      # Il rollback è un dato, non una procedura da ricostruire a posteriori: si
+      # legge PRIMA di toccare il servizio. E si legge TUTTA la distribuzione,
+      # non il primo target: `--to-revisions=<rev>=100` su un servizio che
+      # serviva traffico diviso non lo riporterebbe allo stato precedente, lo
+      # porterebbe in uno stato nuovo. Se la forma non è quella che so
+      # ripristinare — esattamente un target, al 100%, con un nome — mi fermo
+      # prima del deploy invece di promettere un ritorno che non sarebbe tale.
+      - name: Piano di rollback (distribuzione corrente del traffico)
         run: |
           set -euo pipefail
-          REV=$(gcloud run services describe hotelops-hub \
+          DISTRIBUZIONE=$(gcloud run services describe hotelops-hub \
             --project=hotelops-suite --region=europe-west1 \
-            --format='value(status.traffic[0].revisionName)')
+            --flatten='status.traffic[]' \
+            --format='csv[no-heading](status.traffic.revisionName,status.traffic.percent)')
+          echo "distribuzione del traffico osservata:"
+          printf '%s\n' "${DISTRIBUZIONE:-<nessun target>}"
+          TARGET=$(printf '%s\n' "$DISTRIBUZIONE" | grep -c . || true)
+          REV=${DISTRIBUZIONE%%,*}
+          PCT=${DISTRIBUZIONE##*,}
+          if [ "$TARGET" != "1" ] || [ -z "$REV" ] || [ "$PCT" != "100" ]; then
+            echo "FERMO prima del deploy: non so ricostruire questa distribuzione." >&2
+            echo "       Mi fermo su tutto ciò che non è un solo target al 100% con un nome:" >&2
+            echo "       traffico diviso, nessun target, percentuale diversa o nome vuoto." >&2
+            echo "       Annota la distribuzione qui sopra e rilascia a mano (vedi" >&2
+            echo "       docs/architecture/runtime-deploy.md), poi ripristinala con un solo" >&2
+            echo "       update-traffic che elenca tutte le revisioni e le loro percentuali." >&2
+            exit 1
+          fi
           echo "revisione che serve traffico adesso: ${REV}"
           echo "per tornare indietro:"
           echo "  gcloud run services update-traffic hotelops-hub --project=hotelops-suite --region=europe-west1 --to-revisions=${REV}=100"
