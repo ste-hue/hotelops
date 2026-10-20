@@ -37,7 +37,7 @@ Non è: query tool, BI layer, raccolta di script. Ogni azione deve rinforzare qu
 
 | Layer | Dove vive | Ruolo |
 |---|---|---|
-| **Raw** | `hotelops_datahub/canonical/{tipo}/{SOCIETA}/`, `ingresso/` | File originali, immutabili. Archive max 5 versioni per SNAPSHOT. |
+| **Raw** | GCS `gs://hotelops-raw/<SOURCE_NAME>/…` + manifest `f_raw_objects` / eventi `f_lineage_events` (**I9**, ADR 0004). Il vecchio `hotelops_datahub/canonical/`, `ingresso/` è il regime legacy pre-Phase 4 (`lineage_era='pre_phase4'`), non la destinazione delle nuove acquisizioni. | File originali, immutabili, con `raw_object_id` e `gcs_generation`; Object Versioning attivo sul bucket (verificato 2026-10-18). |
 | **Canonical** | BigQuery `F_*` / `D_*` | Fatti governati, post-Pydantic (**I1**), post-dedup / DEL-INS (**I2**). Tutti i write passano da `core.bq.write.bq_write_validated`. |
 | **Semantic** | BigQuery `v_*` | Lenti di business (PF, BVA, cashflow, food cost). Una view = una lente = un'audience. |
 | **Operational** | CLI (`hotelops ...`), Streamlit, NanoClaw, email cron | Qui vivono le persone. Mai logica di business. |
