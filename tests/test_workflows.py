@@ -218,3 +218,28 @@ def test_il_piano_di_rollback_si_ferma_su_cio_che_non_sa_ricostruire(caso, distr
     assert "FERMO prima del deploy" in output, caso
     # Niente mezze misure: non deve lasciare un rollback sbagliato nell'ambiente.
     assert "ROLLBACK_REVISION" not in esportate, caso
+
+
+def ritorno(rollback_revision: str):
+    script = script_del_passo("deploy-hub.yml", "deploy", "Come tornare indietro")
+    ambiente = {"ROLLBACK_REVISION": rollback_revision} if rollback_revision else {}
+    return esegui(script, {"gcloud": GCLOUD_FINTO}, ambiente)
+
+
+def test_senza_piano_acquisito_non_stampa_un_rollback_eseguibile():
+    """Il fallimento può arrivare prima del piano: auth, lettura del traffico,
+    forma non ripristinabile. Allora non c'è niente da copiare, e un
+    `--to-revisions==100` sarebbe un comando rotto offerto come rimedio."""
+    codice, output, _ = ritorno("")
+    assert codice == 0, output
+    assert "Nessun piano di rollback acquisito" in output
+    assert "--to-revisions=" not in output, f"ha stampato un rollback senza revisione:\n{output}"
+    # La lettura offerta non deve passare per un rollback.
+    assert "non un rollback" in output
+
+
+def test_con_il_piano_acquisito_stampa_il_comando_completo():
+    codice, output, _ = ritorno("hotelops-hub-00092-t8f")
+    assert codice == 0, output
+    assert "--to-revisions=hotelops-hub-00092-t8f=100" in output
+    assert "Nessun piano" not in output

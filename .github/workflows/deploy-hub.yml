@@ -119,7 +119,19 @@ jobs:
 
       # Se il controllo del cancello è fallito il deploy non è partito; se è
       # fallito DOPO il deploy, il comando per tornare indietro è questo.
+      # Ma solo se un piano è stato davvero acquisito: se il fallimento è
+      # arrivato prima (auth, lettura del traffico, forma non ripristinabile)
+      # `ROLLBACK_REVISION` è vuota, e stampare `--to-revisions==100` darebbe
+      # da copiare un comando rotto nel momento peggiore per accorgersene.
       - name: Come tornare indietro (se un controllo è fallito)
         if: failure()
         run: |
-          echo "gcloud run services update-traffic hotelops-hub --project=hotelops-suite --region=europe-west1 --to-revisions=${ROLLBACK_REVISION}=100"
+          if [ -z "${ROLLBACK_REVISION:-}" ]; then
+            echo "Nessun piano di rollback acquisito: il fallimento è arrivato prima di leggere"
+            echo "la distribuzione del traffico, quindi questa run non ha niente da ripristinare."
+            echo "Per guardare come sta il servizio adesso (è una lettura, non un rollback):"
+            echo "  gcloud run services describe hotelops-hub --project=hotelops-suite --region=europe-west1 --flatten='status.traffic[]' --format='csv[no-heading](status.traffic.revisionName,status.traffic.percent)'"
+            exit 0
+          fi
+          echo "per tornare indietro:"
+          echo "  gcloud run services update-traffic hotelops-hub --project=hotelops-suite --region=europe-west1 --to-revisions=${ROLLBACK_REVISION}=100"
