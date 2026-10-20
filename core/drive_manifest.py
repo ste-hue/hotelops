@@ -16,20 +16,20 @@ _T = f"`{PROJECT}.{DATASET}`"
 
 _SQL = """
 WITH ultimo AS (
-  SELECT MAX(snapshot_date) AS snapshot_date FROM {t}.f_drive_inventory
+  SELECT MAX(snapshot_date) AS snapshot_date FROM {t}.v_drive_inventory_current
 ),
 cart AS (
-  SELECT i.* FROM {t}.f_drive_inventory i JOIN ultimo USING (snapshot_date)
+  SELECT i.* FROM {t}.v_drive_inventory_current i JOIN ultimo USING (snapshot_date)
   WHERE i.parent_id = '{folder}'
 ),
 dup AS (
-  SELECT md5, COUNT(*) AS copie FROM {t}.f_drive_inventory JOIN ultimo USING (snapshot_date)
+  SELECT md5, COUNT(*) AS copie FROM {t}.v_drive_inventory_current JOIN ultimo USING (snapshot_date)
   WHERE md5 IS NOT NULL AND NOT is_shortcut GROUP BY md5
 )
 SELECT
   c.snapshot_date, c.file_id, c.name, c.mime_type, c.size_bytes, c.sha256, c.md5,
   c.modified_time, c.owner_email, c.is_folder, c.is_shortcut, c.shortcut_target_id,
-  c.perm_anyone, c.perm_outside_domain, c.raw_object_id,
+  c.perm_anyone, c.permissions_observed, c.perm_outside_domain, c.raw_object_id,
   IFNULL(d.copie, 1) AS copie,
   r.source_name
 FROM cart c
@@ -39,8 +39,8 @@ ORDER BY c.is_folder DESC, c.name
 """
 
 _PATH_SQL = """
-SELECT path, name FROM {t}.f_drive_inventory
-WHERE file_id = '{folder}' AND snapshot_date = (SELECT MAX(snapshot_date) FROM {t}.f_drive_inventory)
+SELECT path, name FROM {t}.v_drive_inventory_current
+WHERE file_id = '{folder}' AND snapshot_date = (SELECT MAX(snapshot_date) FROM {t}.v_drive_inventory_current)
 LIMIT 1
 """
 
@@ -62,10 +62,10 @@ def render_manifest(query: Callable[[str], list[dict]], folder_id: str) -> str:
     head = query(_PATH_SQL.format(t=_T, folder=folder_id))
     title = head[0]["path"] if head else folder_id
     if not rows:
-        return (
-            f"# Manifest — {title}\n\n"
-            "Nessun oggetto nell'ultima fotografia: cartella vuota, oppure non condivisa "
-            "con l'identità che esegue il job inventario.\n"
+        return f"# Manifest — {title}\n\n" + (
+            "Nessun figlio visibile nell’ultima fotografia completa per il principal osservatore.\n"
+            if head
+            else "Cartella non osservata nell’ultima fotografia completa; copertura sconosciuta.\n"
         )
     snap = rows[0]["snapshot_date"]
     out = [
@@ -97,7 +97,9 @@ def render_manifest(query: Callable[[str], list[dict]], folder_id: str) -> str:
             else "-"
         )
         esp = (
-            "ANYONE"
+            "NON OSSERVATI"
+            if not r.get("permissions_observed", False)
+            else "ANYONE"
             if r["perm_anyone"]
             else (
                 ", ".join(r["perm_outside_domain"]) if r["perm_outside_domain"] else "-"

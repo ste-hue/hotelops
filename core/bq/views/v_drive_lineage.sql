@@ -9,7 +9,7 @@
 CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_drive_lineage` AS
 
 WITH ultimo AS (
-  SELECT MAX(snapshot_date) AS snapshot_date FROM `hotelops-suite.hotelops.f_drive_inventory`
+  SELECT MAX(snapshot_date) AS snapshot_date FROM `hotelops-suite.hotelops.v_drive_inventory_current`
 ),
 inbox AS (
   SELECT
@@ -24,7 +24,7 @@ inbox AS (
     CAST(NULL AS STRING) AS raw_object_id,
     CAST(NULL AS STRING) AS raw_uri,
     REGEXP_CONTAINS(i.name, r'\d{4}-\d{2}') AS nome_con_periodo
-  FROM `hotelops-suite.hotelops.f_drive_inventory` i
+  FROM `hotelops-suite.hotelops.v_drive_inventory_current` i
   JOIN ultimo USING (snapshot_date)
   WHERE NOT i.is_folder AND NOT i.is_shortcut
     AND REGEXP_CONTAINS(i.path, r'/_inbox/[A-Z0-9_]+/')

@@ -5,9 +5,6 @@
 
 CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_drive_radice` AS
 
-WITH ultimo AS (
-  SELECT MAX(snapshot_date) AS snapshot_date FROM `hotelops-suite.hotelops.f_drive_inventory`
-)
 SELECT
   i.snapshot_date,
   i.root_key,
@@ -18,10 +15,8 @@ SELECT
   i.created_time,
   DATE_DIFF(i.snapshot_date, DATE(i.created_time), DAY) AS giorni_in_radice,
   i.raw_object_id
-FROM `hotelops-suite.hotelops.f_drive_inventory` i
-JOIN ultimo USING (snapshot_date)
-WHERE i.root_key = 'mio_drive'
+FROM `hotelops-suite.hotelops.v_drive_inventory_current` i
+WHERE i.in_inbox_root
   AND NOT i.is_folder
-  AND ARRAY_LENGTH(SPLIT(i.path, '/')) = 2   -- <label radice>/<nome>: figlio diretto
   AND DATE(i.created_time) < DATE_SUB(i.snapshot_date, INTERVAL 7 DAY)
 ORDER BY i.created_time;

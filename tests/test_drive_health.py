@@ -16,10 +16,7 @@ class FakeQuery:
 
     def __call__(self, sql: str) -> list[dict]:
         self.calls.append(sql)
-        if (
-            "FROM `hotelops-suite.hotelops`.f_drive_inventory" in sql
-            and "MAX(snapshot_date)" in sql
-        ):
+        if sql == drive_health.SNAPSHOT_SQL:
             d, n = self.snapshot
             return [{"d": d, "n": n}]
         for name, rows in self.by_view.items():
@@ -96,7 +93,7 @@ def test_render_mostra_i_primi_e_i_segni():
     )
     out = drive_health.render_text(drive_health.compute(q))
     assert "DRIVE" in out and "fotografia 2026-10-17 · 1234 oggetti" in out
-    assert "🔴   1 oggetti visibili fuori" in out
+    assert "🔴   1 esposizioni esterne o permessi non osservati" in out
     assert "ExampleFolder  [ANYONE]" in out
     assert "A/example.pdf  (×3)" in out
     assert "✓    0 file in attesa" in out
@@ -106,7 +103,7 @@ def test_senza_fotografia_dice_che_il_job_non_e_mai_girato():
     q = FakeQuery({}, snapshot=(None, 0))
     h = drive_health.compute(q)
     assert h.snapshot_date is None and h.checks == []
-    assert "mai girato" in drive_health.render_text(h)
+    assert "nessuna fotografia completa" in drive_health.render_text(h)
 
 
 def test_tabella_assente_non_esplode():
@@ -130,13 +127,13 @@ def test_health_testo_include_la_sezione_drive(capsys):
         patch(
             "cli.query",
             side_effect=lambda sql: (
-                [{"d": None, "n": 0}] if "f_drive_inventory" in sql else []
+                [{"d": None, "n": 0}] if sql == drive_health.SNAPSHOT_SQL else []
             ),
         ),
     ):
         cmd_health(Namespace(json=False, source=None, all=False))
     out = capsys.readouterr().out
-    assert "DRIVE" in out and "mai girato" in out
+    assert "DRIVE" in out and "nessuna fotografia completa" in out
 
 
 def test_health_json_resta_la_lista_sorgenti(capsys):
@@ -166,6 +163,7 @@ def test_manifest_render():
             "is_folder": False,
             "is_shortcut": False,
             "shortcut_target_id": None,
+            "permissions_observed": True,
             "perm_anyone": False,
             "perm_outside_domain": [],
             "raw_object_id": "12345678-abc",
@@ -185,6 +183,7 @@ def test_manifest_render():
             "is_folder": True,
             "is_shortcut": False,
             "shortcut_target_id": None,
+            "permissions_observed": True,
             "perm_anyone": True,
             "perm_outside_domain": [],
             "raw_object_id": None,
@@ -210,8 +209,7 @@ def test_manifest_render():
         in md
     )
     assert (
-        "[sample_folder](https://drive.google.com/drive/folders/f1) | cartella"
-        in md
+        "[sample_folder](https://drive.google.com/drive/folders/f1) | cartella" in md
         and "ANYONE" in md
     )
     assert "Oggetti: 2 · con copie altrove: 1 · pubblici: 1." in md

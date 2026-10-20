@@ -5,13 +5,9 @@
 
 CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_drive_duplicati` AS
 
-WITH ultimo AS (
-  SELECT MAX(snapshot_date) AS snapshot_date FROM `hotelops-suite.hotelops.f_drive_inventory`
-),
-file AS (
+WITH file AS (
   SELECT i.*
-  FROM `hotelops-suite.hotelops.f_drive_inventory` i
-  JOIN ultimo USING (snapshot_date)
+  FROM `hotelops-suite.hotelops.v_drive_inventory_current` i
   WHERE NOT i.is_folder AND NOT i.is_shortcut AND i.md5 IS NOT NULL
 ),
 gruppi AS (

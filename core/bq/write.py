@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from datetime import date
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -119,6 +120,8 @@ def bq_write_validated(
     rows: list[BaseModel],
     mode: WriteMode = "append",
     natural_key: list[str] | None = None,
+    *,
+    snapshot_partition: date | None = None,
 ) -> None:
     """Write Pydantic-validated rows to BigQuery via a single observable gate.
 
@@ -132,6 +135,11 @@ def bq_write_validated(
         natural_key: Column names that scope the SNAPSHOT delete. Required when
                      mode="snapshot". Must include every partitioning/identity
                      column the caller wants preserved (otherwise over-delete).
+
+        snapshot_partition: Explicit DATE partition for a complete observation.
+            Requires snapshot mode and one date natural_key. Uses one atomic
+            WRITE_TRUNCATE load to table$YYYYMMDD, preserving other dates.
+            Empty batches remain no-ops; include observed roots for empty trees.
 
     Lineage is read from PipelineRun.get_current() (ContextVar). If no active
     run is present, the function logs a warning and writes anyway with
@@ -227,6 +235,20 @@ def bq_write_validated(
         if collisions:
             raise HashCollisionError(table, collisions)
 
+    # A complete daily observation replaces one DATE partition atomically.
+    # Validate its explicit scope before obtaining a client or writing anything.
+    if snapshot_partition is not None:
+        if (
+            mode != "snapshot"
+            or len(natural_key or []) != 1
+            or type(snapshot_partition) is not date
+        ):
+            raise ValueError(
+                "snapshot_partition requires snapshot mode, one DATE key and a date"
+            )
+        if any(r.get(natural_key[0]) != snapshot_partition.isoformat() for r in rows_dict):
+            raise ValueError("rows outside the declared snapshot partition")
+
     # 4. Lineage discovery (ambient via ContextVar — log-only fallback).
     from core.pipeline_run import PipelineRun
 
@@ -254,6 +276,8 @@ def bq_write_validated(
 
     if mode == "append":
         _append(client, table, rows_dict)
+    elif mode == "snapshot" and snapshot_partition is not None:
+        _replace_partition(client, table, rows_dict, snapshot_partition)
     elif mode == "snapshot":
         _snapshot(client, table, rows_dict, natural_key)  # implemented Task 5
     else:
@@ -293,6 +317,33 @@ def _append(client, table: str, rows_dict: list[dict]) -> None:
     try:
         job.result()
     except Exception as e:  # noqa: BLE001 — propagate as our typed error
+        raise BigQueryInsertError(table, [{"job_error": str(e)}]) from e
+
+
+def _replace_partition(client, table: str, rows_dict: list[dict], day: date) -> None:
+    """Publish a fully observed DATE partition in one atomic load job.
+
+    WRITE_TRUNCATE targets only the partition decorator, never the whole table.
+    A failed load retains the previous partition; earlier dates are untouched.
+    Callers must include an observed scope marker even when it has no members.
+    """
+    from google.cloud import bigquery
+
+    job = client.load_table_from_json(
+        rows_dict,
+        f"{table}${day:%Y%m%d}",
+        job_config=bigquery.LoadJobConfig(
+            write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+            source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+            create_disposition=bigquery.CreateDisposition.CREATE_NEVER,
+            # The client otherwise infers a schema for WRITE_TRUNCATE, even
+            # with an existing partition. Empty arrays must retain table types.
+            autodetect=False,
+        ),
+    )
+    try:
+        job.result()
+    except Exception as e:
         raise BigQueryInsertError(table, [{"job_error": str(e)}]) from e
 
 

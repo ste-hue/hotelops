@@ -172,6 +172,28 @@ class SyncReport:
     errors: list[str] = field(default_factory=list)
 
 
+def _known_problem(
+    known: dict | None, source_name: str, expect_promoted: bool
+) -> str | None:
+    """A known hash proves acquisition, never successful promotion or approval."""
+    if known is None:
+        return (
+            "known raw: canonical promotion state unavailable"
+            if expect_promoted
+            else None
+        )
+    if known.get("source_name") != source_name:
+        return "known raw belongs to another source; explicit reconciliation required"
+    status = known.get("current_status")
+    if status == "REJECTED" or (expect_promoted and status != "PROMOTED"):
+        return (
+            f"known raw {known.get('raw_object_id')}: promotion unresolved "
+            f"({status or 'UNKNOWN'}; {known.get('last_rejection_reason') or 'no reason'}); "
+            "no automatic retry; use the governed reclassification/promotion path"
+        )
+    return None
+
+
 def sync_source(
     source_def,
     svc,
@@ -181,6 +203,7 @@ def sync_source(
     promote: Callable[[str], object] | None,
     tmp_dir: Path,
     dry_run: bool = False,
+    known_lookup: Callable[[str, str], dict | None] | None = None,
 ) -> SyncReport:
     """Un giro su una sorgente: elenca, salta gli hash noti, scarica e fa intake
     dei nuovi, promuove se richiesto. Le dipendenze da BigQuery sono iniettate
@@ -198,6 +221,13 @@ def sync_source(
             continue
         if c.md5 is not None and hash_exists(c.md5):
             rep.skipped_known += 1
+            try:
+                known = known_lookup(c.md5, "content_hash") if known_lookup else None
+                problem = _known_problem(known, rep.source_name, promote is not None)
+                if problem:
+                    rep.errors.append(f"{c.name}: {problem}")
+            except Exception as e:  # noqa: BLE001 — unavailable state must stay explicit
+                rep.errors.append(f"{c.name}: canonical state unavailable: {e}")
             continue
         if dry_run:
             log.info(
@@ -224,6 +254,10 @@ def sync_source(
                 continue
             if getattr(result, "deduped", False):
                 rep.skipped_known += 1
+                known = known_lookup(rid, "raw_object_id") if known_lookup else None
+                problem = _known_problem(known, rep.source_name, promote is not None)
+                if problem:
+                    rep.errors.append(f"{c.name}: {problem}")
                 continue
             rep.ingested.append(rid)
             if promote is not None:
@@ -253,6 +287,32 @@ def _bq_hash_exists(md5: str) -> bool:
     from core.lineage.raw_manifest import _lookup_existing_by_hash
 
     return _lookup_existing_by_hash(md5) is not None
+
+
+def _bq_known(value: str, field: str) -> dict | None:
+    from google.cloud import bigquery
+
+    from core.bq.client import get_client
+    from core.lineage.raw_manifest import V_RAW_OBJECTS_CURRENT
+
+    if field not in {"content_hash", "raw_object_id"}:
+        raise ValueError("unsupported raw lookup")
+    rows = list(
+        get_client()
+        .query(
+            f"SELECT raw_object_id, source_name, current_status, last_rejection_reason "
+            f"FROM `{V_RAW_OBJECTS_CURRENT}` WHERE {field} = @value",
+            job_config=bigquery.QueryJobConfig(
+                query_parameters=[
+                    bigquery.ScalarQueryParameter("value", "STRING", value)
+                ]
+            ),
+        )
+        .result()
+    )
+    if len(rows) != 1:
+        raise ValueError(f"expected one canonical raw object, found {len(rows)}")
+    return dict(rows[0])
 
 
 def _intake(path: Path, source_name: str):
@@ -294,6 +354,7 @@ def run_sources(
                 sd,
                 svc,
                 hash_exists=_bq_hash_exists,
+                known_lookup=_bq_known,
                 intake=_intake,
                 promote=(
                     _promote

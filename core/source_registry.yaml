@@ -1580,19 +1580,19 @@ sources:
     lifecycle: SNAPSHOT
     canonical_table: f_drive_inventory
     parser_module: ingest.drive_inventory
-    natural_key: [snapshot_date, file_id]
+    natural_key: [snapshot_date]
     loop_targets: [archivio_documentale]
     promotion_policy: AUTO
     detector_category: drive_inventory
     raw_storage:
       backend: gcs
       bucket: hotelops-raw
-      path_template: "drive/inventory/GROUP"
     notes: |
-      Non nasce da un file: il job legge l'API Drive e scrive direttamente la
-      canonical via bq_write_validated (I1). Il registry serve al contratto di
-      freschezza: se il job non gira, `health` lo dice come per ogni sorgente.
-      Draft non attivabile: completezza, provenienza e health da chiudere nella spec.
+      Il job conserva le risposte API in un JSON tramite intake GCS canonico:
+      gs://hotelops-raw/DRIVE_INVENTORY_GROUP_SNAPSHOT/YYYY/MM/drive-inventory.json
+      (generazione registrata). Ogni riga punta a observation_raw_object_id.
+      Pubblica atomicamente l'intera partizione del giorno, radici comprese;
+      --root parziale richiede --dry-run. Nessuna attivazione attestata.
       Radici nel file privato HOTELOPS_DRIVE_MAP; template pubblico vuoto.
     freshness:
       tier: M

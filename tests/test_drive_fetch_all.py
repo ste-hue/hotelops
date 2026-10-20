@@ -137,6 +137,11 @@ def test_cartella_tre_file_uno_noto_scarica_e_ingerisce_due(monkeypatch, tmp_pat
         _sd(),
         FakeSvc(files),
         hash_exists=lambda md5: md5 == "aaa",
+        known_lookup=lambda value, field: {
+            "raw_object_id": "raw-known",
+            "source_name": _sd().source_name,
+            "current_status": "PROMOTED",
+        },
         intake=intake,
         promote=lambda rid: (
             promoted.append(rid) or type("P", (), {"status": "PROMOTED"})()

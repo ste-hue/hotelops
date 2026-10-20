@@ -2,8 +2,8 @@
 """DDL idempotente per f_drive_inventory (fotografia giornaliera dell'albero Drive).
 
 Grana: giorno × oggetto Drive. PARTITION BY snapshot_date, CLUSTER BY root_key, md5.
-Lifecycle SNAPSHOT (natural_key snapshot_date, file_id) — scrive ingest.drive_inventory
-via bq_write_validated. Spec: docs/superpowers/specs/2026-10-17-drive-agent-friendly-design.md
+Lifecycle SNAPSHOT: atomic replacement of one complete DATE partition through
+bq_write_validated; unique objects by (snapshot_date, file_id), roots included. Spec: docs/superpowers/specs/2026-10-17-drive-agent-friendly-design.md
 
 Usage:
     python -m core.bq.load.create_drive_inventory_table
@@ -34,6 +34,14 @@ CREATE TABLE IF NOT EXISTS `{F_DRIVE_INVENTORY}` (
     parent_id            STRING,
     path                 STRING NOT NULL,
     root_key             STRING NOT NULL,
+    root_keys            ARRAY<STRING>,
+    inventory_root_keys  ARRAY<STRING>,
+    configured_roots     ARRAY<STRING>,
+    in_inbox_root        BOOL,
+    observer_email       STRING,
+    observed_at          TIMESTAMP,
+    observation_raw_object_id STRING,
+    permissions_observed BOOL,
     is_folder            BOOL NOT NULL,
     is_shortcut          BOOL NOT NULL,
     shortcut_target_id   STRING,
@@ -42,8 +50,23 @@ CREATE TABLE IF NOT EXISTS `{F_DRIVE_INVENTORY}` (
     raw_object_id        STRING
 )
 PARTITION BY snapshot_date
-CLUSTER BY root_key, md5
+CLUSTER BY root_key, md5;
 """
+# Upgrade any previously created draft table without rewriting old observations.
+# Old rows lack coverage/provenance and are excluded by v_drive_inventory_current.
+for column, kind in {
+    "root_keys": "ARRAY<STRING>",
+    "inventory_root_keys": "ARRAY<STRING>",
+    "configured_roots": "ARRAY<STRING>",
+    "in_inbox_root": "BOOL",
+    "observer_email": "STRING",
+    "observed_at": "TIMESTAMP",
+    "observation_raw_object_id": "STRING",
+    "permissions_observed": "BOOL",
+}.items():
+    DDL_F_DRIVE_INVENTORY += (
+        f"ALTER TABLE `{F_DRIVE_INVENTORY}` ADD COLUMN IF NOT EXISTS {column} {kind};\n"
+    )
 
 
 def main() -> int:

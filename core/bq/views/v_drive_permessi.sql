@@ -4,9 +4,6 @@
 
 CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_drive_permessi` AS
 
-WITH ultimo AS (
-  SELECT MAX(snapshot_date) AS snapshot_date FROM `hotelops-suite.hotelops.f_drive_inventory`
-)
 SELECT
   i.snapshot_date,
   i.file_id,
@@ -17,11 +14,11 @@ SELECT
   i.perm_anyone,
   i.perm_outside_domain,
   CASE
+    WHEN NOT COALESCE(i.permissions_observed, FALSE) THEN 'NON_OSSERVATI'
     WHEN i.perm_anyone THEN 'ANYONE'
     ELSE 'FUORI_DOMINIO'
   END AS esposizione,
   i.modified_time
-FROM `hotelops-suite.hotelops.f_drive_inventory` i
-JOIN ultimo USING (snapshot_date)
-WHERE i.perm_anyone OR ARRAY_LENGTH(i.perm_outside_domain) > 0
+FROM `hotelops-suite.hotelops.v_drive_inventory_current` i
+WHERE NOT COALESCE(i.permissions_observed, FALSE) OR i.perm_anyone OR ARRAY_LENGTH(i.perm_outside_domain) > 0
 ORDER BY i.perm_anyone DESC, i.path;
