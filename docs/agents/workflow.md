@@ -15,11 +15,15 @@ di `domain.md`, senza duplicare le fonti canoniche.
 
 ## Team e assegnazione
 
-Il team concordato è di quattro agenti: `coordinatore` (Codex), `regia`,
-`hotelops` e `knowledge` (Claude). Il coordinatore assegna risultati e dipendenze;
-`hotelops` cura il codice di questo repo. Il revisore deve essere un membro
-diverso dall'autore. Non creare altri agenti, merger o sotto-team automaticamente.
-`implement-spec`, `research` e `code-review` devono usare i membri disponibili;
+Il coordinatore assegna risultati e dipendenze; `hotelops` cura il codice di
+questo repo, `regia` il prodotto mgmt-os, `knowledge` la memoria, `researcher`
+le fonti, `tools` gli strumenti e le review indipendenti, `tester` il collaudo.
+Il `consigliere` aiuta Stefano a chiarire requisiti e decisioni, senza assegnare
+incarichi o autorizzare operazioni. Composizione e incarichi correnti sono nel
+[registro del team](https://github.com/ste-hue/mgmt-os/issues/52), non nel
+conteggio storico delle sessioni. Il revisore deve essere diverso dall'autore.
+Nuovi agenti o sotto-team richiedono un incarico esplicito.
+Le skill di implementazione, `research` e `code-review` usano i membri disponibili;
 in assenza di capacità, eseguire in sequenza o segnalare il limite al coordinatore.
 
 GitHub conserva incarichi e prove; Herdr è il terminale locale che ospita le sessioni
@@ -28,17 +32,23 @@ Prima dell'invio verificare ambiente Herdr, identità del destinatario, stato e
 prompt: non sovrascrivere bozze o dialoghi, né interrompere lavoro non concordato.
 Il trasporto non fornisce monitoraggio continuo o scheduler.
 
+Le precisazioni sullo stesso incarico possono arrivare durante il lavoro;
+cambi di perimetro e interruzioni di altri incarichi si coordinano col titolare.
+Prima di scrivere prodotto assegnato a un altro owner, il coordinatore registra
+il passaggio di titolarità. Ogni ricognizione ha un solo raccoglitore: risposta
+unica al destinatario indicato, senza rilanciare la domanda agli altri agenti.
+
 ## Ciclo di lavoro
 
 1. Leggere AGENTS, CLAUDE, STATUS, issue, specifiche e worktree già esistenti.
    Verificare remoto, branch, SHA e working tree. Non riaprire decisioni risolte.
-2. Usare `to-spec` / `to-tickets` se mancano risultato e incrementi verificabili;
-   `grill-with-docs` soltanto per questioni aperte. Per un fix circoscritto basta
-   il ticket con criteri chiari.
+2. Definire risultato e incrementi verificabili con le skill presenti nel
+   catalogo della sessione. Chiarire soltanto le decisioni aperte. Per un fix
+   circoscritto basta il ticket con criteri chiari.
 3. Registrare il claim del coordinatore prima delle modifiche. Un worktree per
    autore attivo, branch e base SHA espliciti. Non resettare worktree esistenti
    per seguire una ricetta; niente force push o cleanup del lavoro altrui.
-4. Implementare con `implement`, `tdd` o `diagnosing-bugs` secondo necessità.
+4. Implementare usando `tdd` o `diagnosing-bugs` quando pertinenti.
    Verificare comportamento e contratti; controlli proporzionati al cambiamento.
    Per soli documenti bastano diff e riferimenti, senza test artificiali.
    Non fare `pip install -e` nel worktree. Verificare che interpreter e import
@@ -90,7 +100,7 @@ Distinguere implementato, revisionato, integrato, pubblicato e verificato live.
 
 Installare il plugin ufficiale per client secondo il README upstream. Evitare
 copie manuali aggiuntive delle stesse skill. In Claude preferire il namespace
-`mattpocock-skills`, per esempio `/mattpocock-skills:implement`; in Codex
+`mattpocock-skills`, per esempio `/mattpocock-skills:code-review` se disponibile; in Codex
 selezionare la skill del plugin dal catalogo. Ricaricare le sessioni libere dopo
 l'installazione e verificare la disponibilità effettiva. Le skill omonime locali
 non vengono sovrascritte da questa configurazione.
