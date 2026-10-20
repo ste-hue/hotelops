@@ -153,6 +153,12 @@ def cmd_health(args):
     )
     print()
 
+    # ── DRIVE: inventario, duplicati, permessi, radice, lineage (core/drive_health.py)
+    from core import drive_health
+
+    print(drive_health.render_text(drive_health.compute(query)))
+    print()
+
     # Budget loaded
     rows = query("""
     SELECT fonte, COUNT(*) AS righe, COUNT(DISTINCT codice_conto) AS conti,

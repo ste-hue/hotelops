@@ -1,0 +1,8 @@
+# Public template only. Runtime Drive IDs belong in a private local YAML file.
+# Set HOTELOPS_DRIVE_MAP to its absolute path. Nothing is inventoried by default.
+# A configured root needs id and label; optional inbox_only defaults to false.
+# The literal Drive ID "root" belongs to the authenticated principal, not to
+# another user's Drive. Resolve the intended identity before configuring it.
+roots: {}
+folders: {}
+domain: ""

@@ -125,6 +125,35 @@ def intake_file(
         raise
 
 
+DRIVE_SYNC_ACTOR = "drive_sync"
+
+
+class DriveSingleWriterError(PermissionError):
+    """Un file di una sorgente Drive è entrato fuori dal job drive_fetch."""
+
+
+def _enforce_single_drive_writer(source_def, actor: str) -> None:
+    """Un solo scrittore sugli intake Drive (spec 2026-10-17 drive-agent-friendly).
+
+    Le sorgenti con drive_file_id/drive_folder_id entrano in f_raw_objects solo
+    tramite il job drive_fetch (actor "drive_sync"). Una sessione interattiva
+    che prova a fare intake di quel file lascia il file nella cartella di
+    atterraggio e aspetta il giro successivo: è la porta che chiude le doppie
+    registrazioni del 16/10.
+    """
+    # `is True`: i test passano source_def finti (Mock) i cui attributi sono truthy.
+    if (
+        getattr(source_def, "is_drive_source", False) is True
+        and actor != DRIVE_SYNC_ACTOR
+    ):
+        raise DriveSingleWriterError(
+            f"{source_def.source_name}: sorgente Drive, intake riservato al job "
+            f"drive_fetch (actor={actor!r}). Metti il file nella cartella di "
+            "atterraggio e aspetta il giro, oppure lancia "
+            f"`python -m ingest.drive_fetch --source-name {source_def.source_name}`."
+        )
+
+
 def _intake_file_core(
     path: Path,
     source_name: Optional[str] = None,
@@ -143,6 +172,7 @@ def _intake_file_core(
         if source_def is None:
             raise KeyError(f"source_name not in registry: {source_name}")
         enforce_loop_target_gate_consistency(source_def)
+        _enforce_single_drive_writer(source_def, actor)
 
     # Dedup-before-upload (spec §3 D8 paragraph 1).
     # Probe content_hash on f_raw_objects BEFORE invoking the storage backend:

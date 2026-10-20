@@ -1132,6 +1132,48 @@ class CopertoGiornalieroRow(BaseModel):
     raw_object_id: Optional[str] = None
 
 
+# ── drive inventory (spec 2026-10-17 drive-agent-friendly) ─────────────────
+
+
+class DriveInventoryRow(BaseModel):
+    """Schema for f_drive_inventory: una fotografia al giorno dell'albero Drive.
+
+    One row per (snapshot_date, file_id); publication replaces the whole DATE
+    partition, only after all configured roots were observed. Root rows also
+    represent empty trees. raw_object_id bridges the file's content by MD5;
+    observation_raw_object_id identifies the GCS raw JSON of this API scan.
+    Missing permission metadata is unknown, never an observed empty list.
+    """
+
+    snapshot_date: date
+    file_id: str
+    name: str
+    mime_type: str
+    size_bytes: Optional[int] = None
+    md5: Optional[str] = None
+    sha256: Optional[str] = None
+    modified_time: Optional[datetime] = None
+    created_time: Optional[datetime] = None
+    owner_email: Optional[str] = None
+    parent_id: Optional[str] = None
+    path: str
+    root_key: str
+    root_keys: list[str] = Field(default_factory=list)
+    inventory_root_keys: list[str] = Field(default_factory=list)
+    configured_roots: list[str] = Field(default_factory=list)
+    in_inbox_root: bool = False
+    observer_email: str | None = None
+    observed_at: datetime | None = None
+    observation_raw_object_id: str | None = None
+    is_folder: bool = False
+    is_shortcut: bool = False
+    shortcut_target_id: Optional[str] = None
+    permissions_observed: bool = False
+    perm_anyone: bool = False
+    perm_outside_domain: list[str] = Field(default_factory=list)
+    raw_object_id: Optional[str] = None
+
+
 # ── projects (event-sourced Step 1) ──────────────────────────────────────────
 
 

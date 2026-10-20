@@ -2,7 +2,11 @@
 """Il registry reale rispetta il freshness contract (spec 2026-09-09 §3, §9)."""
 
 from collections import defaultdict
+from datetime import UTC, date, datetime
 
+import pytest
+
+from core import freshness
 from core.lineage.source_resolver import load_registry
 
 
@@ -46,6 +50,7 @@ def test_auto_solo_dove_esiste_un_job():
         "PEC_MAILBOX_INTUR_APPEND": "pec_fetch",
         "PEC_MAILBOX_ORTI_APPEND": "pec_fetch",
         "PEC_MAILBOX_VIGNA_APPEND": "pec_fetch",
+        "DRIVE_INVENTORY_GROUP_SNAPSHOT": "drive_inventory",
     }
     auto = {
         sd.source_name: sd.acquisition.job
@@ -87,3 +92,55 @@ def test_dims_banca_id_hanno_sempre_dim_filter():
         assert fc.dim_filter.get("banca_id"), (
             f"{sd.source_name}: dims include banca_id senza dim_filter"
         )
+
+
+@pytest.mark.parametrize("last_intake", [None, date(2026, 10, 20)])
+def test_inventory_raw_freshness_does_not_query_its_canonical_table(last_intake):
+    """Actual registry + query builder; no inventory table or societa_id required."""
+    inventory = "DRIVE_INVENTORY_GROUP_SNAPSHOT"
+    now = datetime(2026, 10, 20, 10, tzinfo=UTC)
+    covered = date(2026, 10, 18)
+    calls = []
+
+    def query(sql):
+        calls.append(sql)
+        if "hotelops.f_drive_inventory" in sql:
+            raise RuntimeError("inventory table/societa_id unavailable: " + sql)
+        if sql == freshness.RAW_SQL:
+            return (
+                [{"source_name": inventory, "last_intake": last_intake}]
+                if last_intake
+                else []
+            )
+        if sql == freshness.JOBS_SQL:
+            return [
+                {"pipeline_name": "ingest_coperti", "last_ok": now},
+                {
+                    "pipeline_name": "drive_fetch:RT_CORRISPETTIVISPIAGGIA_INTUR_SNAPSHOT",
+                    "last_ok": now,
+                },
+            ]
+        if "FROM hotelops.f_spiaggia_corrispettivi " in sql:
+            return [{"societa_id": "INTUR", "covered": covered}]
+        if "FROM hotelops.f_coperti_giornalieri " in sql:
+            return [{"societa_id": "ORTI", "covered": covered}]
+        return []
+
+    items = {i.source_name: i for i in freshness.compute(_reg(), query, now=now)}
+    item = items[inventory]
+    assert item.basis == "raw" and item.covered_through == last_intake
+    assert item.last_raw_at == last_intake and item.per_dim == []
+    assert item.status == ("NO_RECEIPT" if last_intake else "JOB_DOWN")
+    assert not any("hotelops.f_drive_inventory" in sql for sql in calls)
+    assert (
+        "SELECT societa_id, MAX(data) AS covered FROM hotelops.f_spiaggia_corrispettivi GROUP BY 1"
+        in calls
+    )
+    assert (
+        "SELECT societa_id, MAX(data_servizio) AS covered FROM hotelops.f_coperti_giornalieri GROUP BY 1"
+        in calls
+    )
+    for name in ("RT_CORRISPETTIVISPIAGGIA_INTUR_SNAPSHOT", "ORTI_COPERTI_ORTI_APPEND"):
+        assert items[name].basis == "canonical"
+        assert items[name].covered_through == covered
+        assert items[name].status == "OK"

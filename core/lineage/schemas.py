@@ -215,7 +215,14 @@ class SourceDefinition(BaseModel):
     input_formats: list[Literal["mbox", "eml"]] = Field(
         default_factory=lambda: ["mbox"]
     )
+    # Sorgenti acquisite da Drive (spec 2026-10-17 drive-agent-friendly):
+    # esattamente uno tra drive_file_id (file vivo a identità fissa) e
+    # drive_folder_id (cartella di atterraggio: ogni file nuovo per MD5 è un
+    # intake). drive_export_mime serve solo ai file nativi Google, che non
+    # hanno md5Checksum: senza, il file viene inventariato ma non acquisito.
     drive_file_id: Optional[str] = None
+    drive_folder_id: Optional[str] = None
+    drive_export_mime: Optional[str] = None
     imap: Optional[ImapMailbox] = None
     notes: Optional[str] = None
     freshness: Optional[FreshnessContract] = None
@@ -234,6 +241,24 @@ class SourceDefinition(BaseModel):
                 f"{self.source_name}: sorgente PEC richiede casella ed entity_id"
             )
         return self
+
+    @model_validator(mode="after")
+    def _drive_un_solo_id_e_raw_su_gcs(self):
+        if self.drive_file_id and self.drive_folder_id:
+            raise ValueError(
+                f"{self.source_name}: drive_file_id e drive_folder_id sono alternativi"
+            )
+        if (self.drive_file_id or self.drive_folder_id) and (
+            self.raw_storage.backend != "gcs"
+        ):
+            raise ValueError(
+                f"{self.source_name}: sorgente Drive richiede raw_storage.backend gcs (I9)"
+            )
+        return self
+
+    @property
+    def is_drive_source(self) -> bool:
+        return bool(self.drive_file_id or self.drive_folder_id)
 
     @model_validator(mode="after")
     def _raw_only_usa_basis_raw(self):

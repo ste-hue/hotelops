@@ -78,6 +78,8 @@ conversation, then keep entries concise.
   `hotelops manifest`.
 - Source registry: `core/source_registry.yaml`.
 - Architecture docs and ADRs: `docs/architecture/`, `docs/adr/`.
+- Drive inventory publication, visibility and raw provenance:
+  `docs/superpowers/specs/2026-10-17-drive-agent-friendly-design.md`.
 
 Durable domain facts that matter often:
 

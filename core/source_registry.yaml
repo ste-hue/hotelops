@@ -1571,6 +1571,41 @@ sources:
       format: json
 
   # ── Registro Corrispettivi Spiaggia INTUR — SNAPSHOT ─────────────────────
+  DRIVE_INVENTORY_GROUP_SNAPSHOT:
+    system: DRIVE
+    dataset: INVENTORY
+    dataset_label: "Fotografia giornaliera dell'albero Drive (metadati, hash, permessi)"
+    societa: GROUP
+    business_unit: null
+    lifecycle: SNAPSHOT
+    canonical_table: f_drive_inventory
+    parser_module: ingest.drive_inventory
+    natural_key: [snapshot_date]
+    loop_targets: [archivio_documentale]
+    promotion_policy: AUTO
+    detector_category: drive_inventory
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+    notes: |
+      Il job conserva le risposte API in un JSON tramite intake GCS canonico:
+      gs://hotelops-raw/DRIVE_INVENTORY_GROUP_SNAPSHOT/YYYY/MM/drive-inventory.json
+      (generazione registrata). Ogni riga punta a observation_raw_object_id.
+      Pubblica atomicamente l'intera partizione del giorno, radici comprese;
+      --root parziale richiede --dry-run. Nessuna attivazione attestata.
+      Radici nel file privato HOTELOPS_DRIVE_MAP; template pubblico vuoto.
+    freshness:
+      tier: M
+      cadence: daily
+      grain: daily
+      basis: raw
+    acquisition:
+      mode: AUTO
+      owner: job
+      location: "Google Drive (API v3, drive-audit@)"
+      report: "inventario radici configurate privatamente via HOTELOPS_DRIVE_MAP"
+      job: "drive_inventory"
+
   RT_CORRISPETTIVISPIAGGIA_INTUR_SNAPSHOT:
     system: RT
     dataset: CORRISPETTIVISPIAGGIA
