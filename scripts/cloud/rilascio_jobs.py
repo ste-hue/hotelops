@@ -325,6 +325,9 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--inventario", type=Path, default=None)
         if verbo == "piano":
             p.add_argument("--tag", required=True, help="il riferimento appena costruito")
+            # Il workflow legge i comandi da qui invece di ricostruirli: due
+            # posti che derivano lo stesso comando divergono al primo cambio.
+            p.add_argument("--json", action="store_true", help="il piano come dati")
         else:
             p.add_argument("--digest", required=True)
     args = genitore.parse_args(argv)
@@ -334,7 +337,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.verbo == "piano":
         riferimento = f"{inventario['immagine']}:{args.tag}"
         p = piano(cloud, inventario, args.job, riferimento, _commit())
-        stampa_piano(p)
+        if args.json:
+            print(json.dumps(p, indent=1, ensure_ascii=False))
+        else:
+            stampa_piano(p)
         return 1 if p["rifiuti"] or not p["job"] else 0
 
     uscita = 0

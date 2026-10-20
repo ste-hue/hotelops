@@ -1,22 +1,41 @@
-# Build dell'immagine batch (Dockerfile.jobs) + aggiornamento dei 4 Cloud Run Jobs
-# al tag mobile jobs:prod (STD-03). Trigger manuale: i job sono pinnati deliberatamente,
-# l'aggiornamento è una decisione, non un side-effect di ogni push.
-# Rollback: gcloud run jobs update <job> --image=...europe-west1-docker.pkg.dev/hotelops-suite/hotelops/jobs:<tag-precedente>
+# Build dell'immagine batch (Dockerfile.jobs) e aggiornamento dei Cloud Run Job
+# SCELTI, a un digest immutabile.
+#
+# Com'era: aggiornava quattro job a `jobs:prod`, un tag mobile, con una lista
+# scritta a mano nel workflow. pec-fetch non c'era — ed è il job la cui
+# ricevuta mancava da settimane. Non c'era modo di sapere a quale immagine un
+# job stesse girando, né come riportarlo indietro.
+#
+# Com'è: i job stanno in infra/jobs.yaml insieme al loro entrypoint e alla
+# ricevuta attesa; quali aggiornare si sceglie a ogni rilascio (il pilota è
+# pec-fetch); l'immagine viene riferita per digest, non per tag; e prima di
+# toccare qualcosa il piano dice da dove si tornerebbe — fermandosi se non lo
+# sa. Runbook: docs/architecture/runtime-jobs.md.
 name: deploy-jobs
 
 on:
   workflow_dispatch:
+    inputs:
+      job:
+        description: "Job da aggiornare, separati da spazio (devono stare in infra/jobs.yaml)"
+        default: pec-fetch
+        required: true
 
 concurrency: deploy-jobs
 
 jobs:
-  build-and-update:
+  rilascia:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pyyaml
 
       - uses: google-github-actions/auth@v2
         with:
@@ -25,20 +44,85 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Build jobs image (Cloud Build)
+      # Tag datato e legato al commit: non viene riusato, quindi non si sposta
+      # sotto i piedi di nessuno. L'ancora vera resta però il digest, che si
+      # risolve subito dopo la build.
+      - name: Build dell'immagine e digest
         run: |
-          IMAGE=europe-west1-docker.pkg.dev/hotelops-suite/hotelops/jobs:prod
+          set -euo pipefail
+          IMMAGINE=$(python -c "import yaml;print(yaml.safe_load(open('infra/jobs.yaml'))['immagine'])")
+          TAG="prod-$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_SHA::12}"
           cat > /tmp/cloudbuild-jobs.yaml <<EOF
           steps:
             - name: gcr.io/cloud-builders/docker
-              args: ['build','-f','Dockerfile.jobs','-t','${IMAGE}','.']
-          images: ['${IMAGE}']
+              args: ['build','-f','Dockerfile.jobs','-t','${IMMAGINE}:${TAG}','.']
+          images: ['${IMMAGINE}:${TAG}']
           EOF
           gcloud builds submit --project=hotelops-suite --config=/tmp/cloudbuild-jobs.yaml .
+          DIGEST=$(gcloud artifacts docker images describe "${IMMAGINE}:${TAG}" \
+            --project=hotelops-suite --format='value(image_summary.digest)')
+          test -n "$DIGEST"
+          echo "immagine: ${IMMAGINE}:${TAG}"
+          echo "digest:   ${DIGEST}"
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+          echo "DIGEST=${DIGEST}" >> "$GITHUB_ENV"
 
-      - name: Point jobs at jobs:prod
+      # Il piano si ferma da sé se un job non è nell'inventario, se la
+      # destinazione non si risolve, o se non sa da dove si tornerebbe.
+      - name: Piano (nessun job viene toccato in questo passo)
         run: |
-          IMAGE=europe-west1-docker.pkg.dev/hotelops-suite/hotelops/jobs:prod
-          for J in reviews-scrape reviews-report spiaggia-corrispettivi coperti; do
-            gcloud run jobs update "$J" --project=hotelops-suite --region=europe-west1 --image="$IMAGE"
-          done
+          set -euo pipefail
+          ARG=()
+          for J in ${{ inputs.job }}; do ARG+=(--job "$J"); done
+          python -m scripts.cloud.rilascio_jobs piano --tag "$TAG" "${ARG[@]}"
+          python -m scripts.cloud.rilascio_jobs piano --json --tag "$TAG" "${ARG[@]}" > /tmp/piano.json
+
+      # I comandi si leggono dal piano, non si ricostruiscono qui: due posti
+      # che derivano lo stesso comando divergono al primo cambiamento.
+      - name: Aggiorna i job scelti
+        run: |
+          set -euo pipefail
+          python - <<'PY' > /tmp/comandi.sh
+          import json
+          p = json.load(open("/tmp/piano.json"))
+          for j in p["job"]:
+              print(j["aggiorna"])
+          PY
+          cat /tmp/comandi.sh
+          bash -euo pipefail /tmp/comandi.sh
+
+      # Il job non viene eseguito da qui: la ricevuta si verifica dopo la prima
+      # esecuzione schedulata, e il comando per farlo è questo.
+      - name: Che cosa resta da verificare, e come
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          p = json.load(open("/tmp/piano.json"))
+          print(f"digest rilasciato: {p['digest_destinazione']}")
+          for j in p["job"]:
+              print()
+              print(f"{j['nome']}: aggiornato. Non è stato eseguito da questo rilascio.")
+              print(f"  ricevuta attesa:  {j['ricevuta_attesa'] or '<nessuna, dichiarato>'}")
+              print("  dopo la prima esecuzione schedulata, verifica con:")
+              print(f"    python -m scripts.cloud.rilascio_jobs verifica --job {j['nome']} --digest {p['digest_destinazione']}")
+              print("  per tornare indietro:")
+              print(f"    {j['torna_indietro']}")
+          print()
+          print(f"limite: {p['limite']}")
+          PY
+
+      - name: Come tornare indietro (se un passo è fallito)
+        if: failure()
+        run: |
+          if [ ! -s /tmp/piano.json ]; then
+            echo "Nessun piano acquisito: il fallimento è arrivato prima, quindi nessun job è stato"
+            echo "aggiornato da questa run e non c'è niente da ripristinare."
+            exit 0
+          fi
+          echo "I job possono essere stati aggiornati. Comandi di ritorno dal piano:"
+          python -c "
+          import json
+          for j in json.load(open('/tmp/piano.json'))['job']:
+              print('  ' + j['torna_indietro'])
+          "
