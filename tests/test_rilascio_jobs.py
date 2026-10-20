@@ -43,8 +43,12 @@ class CloudFinto:
         return self._righe
 
 
-def esecuzione(nome, digest, fine="2026-10-20T02:01:00Z"):
-    return {"nome": nome, "immagine": f"{IMMAGINE}@{digest}", "inizio": "2026-10-20T02:00:00Z", "fine": fine}
+def esecuzione(nome, digest, fine="2026-10-20T02:01:00Z", riuscite=1, fallite=0):
+    return {
+        "nome": nome, "immagine": f"{IMMAGINE}@{digest}",
+        "inizio": "2026-10-20T02:00:00Z", "fine": fine,
+        "riuscite": riuscite, "fallite": fallite,
+    }
 
 
 def cloud_in_ordine(**extra):
@@ -74,7 +78,9 @@ def test_il_piano_del_pilota_tiene_distinti_i_tre_stati():
     assert j["digest_osservato"] == VECCHIO
     # Lo stato che il ritorno ripristina è la configurazione attuale risolta,
     # non «l'ultimo che ha girato»: qui coincidono, ed è per questo che vale.
-    assert j["ripristina_stato"] == VECCHIO
+    # E comprende il repository, non solo il digest.
+    assert j["repository_configurato"] == IMMAGINE
+    assert j["ripristina_stato"] == f"{IMMAGINE}@{VECCHIO}"
     assert f"--image={IMMAGINE}@{NUOVO}" in j["aggiorna"]
     assert f"--image={IMMAGINE}@{VECCHIO}" in j["torna_indietro"]
     assert j["ricevuta_attesa"] == "pec_fetch"
@@ -194,7 +200,8 @@ def test_verifica_della_ricevuta_distingue_i_tre_esiti(caso, righe, atteso):
         esecuzione={"pec-fetch": esecuzione("pec-fetch-nuova", NUOVO)}, righe=righe
     )
     esito = fai_verifica(cloud)
-    assert stati(esito) == ["OK", atteso], caso
+    # «NOTA» chiude la lista perché pec-fetch ha un entrypoint a due fasi.
+    assert stati(esito) == ["OK", atteso, "NOTA"], caso
     assert cloud.ricevute_chieste == [("pec_fetch", "2026-10-20T02:00:00Z", "2026-10-20T02:01:00Z")]
     if atteso == "MANCA":
         # Non deve concludere la causa: writer assente e permesso negato
@@ -221,3 +228,70 @@ def test_esecuzione_non_conclusa_resta_ignota():
     esito = fai_verifica(cloud)
     assert stati(esito) == ["OK", "IGNOTO"]
     assert cloud.ricevute_chieste == []
+
+
+def test_il_ritorno_conserva_il_repository_da_cui_il_job_pescava():
+    """Appendere il digest al repository di DESTINAZIONE sarebbe un terzo stato
+    anche con il digest giusto: il job tornerebbe a un'altra provenienza."""
+    altro = "europe-west1-docker.pkg.dev/hotelops-suite/legacy/jobs"
+    cloud = cloud_in_ordine(
+        configurata={"pec-fetch": f"{altro}:v5"},
+        digesti={f"{altro}:v5": VECCHIO, f"{IMMAGINE}:nuovo": NUOVO},
+    )
+    p = fai_piano(cloud)
+    assert p["rifiuti"] == []
+    j = p["job"][0]
+    assert j["repository_configurato"] == altro
+    assert f"--image={altro}@{VECCHIO}" in j["torna_indietro"]
+    # L'aggiornamento va comunque al repository dell'inventario: è lì che la
+    # nuova immagine è stata costruita.
+    assert f"--image={IMMAGINE}@{NUOVO}" in j["aggiorna"]
+
+
+def test_l_esecuzione_fallita_non_passa_per_buona():
+    """Digest giusto e ricevuta presente non dicono che il lavoro sia andato
+    bene: l'esito dell'esecuzione è un'affermazione a parte."""
+    cloud = cloud_in_ordine(
+        esecuzione={"pec-fetch": esecuzione("pec-fetch-ko", NUOVO, riuscite=0, fallite=1)},
+        righe=[{"status": "FAIL"}],
+    )
+    esito = fai_verifica(cloud)
+    assert "ESECUZIONE_FALLITA" in stati(esito)
+    assert "CORRELATA_NON_RIUSCITA" in stati(esito)
+
+
+def test_una_ricevuta_fallita_non_e_un_successo():
+    cloud = cloud_in_ordine(
+        esecuzione={"pec-fetch": esecuzione("pec-fetch-x", NUOVO)}, righe=[{"status": "FAIL"}]
+    )
+    esito = fai_verifica(cloud)
+    assert stati(esito) == ["OK", "CORRELATA_NON_RIUSCITA", "NOTA"]
+    assert "la ricevuta c'è, il lavoro no" in esito["esiti"][1][1]
+
+
+def test_esecuzione_senza_esito_leggibile_resta_ignota():
+    cloud = cloud_in_ordine(
+        esecuzione={"pec-fetch": esecuzione("pec-fetch-?", NUOVO, riuscite=0, fallite=0)},
+        righe=[{"status": "OK"}],
+    )
+    assert "ESECUZIONE_IGNOTA" in stati(fai_verifica(cloud))
+
+
+def test_la_nota_dice_che_la_ricevuta_copre_solo_la_prima_fase():
+    """pec-fetch è `fetch && classify`: pec_fetch attesta il fetch, non il
+    classify che lo segue."""
+    cloud = cloud_in_ordine(
+        esecuzione={"pec-fetch": esecuzione("pec-fetch-ok", NUOVO)}, righe=[{"status": "OK"}]
+    )
+    nota = [m for s, m in fai_verifica(cloud)["esiti"] if s == "NOTA"]
+    assert nota and "attesta solo la prima" in nota[0]
+    assert "classify" in nota[0] or "pec_fetch" in nota[0]
+
+
+def test_un_job_a_una_sola_fase_non_porta_la_nota():
+    cloud = CloudFinto(
+        configurata={"coperti": f"{IMMAGINE}:v5"},
+        esecuzione={"coperti": esecuzione("coperti-1", NUOVO)},
+        digesti={}, righe=[{"status": "OK"}],
+    )
+    assert stati(verifica(cloud, INVENTARIO, "coperti", NUOVO)) == ["OK", "PLAUSIBILE"]

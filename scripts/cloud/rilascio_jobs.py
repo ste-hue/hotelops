@@ -82,16 +82,22 @@ class Cloud:
         """
         righe = self._gcloud(
             "run", "jobs", "executions", "list", f"--job={job}", f"--region={self.regione}",
-            "--limit=1", "--format=value[separator=|](metadata.name,status.startTime,status.completionTime)",
+            "--limit=1",
+            "--format=value[separator=|](metadata.name,status.startTime,status.completionTime,"
+            "status.succeededCount,status.failedCount)",
         )
         if not righe:
             return None
-        nome, inizio, fine = (righe.split("|") + ["", "", ""])[:3]
+        nome, inizio, fine, riuscite, fallite = (righe.split("|") + [""] * 5)[:5]
         immagine = self._gcloud(
             "run", "jobs", "executions", "describe", nome, f"--region={self.regione}",
             "--format=value(spec.template.spec.containers[0].image)",
         )
-        return {"nome": nome, "immagine": immagine, "inizio": inizio, "fine": fine}
+        return {
+            "nome": nome, "immagine": immagine, "inizio": inizio, "fine": fine,
+            "riuscite": int(riuscite) if riuscite.strip().isdigit() else 0,
+            "fallite": int(fallite) if fallite.strip().isdigit() else 0,
+        }
 
     def digest(self, immagine_con_tag: str) -> str | None:
         """Risolve un riferimento in `sha256:...`, o None se non esiste."""
@@ -182,6 +188,12 @@ def piano(cloud, inventario: dict, scelti: list[str], riferimento: str, commit: 
             if "@" in configurata
             else cloud.digest(configurata)
         )
+        # Il ritorno deve riportare anche al REPOSITORY da cui il job stava
+        # pescando: appendere il digest al repository di destinazione sarebbe
+        # un terzo stato anche quando il digest è quello giusto.
+        repository_configurato = (
+            configurata.split("@", 1)[0] if "@" in configurata else configurata.rsplit(":", 1)[0]
+        )
         esecuzione = cloud.ultima_esecuzione(nome)
         osservato_immagine = (esecuzione or {}).get("immagine") or ""
         osservato = osservato_immagine.split("@", 1)[1] if "@" in osservato_immagine else None
@@ -216,14 +228,15 @@ def piano(cloud, inventario: dict, scelti: list[str], riferimento: str, commit: 
             "esecuzione_osservata": esecuzione["nome"],
             # Coincidono: ripristinare questo digest riporta davvero alla
             # configurazione da cui si parte, e non a uno stato inventato.
-            "ripristina_stato": risolto,
+            "repository_configurato": repository_configurato,
+            "ripristina_stato": f"{repository_configurato}@{risolto}",
             "aggiorna": (
                 f"gcloud run jobs update {nome} --project={progetto} --region={regione} "
                 f"--image={immagine_destinazione}"
             ),
             "torna_indietro": (
                 f"gcloud run jobs update {nome} --project={progetto} --region={regione} "
-                f"--image={inventario['immagine']}@{risolto}"
+                f"--image={repository_configurato}@{risolto}"
             ),
         })
     return esito
@@ -265,6 +278,20 @@ def verifica(cloud, inventario: dict, nome: str, digest_atteso: str) -> dict:
         esito["esiti"].append(("IGNOTO", f"{esecuzione['nome']} non è conclusa: la ricevuta si cerca dopo"))
         return esito
 
+    # L'esito dell'ESECUZIONE è un'affermazione a parte: il digest giusto e una
+    # ricevuta presente non dicono che il lavoro sia andato a buon fine.
+    if esecuzione.get("fallite"):
+        esito["esiti"].append((
+            "ESECUZIONE_FALLITA",
+            f"{esecuzione['nome']}: {esecuzione['fallite']} task falliti",
+        ))
+    elif not esecuzione.get("riuscite"):
+        esito["esiti"].append((
+            "ESECUZIONE_IGNOTA",
+            f"{esecuzione['nome']}: nessun task riuscito e nessuno fallito, esito non leggibile",
+        ))
+
+
     righe = cloud.ricevute(ricevuta, esecuzione["inizio"], esecuzione["fine"])
     if not righe:
         esito["esiti"].append((
@@ -274,14 +301,38 @@ def verifica(cloud, inventario: dict, nome: str, digest_atteso: str) -> dict:
             "nell'immagine o il permesso negato, e questo controllo non li distingue",
         ))
     elif len(righe) == 1:
-        esito["esiti"].append((
-            "PLAUSIBILE",
-            f"una riga «{ricevuta}» ({righe[0].get('status')}) nella finestra di {esecuzione['nome']}",
-        ))
+        # Correlazione e successo sono due affermazioni diverse: una riga
+        # trovata dice che il writer ha funzionato, non che il lavoro sia
+        # andato bene. Un FAIL correlato è un esito peggiore di un silenzio,
+        # non uguale a un OK.
+        stato_riga = (righe[0].get("status") or "").upper()
+        if stato_riga == "OK":
+            esito["esiti"].append((
+                "PLAUSIBILE",
+                f"una riga «{ricevuta}» OK nella finestra di {esecuzione['nome']}",
+            ))
+        else:
+            esito["esiti"].append((
+                "CORRELATA_NON_RIUSCITA",
+                f"una riga «{ricevuta}» nella finestra di {esecuzione['nome']}, ma dichiara "
+                f"status {stato_riga or '<vuoto>'}: la ricevuta c'è, il lavoro no",
+            ))
     else:
         esito["esiti"].append((
             "AMBIGUO",
             f"{len(righe)} righe «{ricevuta}» nella finestra: non so quale appartenga a questa esecuzione",
+        ))
+
+    # Commento finale su quanto vale l'esito appena dato: un entrypoint a più
+    # comandi fa attestare alla ricevuta solo la prima fase, e chi legge
+    # «PLAUSIBILE» non deve concludere che tutto il job sia andato bene.
+    comando = " ".join(per_nome[nome]["entrypoint"]["args"])
+    if "&&" in comando:
+        fasi = [f.strip() for f in comando.split("&&")]
+        esito["esiti"].append((
+            "NOTA",
+            f"l'entrypoint ha {len(fasi)} fasi e «{ricevuta}» attesta solo la prima "
+            f"(«{fasi[0]}»): l'esito delle successive non è in f_pipeline_runs",
         ))
     return esito
 
@@ -305,7 +356,8 @@ def stampa_piano(p: dict) -> None:
         print()
         print(f"  {j['nome']}")
         print(f"    configurato ora:  {j['immagine_configurata']}")
-        print(f"    risolve a:        {j['digest_configurato']}   <- lo stato che un ritorno ripristina")
+        print(f"    risolve a:        {j['digest_configurato']}")
+        print(f"    ripristina:       {j['ripristina_stato']}   <- lo stato da cui si parte, repository compreso")
         print(f"    ultima esecuzione: {j['digest_osservato']}  (da {j['esecuzione_osservata']}) — coincide")
         print(f"    ricevuta attesa:  {j['ricevuta_attesa'] or '<nessuna, dichiarato>'}")
         print(f"    aggiorna:         {j['aggiorna']}")
@@ -328,6 +380,11 @@ def main(argv: list[str] | None = None) -> int:
             # Il workflow legge i comandi da qui invece di ricostruirli: due
             # posti che derivano lo stesso comando divergono al primo cambio.
             p.add_argument("--json", action="store_true", help="il piano come dati")
+            # Una sola fotografia: scrive il JSON e stampa il testo ricavato
+            # dallo STESSO dizionario. Due invocazioni leggerebbero il cloud
+            # due volte, e il testo potrebbe descrivere uno stato diverso dai
+            # comandi che poi vengono eseguiti.
+            p.add_argument("--salva", type=Path, default=None, help="dove scrivere il piano")
         else:
             p.add_argument("--digest", required=True)
     args = genitore.parse_args(argv)
@@ -337,18 +394,25 @@ def main(argv: list[str] | None = None) -> int:
     if args.verbo == "piano":
         riferimento = f"{inventario['immagine']}:{args.tag}"
         p = piano(cloud, inventario, args.job, riferimento, _commit())
+        if args.salva:
+            args.salva.write_text(json.dumps(p, indent=1, ensure_ascii=False), encoding="utf-8")
         if args.json:
             print(json.dumps(p, indent=1, ensure_ascii=False))
         else:
             stampa_piano(p)
         return 1 if p["rifiuti"] or not p["job"] else 0
 
+    if not args.job:
+        print("FERMO: nessun job chiesto. `verifica` controlla i job che le indichi.", file=sys.stderr)
+        return 2
     uscita = 0
     for nome in args.job:
         esito = verifica(cloud, inventario, nome, args.digest)
         for stato, messaggio in esito["esiti"]:
             print(f"[{stato}] {messaggio}")
-            if stato in ("ERRORE", "DIVERSO", "MANCA", "AMBIGUO"):
+            # IGNOTO compreso: un controllo che non ha potuto concludere non
+            # e' un controllo superato, e uscire 0 lo farebbe passare per tale.
+            if stato not in ("OK", "ATTESO", "PLAUSIBILE", "NOTA"):
                 uscita = 1
         print(f"limite: {esito['limite']}")
     return uscita

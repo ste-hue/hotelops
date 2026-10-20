@@ -37,6 +37,15 @@ def ricevute_dichiarate():
     return {j["nome"]: j["ricevuta"] for j in JOB}
 
 
+def test_ogni_job_ha_un_percorso_dichiarato():
+    """Nessun job senza il punto del codice da ispezionare: se ne nasce uno
+    nuovo, questo test chiede di dichiararlo invece di lasciarlo scoperto."""
+    assert set(PERCORSI) == set(NOMI), (
+        f"percorsi non dichiarati: {set(NOMI) - set(PERCORSI)}; "
+        f"di troppo: {set(PERCORSI) - set(NOMI)}"
+    )
+
+
 def test_ogni_job_e_descritto_per_intero():
     """Un campo assente non è verificabile: qui si pretende che ci sia."""
     assert NOMI, "inventario vuoto"
@@ -84,45 +93,109 @@ def test_l_immagine_non_e_pinnata_nell_inventario():
         assert osservato.get("il"), f"{j['nome']}: l'osservazione va datata"
 
 
-@pytest.mark.parametrize("nome,ricevuta", sorted(ricevute_dichiarate().items()))
-def test_la_ricevuta_dichiarata_corrisponde_al_codice(nome, ricevuta):
-    """Il controllo centrale, nei due versi.
+# ── Dal flag dell'entrypoint al punto esatto che apre la ricevuta ───────────
+# Cercare `PipelineRun("reviews_scrape")` in tutto il repo è un falso verde:
+# resta verde anche se il job viene instradato su `--report`, che quella
+# ricevuta non la scrive. Tabella esplicita per i sei percorsi che esistono,
+# non un analizzatore generico: il file e, dove un flag discrimina, la
+# funzione raggiunta.
+import ast
+import re
 
-    Se l'inventario dichiara una ricevuta, nel repo deve esserci il
-    `PipelineRun` che la scrive. Se dichiara `null`, non deve esserci: così un
-    null messo per distrazione viene fuori qui e non dopo mesi di silenzio.
-    """
-    if ricevuta is None:
-        return  # il viceversa si verifica una volta sola, nel test seguente
-    prefisso = ricevuta.split(":")[0] if ":" in ricevuta else ricevuta
-    # Nome composto (`drive_fetch:<source>`): nel codice è una f-string, quindi
-    # si cerca il prefisso; nome semplice: si cerca la stringa esatta.
-    attesi = (
-        [f'PipelineRun(\n            f"{prefisso}:', f'PipelineRun(f"{prefisso}:']
-        if ":" in ricevuta
-        else [f'PipelineRun("{ricevuta}"', f'PipelineRun(\n        "{ricevuta}"']
-    )
-    trovato = any(a in testo for testo in SORGENTI.values() for a in attesi)
-    assert trovato, f"{nome}: dichiara la ricevuta «{ricevuta}» ma nessun PipelineRun la scrive"
+PERCORSI = {
+    # job: (file che deve contenere il PipelineRun, funzione o None per tutto il file)
+    "pec-fetch": ("ingest/pec_fetch.py", None),
+    "coperti": ("ingest/flussi/ingest_coperti.py", None),
+    "spiaggia-corrispettivi": ("ingest/drive_fetch.py", None),
+    "reviews-scrape": ("verticals/reviews/cli_commands.py", "_cmd_scrape"),
+    "reviews-report": ("verticals/reviews/cli_commands.py", "_cmd_report"),
+    "canone-push": ("cli.py", "cmd_canone"),
+}
+
+# Il flag dell'entrypoint che deve portare a quella funzione, per i percorsi
+# che passano da un dispatcher.
+DISPATCH = {
+    "reviews-scrape": ("verticals/reviews/cli_commands.py", "cmd_reviews", "scrape", "_cmd_scrape"),
+    "reviews-report": ("verticals/reviews/cli_commands.py", "cmd_reviews", "report", "_cmd_report"),
+}
 
 
-def test_i_null_sono_davvero_senza_ricevuta():
-    """Un `ricevuta: null` sbagliato è un buco silenzioso: va provato.
+def _funzione(percorso: Path, nome: str) -> ast.FunctionDef:
+    albero = ast.parse(percorso.read_text(encoding="utf-8"))
+    for nodo in ast.walk(albero):
+        if isinstance(nodo, (ast.FunctionDef, ast.AsyncFunctionDef)) and nodo.name == nome:
+            return nodo
+    raise AssertionError(f"{percorso}: nessuna funzione {nome}")
 
-    Controllo nel verso opposto: i file dei moduli dichiarati nell'entrypoint
-    non devono aprire un PipelineRun. Se qualcuno ne aggiunge uno e lascia il
-    null, il test lo dice qui — invece di lasciare la ricevuta attesa a zero e
-    la freschezza a indovinare.
-    """
-    for j in JOB:
-        if j["ricevuta"] is not None:
+
+def _sorgente_di(file_relativo: str, funzione: str | None) -> str:
+    percorso = RADICE / file_relativo
+    assert percorso.exists(), f"{file_relativo} non esiste"
+    if funzione is None:
+        return percorso.read_text(encoding="utf-8")
+    return ast.unparse(_funzione(percorso, funzione))
+
+
+@pytest.mark.parametrize("nome", sorted(PERCORSI))
+def test_il_flag_dell_entrypoint_porta_alla_funzione_dichiarata(nome):
+    """Instradare reviews-scrape su `--report` deve rompere qualcosa, qui."""
+    if nome not in DISPATCH:
+        return
+    file_relativo, dispatcher, flag, attesa = DISPATCH[nome]
+    args = [j for j in JOB if j["nome"] == nome][0]["entrypoint"]["args"]
+    assert f"--{flag}" in args, f"{nome}: l'entrypoint non passa --{flag}"
+    # Nel dispatcher, il ramo che testa quel flag chiama proprio quella funzione.
+    corpo = _funzione(RADICE / file_relativo, dispatcher)
+    chiamate_per_flag = {}
+    for nodo in ast.walk(corpo):
+        if not isinstance(nodo, ast.If):
             continue
-        for modulo in j["moduli"]:
-            percorso = RADICE / (modulo.replace(".", "/") + ".py")
-            testo = percorso.read_text(encoding="utf-8") if percorso.exists() else ""
-            assert "PipelineRun(" not in testo, (
-                f"{j['nome']}: dichiara `ricevuta: null` ma {modulo} apre un PipelineRun"
-            )
+        testo_test = ast.unparse(nodo.test)
+        chiamate = [
+            c.func.id for c in ast.walk(ast.Module(body=nodo.body, type_ignores=[]))
+            if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+        ]
+        for f in ("scrape", "report", "alert", "stats", "rispondi"):
+            if f in testo_test and chiamate:
+                chiamate_per_flag.setdefault(f, chiamate[0])
+    assert chiamate_per_flag.get(flag) == attesa, (
+        f"{nome}: --{flag} porta a {chiamate_per_flag.get(flag)}, non a {attesa}"
+    )
+
+
+@pytest.mark.parametrize("nome,ricevuta", sorted(ricevute_dichiarate().items()))
+def test_la_ricevuta_dichiarata_e_aperta_proprio_dal_percorso_di_quel_job(nome, ricevuta):
+    """Non «esiste da qualche parte nel repo»: deve stare nel punto che
+    l'entrypoint di QUESTO job raggiunge."""
+    file_relativo, funzione = PERCORSI[nome]
+    sorgente = _sorgente_di(file_relativo, funzione)
+    if ricevuta is None:
+        assert "PipelineRun(" not in sorgente, (
+            f"{nome}: dichiara `ricevuta: null` ma {file_relativo}"
+            f"{'::' + funzione if funzione else ''} apre un PipelineRun"
+        )
+        return
+    if ":" in ricevuta:
+        # Nome composto: il prefisso sta nel codice come f-string, e la parte
+        # dopo i due punti deve venire dall'argomento dell'entrypoint — non
+        # basta che il prefisso combaci.
+        prefisso, valore = ricevuta.split(":", 1)
+        # `ast.unparse` normalizza gli apici: il confronto non deve dipendere
+        # dalla forma con cui la stringa è scritta nel sorgente.
+        assert re.search(rf"""f['"]{re.escape(prefisso)}:""", sorgente), (
+            f"{nome}: {file_relativo} non costruisce una ricevuta «{prefisso}:…»"
+        )
+        args = [j for j in JOB if j["nome"] == nome][0]["entrypoint"]["args"]
+        assert "--source-name" in args, f"{nome}: nessun --source-name nell'entrypoint"
+        passato = args[args.index("--source-name") + 1]
+        assert passato == valore, (
+            f"{nome}: la ricevuta dichiara «{valore}» ma l'entrypoint passa «{passato}»"
+        )
+    else:
+        assert re.search(rf"""PipelineRun\(\s*['"]{re.escape(ricevuta)}['"]""", sorgente), (
+            f"{nome}: dichiara «{ricevuta}» ma non è aperto in {file_relativo}"
+            f"{'::' + funzione if funzione else ''}"
+        )
 
 
 def registry_auto():

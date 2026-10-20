@@ -24,7 +24,40 @@ on:
 concurrency: deploy-jobs
 
 jobs:
+  # Stesso cancello del hub: distribuire solo codice verificato non richiede
+  # nessuna decisione di merito, quindi sta prima di auth, build e update.
+  test-sullo-stesso-sha:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # leggere le run di questo repo; nessun permesso cloud in più
+    steps:
+      - name: La suite è passata su ${{ github.sha }}?
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ERRORE=$(mktemp)
+          if ! CONCLUSIONI=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/test.yml/runs?head_sha=${GITHUB_SHA}&status=completed&per_page=100" \
+            --jq '[.workflow_runs[].conclusion] | join(",")' 2>"$ERRORE"); then
+            echo "FERMO: non ho potuto verificare lo stato dei test su ${GITHUB_SHA}." >&2
+            sed -n '1,3p' "$ERRORE" >&2 || true
+            exit 1
+          fi
+          echo "run di test concluse su questo SHA: ${CONCLUSIONI:-nessuna}"
+          case ",${CONCLUSIONI}," in
+            *,success,*) echo "OK: suite verde su questo commit." ;;
+            *)
+              echo "FERMO: nessuna esecuzione riuscita del workflow test su ${GITHUB_SHA}." >&2
+              echo "       Il workflow 'test' non si lancia a mano: riesegui la run di 'test'" >&2
+              echo "       già esistente per questo commit (Actions -> test -> Re-run), oppure" >&2
+              echo "       porta questo commit su main o in una pull request, dove parte da sé." >&2
+              exit 1 ;;
+          esac
+
   rilascia:
+    needs: test-sullo-stesso-sha
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -69,13 +102,24 @@ jobs:
 
       # Il piano si ferma da sé se un job non è nell'inventario, se la
       # destinazione non si risolve, o se non sa da dove si tornerebbe.
+      # L'input NON va interpolato dentro lo script: `${{ inputs.job }}` viene
+      # sostituito prima che la shell parta, quindi un valore con `;` o backtick
+      # sarebbe codice eseguito prima di qualunque validazione. Passa da env,
+      # quotato, e diventa un array di parole: al massimo nomi di job che
+      # l'inventario non conosce, e il piano li rifiuta.
+      #
+      # Una sola lettura del cloud: `--salva` scrive il piano e stampa il testo
+      # ricavato dallo STESSO dizionario. Due invocazioni leggerebbero due
+      # volte, e il testo potrebbe descrivere uno stato diverso dai comandi.
       - name: Piano (nessun job viene toccato in questo passo)
+        env:
+          JOB_INPUT: ${{ inputs.job }}
         run: |
           set -euo pipefail
+          read -r -a SCELTI <<< "$JOB_INPUT"
           ARG=()
-          for J in ${{ inputs.job }}; do ARG+=(--job "$J"); done
-          python -m scripts.cloud.rilascio_jobs piano --tag "$TAG" "${ARG[@]}"
-          python -m scripts.cloud.rilascio_jobs piano --json --tag "$TAG" "${ARG[@]}" > /tmp/piano.json
+          for J in "${SCELTI[@]}"; do ARG+=(--job "$J"); done
+          python -m scripts.cloud.rilascio_jobs piano --tag "$TAG" --salva /tmp/piano.json "${ARG[@]}"
 
       # I comandi si leggono dal piano, non si ricostruiscono qui: due posti
       # che derivano lo stesso comando divergono al primo cambiamento.
