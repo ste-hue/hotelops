@@ -68,8 +68,9 @@ La pagina del hub resta **sottile**.
    `brand_header("Food & Beverage")`. Mai un `st.title` grezzo per superfici
    direttore-facing.
 
-3. **Registra** in `verticals/hub/registry.py` (non in `app.py`: dal 2026-06-12 `app.py` è
-   registry-driven e crea una `st.Page` per ogni app concessa, con `url_path = id`):
+3. **Registra** in `verticals/hub/registry.py` (non in `app.py`: `app.py` è registry-driven
+   dal 2026-06-20, commit `1de0df78`, e monta una `st.Page` per ogni app **concessa** dal
+   2026-06-21, commit `47b4a38f`, con `url_path = id`):
 
    ```python
    from verticals.hub.pages_ import <nome>            # import in cima a registry.py
