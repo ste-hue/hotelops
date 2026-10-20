@@ -17,6 +17,7 @@ are not part of the repository's operational contract.
 - [ ] Google Drive e Gmail — connettori opzionali, da attivare con i permessi personali autorizzati. Verificare copertura e accesso prima di citare una fonte.
 
 ### Skills to Know About
+- [ ] Matt Pocock engineering plugin — install per user from the upstream README, then read [the local workflow](docs/agents/workflow.md). GitHub tracker, triage mapping and domain pointers are in `docs/agents/`; existing HotelOps skills remain canonical for the domain.
 - [ ] `/session-reflect` — writes the session's full state to the Obsidian vault (what was done, open threads with destinations, preformulated questions for blockers) so the next person can resume without asking "where were we?". Used at the end of substantive sessions
 - [ ] `/recap` — one-paragraph summary of where the current session stands. Cheap, use it often
 - [ ] `/vault-loop` — loads the constitutional layer (INVARIANTS, AI_INSTRUCTIONS) at session start, or lints vault↔repo drift on demand. The deterministic part is `python -m scripts.vault_loop.reconcile`

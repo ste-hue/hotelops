@@ -27,7 +27,7 @@ sources:
       - .claude/commands/vault-loop.md
 
   mgmt-os:
-    path: ../mgmt_os
+    path: ../mgmt-os
     authority: "management state engine (Regia): decisions, fronts, verification state"
     watch_paths:
       - docs/
@@ -36,6 +36,16 @@ sources:
       - mgmt/shared_server.py
       - AGENTS.md
       - README.md
+
+  mutui-tracker:
+    path: ../mutui-tracker
+    authority: "investment/debt scenarios and loan engines; production data not verified by lint"
+    watch_paths: [public/js/, src/worker.js, docs/, README.md]
+
+  panorama-businessplan:
+    path: ../panorama-businessplan
+    authority: "versioned historical BP workbook; not authority for current Drive MASTER"
+    watch_paths: ["*.xlsx"]
 
   vault:
     path: ../obsidian/Obsidian Vault
