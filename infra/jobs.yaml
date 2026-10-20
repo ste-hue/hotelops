@@ -1,0 +1,95 @@
+# Inventario dei Cloud Run Job schedulati di hotelops.
+#
+# Perché esiste: niente di versionato legava il nome di una pipeline al runtime
+# che deve portarla. `core/source_registry.yaml` dichiara `acquisition.job`
+# (il `pipeline_name` atteso in `f_pipeline_runs`), gli script in
+# `scripts/cloud/*.sh` creano i job una volta sola, e il workflow di deploy
+# aggiornava una lista scritta a mano che non coincideva con nessuna delle due.
+# Questo file è l'unico posto dove job, entrypoint e ricevuta attesa stanno
+# insieme, ed è letto sia dal rilascio sia dai test.
+#
+# Che cosa NON è: non è un ordine di distribuzione. Comparire qui non significa
+# che un job verrà aggiornato — i job da aggiornare si scelgono uno per uno al
+# rilascio. I tag diversi oggi in uso possono essere deliberati, e nessuno li
+# allinea per il solo fatto che esistono.
+#
+# `ricevuta` è il `pipeline_name` che il percorso di quel job scrive in
+# `f_pipeline_runs`, oppure `null` DICHIARATO quando quel percorso non ne apre
+# nessuna: un null esplicito è verificabile, un campo assente no.
+
+progetto: hotelops-suite
+regione: europe-west1
+# Una sola immagine per tutti i job batch (Dockerfile.jobs). Qui sta senza tag
+# e senza digest: il riferimento immutabile si risolve al rilascio.
+immagine: europe-west1-docker.pkg.dev/hotelops-suite/hotelops/jobs
+
+job:
+  - nome: pec-fetch
+    entrypoint:
+      command: /bin/sh
+      args: ["-c", "python -m ingest.pec_fetch --all && python -m cli pec classify"]
+    moduli: [ingest.pec_fetch, cli]
+    service_account: drive-audit@hotelops-suite.iam.gserviceaccount.com
+    scheduler: {nome: pec-fetch-daily, schedule: "0 4 * * *", fuso: Europe/Rome}
+    ricevuta: pec_fetch
+    provisioning: scripts/cloud/70_pec_fetch.sh
+    osservato: {il: "2026-10-20", immagine_configurata: "jobs:v5"}
+
+  - nome: coperti
+    entrypoint:
+      command: python
+      args: ["-m", "ingest.flussi.ingest_coperti", "--gsheet", "--replace"]
+    moduli: [ingest.flussi.ingest_coperti]
+    service_account: drive-audit@hotelops-suite.iam.gserviceaccount.com
+    scheduler: {nome: coperti-daily, schedule: "0 12 * * *", fuso: Europe/Rome}
+    ricevuta: ingest_coperti
+    provisioning: scripts/cloud/50_coperti.sh
+    osservato: {il: "2026-10-20", immagine_configurata: "jobs:v5"}
+
+  - nome: spiaggia-corrispettivi
+    entrypoint:
+      command: python
+      args: ["-m", "ingest.drive_fetch", "--source-name", "RT_CORRISPETTIVISPIAGGIA_INTUR_SNAPSHOT"]
+    moduli: [ingest.drive_fetch]
+    service_account: drive-audit@hotelops-suite.iam.gserviceaccount.com
+    scheduler: {nome: spiaggia-corrispettivi-daily, schedule: "0 9 * * *", fuso: Europe/Rome}
+    # Nome composto: `drive_fetch.py` apre PipelineRun(f"drive_fetch:{source_name}").
+    ricevuta: "drive_fetch:RT_CORRISPETTIVISPIAGGIA_INTUR_SNAPSHOT"
+    provisioning: scripts/cloud/40_spiaggia.sh
+    osservato: {il: "2026-10-20", immagine_configurata: "jobs:v2"}
+
+  - nome: reviews-scrape
+    entrypoint:
+      command: python
+      args: ["-m", "cli", "reviews", "--scrape"]
+    moduli: [cli]
+    service_account: hotelops-jobs@hotelops-suite.iam.gserviceaccount.com
+    scheduler: {nome: reviews-scrape-daily, schedule: "0 7 * * *", fuso: Europe/Rome}
+    ricevuta: reviews_scrape
+    provisioning: scripts/cloud/20_reviews_scrape.sh
+    osservato: {il: "2026-10-20", immagine_configurata: "jobs:v1"}
+
+  - nome: reviews-report
+    entrypoint:
+      command: python
+      args: ["-m", "cli", "reviews", "--report"]
+    moduli: [cli]
+    service_account: hotelops-jobs@hotelops-suite.iam.gserviceaccount.com
+    scheduler: {nome: reviews-report-weekly, schedule: "0 8 * * 1", fuso: Europe/Rome}
+    # Dichiarato nullo, non dimenticato: `_cmd_report` manda la mail settimanale
+    # e non apre nessun PipelineRun. La sua assenza da f_pipeline_runs è attesa.
+    ricevuta: null
+    provisioning: scripts/cloud/30_reviews_report.sh
+    osservato: {il: "2026-10-20", immagine_configurata: "jobs:v1"}
+
+  - nome: canone-push
+    entrypoint:
+      command: python
+      args: ["-m", "cli", "canone", "--push"]
+    moduli: [cli]
+    service_account: hotelops-jobs@hotelops-suite.iam.gserviceaccount.com
+    scheduler: {nome: canone-push-daily, schedule: "30 9 * * *", fuso: Europe/Rome}
+    # Dichiarato nullo: nessun PipelineRun nel percorso del canone.
+    ricevuta: null
+    provisioning: scripts/cloud/80_canone.sh
+    osservato: {il: "2026-10-20", immagine_configurata: "jobs:v7"}
