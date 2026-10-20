@@ -1,22 +1,51 @@
 # Deploy del hub su Cloud Run — keyless via Workload Identity Federation (STD-01).
 # Identità: github-deployer@hotelops-suite (nessuna chiave; WIF vincolato a ste-hue/hotelops).
 # Break-glass manuale (documentato): gcloud run deploy hotelops-hub --source . --region=europe-west1
+#
+# SOLO su richiesta esplicita. Prima c'era anche `push: branches [main]` con
+# paths-ignore su docs/meta/vault/md: un merge di codice pubblicava da sé, e la
+# pubblicazione diventava un effetto collaterale del merge invece di una
+# decisione. Chi rilascia lo fa con un dispatch, dopo aver guardato il piano.
+#
+# Prima del deploy si pretende che la suite sia passata SU QUESTO STESSO commit.
+# Non "sia passata di recente": il verde di un altro SHA non dice niente su
+# questo albero. Runbook, rollback e modalità manuale: docs/architecture/runtime-deploy.md.
 name: deploy-hub
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "docs/**"
-      - "meta/**"
-      - "vault/**"
-      - "**.md"
   workflow_dispatch:
 
 concurrency: deploy-hub
 
 jobs:
+  # Cancello: esiste una esecuzione CONCLUSA e RIUSCITA del workflow `test`
+  # per esattamente questo commit? Si interroga per head_sha, non per branch.
+  test-sullo-stesso-sha:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # leggere le run di questo repo; nessun permesso cloud in più
+    steps:
+      - name: La suite è passata su ${{ github.sha }}?
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          CONCLUSIONI=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/test.yml/runs?head_sha=${GITHUB_SHA}&status=completed&per_page=100" \
+            --jq '[.workflow_runs[].conclusion] | join(",")')
+          echo "run di test concluse su questo SHA: ${CONCLUSIONI:-nessuna}"
+          case ",${CONCLUSIONI}," in
+            *,success,*)
+              echo "OK: suite verde su questo commit." ;;
+            *)
+              echo "FERMO: nessuna esecuzione riuscita del workflow test su ${GITHUB_SHA}." >&2
+              echo "       Lancia 'test' su questo commit e ripeti il dispatch." >&2
+              exit 1 ;;
+          esac
+
   deploy:
+    needs: test-sullo-stesso-sha
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,6 +60,20 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
+      # Il rollback è un dato, non una procedura da ricostruire a posteriori:
+      # la revisione che serve stamparla è quella che sta servendo traffico ORA,
+      # e si legge PRIMA di toccare il servizio.
+      - name: Piano di rollback (revisione corrente)
+        run: |
+          set -euo pipefail
+          REV=$(gcloud run services describe hotelops-hub \
+            --project=hotelops-suite --region=europe-west1 \
+            --format='value(status.traffic[0].revisionName)')
+          echo "revisione che serve traffico adesso: ${REV}"
+          echo "per tornare indietro:"
+          echo "  gcloud run services update-traffic hotelops-hub --project=hotelops-suite --region=europe-west1 --to-revisions=${REV}=100"
+          echo "ROLLBACK_REVISION=${REV}" >> "$GITHUB_ENV"
+
       - name: Deploy hotelops-hub
         run: |
           gcloud run deploy hotelops-hub \
@@ -44,3 +87,10 @@ jobs:
           CODE=$(curl -s -o /dev/null -w "%{http_code}" https://hotelops-hub-942784312622.europe-west1.run.app/)
           echo "anonymous GET -> $CODE"
           test "$CODE" = "302"
+
+      # Se il controllo del cancello è fallito il deploy non è partito; se è
+      # fallito DOPO il deploy, il comando per tornare indietro è questo.
+      - name: Come tornare indietro (se un controllo è fallito)
+        if: failure()
+        run: |
+          echo "gcloud run services update-traffic hotelops-hub --project=hotelops-suite --region=europe-west1 --to-revisions=${ROLLBACK_REVISION}=100"
