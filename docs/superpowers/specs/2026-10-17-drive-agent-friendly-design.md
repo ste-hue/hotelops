@@ -58,6 +58,13 @@ unavailable checks explicitly. A read does not renew the observation's date.
 Malformed private-map YAML or structure is rejected by the loader as ValueError:
 health reports unverifiable coverage, while inventory stops before any effects.
 
+The general freshness contract uses `basis: raw` for this source: it reports
+the latest metadata intake and the `drive_inventory` execution receipt. It does
+not query inventory coverage through the generic `societa_id` aggregation;
+`f_drive_inventory` has no company dimension. Fresh raw intake alone does not
+certify successful publication or root coverage: those remain the dedicated
+Drive health checks described above.
+
 ## Visibility and provenance
 
 Completeness means completion of all configured traversals for the recorded API
@@ -107,3 +114,13 @@ and visible coverage using that actual principal. Neither cloud setup nor SQL
 execution was performed by this correction. The draft Cloud Run/Scheduler
 script is not an activation instruction; preserve existing schedules until a
 separate cutover is approved and verified.
+
+`archivio_documentale` is a declared loop target, not an approved new operational
+loop: ownership and its completion criteria still need definition before use.
+`scripts/cloud/90_drive.sh` remains DRAFT, uses a mutable image tag (default `v8`),
+and names both a job `drive-audit` and a service account `drive-audit@…`; these
+are distinct resources, neither a deployment receipt nor an approved release
+path. Future integration must use the governed job inventory and immutable
+image digest introduced by the runtime work. Replacing the existing spiaggia
+schedule with `drive-fetch --all` requires unambiguous receipts and a separately
+verified cutover; this change does not activate or replace either schedule.

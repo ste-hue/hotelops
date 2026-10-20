@@ -1598,7 +1598,7 @@ sources:
       tier: M
       cadence: daily
       grain: daily
-      coverage_column: snapshot_date
+      basis: raw
     acquisition:
       mode: AUTO
       owner: job
