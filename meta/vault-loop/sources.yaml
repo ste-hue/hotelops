@@ -37,6 +37,16 @@ sources:
       - AGENTS.md
       - README.md
 
+  mutui-tracker:
+    path: ../mutui-tracker
+    authority: "investment/debt scenarios and loan engines; production data not verified by lint"
+    watch_paths: [public/js/, src/worker.js, docs/, README.md]
+
+  panorama-businessplan:
+    path: ../panorama-businessplan
+    authority: "versioned historical BP workbook; not authority for current Drive MASTER"
+    watch_paths: ["*.xlsx"]
+
   vault:
     path: ../obsidian/Obsidian Vault
     subdir: HotelOps

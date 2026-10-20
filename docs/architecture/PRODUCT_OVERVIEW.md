@@ -94,7 +94,7 @@ attestata come attiva.
   pubblicati; il Hub contiene le relative porte e quella Mutui. La disponibilità
   e i permessi delle destinazioni non sono stati ricollaudati per questa mappa.
 - **Da completare:** versioni/approvazione e viste del nuovo CdG, API del budget,
-  persistenza condivisa in produzione, proposte journal → Quadro, raccordo
+  persistenza condivisa in produzione, attivazione del ciclo revisionato journal → Quadro, raccordo
   Piano Industriale / Canone / budget e autorità dei campi Calendar/Trello.
   La scheda Numeri usa ancora il BP come ponte; l'app CdG precedente è ritirata.
 
@@ -103,6 +103,13 @@ percorso completo. L'AI documentation contiene anche indicazioni storiche su
 DSCR e perimetri che vanno riallineate con i modelli correnti prima di usarle
 come specifica di integrazione. Questa mappa segnala lo scarto e non cambia
 silenziosamente formule, invarianti o fonti canoniche.
+
+Il ciclo journal → proposta → revisione → engine è implementato nella CLI di
+`mgmt-os` (contratto `docs/regia-journal-proposals.md`, main `e7b5f58` verificato
+il 14 ottobre). Questo non attesta watcher, schedulazione o uso sul DB aziendale.
+La direzione durevole è [ADR 0005](../adr/0005-ai-native-operating-infrastructure.md);
+il riconciliatore è un sottoinsieme deterministico di Vault Loop, non una verifica
+semantica automatica né una prova di deployment.
 
 ## Riferimenti per continuare
 
