@@ -175,6 +175,8 @@ Regole per le rotation mensili del Piano Finanziario (`hotelops pf-rotate`).
 
 ## Git Conventions
 
+Per gli incarichi coordinati leggere [docs/agents/workflow.md](docs/agents/workflow.md).
+
 In aggiunta a `~/.claude/CLAUDE.md`:
 - **Mai `git checkout main -- .`** su working tree dirty (usa `git stash` o path specifici).
 - **Mai `git add .`/`git add -A`** con untracked non-cashflow — stagia per nome.
@@ -197,3 +199,20 @@ NanoClaw (WhatsApp agent) è un canale query + ingest: usa `ingest/classify.py` 
 Python ≥3.11. `pytest` / `ruff check .` / `ruff format .`. I test sono in `tests/` (un file per dominio/pipeline).
 Core: `pyyaml`, `openpyxl`, `pandas`, `google-cloud-bigquery`, `pydantic`, `anthropic` (spostata da `[jobs]` a core 2026-08-06: la usa il path interattivo `--rispondi`).
 Optional: `[reconcile]` (bank-reconcile), `[dashboard]` (streamlit+plotly+db-dtypes), `[drive]` (google-api-python-client). Dev: `[dev]` (pytest, ruff).
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues in `ste-hue/hotelops`; riusare issue e specifiche del fronte.
+Vedi [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
+
+### Triage labels
+
+Cinque ruoli di triage, preservando le label e le automazioni esistenti.
+Vedi [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
+
+### Domain docs
+
+Contesto unico con architettura e ADR già canonici, senza duplicare il lessico.
+Vedi [docs/agents/domain.md](docs/agents/domain.md).

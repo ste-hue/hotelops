@@ -27,7 +27,7 @@ sources:
       - .claude/commands/vault-loop.md
 
   mgmt-os:
-    path: ../mgmt_os
+    path: ../mgmt-os
     authority: "management state engine (Regia): decisions, fronts, verification state"
     watch_paths:
       - docs/
