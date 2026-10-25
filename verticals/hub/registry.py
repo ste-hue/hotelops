@@ -17,6 +17,7 @@ from verticals.hub.pages_ import (
     cashflow,
     fb,
     mutui,
+    projects,
     regia,
     revenue,
     reviews,
@@ -70,6 +71,8 @@ APPS: list[HubApp] = [
     # CdG spento 2026-07-05 (troppi dati, redesign "budget vs reale" in arrivo);
     # riaccendere = ripristinare kind=page + import (pages_/cdg.py resta nel codice).
     HubApp("cdg", "CdG", "📊", "Finanza", "soon", None, "controllo di gestione (in redesign)"),
+    # Progetti: una superficie, applicazioni specialistiche per progetto.
+    HubApp("projects", "Progetti", "🏗️", "Operations", "page", projects.render, "soft camere e cantiere terzo piano", sensitive=True),
     # ── Operations ───────────────────────────────────────────────────────────
     HubApp("fb", "Food & Beverage", "🍽", "Operations", "page", fb.render, "food cost & coperti"),
     HubApp("spiaggia", "Spiaggia", "🏖️", "Operations", "page", spiaggia.render, "ricavo stabilimento & quadratura"),
