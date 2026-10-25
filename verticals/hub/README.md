@@ -121,3 +121,10 @@ HUB_DEV_ALLOW_ALL=1 streamlit run verticals/hub/app.py   # bypass grant (vedi tu
 È quello che l'alias `hotelops` attiva e che tutti i cron `scripts/*-daily.sh` hardcodano.
 Un eventuale `.venv` nel repo è un **orfano** (gitignored, referenziato da nulla): non usarlo,
 si può rimuovere. Punta l'interprete dell'IDE a `hotelops_core` per evitare drift di dipendenze.
+
+### Progetti
+
+Una pagina sensibile `projects` collega i progetti agli strumenti operativi e
+ai fronti Regia. Soft e Terzo piano sono istanze del progetto, non app-id o
+verticali indipendenti. Il [catalogo](../projects/README.md) contiene solo i
+raccordi; nessuna sincronizzazione implicita. I grant di reparto restano invariati.

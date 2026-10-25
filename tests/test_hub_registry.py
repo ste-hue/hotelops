@@ -39,6 +39,7 @@ def test_pages_solo_kind_page():
         "revenue",
         "canone",
         "regia",
+        "projects",
     }
 
 
@@ -86,6 +87,7 @@ def test_cashflow_accodamenti_sono_sensibili():
         "bilancini",
         "canone",
         "regia",
+        "projects",
     }
 
 
