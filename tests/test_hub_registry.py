@@ -39,6 +39,7 @@ def test_pages_solo_kind_page():
         "revenue",
         "canone",
         "regia",
+        "progetti",
     }
 
 
@@ -49,6 +50,7 @@ def test_by_group_ordine_e_contenuto():
     assert "accodamenti" in {a.id for a in g["Finanza"]}
     assert "revenue" in {a.id for a in g["Finanza"]}
     assert "fb" in {a.id for a in g["Operations"]}
+    assert {a.id for a in g["Progetti"]} == {"progetti"}
     assert g["Sistema"] == []  # ingest non è una sezione: è funzione del vertical
 
 
@@ -79,6 +81,7 @@ def test_cashflow_accodamenti_sono_sensibili():
     # (pages_/spiaggia._MOOLTY_UPLOADERS) — la pagina resta lettura per Operations.
     # canone: sensibile dal 2026-10-01 (BP interno: dati riservati, nessun write-path BQ).
     # regia: sensibile dal 2026-10-06 (Management OS: dati riservati, nessun write-path BQ).
+    # progetti: sensibile dal 2026-10-26 (contratti/budget cantiere: dati riservati, nessun write-path BQ).
     assert sens == {
         "cashflow",
         "accodamenti",
@@ -86,6 +89,7 @@ def test_cashflow_accodamenti_sono_sensibili():
         "bilancini",
         "canone",
         "regia",
+        "progetti",
     }
 
 

@@ -17,6 +17,7 @@ from verticals.hub.pages_ import (
     cashflow,
     fb,
     mutui,
+    progetti,
     regia,
     revenue,
     reviews,
@@ -24,7 +25,7 @@ from verticals.hub.pages_ import (
 )
 
 # Ordine dei gruppi nella Home gateway.
-GROUPS = ["Finanza", "Operations", "Sistema"]
+GROUPS = ["Finanza", "Operations", "Progetti", "Sistema"]
 
 # URL esterni (bind).
 _BANCHE_LOOKER = (
@@ -74,6 +75,9 @@ APPS: list[HubApp] = [
     HubApp("fb", "Food & Beverage", "🍽", "Operations", "page", fb.render, "food cost & coperti"),
     HubApp("spiaggia", "Spiaggia", "🏖️", "Operations", "page", spiaggia.render, "ricavo stabilimento & quadratura"),
     HubApp("reviews", "Reviews", "⭐", "Operations", "page", reviews.render, "reputation & sentiment"),
+    # ── Progetti ─────────────────────────────────────────────────────────────
+    # progetti: sensibile per dati riservati (contratti, budget cantiere su Drive) — nessun write-path BQ.
+    HubApp("progetti", "Progetti", "🏗️", "Progetti", "page", progetti.render, "cantiere terzo piano & soft restyling: scadenze, app, documenti", sensitive=True),
     # ── Sistema ──────────────────────────────────────────────────────────────
     # L'ingest NON è una sezione trasversale: è una funzione di ciascun vertical
     # (accodamenti → condges/Finanza, F&B → Operations, …). La vecchia pagina

@@ -81,6 +81,10 @@ HubApp("reviews", "Reviews", "⭐", "Operations", "page", reviews.render, "reput
 | `bind` | URL esterno (str) | solo tile, link in nuova scheda (es. Banche → Looker) |
 | `soon` | `None` | placeholder "coming soon" (es. CdG) |
 
+Gruppo `Progetti` (2026-10-26): una pagina, una card per progetto CapEx aperto (tappe +
+link ad app di avanzamento, cartella Drive, cockpit). Le tappe sono dichiarate in
+[`pages_/progetti.py`](pages_/progetti.py), si aggiornano a mano quando cambia il piano.
+
 `sensitive=True` ⇒ scrive/muta stato ⇒ va concessa a mano nei grant (S1). `validate()` gira a
 import-time (id unici, group noto, target coerente col kind). Le `render()` vivono in
 [`pages_/`](pages_/) (un file per superficie).
