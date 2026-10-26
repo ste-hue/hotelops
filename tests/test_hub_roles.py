@@ -44,7 +44,7 @@ def test_anna_solo_operations():
 def test_rosa_finanza_con_cashflow_accodamenti_spiaggia():
     apps = _resolve("amministrazione@panoramagroup.it", allow_all=False)
     # accodamenti (sensitive) + spiaggia concessi a mano a Rosa (cassa/Gaia), non da FINANZA (S1)
-    assert {"cashflow", "mutui", "banche", "accodamenti", "spiaggia"} <= apps
+    assert {"cashflow", "mutui", "banche", "accodamenti", "spiaggia", "canone"} <= apps
     # cdg ora è sensitive (scrive budget su BQ) → fuori da FINANZA; grant a mano da decidere
     assert "cdg" not in apps
     assert "fb" not in apps
@@ -55,13 +55,13 @@ def test_antonio_tutto_tranne_scrittura_a_mano():
     # accodamenti è sensitive → non ereditato, solo admin a mano
     assert "accodamenti" not in apps
     assert {"cashflow", "reviews", "fb", "spiaggia", "mutui"} <= apps
-    # cdg (sensitive): concesso a mano al direttore
-    assert "cdg" in apps
+    # cdg, canone (sensitive): concessi a mano al direttore
+    assert "cdg" in apps and "canone" in apps
 
 
 def test_padre_solo_reviews_e_mutui():
     apps = _resolve("stedepi@gmail.com", allow_all=False)
-    assert apps == frozenset({"reviews", "mutui"})
+    assert apps == frozenset({"reviews", "mutui", "canone"})
 
 
 def test_mario_solo_fb_e_spiaggia():
