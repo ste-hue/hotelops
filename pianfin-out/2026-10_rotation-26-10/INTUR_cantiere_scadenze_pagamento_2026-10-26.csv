@@ -1,0 +1,26 @@
+fornitore;evento;scadenza_pagamento;importo_eur;fonte;stato
+Santelia Luigi;FT-RC 89 del 03/09 (4° acconto I piano);2026-10-03;15000;partite Esolver 26/09;GIÀ PAGATA 14/09 MPS → nel PF ott è doppia, togliere
+S.T.E. srl;FT 44 del 16/09 (saldo lavori I piano 2025/26);2026-10-16;49500;partite Esolver 26/09;nel PF ott (riga 23 Varie, fuori totale → fix)
+Santelia Luigi;FT 115 del 20/10 (saldo I piano: 103.000 − 85.000 acconti);2026-10-20;18000;fattura (Drive/Gmail Rosa 22/10);NON nel PF: aggiungere
+AMCN;Anticipo 15% su 482.000 (proforma 20/10, dicitura GreenTour in revisione);2026-10-29;72300;contratto Rev9 15/10;NON nel PF: aggiungere (può slittare a nov)
+AMCN;SAL 1 60k ×75% (−10% ritenuta −15% anticipo), pag. 15 gg;2026-11-22;45000;contratto + computo/cronoprogramma;stima
+S.T.E. srl;SAL 11/2026 (maturato 26,616) ×90%, pag. 15 gg;2026-12-15;23955;computo-offerta firmato 15/10 + cronoprogramma Rev02;IPOTESI (contratto da firmare)
+Santelia Luigi;SAL 11/2026 (maturato 42,155) ×90%, pag. 15 gg;2026-12-15;37939;preventivo 0066/26 (computo Delta 16/10 = 158.231 escl. antincendio);IPOTESI (contratto da firmare)
+AMCN;SAL 2 60k ×75% (−10% ritenuta −15% anticipo), pag. 15 gg;2026-12-17;45000;contratto + computo/cronoprogramma;stima
+AMCN;SAL 3 60k ×75% (−10% ritenuta −15% anticipo), pag. 15 gg;2027-01-15;45000;contratto + computo/cronoprogramma;stima
+S.T.E. srl;SAL 12/2026 (maturato 55,007) ×90%, pag. 15 gg;2027-01-15;49507;computo-offerta firmato 15/10 + cronoprogramma Rev02;IPOTESI (contratto da firmare)
+Santelia Luigi;SAL 12/2026 (maturato 59,400) ×90%, pag. 15 gg;2027-01-15;53460;preventivo 0066/26 (computo Delta 16/10 = 158.231 escl. antincendio);IPOTESI (contratto da firmare)
+AMCN;SAL 4 60k ×75% (−10% ritenuta −15% anticipo), pag. 15 gg;2027-02-02;45000;contratto + computo/cronoprogramma;stima
+S.T.E. srl;SAL 01/2027 (maturato 15,970) ×90%, pag. 15 gg;2027-02-15;14373;computo-offerta firmato 15/10 + cronoprogramma Rev02;IPOTESI (contratto da firmare)
+Santelia Luigi;SAL 01/2027 (maturato 17,245) ×90%, pag. 15 gg;2027-02-15;15521;preventivo 0066/26 (computo Delta 16/10 = 158.231 escl. antincendio);IPOTESI (contratto da firmare)
+AMCN;SAL 5 60k ×75% (−10% ritenuta −15% anticipo), pag. 15 gg;2027-02-24;45000;contratto + computo/cronoprogramma;stima
+AMCN;SAL 6 60k ×75% (−10% ritenuta −15% anticipo), pag. 15 gg;2027-03-06;45000;contratto + computo/cronoprogramma;stima
+S.T.E. srl;SAL 02/2027 (maturato 35,034) ×90%, pag. 15 gg;2027-03-15;31530;computo-offerta firmato 15/10 + cronoprogramma Rev02;IPOTESI (contratto da firmare)
+Santelia Luigi;SAL 02/2027 (maturato 42,646) ×90%, pag. 15 gg;2027-03-15;38382;preventivo 0066/26 (computo Delta 16/10 = 158.231 escl. antincendio);IPOTESI (contratto da firmare)
+AMCN;SAL 7 60k ×75% (−10% ritenuta −15% anticipo), pag. 15 gg;2027-03-17;45000;contratto + computo/cronoprogramma;stima
+AMCN;SAL 8 60k ×75% (−10% ritenuta −15% anticipo), pag. 15 gg;2027-04-02;45000;contratto + computo/cronoprogramma;stima
+S.T.E. srl;SAL 03/2027 (maturato 30,029) ×90%, pag. 15 gg;2027-04-15;27026;computo-offerta firmato 15/10 + cronoprogramma Rev02;IPOTESI (contratto da firmare)
+Santelia Luigi;SAL 03/2027 (maturato 36,554) ×90%, pag. 15 gg;2027-04-15;32898;preventivo 0066/26 (computo Delta 16/10 = 158.231 escl. antincendio);IPOTESI (contratto da firmare)
+AMCN;Svincolo ritenuta 10% al collaudo (≥30 gg da apertura);2027-06-19;48200;contratto art. 6/20;stima
+S.T.E. srl;Saldo 10% al collaudo;2027-06-19;16266;computo-offerta firmato 15/10 + cronoprogramma Rev02;IPOTESI
+Santelia Luigi;Saldo 10% al collaudo;2027-06-19;19800;preventivo 0066/26 (computo Delta 16/10 = 158.231 escl. antincendio);IPOTESI
