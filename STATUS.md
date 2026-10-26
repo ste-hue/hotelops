@@ -456,6 +456,16 @@ Consolidamento ("torniamo su main, worktree-only d'ora in poi"). Esito:
 - **Spiaggia: decidere mount hub** (A rimando / B merge `main`→`worktree-app-store` con conflitto `cli.py` / C cherry-pick) + cleanup worktree (`git worktree remove .worktrees/spiaggia` + `git branch -d feat/spiaggia-vertical`, branch già su origin).
 - **Spiaggia: legenda metodi pagamento** -- riempire `METHOD_LABELS` in `ingest/flussi/ingest_spiaggia.py` (codici 1/14/2/3) quando arriva l'info da Spiagge.it, poi re-promote.
 
+## HANDOFF (2026-10-26, rito del giorno 1 / cantiere INTUR)
+
+> Sessione vault `HotelOps/sessions/2026-10-26_rito_del_giorno_1_e_cantiere_intur`. Mergiato su `main` (`66f14b9`): Kross+Unicredit nell'anchor ORTI (`77db7a3`), rito del giorno 1 (`de7054f`), `pianfin-out/2026-10_rotation-26-10/` (`5da0ca4`).
+
+- [ ] **Mandare a Rosa** i 4 post-rotate + `INTUR_cantiere_scadenze_pagamento_2026-10-26.csv` (upload Drive manuale, cartella PF). Per INTUR usare `…T15-59_totali-fix.xlsx`: il master ha la riga 3 di " Varie ed Eventuali" (col. L..W) come lista esplicita fino alla riga 18 → 116.360 di scadenze di ottobre fuori dal totale con Controlli 23/23 OK. Rosa corregge il master (SUM).
+- [ ] **PF INTUR ottobre**: togliere Santelia 15.000 (pagata 14/09), aggiungere Santelia FT 115 18.000 e anticipo AMCN 72.300, righe cantiere 24-26 dal CSV — su ok di Stefano.
+- [ ] **Partite Esolver al 30/09** (ORTI+INTUR) da Rosa → ri-rotation settembre (quelle usate sono del 26/09). Residui non mappati (ORTI 16, INTUR 7) e fitto 244k di ottobre nel PF ORTI: Rosa.
+- [ ] **Motore**: guard fail-loud quando `pf_writer` scrive una cella fuori dal range della riga totale (oggi `_find_total_row_and_range` riconosce solo SUM) + check in ✓ Controlli.
+- [ ] **Daily Production 24-29**: riclassifica dei 3 raw imponibile a `POWERBI_OCCUPAZIONE_ORTI_SNAPSHOT` + promote; lordo = nuova source RAW_ONLY o colonna canonical. In attesa di ok (dettaglio nel hub INGEST_CHIUSURE).
+
 ## HANDOFF (2026-10-17, consolidamento repository)
 
 - [x] Consolidamento documentale preparato: skill canoniche, onboarding e proposte storiche; memoria finanziaria salvata nel vault privato. Pubblicazione codice e attivazioni residue hanno destinazioni esplicite in `docs/reports/2026-10-17-consolidation-handoff.md`.
