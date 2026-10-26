@@ -28,8 +28,9 @@ def test_csv_parse_e_validate():
         and r["data_riferimento"] == "2026-04-30"
     )
     assert mps_apr["saldo_eur"] == 245171.52  # certificato 2026-06-12, corregge 251897.54
-    # Kross fuori dall'anchor (deciso 2026-06-12, commit ee6ff55)
-    assert not any(r["banca_id"] == "MPS_KROSS" for r in rows)
+    # Kross DENTRO l'anchor dal 2026-10-26 (rovescia ee6ff55 del 2026-06-12): primo saldo 31/08
+    kross = [r for r in rows if r["banca_id"] == "MPS_KROSS"]
+    assert kross and min(r["data_riferimento"] for r in kross) == "2026-08-31"
     intesa_apr = next(
         r
         for r in rows

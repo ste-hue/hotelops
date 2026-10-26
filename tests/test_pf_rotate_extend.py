@@ -409,7 +409,7 @@ def test_trim_poi_rotate_smoke(minimal_pf_orti_bytes, tmp_path):
         societa="ORTI",
         periodo_chiuso=P(1),
         data_saldo=date(2027, 1, 31),
-        saldi={"MPS": 251897.54, "Intesa": 87439.92},
+        saldi={"MPS": 251897.54, "Intesa": 87439.92, "MPS_KROSS": 0.0, "UNICREDIT": 0.0},  # Kross+Unicredit obbligatori dal 2026-10-26
         fornitori_csv=fornitori_csv,
         out_dir=tmp_path / "out",
         unmapped_policy=UnmappedPolicy.FAIL,

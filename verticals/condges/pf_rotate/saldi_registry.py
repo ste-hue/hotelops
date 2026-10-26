@@ -25,7 +25,8 @@ SALDI_REGISTRY: dict[str, tuple[ContoSaldo, ...]] = {
     "ORTI": (
         ContoSaldo("INTESA", True),
         ContoSaldo("MPS", True),
-        ContoSaldo("MPS_KROSS", False),  # extra/opzionale
+        ContoSaldo("MPS_KROSS", True),  # dentro l'anchor dal 2026-10-26 (Stefano: "non escludiamo più Kross")
+        ContoSaldo("UNICREDIT", True),  # Cc4 dormiente, scende ogni trimestre per spese: si conta (Stefano 2026-10-26)
     ),
     "INTUR": (
         ContoSaldo("SELLA", True),

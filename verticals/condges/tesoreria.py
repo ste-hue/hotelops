@@ -43,7 +43,7 @@ MESI_NOMI = [
 ]
 
 BANKS_BY_SOCIETA: dict[str, list[str]] = {
-    "ORTI": ["MPS", "Intesa", "MPS_KROSS"],
+    "ORTI": ["MPS", "Intesa", "MPS_KROSS", "Unicredit"],
     "INTUR": ["Sella", "MPS", "Intesa", "BCP"],
 }
 
