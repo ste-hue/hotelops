@@ -240,7 +240,7 @@ def render() -> None:
         f"Cutover: {data_saldo.isoformat()} (pre-compilati da BQ se disponibili)"
     )
     default_banche = list(bq_saldi.keys()) or (
-        ["MPS", "Intesa", "MPS_KROSS"]
+        ["MPS", "Intesa", "MPS_KROSS", "Unicredit"]
         if societa == "ORTI"
         else ["MPS", "Intesa", "Sella", "BCP"]
     )

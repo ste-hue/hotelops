@@ -7,7 +7,7 @@ from core.schemas import ChiusuraMensileRow, validate_batch
 
 # Banche attese per società (Esolver Cc#) — usato per saldo banca in `chiudi` / `saldo`
 SOCIETA_BANCHE: dict[str, tuple[str, ...]] = {
-    "ORTI": ("INTESA", "MPS", "MPS_KROSS"),
+    "ORTI": ("INTESA", "MPS", "MPS_KROSS", "UNICREDIT"),  # Kross+Unicredit contati dal 2026-10-26
     "INTUR": ("SELLA", "MPS", "INTESA", "BCP"),
 }
 

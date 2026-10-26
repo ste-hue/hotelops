@@ -436,7 +436,7 @@ sources:
     freshness:
       tier: E
       cadence: monthly
-      grace_day: 20
+      grace_day: 1  # rito del giorno 1: al 1° di M+1 serve la foto al 30 di M (Stefano 2026-10-26)
       grain: snapshot
       coverage_column: data_snapshot
     acquisition:
@@ -465,7 +465,7 @@ sources:
     freshness:
       tier: E
       cadence: monthly
-      grace_day: 20
+      grace_day: 1  # rito del giorno 1: al 1° di M+1 serve la foto al 30 di M (Stefano 2026-10-26)
       grain: snapshot
       coverage_column: data_snapshot
     acquisition:

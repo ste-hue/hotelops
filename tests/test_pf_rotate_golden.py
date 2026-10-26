@@ -83,7 +83,7 @@ def test_rotate_end_to_end_orti(
         societa="ORTI",
         periodo_chiuso=P(4),
         data_saldo=date(2026, 4, 30),
-        saldi={"MPS": 251897.54, "Intesa": 87439.92},
+        saldi={"MPS": 251897.54, "Intesa": 87439.92, "MPS_KROSS": 0.0, "UNICREDIT": 0.0},  # Kross+Unicredit obbligatori dal 2026-10-26; il golden non ha la riga
         fornitori_csv=fornitori_csv_orti,
         out_dir=tmp_path / "out",
         unmapped_policy=UnmappedPolicy.FAIL,
@@ -166,7 +166,7 @@ def test_rotate_exclude_flag_drops_fornitore(
         societa="ORTI",
         periodo_chiuso=P(4),
         data_saldo=date(2026, 4, 30),
-        saldi={"MPS": 251897.54, "Intesa": 87439.92},
+        saldi={"MPS": 251897.54, "Intesa": 87439.92, "MPS_KROSS": 0.0, "UNICREDIT": 0.0},  # Kross+Unicredit obbligatori dal 2026-10-26; il golden non ha la riga
         fornitori_csv=fornitori_csv_orti,
         out_dir=tmp_path / "out",
         unmapped_policy=UnmappedPolicy.FAIL,
@@ -197,7 +197,7 @@ def test_rotate_writes_failed_suffix_on_check_failure(
         societa="ORTI",
         periodo_chiuso=P(4),
         data_saldo=date(2026, 4, 30),
-        saldi={"MPS": 250000.0, "Intesa": 90000.0},
+        saldi={"MPS": 250000.0, "Intesa": 90000.0, "MPS_KROSS": 0.0, "UNICREDIT": 0.0},  # Kross+Unicredit obbligatori dal 2026-10-26; il golden non ha la riga
         fornitori_csv=fornitori_csv_orti,
         out_dir=tmp_path / "out",
         unmapped_policy=UnmappedPolicy.SKIP,
@@ -235,7 +235,7 @@ def test_rotate_hard_fail_su_scadenzario_vuoto(
             societa="ORTI",
             periodo_chiuso=P(4),
             data_saldo=date(2026, 4, 30),
-            saldi={"MPS": 250000.0, "Intesa": 90000.0},
+            saldi={"MPS": 250000.0, "Intesa": 90000.0, "MPS_KROSS": 0.0, "UNICREDIT": 0.0},  # Kross+Unicredit obbligatori dal 2026-10-26; il golden non ha la riga
             fornitori_csv=fornitori_csv_orti,
             out_dir=out_dir,
             unmapped_policy=UnmappedPolicy.SKIP,
@@ -276,7 +276,7 @@ def test_rotate_15col_giugno26_e_giugno27_in_colonne_diverse(
         societa="ORTI",
         periodo_chiuso=periodo(2026, 5),
         data_saldo=date(2026, 5, 31),
-        saldi={"MPS": 100.0, "Intesa": 50.0},
+        saldi={"MPS": 100.0, "Intesa": 50.0, "MPS_KROSS": 0.0, "UNICREDIT": 0.0},  # Kross+Unicredit obbligatori dal 2026-10-26; il golden non ha la riga
         fornitori_csv=fornitori_csv_orti,
         out_dir=tmp_path,
         unmapped_policy=UnmappedPolicy.FAIL,

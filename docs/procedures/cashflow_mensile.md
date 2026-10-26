@@ -1,10 +1,14 @@
 ---
 subsystem: condges
 code_paths:
+  - verticals/condges/pf_rotate/rotate.py
+  - verticals/condges/pf_rotate/saldi_registry.py
   - verticals/condges/pf_rotate/pf_writer.py
   - verticals/condges/scadenze_parse.py
+  - core/bq/load/load_saldi_banca_chiusura_mensile.py
+  - core/bq/dimensioni/d_saldi_banca_chiusura_mensile.csv
   - core/bq/dimensioni/d_fornitori.csv
-last_verified: 2026-05-13
+last_verified: 2026-10-26
 source: tribal knowledge (Rosa) → first written 2026-05-13
 ---
 
@@ -36,22 +40,28 @@ Il rollover N → N+1 sostituisce la colonna N con la N+1 come nuovo "mese corre
 
 ---
 
-## Quando
+## Quando — il rito del giorno 1 (regola Stefano, 2026-10-26)
 
-Una volta al mese, tipicamente tra il 5 e il 10 del mese N+1, **dopo** che:
+**Il giorno 1 di N+1 devono esistere gli input datati all'ultimo giorno di N.** Non "tra il 5 e il 10":
+la rotation di N si fa appena il mese è chiuso, con una fotografia presa al 30/31 di N. Chiudere
+settembre con uno scadenzario del 26/09 (successo il 2026-10-26) è un debito da rifare, non una rotation.
 
-- I movimenti bancari di N sono caricati in Esolver (per leggere i saldi a fine N)
-- Esolver è aggiornato con le fatture passive di N (per l'export scadenzario riflette lo stato corretto)
+- Il contratto di freschezza di `ESOLVER_PARTITE_*_SNAPSHOT` ha `grace_day: 1`: dal 2 del mese
+  `hotelops health` segna le partite STALE finché non c'è la foto di fine mese.
+- I saldi di fine mese si prendono **dal foglio di Rosa "Saldi Banca Fine Mese"** (Drive), colonna
+  di N compilata per **tutti** i conti del registry (`pf_rotate/saldi_registry.py`): ORTI = MPS, Intesa,
+  **MPS Kross, Unicredit** (contati dal 2026-10-26); INTUR = Sella, MPS, Intesa. BCP resta fuori (D3).
+  Senza un saldo obbligatorio il motore si ferma (gate O-A), non lo salta.
 
 ---
 
 ## Prerequisiti
 
-| Input | Origine | Esempio |
+| Input | Origine | Nota |
 |---|---|---|
-| PF mese N | Drive `1wGf0yL7RGrvumCKSVWFBlxC2zcAYT8u` (cartella Rosa) — scaricato in locale | `~/Downloads/ORTI Piano Finanziario 2026.xlsx` (versione aprile) |
-| Saldi banca a fine N | Estratti conto / Esolver scheda contabile | MPS, Intesa (ORTI); MPS, Intesa, Sella, BCP (INTUR) |
-| Scadenzario partite sintetica | Esolver export "Situazione partite sintetica per fornitori" | `~/Desktop/WORK/condges/pianfin/scadenziarioall<giorno>maggio.xlsx` |
+| PF mese N | Drive cartella Rosa, file col **nome semplice** `XXX_PF_YYYY-MM.xlsx` (= Rosa l'ha visto) | ORTI: layout month-closed; INTUR: fixed-snapshot (`C1="DATA RILEVAZ"`) |
+| Saldi banca al 30/31 di N | Foglio Rosa "Saldi Banca Fine Mese" (Drive) → righe in `core/bq/dimensioni/d_saldi_banca_chiusura_mensile.csv` → `python -m core.bq.load.load_saldi_banca_chiusura_mensile` (CSV = verità, WRITE_TRUNCATE) | un saldo senza data di riferimento non si registra; la nota della riga cita il foglio |
+| Scadenzario partite (×2 società) | Esolver "Situazione partite sintetica per fornitori", senza filtri, **esportato il 30/31 di N o dopo** | intake → `ESOLVER_PARTITE_<SOC>_SNAPSHOT`; attenzione: l'export "ORTI" può contenere INTUR (ragione sociale interna) |
 
 ---
 
@@ -72,13 +82,19 @@ Aprire il PF di N e:
 
 **Razionale del cancellamento**: tutto ciò che era previsto per il mese N ora è materializzato nei saldi banca aggiornati. Lasciarlo in cella creerebbe double counting.
 
-### 2. Scrittura fornitori — **automatizzata** (Streamlit)
+### 2. Rotation — **automatizzata** (`hotelops pf-rotate`, oppure app Cashflow nel hub)
 
 ```bash
-streamlit run verticals/condges/app_scadenzario.py
+hotelops pf-rotate --pf <PF di N> --scad <partite al 30/31 di N> --societa ORTI \
+  --mese-chiuso <N> --anno <YYYY> --unmapped-policy skip [--exclude 264]
 ```
 
-Nell'app:
+Il motore fa da solo lo step 1 (saldi dal CSV→BQ, azzera il mese chiuso senza toccare formule,
+avanza la cascata) e scrive un file nuovo `<SOC>_PF_<primo mese aperto>_post-rotate_<ts>.xlsx`;
+con ERR nei Controlli il file esce con suffisso `_FAILED_CHECKS`. Più mesi arretrati = più giri in
+catena sull'output precedente. I non mappati finiscono nel foglio `DA MAPPARE<n>`: li assegna Rosa.
+
+Equivalente nell'app Cashflow (`verticals/condges/app_cashflow.py`, stesso motore), nell'app:
 
 1. Upload **Piano Finanziario** (file post-step 1)
 2. Upload **Situazione fornitori** (scadenzario Esolver di N+1)
@@ -112,7 +128,7 @@ Check operativo prima di passare il file a Rosa:
 
 1. **Eyeball 3-5 fornitori chiave** (es. Le Croissant, Ausino, fitto INTUR): aprire il foglio dettaglio della loro voce e confermare che le celle del mese N+1 corrispondono ai valori attesi dallo scadenzario.
 2. **Sanity check sui totali**: riga 27 (TOTALE USCITE) del master deve aggiornarsi automaticamente via formula SUM dai fogli dettaglio; controllare che il valore N+1 sia plausibile vs N.
-3. **Coerenza saldi banca**: riga 35 (TOTALE BANCHE) del master deve essere = somma saldi MPS+Intesa+altre. Riga 4 (SALDO MESE PRECED) colonna N+1 deve essere uguale.
+3. **Coerenza saldi banca**: la riga TOTALE BANCHE del master deve essere = somma di **tutti** i conti del registry (ORTI: MPS + Intesa + MPS Kross + Unicredit; INTUR: Sella + MPS + Intesa) e coincidere col subtotale del foglio di Rosa. Riga 4 (SALDO MESE PRECED) colonna N+1 deve essere uguale.
 4. **Riga 29 Cash Flow** colonna N+1 = TOTALE ENTRATE − TOTALE USCITE.
 
 Approval finale: passare il file a Rosa, attendere conferma o segnalazione anomalie.

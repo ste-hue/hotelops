@@ -237,9 +237,10 @@ def test_banche_mancanti_intur_missing_sella():
     assert banche_mancanti("INTUR", {"MPS": 1, "INTESA": 2}) == ["SELLA"]
 
 
-def test_banche_mancanti_case_insensitive_and_kross_optional():
-    # Kross è opzionale → ORTI completo con solo INTESA+MPS; chiavi case-insensitive.
-    assert banche_mancanti("ORTI", {"intesa": 1, "mps": 2}) == []
+def test_banche_mancanti_case_insensitive_kross_e_unicredit_required():
+    # Kross e Unicredit obbligatori dal 2026-10-26: ORTI con solo INTESA+MPS è incompleto; chiavi case-insensitive.
+    assert banche_mancanti("ORTI", {"intesa": 1, "mps": 2}) == ["MPS_KROSS", "UNICREDIT"]
+    assert banche_mancanti("ORTI", {"intesa": 1, "mps": 2, "mps_kross": 3, "unicredit": 4}) == []
 
 
 def test_preflight_saldi_hard_fail_actionable():
