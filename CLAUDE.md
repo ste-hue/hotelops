@@ -161,6 +161,8 @@ Stabilimento balneare (Lido, INTUR). **Ricavo TOTALE/giorno = banco INTUR + allo
 
 Regole per le rotation mensili del Piano Finanziario (`hotelops pf-rotate`).
 
+**Rito del giorno 1 (2026-10-26).** Il 1° di N+1 devono esistere gli scadenziari Esolver al 30/31 di N (×2 società, `grace_day: 1`) e il foglio saldi di Rosa con la colonna di N per tutti i conti di `pf_rotate/saldi_registry.py` (ORTI include **MPS Kross e Unicredit** dal 2026-10-26; BCP fuori). CSV saldi → loader → `pf-rotate`. Procedura: `docs/procedures/cashflow_mensile.md`.
+
 **Layout-aware = obbligatorio.** Due layout del master "Piano Finanziario":
 - **ORTI (`snapshot_kind="month-closed"`)**: la colonna del mese chiuso ospita saldi banche puntuali + saldo iniziale hardcoded.
 - **INTUR (`snapshot_kind="fixed-snapshot"`)**: colonna C snapshot fisso (`C1="DATA RILEVAZ"`, `C2=<data>`, saldi in `C31:C33`); la colonna del mese chiuso resta vuota sui saldi.
