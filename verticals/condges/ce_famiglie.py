@@ -197,6 +197,8 @@ def render_ce_report(report):
     html = '<h2>Conto economico per famiglie</h2><p>COMPETENZA · Consuntivo osservato · EUR</p>'
     html += ("<p>Ricavi e costi dal bilancino; incidenza sui ricavi classificati, "
              "non disponibile con ricavi nulli o negativi. Importi negativi conservati. "
+             "I mensili sono differenze tra bilancini cumulativi: le rettifiche di competenza "
+             "non registrate non sono ricostruite. La famiglia Investimenti contiene conti CE, non misura il CAPEX. "
              "Intercompany distinto nel dettaglio; società non consolidate. "
              "Attribuzione per struttura e verifica IVA dei ricavi non disponibili in questa fonte. "
              "I flussi IVA di cassa, gli impegni, il margine operativo e il confronto 65% "
