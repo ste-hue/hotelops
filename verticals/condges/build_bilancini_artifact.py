@@ -12,7 +12,7 @@ Uso:
 import argparse
 import json
 import logging
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from core.bq.client import get_client
@@ -73,6 +73,10 @@ def build_payload(bilancino_rows: list[dict], gruppi: dict[str, str] | None = No
 
 def payload_to_csv(payload: dict) -> str:
     """CSV tidy (una riga per società × conto × mese) — stesso tracciato del bottone JS."""
+    if "ce_famiglie" in payload:
+        from verticals.condges.ce_famiglie import ce_to_csv
+
+        return ce_to_csv(payload["ce_famiglie"])
     import csv
     import io
 
@@ -92,6 +96,11 @@ def payload_to_csv(payload: dict) -> str:
 
 
 def render_html(payload: dict) -> str:
+    if "ce_famiglie" in payload:
+        from verticals.condges.ce_famiglie import render_ce_document
+
+        style = HTML_TEMPLATE.split("<style>", 1)[1].split("</style>", 1)[0]
+        return render_ce_document(payload["ce_famiglie"], style)
     data_json = json.dumps(payload, ensure_ascii=False)
     # Hardening: un `</script>` dentro una descrizione/stringa embedded
     # chiuderebbe il tag prematuramente — evaso qui, prima dell'inject.
@@ -125,7 +134,7 @@ def push_to_kv(html: str, payload: dict, env: dict[str, str]) -> None:
     )
     body = [
         {"key": "html", "value": html},
-        {"key": "data.json", "value": json.dumps(payload, ensure_ascii=False)},
+        {"key": "data.json", "value": json.dumps(payload.get("ce_famiglie", payload), ensure_ascii=False)},
         {"key": "data.csv", "value": payload_to_csv(payload)},
     ]
     r = requests.put(
@@ -765,6 +774,8 @@ renderNavigator();
 def main():
     ap = argparse.ArgumentParser(description="Build artifact Bilancini")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    ap.add_argument("--ce-mese", type=int, choices=range(1, 13),
+                    help="genera CE per famiglie gennaio–mese 2026 e snapshot .ce.json riconciliato")
     ap.add_argument("--push", action="store_true",
                     help="dopo il build, carica html/data.json/data.csv nel KV del Worker bilancini")
     args = ap.parse_args()
@@ -782,11 +793,28 @@ def main():
     client = get_client()
     bilancino = fetch_bilancino(client)
     gruppi = fetch_gruppi(client)
+    ce_report = None
+    if args.ce_mese is not None:
+        from verticals.condges.ce_famiglie import build_ce_report, fetch_ce_rows
+
+        cutoff = f"{ANNO}-{args.ce_mese:02}"
+        bilancino = [r for r in bilancino if r["mese"] <= cutoff]
+        ce_report = build_ce_report(
+            fetch_ce_rows(client, year=ANNO, through_month=args.ce_mese), bilancino,
+            year=ANNO, through_month=args.ce_mese,
+            observed_at=datetime.now(timezone.utc).isoformat(),
+        )
     payload = build_payload(bilancino, gruppi)
+    if ce_report is not None:
+        payload["ce_famiglie"] = ce_report
 
     html = render_html(payload)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(html, encoding="utf-8")
+    if ce_report is not None:
+        args.out.with_suffix(".ce.json").write_text(
+            json.dumps(ce_report, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8"
+        )
     log.info(f"OK → {args.out} ({len(bilancino)} righe bilancino)")
 
     if push_env is not None:
