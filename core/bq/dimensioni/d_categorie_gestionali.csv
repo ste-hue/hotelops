@@ -1,0 +1,137 @@
+codice_conto,descrizione,categoria_gestionale,is_intercompany,nota
+47.91.01,Ricavi per alloggi,Ricavi,false,
+47.91.03,Ricavi parcheggi,Ricavi,false,
+47.91.04,Ricavi diversi,Ricavi,false,
+47.91.06,Ricavi fitti sala meeting,Ricavi,false,
+47.91.07.01,Ricavi ristorante,Ricavi,false,
+47.91.07.02,Ricavi bar,Ricavi,false,
+47.91.07.03,Ricavi breakfast,Ricavi,false,
+47.92.01,Ricavi per alloggi,Ricavi,false,
+47.92.02,Ricavi F&B,Ricavi,false,
+47.92.03,Ricavi parcheggi,Ricavi,false,
+47.92.04,Ricavi diversi,Ricavi,false,
+47.93.01,Ricavi per alloggi,Ricavi,false,
+47.93.02,Ricavi F&B,Ricavi,false,
+47.93.03,Ricavi parcheggi,Ricavi,false,
+47.94.01,Ricavi spiaggia alloggiati Hotel,Ricavi,false,
+47.94.02,Ricavi spiaggia alloggiati Residence,Ricavi,false,
+47.94.03,Ricavi spiaggia alloggiati CVM,Ricavi,false,
+47.94.07,Ricavi Bar,Ricavi,false,
+47.94.09,Ricavi spiaggia,Ricavi,false,
+47.95.01,Ricavi farmacia,Ricavi,false,
+47.95.02,Ricavi Supermercato,Ricavi,false,
+47.95.03,Ricavi fitti case di terzi,Ricavi,false,
+53.01.29,Arrotondamenti attivi diversi,Ricavi,false,
+53.01.33,Canoni attivi affitto ramo d'azienda,Ricavi,true,"canone ramo d'azienda, ricavo INTUR (specchio di 65.11.01)"
+53.01.51.99,Altri ricavi e proventi,Ricavi,false,
+53.09.03.01,Sopravv.attive imp.da ev.str./es.prec.,Ricavi,false,straordinario: sopravvenienze attive
+55.01.05,Acquisti materiali di consumo,Acquisti operativi,false,
+55.01.90,Acquisti materie prime Food,Acquisti operativi,false,
+55.01.91,Acquisti materie prime Beverage,Acquisti operativi,false,
+55.01.98,Trasporti su acquisti,Acquisti operativi,false,
+55.03.01,Acq.beni materiali per produz. servizi,Acquisti operativi,false,
+55.03.03,Acq.materiali di consumo (att.servizi),Acquisti operativi,false,
+55.05.03.99,Abbuoni e arrotond.attivi su acquisti,Acquisti operativi,false,
+55.07.01.01,"Acquisto beni strument.inf.516,46 ded.",Investimenti,false,beni strumentali <516€ spesati (decisione 2026-10-27)
+55.07.03,Attrezzatura minuta,Acquisti operativi,false,
+55.07.11,Materiali manutenz.impianti e macchinari,Manutenzioni,false,
+55.07.25,Materiali manutenzione totalm.deducibili,Manutenzioni,false,
+55.07.51,Materiale vario di consumo,Acquisti operativi,false,
+55.07.91,Detergenti e Materiali di Pulizia,Acquisti operativi,false,
+55.07.92,Manutenzione piscina,Manutenzioni,false,
+55.07.93,LINEA CORTESIA,Acquisti operativi,false,
+55.07.94,Fiori per la clientela,Acquisti operativi,false,
+55.07.98.01,Piante e fiori,Acquisti operativi,false,
+55.07.98.02,Cura del verde,Manutenzioni,false,cura del verde: servizio
+57.01.51.03,Acq.servizi diversi (attiv.di servizi),Acquisti operativi,false,
+57.01.51.90,Altre spese per servizi,Acquisti operativi,false,conto generico: dettaglio solo da mastrino
+57.01.51.91,Costo per noleggio biancheria,Acquisti operativi,false,lavanderia
+57.01.51.92,Commissioni OTA Hotel,Commerciali,false,OTA Hotel
+57.01.51.93,Commissioni OTA Residence,Commerciali,false,OTA Residence
+57.01.51.94,Commissioni OTA Casa Vacanza,Commerciali,false,OTA CVM
+57.01.90.01,Software per la Gestione Alberghiera,Amministrativi,false,
+57.01.90.02,Software per Contabilità e Magazzino,Amministrativi,false,
+57.01.90.03,Domini e Hosting,Amministrativi,false,
+57.01.90.04,Mail e Pec,Amministrativi,false,
+57.05.01.03,Trasporti di terzi (attività servizi),Acquisti operativi,false,
+57.09.01.01,Spese telefoniche ordinarie,Utenze,false,
+57.09.13.01,Energia elettrica,Utenze,false,
+57.09.17,Acqua potabile,Utenze,false,
+57.09.19,Gas,Utenze,false,
+57.09.90,Spese di sanificazione,Acquisti operativi,false,sanificazione
+57.09.91.01,Canoni per connevità,Utenze,false,
+57.09.91.02,Canoni assist. reti interne e apparati,Utenze,false,
+57.11.01,Spese manut.impianti e macchin.propri,Manutenzioni,false,
+57.11.07.01,Altre spese manutenzione beni propri,Manutenzioni,false,
+57.11.07.90,Altre spese manutenzione beni di terzi,Manutenzioni,false,
+57.13.01.01,Spese manut.fabbricati strumentali,Manutenzioni,false,
+59.03.90.01,Altre spese veicoli aziendali,Amministrativi,false,veicoli aziendali
+59.03.90.02,Canoni veicoli aziendali,Amministrativi,false,canoni veicoli aziendali
+61.01.01.03,Consulenze ammin.e fiscali (ordinarie),Amministrativi,false,
+61.01.01.91,Consulenze del lavoro (ordinarie),Amministrativi,false,
+61.01.03,Consulenze tecniche,Amministrativi,false,
+61.01.07,Consulenze notarili,Amministrativi,false,
+61.01.09,Consulenze marketing e pubblicitarie,Commerciali,false,consulenze marketing
+61.01.90,Spese legali,Amministrativi,false,
+61.03.01.01,Compensi/rimborsi co.co.co.afferenti,Personale,false,co.co.co.
+61.03.19,Compensi stage/tirocini,Personale,false,stage/tirocini
+63.01.09.11,Spese alberghi e ristor.deducibili,Commerciali,false,
+63.01.13,Spese di viaggio,Commerciali,false,
+63.01.90,Spese di transfer,Commerciali,false,
+63.01.94.02,Contenuti Foto e Video,Commerciali,false,
+63.01.94.03,Canoni attrezzature,Commerciali,false,"canoni attrezzature, gruppo marketing 63.01.94"
+63.01.94.04,Consulenze di Marketing,Commerciali,false,
+63.05.11,Altre spese amministrative,Amministrativi,false,
+63.05.15,Premi di assicurazioni obbligatorie,Amministrativi,false,
+63.05.19,Servizi smaltimento rifiuti,Utenze,false,servizio smaltimento rifiuti (la TARI 71.01.13 sta in Imposte)
+63.05.23,Valori bollati,Amministrativi,false,
+63.05.90,Canone noleggio fotocopiatrici,Amministrativi,false,
+63.05.91,Cancelleria varia,Amministrativi,false,
+63.05.98.01,Polizze assicurazioni,Amministrativi,false,
+65.01.05.90,Canoni locazione CVM SDP,Affitti e canoni,false,sublocazione CVM da Panorama Company: resta costo (decisione 2026-10-27)
+65.01.05.91,Canoni locazione Angelina Residence,Affitti e canoni,true,fitto Angelina ORTI→INTUR; in INTUR registrato come costo negativo
+65.01.07.01,Spese condominiali e varie ded. immobili,Affitti e canoni,false,
+65.05.05,Canoni leasing attrezzature,Affitti e canoni,false,
+65.05.15,Canoni noleggio attrezzature,Affitti e canoni,false,
+65.05.90,Noleggio attrezzature,Affitti e canoni,false,
+65.07.01,Canoni per utilizzo licenze software,Amministrativi,false,licenze software
+65.11.01,Canoni passivi affitto d'azienda,Affitti e canoni,true,"canone ramo d'azienda ORTI→INTUR, escluso da EBITDA ante canone"
+65.11.90,Canoni passivi concessione demaniale,Affitti e canoni,false,concessione demaniale
+65.90.01,Software per la Gestione Alberghiera,Amministrativi,false,
+65.90.02,Software per Contabilità e Magazzino,Amministrativi,false,
+65.90.06,Software per la Gestione della Spiaggia,Amministrativi,false,
+65.90.09,Mail e Pec,Amministrativi,false,
+67.01.01.01,Retribuzioni lorde dipendenti ordinari,Personale,false,
+67.01.03.01,Contributi INPS dipendenti ordinari,Personale,false,
+67.01.05.01,Oneri sociali fiscalizz. dipend.ordinari,Personale,false,
+67.01.07.01,Quote TFR dipend.ordinari (in azienda),Personale,false,
+67.01.11,Premi INAIL,Personale,false,
+67.03.01.01,Rimborsi chilometrici dipend.ordinari,Personale,false,
+67.03.03.01,Indenn.trasf.e altri rimb.spese dip.ord.,Personale,false,
+67.03.13,"Ricerca, formazione e addestramento",Personale,false,
+67.03.51,Altri costi per il personale dipendente,Personale,false,
+67.03.90,Formazione sicurezza,Personale,false,
+67.03.91,Software Reclutamento Personale,Personale,false,
+67.03.94,Vestiario dipendenti,Personale,false,
+71.01.04,IMU,Imposte,false,
+71.01.05,Diritti camerali,Imposte,false,
+71.01.13,Tassa raccolta e smaltimento rifiuti,Imposte,false,
+71.01.90,Diritti S.I.A.E.,Amministrativi,false,"SIAE: diritto, non imposta"
+71.01.91,Imposta di registro,Imposte,false,
+71.03.01.05,"Spese, perdite e sopravv.passive inded.",Amministrativi,false,straordinario: sopravvenienze passive
+71.03.07.01,Contributi associativi versati,Amministrativi,false,
+71.03.11,"Abbonamenti, libri e pubblicazioni",Amministrativi,false,
+71.03.17,Arrotondamenti passivi diversi,Amministrativi,false,
+75.01.07,Commissioni e spese bancarie,Finanziari,false,
+75.01.90,Commissioni Nexi,Finanziari,false,
+75.01.91,Costo per bonifici verso altre banche,Finanziari,false,
+75.01.92,Costi per addebito SEPA,Finanziari,false,
+75.01.93,Canoni noleggio pos,Finanziari,false,
+75.01.94,Canone Remote Banking,Finanziari,false,
+75.01.96,Commissione omnic. e spese tenuta conto,Finanziari,false,
+75.01.97,Imposta di bollo c\c,Finanziari,false,
+75.01.98,Spese bancarie,Finanziari,false,
+75.03.05,Interessi passivi su mutui,Finanziari,false,
+75.03.51,Oneri finanziari diversi,Finanziari,false,
+75.90.01,Commissioni su transato POS - Sella,Commerciali,false,commissioni POS Sella
+75.90.02,Commissioni su transato POS - MPS,Commerciali,false,commissioni POS MPS
