@@ -116,6 +116,7 @@ VOCE_MAP: dict[str, str] = {
     "Fitto Hotel": "ENTRATE_AFFITTI_INTUR",  # canone ORTI→INTUR (conto 53.xx)
     "Fitto AR": "ENTRATE_AFFITTI_INTUR",  # affitto ramo d'azienda (same 53.xx)
     "Entrate Farmacia": "ENTRATE_AFFITTI_MINORI",  # affitto farmacia (47.95.xx)
+    "Ribaltamento Costi a Orti": "ENTRATE_RIBALTAMENTO_ORTI",  # intercompany INTUR→ORTI, blocco ENTRATE (28/10/2026)
     "Entrate Spiaggia": "ENTRATE_SPIAGGIA",
     "Caparre da girocantare": "ENTRATE_CAPARRE_INTUR",  # was CAPARRE_GIRO → align to d_voci
     "Godimento Benidi Terzi": "USCITE_GODIMENTO_BENI",  # INTUR typo
@@ -269,6 +270,67 @@ def _detect_year_and_month_block(ws) -> list[tuple[int, int, int]]:
     return dated
 
 
+# ── Intercompany nascosto nel dettaglio ──────────────────────────────────────
+# Il master ORTI porta i costi che INTUR gli ribalta dentro il foglio "Utenze",
+# etichettati "(intur)" (es. "RID Vodafone (intur)"); nel foglio principale
+# arrivano sommati nella riga Utenze. Decisione di Stefano del 28/10/2026: sono
+# la gamba ORTI del ribaltamento (coppia ENTRATE_RIBALTAMENTO_ORTI ↔
+# USCITE_RIBALTAMENTO_INTUR) e si spostano al centesimo da USCITE_UTENZE.
+# Se il totale del mese non li contiene, WARNING e nessuno spostamento: mai
+# un negativo inventato. Vale per il PF vivo e per l'archivio (stesso parser).
+INTERCOMPANY_DETTAGLIO: dict[str, tuple[str, str, str, str]] = {
+    # societa: (foglio, tag nell'etichetta, voce di partenza, voce di arrivo)
+    "ORTI": ("Utenze", "(intur)", "USCITE_UTENZE", "USCITE_RIBALTAMENTO_INTUR"),
+}
+
+
+def _riclassifica_dettaglio(
+    wb, societa_id: str, records: list[dict], filepath: Path, now, logger: logging.Logger
+) -> None:
+    cfg = INTERCOMPANY_DETTAGLIO.get(societa_id)
+    if not cfg or cfg[0] not in wb.sheetnames:
+        return
+    foglio, tag, da_voce, a_voce = cfg
+    ws = wb[foglio]
+    cols = _detect_year_and_month_block(ws)
+    for r in range(3, 80):
+        label = " ".join(str(ws.cell(r, c).value) for c in (1, 2) if ws.cell(r, c).value)
+        if tag not in label.lower():
+            continue
+        for col, anno, mese in cols:
+            val = round(_v(ws.cell(r, col).value), 2)
+            if val == 0:
+                continue
+            rec = next(
+                (x for x in records if x["voce_id"] == da_voce and x["anno"] == anno and x["mese"] == mese),
+                None,
+            )
+            if rec is None or rec["importo"] + 0.005 < val:
+                logger.warning(
+                    f"  {foglio} r{r} '{label.strip()}' {anno}-{mese:02d} {val:,.2f}: "
+                    f"{da_voce} del mese non lo contiene — non spostato"
+                )
+                continue
+            rec["importo"] = round(rec["importo"] - val, 2)
+            if abs(rec["importo"]) < 0.005:
+                records.remove(rec)
+            records.append(
+                {
+                    "hash_riga": make_hash(societa_id, a_voce, anno, mese, FONTE),
+                    "societa_id": societa_id,
+                    "voce_id": a_voce,
+                    "anno": anno,
+                    "mese": mese,
+                    "importo": val,
+                    "fonte": FONTE,
+                    "note": f"{foglio}: {label.strip()}",
+                    "file_sorgente": filepath.name,
+                    "data_caricamento": now.isoformat(),
+                }
+            )
+            logger.info(f"  riclassificato {da_voce}→{a_voce} {anno}-{mese:02d} {val:,.2f} ({label.strip()})")
+
+
 def setup_logger() -> logging.Logger:
     log = logging.getLogger("ingest_piano_finanziario_xlsx")
     log.setLevel(logging.DEBUG)
@@ -369,6 +431,7 @@ def parse_piano_finanziario(
                 }
             )
 
+    _riclassifica_dettaglio(wb, societa_id, records, filepath, now, logger)
     wb.close()
 
     logger.info(
