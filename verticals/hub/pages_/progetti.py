@@ -64,7 +64,7 @@ PROGETTI: tuple[Progetto, ...] = (
         perimetro="Hotel piano 2 + 101–114 · 20 unità Angelina · 9 Casa Vacanze · risorse interne",
         app_url="https://soft.panorama-host.com",
         drive_url=_DRIVE + "1Qobru_psvvTFWw2dUCeUo4VjXx0-hQoO",
-        cockpit_url=_FILE + "1Q3YT663dWD8GZpT97G-c1Y8OeDQxfXtD/view",
+        cockpit_url=_FILE + "1YwcAGqsyzAomSydj1UT0BIUMSiA8GB8s/view",
         tappe=(Tappa("Fine lavori (riapertura)", date(2027, 4, 14)),),
         nota="Il budget nasce dal rilievo nell'app: prezzo per voce × voci da fare.",
     ),
