@@ -1576,6 +1576,48 @@ class SpiaggiaFbOrdineRow(BaseModel):
     data_caricamento: datetime
 
 
+# ── f_stampa_cassa ───────────────────────────────────────────────────────────
+
+
+class StampaCassaRow(BaseModel):
+    """Schema per f_stampa_cassa — HotelCube «Stampa Cassa», incassi per documento.
+
+    Una riga per (documento, pagante, modalità) dentro una sezione del report:
+    PAGATI (documenti pagati e caparre incassate/restituite), INCASSATI_CON_CAPARRA,
+    RIENTRI_SOSPESO, SOSPESI. `importo` è la quota della riga, `totale_doc` il
+    totale del documento (ripetuto sulle righe spaccate per pagante/modalità: mai
+    sommarlo). Cassa del mese = PAGATI + RIENTRI_SOSPESO; SOSPESI = crediti.
+    Export per struttura: BU dal prefisso camera (H/R/C). Lifecycle APPEND.
+    """
+
+    societa_id: SocietaId
+    business_unit_id: BusinessUnitId
+    location_id: Optional[str] = None
+    oggetto_id: Optional[str] = None
+    funzione_id: Optional[str] = None
+    data: _Date
+    ora: Optional[str] = None
+    data_ora: Optional[datetime] = None
+    operatore: Optional[str] = None
+    camera: Optional[str] = None
+    ospite: Optional[str] = None
+    pagante: Optional[str] = None
+    numero_doc: str
+    anno_doc: Optional[int] = None
+    serie_doc: Optional[str] = None
+    numero: Optional[int] = None
+    importo: float
+    totale_doc: Optional[float] = None
+    sezione: Literal["PAGATI", "INCASSATI_CON_CAPARRA", "RIENTRI_SOSPESO", "SOSPESI"]
+    metodo_pagamento: Optional[str] = None
+    is_acconto: bool = False
+    occorrenza: int = 1  # n-esima riga identica nello stesso file (entra nella chiave)
+    raw_object_id: Optional[str] = None
+    file_sorgente: str
+    hash_riga: str
+    data_caricamento: datetime
+
+
 # ── f_pipeline_runs ──────────────────────────────────────────────────────────
 
 
