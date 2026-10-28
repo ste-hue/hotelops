@@ -119,3 +119,38 @@ def test_intur_fallback_data_rilevazione_still_works():
     cols = _detect_year_and_month_block(ws)
 
     assert [(a, m) for _, a, m in cols] == [(2026, 7), (2026, 8)]
+
+
+def test_sheets_saved_file_without_dimension_tag(tmp_path):
+    """Un xlsx ri-salvato da Google Sheets (INTUR_PF_2026-09, 28/10) non porta il
+    tag <dimension>: in read_only `ws.max_column` è None e il detector esplodeva
+    con TypeError. Deve leggere i mesi comunque."""
+    import re
+    import zipfile
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Piano Finanziario"
+    ws["C1"] = "DATA RILEVAZ"
+    ws["D1"] = 2026.0  # Sheets scrive i marker anno come float
+    ws["D2"] = "SETTEMBRE"
+    ws["E2"] = "OTTOBRE"
+    src = tmp_path / "con_dimension.xlsx"
+    wb.save(src)
+
+    dst = tmp_path / "senza_dimension.xlsx"
+    with (
+        zipfile.ZipFile(src) as zin,
+        zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout,
+    ):
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "xl/worksheets/sheet1.xml":
+                data = re.sub(rb"<dimension[^>]*/>", b"", data)
+            zout.writestr(item, data)
+
+    ro = openpyxl.load_workbook(dst, read_only=True, data_only=True)[
+        "Piano Finanziario"
+    ]
+    assert ro.max_column is None  # il caso riprodotto davvero
+    assert _detect_year_and_month_block(ro) == [(4, 2026, 9), (5, 2026, 10)]

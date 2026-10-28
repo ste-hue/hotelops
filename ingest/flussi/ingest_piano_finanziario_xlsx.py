@@ -186,6 +186,14 @@ def _detect_societa(ws) -> str | None:
     return None
 
 
+def _max_column(ws) -> int:
+    """`ws.max_column` in read_only è None se il foglio non ha il tag <dimension>
+    (xlsx ri-salvati da Google Sheets, 2026-10-28): si calcola scansionando."""
+    if ws.max_column is None:
+        ws.calculate_dimension(force=True)
+    return ws.max_column
+
+
 def _detect_year_and_month_block(ws) -> list[tuple[int, int, int]]:
     """Data ogni colonna-mese: return [(col, anno, mese), ...].
 
@@ -207,7 +215,7 @@ def _detect_year_and_month_block(ws) -> list[tuple[int, int, int]]:
     """
     # Mesi: ogni cella di riga 2 il cui testo è un nome-mese italiano.
     months: list[tuple[int, int]] = []
-    for col in range(1, ws.max_column + 1):
+    for col in range(1, _max_column(ws) + 1):
         v = ws.cell(2, col).value
         if isinstance(v, str):
             mese = MESI_IT.get(v.strip().upper())
@@ -231,7 +239,7 @@ def _detect_year_and_month_block(ws) -> list[tuple[int, int, int]]:
 
     # Fallback anno: una data in riga 2 (cella "DATA RILEVAZIONE" INTUR).
     if anno is None:
-        for col in range(1, ws.max_column + 1):
+        for col in range(1, _max_column(ws) + 1):
             v = ws.cell(2, col).value
             if hasattr(v, "year") and 2025 <= getattr(v, "year", 0) <= 2030:
                 anno = v.year
