@@ -35,11 +35,15 @@ def test_le_raw_only_hanno_contratto_su_base_raw():
             )
 
 
-def test_esolver_ha_grazia_20_tutti_gli_altri_mensili_10():
+def test_esolver_ha_grazia_20_partite_1_tutti_gli_altri_mensili_10():
+    """ESOLVER 20; le PARTITE 1 (rito del giorno 1, Stefano 2026-10-26: al 1° di M+1 serve la
+    foto al 30 di M — docs/procedures/cashflow_mensile.md); ogni altra mensile 10."""
     for sd in _reg().sources.values():
         if sd.freshness is None or sd.freshness.cadence != "monthly":
             continue
-        atteso = 20 if sd.system == "ESOLVER" else 10
+        atteso = (
+            (1 if sd.dataset == "PARTITE" else 20) if sd.system == "ESOLVER" else 10
+        )
         assert sd.freshness.grace_day == atteso, sd.source_name
 
 
