@@ -20,6 +20,7 @@ import openpyxl
 import pandas as pd
 
 from verticals.condges.pf_rotate.excel_model import require_periodo
+from verticals.condges.pf_rotate.extend import extend_to
 from verticals.condges.pf_rotate.step1_saldi import (
     fetch_saldi_da_bq,
     preflight_saldi,
@@ -32,6 +33,9 @@ from verticals.condges.pf_rotate.step3_scadenzario import (
     apply_scadenzario,
 )
 from verticals.condges.pf_rotate.step5_controlli import verifica_controlli, CheckOutcome
+
+
+MESI_APERTI = 12  # orizzonte rolling: mesi aperti garantiti dopo ogni rotation
 
 
 class ScadenzarioVuotoError(RuntimeError):
@@ -115,6 +119,12 @@ def rotate(
     # Step 2b: allinea i controlli in-foglio al nuovo mese chiuso
     # (altrimenti restano ancorati al mese della rotation precedente → ERRORE finti)
     advance_controlli(wb, periodo_chiuso)
+
+    # Step 2c: orizzonte rolling (decisione 2026-10-28) — davanti al mese chiuso
+    # ci sono sempre 12 mesi aperti; prima dello scadenzario, così le scadenze
+    # lontane trovano la colonna invece del secchio oltre_orizzonte. No-op se il
+    # foglio arriva già oltre (pf-extend resta per orizzonti più lunghi).
+    extend_to(wb, periodo_chiuso + MESI_APERTI)
 
     # Serialize after step 1+2 prima dello step 3 (write_pf legge bytes)
     buf = BytesIO()
