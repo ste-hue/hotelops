@@ -116,15 +116,16 @@ def rotate(
     # Step 2: azzera
     changes = azzera_mese(wb, periodo_chiuso)
 
-    # Step 2b: allinea i controlli in-foglio al nuovo mese chiuso
-    # (altrimenti restano ancorati al mese della rotation precedente → ERRORE finti)
-    advance_controlli(wb, periodo_chiuso)
-
-    # Step 2c: orizzonte rolling (decisione 2026-10-28) — davanti al mese chiuso
+    # Step 2b: orizzonte rolling (decisione 2026-10-28) — davanti al mese chiuso
     # ci sono sempre 12 mesi aperti; prima dello scadenzario, così le scadenze
     # lontane trovano la colonna invece del secchio oltre_orizzonte. No-op se il
     # foglio arriva già oltre (pf-extend resta per orizzonti più lunghi).
     extend_to(wb, periodo_chiuso + MESI_APERTI)
+
+    # Step 2c: allinea i controlli in-foglio al nuovo mese chiuso e al nuovo
+    # orizzonte (dopo l'estensione, così la catena arriva all'ultima colonna;
+    # altrimenti restano ancorati alla rotation precedente → ERRORE finti)
+    advance_controlli(wb, periodo_chiuso)
 
     # Serialize after step 1+2 prima dello step 3 (write_pf legge bytes)
     buf = BytesIO()
