@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from openpyxl import Workbook
 
-from core.bq.load.load_pf_rotazioni import _hash, build_rows
+from core.bq.load.load_pf_rotazioni import _hash, build_rows, file_mancanti
 
 MESI = [
     "GENNAIO",
@@ -31,9 +31,9 @@ MESI = [
     "NOVEMBRE",
     "DICEMBRE",
 ]
-COL_GIU = 3 + 5
+COL_LUG = 3 + 6  # luglio 2026: il caso reale di INTUR_PF_2026-07
 VOCE = "ENTRATE_AFFITTI_INTUR"
-FITTI = {"Fitto Hotel": {COL_GIU: 488_000.0}, "Fitto AR": {COL_GIU: 60_000.0}}
+FITTI = {"Fitto Hotel": {COL_LUG: 488_000.0}, "Fitto AR": {COL_LUG: 60_000.0}}
 
 
 def _pf(path: Path, righe: dict[str, dict[int, float]]) -> Path:
@@ -62,18 +62,18 @@ def log():
 def test_due_righe_sulla_stessa_voce_e_mese_restano_due_con_hash_distinti(
     tmp_path, log
 ):
-    p = _pf(tmp_path / "INTUR_PF_2026-06.xlsx", FITTI)
+    p = _pf(tmp_path / "INTUR_PF_2026-07.xlsx", FITTI)
     rows = build_rows([p], log)
-    affitti = [r for r in rows if r["voce_id"] == VOCE and r["mese"] == 6]
+    affitti = [r for r in rows if r["voce_id"] == VOCE and r["mese"] == 7]
     assert [r["importo"] for r in affitti] == [488_000.0, 60_000.0]  # ordine del foglio
     assert affitti[0]["hash_riga"] != affitti[1]["hash_riga"]
     assert affitti[0]["hash_riga"] == _hash(affitti[0], 1)
     assert affitti[1]["hash_riga"] == _hash(affitti[1], 2)
-    assert {r["file_sorgente"] for r in affitti} == {"INTUR_PF_2026-06.xlsx"}
+    assert {r["file_sorgente"] for r in affitti} == {"INTUR_PF_2026-07.xlsx"}
 
 
 def test_nessuna_collisione_e_stessi_hash_a_ogni_ricarico(tmp_path, log):
-    p = _pf(tmp_path / "INTUR_PF_2026-06.xlsx", {**FITTI, "Utenze": {COL_GIU: 1_000.0}})
+    p = _pf(tmp_path / "INTUR_PF_2026-07.xlsx", {**FITTI, "Utenze": {COL_LUG: 1_000.0}})
     prima = [r["hash_riga"] for r in build_rows([p], log)]
     seconda = [r["hash_riga"] for r in build_rows([p], log)]
     assert len(prima) == 3 and len(set(prima)) == 3
@@ -81,8 +81,8 @@ def test_nessuna_collisione_e_stessi_hash_a_ogni_ricarico(tmp_path, log):
 
 
 def test_lo_stesso_contenuto_in_due_versioni_resta_distinto_per_file(tmp_path, log):
-    a = _pf(tmp_path / "INTUR_PF_2026-06.xlsx", FITTI)
-    b = _pf(tmp_path / "INTUR_PF_2026-07.xlsx", FITTI)
+    a = _pf(tmp_path / "INTUR_PF_2026-07.xlsx", FITTI)
+    b = _pf(tmp_path / "INTUR_PF_2026-08.xlsx", FITTI)
     rows = build_rows([a, b], log)
     per_file = {
         f: [r["hash_riga"] for r in rows if r["file_sorgente"] == f]
@@ -97,7 +97,21 @@ def test_lo_stesso_file_sorgente_due_volte_nella_stessa_corsa_viene_rifiutato(
     tmp_path, log
 ):
     """Originale e ricalcolato con lo stesso nome: la DELETE per file non proteggerebbe."""
-    a = _pf(tmp_path / "originali" / "INTUR_PF_2026-06.xlsx", FITTI)
-    b = _pf(tmp_path / "ricalcolati" / "INTUR_PF_2026-06.xlsx", FITTI)
-    with pytest.raises(ValueError, match="INTUR_PF_2026-06.xlsx"):
+    a = _pf(tmp_path / "originali" / "INTUR_PF_2026-07.xlsx", FITTI)
+    b = _pf(tmp_path / "ricalcolati" / "INTUR_PF_2026-07.xlsx", FITTI)
+    with pytest.raises(ValueError, match="INTUR_PF_2026-07.xlsx"):
         build_rows([a, b], log)
+
+
+def test_file_mancanti_elenca_cio_che_la_corsa_non_ricaricherebbe():
+    """--ricarico-completo: una tabella, una convenzione. Vuoto solo se la corsa copre tutto."""
+    in_tabella = {
+        "ORTI_PF_2026-09.xlsx",
+        "INTUR_PF_2026-09.xlsx",
+        "INTUR_PF_2026-10.xlsx",
+    }
+    assert file_mancanti(in_tabella, {"INTUR_PF_2026-10.xlsx"}) == [
+        "INTUR_PF_2026-09.xlsx",
+        "ORTI_PF_2026-09.xlsx",
+    ]
+    assert file_mancanti(in_tabella, in_tabella | {"ORTI_PF_2026-10.xlsx"}) == []
