@@ -16,7 +16,10 @@ ENTRATE_AFFITTI_INTUR; lo stesso in INTUR_PF_2026-06 a giugno e agosto) —
 nell'ordine in cui il parser le restituisce, cioè l'ordine del foglio: stesso
 file, stessi hash a ogni ricarico. La chiave precedente non aveva `occorrenza`
 e quelle righe collidevano (3 su 22 file). Una tabella, una convenzione: il
-passaggio richiede UN ricarico di tutti i file presenti nella stessa finestra.
+passaggio richiede UN ricarico di tutti i file presenti nella stessa finestra
+(`--ricarico-completo`). I sei campi della chiave vecchia stanno tutti nello
+schema, quindi le righe vecchie si riconoscono in SQL: senza il flag, se ce ne
+sono, la corsa viene rifiutata; dopo la finestra sono 0 e il controllo tace.
 
 Usage:
     python -m core.bq.load.load_pf_rotazioni ORTI_PF_2026_03.xlsx ORTI_PF_2026-05.xlsx
@@ -113,6 +116,34 @@ def file_mancanti(in_tabella: set[str], in_corsa: set[str]) -> list[str]:
     return sorted(in_tabella - in_corsa)
 
 
+# Chiave VECCHIA (fino a 7f17c93, senza occorrenza) ricalcolata in SQL. Misurata sulla
+# tabella vera il 28/10/2026: totale 2194 · chiave_vecchia 2194 · chiave_nuova(occ=1) 0.
+CHIAVE_VECCHIA_SQL = (
+    "TO_HEX(MD5(CONCAT(societa_id,'|',voce_id,'|',CAST(anno AS STRING),'|',"
+    "CAST(mese AS STRING),'|',fonte,'|',file_sorgente)))"
+)
+SQL_RIGHE_CHIAVE_VECCHIA = (
+    f"SELECT COUNT(*) AS n, COUNT(DISTINCT file_sorgente) AS n_file "
+    f"FROM `{BQ_TABLE}` WHERE hash_riga = {CHIAVE_VECCHIA_SQL}"
+)
+
+
+def righe_chiave_vecchia(client) -> tuple[int, int]:
+    """(righe, file) ancora con la chiave vecchia in tabella."""
+    r = next(iter(client.query(SQL_RIGHE_CHIAVE_VECCHIA).result()))
+    return int(r.n), int(r.n_file)
+
+
+def verifica_convenzione(n_vecchie: int, n_file: int, ricarico_completo: bool) -> None:
+    """Senza --ricarico-completo, righe con la chiave vecchia bloccano la corsa: una corsa
+    parziale produrrebbe la tabella mista. Dopo la finestra n_vecchie è 0 e il controllo tace."""
+    if n_vecchie and not ricarico_completo:
+        raise SystemExit(
+            f"{n_vecchie} righe con la chiave vecchia ({n_file} file): "
+            "serve --ricarico-completo con tutti i file"
+        )
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("files", nargs="+", help="Path ai file PF xlsx")
@@ -142,7 +173,12 @@ def main() -> None:
 
     client = get_client()
     client.create_table(bigquery.Table(BQ_TABLE, schema=SCHEMA), exists_ok=True)
+    n_vecchie, n_file = righe_chiave_vecchia(client)
+    verifica_convenzione(n_vecchie, n_file, args.ricarico_completo)
     if args.ricarico_completo:
+        logger.info(
+            f"Ricarico completo: {n_vecchie} righe con la chiave vecchia su {n_file} file"
+        )
         in_tabella = {
             r.file_sorgente
             for r in client.query(

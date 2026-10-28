@@ -9,13 +9,22 @@ nessuna connessione a BigQuery (si prova solo build_rows).
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from openpyxl import Workbook
 
-from core.bq.load.load_pf_rotazioni import _hash, build_rows, file_mancanti
+from core.bq.load.load_pf_rotazioni import (
+    SQL_RIGHE_CHIAVE_VECCHIA,
+    _hash,
+    build_rows,
+    file_mancanti,
+    righe_chiave_vecchia,
+    verifica_convenzione,
+)
 
 MESI = [
     "GENNAIO",
@@ -115,3 +124,60 @@ def test_file_mancanti_elenca_cio_che_la_corsa_non_ricaricherebbe():
         "ORTI_PF_2026-09.xlsx",
     ]
     assert file_mancanti(in_tabella, in_tabella | {"ORTI_PF_2026-10.xlsx"}) == []
+
+
+# ── Chiave vecchia riconoscibile in SQL (coordinatore, 28/10/2026, sulla tabella vera:
+#    totale 2194 · chiave_vecchia 2194 · chiave_nuova(occ=1) 0 · file 22 · hash_distinti 2191)
+QUERY_MISURATA = (
+    "SELECT COUNT(*) AS n, COUNT(DISTINCT file_sorgente) AS n_file "
+    "FROM `hotelops-suite.hotelops.f_pf_rotazioni` WHERE hash_riga = TO_HEX(MD5(CONCAT("
+    "societa_id,'|',voce_id,'|',CAST(anno AS STRING),'|',CAST(mese AS STRING),'|',fonte,'|',file_sorgente)))"
+)
+
+
+class _ClientFinto:
+    def __init__(self, n: int, n_file: int):
+        self.n, self.n_file, self.sql = n, n_file, None
+
+    def query(self, sql: str):
+        self.sql = sql
+        return SimpleNamespace(
+            result=lambda: iter([SimpleNamespace(n=self.n, n_file=self.n_file)])
+        )
+
+
+def test_la_query_della_chiave_vecchia_e_quella_misurata_sulla_tabella():
+    assert SQL_RIGHE_CHIAVE_VECCHIA == QUERY_MISURATA
+
+
+def test_la_chiave_vecchia_in_sql_e_quella_python_fino_a_7f17c93_e_non_e_mai_la_nuova():
+    r = {
+        "societa_id": "INTUR",
+        "voce_id": VOCE,
+        "anno": 2026,
+        "mese": 7,
+        "fonte": "PIANO_FINANZIARIO",
+        "file_sorgente": "INTUR_PF_2026-07.xlsx",
+    }
+    vecchia = hashlib.md5(
+        b"INTUR|ENTRATE_AFFITTI_INTUR|2026|7|PIANO_FINANZIARIO|INTUR_PF_2026-07.xlsx"
+    ).hexdigest()  # = TO_HEX(MD5(CONCAT(...))): stesso ordine, stesso separatore, hex minuscolo
+    assert _hash(r, 1) != vecchia  # la chiave nuova porta sempre "|occorrenza" in più
+
+
+def test_righe_chiave_vecchia_esegue_la_query_misurata():
+    c = _ClientFinto(2194, 22)
+    assert righe_chiave_vecchia(c) == (2194, 22)
+    assert c.sql == QUERY_MISURATA
+
+
+def test_senza_flag_la_chiave_vecchia_blocca_la_corsa_e_dopo_la_finestra_tace():
+    with pytest.raises(
+        SystemExit,
+        match=r"2194 righe con la chiave vecchia \(22 file\): serve --ricarico-completo",
+    ):
+        verifica_convenzione(2194, 22, ricarico_completo=False)
+    verifica_convenzione(2194, 22, ricarico_completo=True)  # la finestra
+    verifica_convenzione(
+        0, 0, ricarico_completo=False
+    )  # carico mensile dopo la finestra
