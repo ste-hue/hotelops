@@ -74,6 +74,13 @@ def _mese_dopo(mese: str) -> str:
     return _mese(a + m // 12, m % 12 + 1)
 
 
+def _eur(cent: int) -> str:
+    """Centesimi -> '1.549,23' (segno, punto migliaia, virgola decimale). Solo per i motivi."""
+    segno = "-" if cent < 0 else ""
+    e, c = divmod(abs(cent), 100)
+    return f"{segno}{e:,}".replace(",", ".") + f",{c:02d}"
+
+
 # ── ancore ──
 
 _SQL_SALDI = f"""
@@ -158,7 +165,9 @@ def leggi_ancore(query: Query) -> dict[str, Ancora]:
                     saldo, False, f"movimenti fino al {copertura.isoformat()}"
                 )
             elif atteso != saldo:
-                conti[banca] = Conto(saldo, False, f"scostamento {saldo - atteso}")
+                conti[banca] = Conto(
+                    saldo, False, f"scostamento {_eur(saldo - atteso)}"
+                )
             else:
                 conti[banca] = Conto(
                     saldo, True, f"quadra con movimenti dal {D0.isoformat()}"

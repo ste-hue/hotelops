@@ -290,7 +290,14 @@ def test_scostamento_di_un_centesimo_non_attesta():
         }
     )
     c = leggi_ancore(q)["ORTI"].conti["MPS"]
-    assert c.attestato is False and c.motivo == "scostamento 1"
+    assert c.attestato is False and c.motivo == "scostamento 0,01"
+
+
+def test_scostamento_in_euro_con_segno():
+    from verticals.condges.cassa_fonti import _eur
+
+    assert _eur(154923) == "1.549,23" and _eur(-154923) == "-1.549,23"
+    assert _eur(5) == "0,05" and _eur(0) == "0,00" and _eur(100000000) == "1.000.000,00"
 
 
 def test_movimenti_fuori_dal_periodo_o_di_altro_conto_non_contano():
