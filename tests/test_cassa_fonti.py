@@ -7,6 +7,7 @@ from tests.test_cassa_scenario import scenario_sintetico
 from verticals.condges.cassa_fonti import (
     BaselineNonUnica,
     carica_snapshot,
+    coda_flussi,
     coda_ripetuta,
     leggi_ancore,
     leggi_baseline,
@@ -372,6 +373,9 @@ def test_scenari_dedup_per_scenario_id_tiene_il_piu_recente():
     )
     s2, f2, p2 = (_copia(x, "nuovo", "2026-10-29 09:00:00") for x in (s, f, p))
     s, f, p = (_copia(x, "vecchio", "2026-10-01 09:00:00") for x in (s, f, p))
+    # il vecchio ha un mese di pagamento in più e un importo diverso su un flusso
+    p = p + [{**p[0], "mese": "2031-12", "importo_netto_cent": 999}]
+    f = [{**f[0], "importo_cent": f[0]["importo_cent"] + 1}] + f[1:]
     q = finta(
         {
             "p_scenario_flussi": f + f2,
@@ -381,6 +385,67 @@ def test_scenari_dedup_per_scenario_id_tiene_il_piu_recente():
     )
     ((sc_out, base_out, meta),) = leggi_scenari(q)
     assert sc_out == sc and base_out == base and meta["nome"] == "t"
+
+
+def test_scenari_ultimo_padre_senza_figli_vince_e_resta_vuoto():
+    # "latest wins": il padre più recente comanda anche se non ha righe figlie
+    sc, base = scenario_sintetico()
+    s, f, p = righe_p(
+        scenario_to_json(sc, base, "t"), "vecchio", datetime(2026, 10, 1), "s"
+    )
+    s, f, p = (_copia(x, "vecchio", "2026-10-01 09:00:00") for x in (s, f, p))
+    s2 = _copia(s, "nuovo", "2026-10-29 09:00:00")
+    q = finta({"p_scenario_flussi": f, "p_progetti_pagamenti": p, "p_scenari": s + s2})
+    ((sc_out, _, _),) = leggi_scenari(q)
+    assert all(pr.pagamenti == [] for pr in sc_out.progetti)
+    assert sc_out.manuali == []
+
+
+def test_coda_flussi_ripete_i_flussi_omologhi_con_stato():
+    fl = [
+        Flusso("Fitto Hotel (canone)", "ORTI", "INTUR", "2026-11", 100, "pf"),
+        Flusso("Fitto Hotel (canone)", "TERZI", "INTUR", "2026-11", 30, "una_gamba"),
+        Flusso("Godimento beni di terzi", "ORTI", "TERZI", "2026-10", 5, "pf"),
+    ]
+    assert coda_flussi(fl, ["2027-11"]) == [
+        Flusso("Fitto Hotel (canone)", "ORTI", "INTUR", "2027-11", 100, "pf"),
+        Flusso("Fitto Hotel (canone)", "TERZI", "INTUR", "2027-11", 30, "una_gamba"),
+    ]
+    assert coda_flussi(fl, ["2027-12"]) == []
+
+
+def test_conto_senza_chiusura_all_ultima_data_resta_nell_ancora():
+    q = finta(
+        {
+            "f_saldi_banca_chiusura_mensile": saldi(
+                MPS={"2026-08-31": 900.0, "2026-09-30": 1000.0},
+                INTESA={"2026-08-31": 500.0},
+            ),
+            "f_banche_movimenti": movimenti(
+                MPS=[("2026-09-10", 100.0)], fino="2026-09-30"
+            ),
+        }
+    )
+    a = leggi_ancore(q)["ORTI"]
+    assert a.conti["MPS"].attestato is True
+    assert a.attestato is False and "INTESA" in a.conti
+    assert a.saldo == eur(1500)
+    assert (
+        a.conti["INTESA"].motivo == "nessuna chiusura al 2026-09-30 (ultima 2026-08-31)"
+    )
+
+
+def test_conto_senza_movimenti_dopo_la_chiusura_precedente():
+    q = finta(
+        {
+            "f_saldi_banca_chiusura_mensile": saldi(
+                MPS={"2026-08-31": 900.0, "2026-09-30": 1000.0}
+            ),
+            "f_banche_movimenti": [],
+        }
+    )
+    c = leggi_ancore(q)["ORTI"].conti["MPS"]
+    assert c.attestato is False and c.motivo == "nessun movimento dopo il 2026-08-31"
 
 
 # ── orizzonte e snapshot ──

@@ -131,7 +131,15 @@ def leggi_ancore(query: Query) -> dict[str, Ancora]:
     for soc, D in ultime.items():
         conti: dict[str, Conto] = {}
         for (s, banca), per_data in chiusure.items():
-            if s != soc or D not in per_data:
+            if s != soc:
+                continue
+            if D not in per_data:
+                ultima = max(per_data)
+                conti[banca] = Conto(
+                    per_data[ultima],
+                    False,
+                    f"nessuna chiusura al {D.isoformat()} (ultima {ultima.isoformat()})",
+                )
                 continue
             saldo = per_data[D]
             D0 = precedenti.get((s, banca))
@@ -141,7 +149,11 @@ def leggi_ancore(query: Query) -> dict[str, Ancora]:
             mov = somme.get((s, banca), [])
             copertura = max((d for d, _ in mov), default=D0)
             atteso = per_data[D0] + sum(c for d, c in mov if D0 < d <= D)
-            if copertura < D:
+            if not mov:
+                conti[banca] = Conto(
+                    saldo, False, f"nessun movimento dopo il {D0.isoformat()}"
+                )
+            elif copertura < D:
                 conti[banca] = Conto(
                     saldo, False, f"movimenti fino al {copertura.isoformat()}"
                 )
@@ -297,6 +309,7 @@ def leggi_scenari(query: Query):
     flussi = query(f"SELECT * FROM `{P_SCENARIO_FLUSSI}`")
     pagamenti = query(f"SELECT * FROM `{P_PROGETTI_PAGAMENTI}`")
 
+    # latest wins: il padre più recente comanda anche se non ha righe figlie
     # lo stesso scenario salvato da raw object diversi duplica le righe: vince il più recente
     vincente: dict[str, dict] = {}
     for s in scenari:
@@ -338,6 +351,19 @@ def coda_ripetuta(pf: list[Riga], mesi_coda: list[str]) -> list[Riga]:
             Riga(r.societa, r.voce_id, mese, r.importo, r.direzione, "pf")
             for r in pf
             if r.mese == omologo and r.origine == "pf"
+        ]
+    return out
+
+
+def coda_flussi(flussi: list[Flusso], mesi_coda: list[str]) -> list[Flusso]:
+    out = []
+    for mese in mesi_coda:
+        anno, m = (int(x) for x in mese.split("-"))
+        omologo = _mese(anno - 1, m)
+        out += [
+            Flusso(f.nome, f.da, f.a, mese, f.importo, f.stato)
+            for f in flussi
+            if f.mese == omologo
         ]
     return out
 
