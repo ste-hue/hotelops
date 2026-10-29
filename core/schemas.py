@@ -1676,3 +1676,7 @@ def make_hash(*parts: str) -> str:
     """Create MD5 hash from pipe-separated parts."""
     key = "|".join(str(p) for p in parts)
     return hashlib.md5(key.encode()).hexdigest()
+
+
+# Origini delle righe della pagina Cassa (motore verticals/condges/cassa_motore.py)
+ORIGINI_CASSA = ("pf", "canone", "finanziamento", "progetto", "manuale", "fatto")
