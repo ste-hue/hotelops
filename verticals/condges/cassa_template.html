@@ -36,7 +36,7 @@ h3{font-size:14px;font-weight:620;margin:12px 0 6px}
 .minimi .saldo{font-size:26px;font-weight:650;margin:2px 0}
 .minimi .delta{font-size:13px;color:var(--muted)}
 .minimi ul{margin:6px 0 0;padding-left:16px;font-size:13px}
-.badge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);background:var(--soft);color:var(--muted);margin-left:4px;vertical-align:middle}
+.badge{display:inline-block;white-space:nowrap;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);background:var(--soft);color:var(--muted);margin-left:4px;vertical-align:middle}
 .badge.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent}
 .badge.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}
 .badge.bad{background:var(--bad-bg);color:var(--bad);border-color:transparent}
@@ -82,6 +82,36 @@ input.nome{width:100%}
 .limiti ul{margin:0;padding-left:18px;font-size:13px}
 .piccolo{font-size:12px;color:var(--muted)}
 details summary{cursor:pointer;color:var(--muted);font-size:13px}
+.canone{margin-top:14px;border-color:var(--accent)}
+.canone .testa{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;justify-content:space-between}
+.canone .grande{font-size:22px;font-weight:650}
+.canone .slider{display:flex;gap:10px;align-items:center;margin-top:8px}
+.canone .slider input[type=range]{flex:1;min-width:120px;accent-color:var(--accent);padding:0;border:0;background:transparent}
+.canone .slider input[type=range]:disabled{opacity:.4}
+.canone details{margin-top:8px}
+.canone details .riga{margin-top:8px}
+button.mini{font-size:12px;padding:2px 7px}
+.strumenti{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;margin-top:8px;font-size:13px}
+details.leva{border-top:1px solid var(--line);padding:6px 0}
+details.leva:first-of-type{border-top:0}
+details.leva summary{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;list-style:none;color:var(--ink);font-size:13px;padding:4px 0 4px 18px;position:relative}
+details.leva summary::-webkit-details-marker{display:none}
+details.leva summary::before{content:"";position:absolute;left:4px;top:11px;border:solid var(--muted);border-width:0 1.5px 1.5px 0;width:6px;height:6px;transform:rotate(-45deg);transition:transform .15s}
+details.leva[open] summary::before{transform:rotate(45deg);top:9px}
+details.leva summary .nome{font-weight:600;flex:1 1 140px}
+details.leva summary .tot{font-weight:600}
+details.leva summary .peso{color:var(--muted)}
+details.leva summary .peso.neg{color:var(--bad)}
+details.leva summary .sw{display:inline-flex;align-items:center}
+details.leva.spento summary .nome,details.leva.spento summary .tot{color:var(--muted);font-weight:500}
+details.leva .corpo{padding:4px 0 6px 18px}
+.minimi .oltre{font-size:12px;color:var(--muted);margin-top:4px}
+.fonti{margin-top:16px;font-size:13px;color:var(--muted)}
+.fonti summary{font-weight:600;color:var(--ink)}
+.fonti ul{margin:6px 0 0;padding-left:18px}
+.fonti li{margin-top:3px}
+td.vuoto{color:var(--muted)}
+.leg i.eff{width:12px;height:10px;border:0;background:var(--accent);opacity:.35;border-radius:2px}
 </style>
 </head>
 <body>
@@ -90,33 +120,32 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
   <h1>Cassa · ORTI e INTUR</h1>
   <p class="sub" id="sub"></p>
 </header>
-
-<div class="barra" id="barra">
-  <label class="piccolo">Scenario <select id="sel-scenari"></select></label>
-  <input type="text" id="nome-scenario" class="nome" style="width:200px" placeholder="nome scenario">
-  <label class="piccolo">Soglia € <input type="text" class="eur" id="soglia"></label>
-  <button id="esporta" class="primario">Esporta scenario</button>
-  <button id="nessuna">Nessuna leva</button>
-</div>
 <div id="errore" class="errore" hidden></div>
 
 <section class="minimi" id="minimi"></section>
 
+<section class="card canone" id="canone"></section>
+
 <div class="griglia">
   <div>
     <div id="grafici"></div>
-    <div id="tabelle"></div>
-    <h2>Consolidato</h2>
-    <div class="card" id="consolidato"></div>
-    <div id="fatti"></div>
   </div>
   <aside>
-    <h2 style="margin-top:0">Leve</h2>
-    <div class="card" id="leve"></div>
+    <div class="card" id="scenario"></div>
+    <h2>Progetti</h2>
+    <div class="card" id="progetti"></div>
+    <h2>Finanziamenti</h2>
+    <div class="card" id="finanziamenti"></div>
   </aside>
 </div>
 
+<div id="tabelle"></div>
+<h2>Consolidato</h2>
+<div class="card" id="consolidato"></div>
+<div id="fatti"></div>
+
 <section class="limiti" id="limiti"></section>
+<details class="fonti" id="fonti"></details>
 </main>
 
 <script type="application/json" id="dati">__DATA__</script>
@@ -373,6 +402,9 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   const D = JSON.parse(document.getElementById("dati").textContent);
   const SOC = MOTORE.SOCIETA;
   const IPO = new Set(D.mesi_ipotetici);
+  const MESI_PF = D.mesi.filter((m) => !IPO.has(m));
+  const ULTIMO_PF = MESI_PF[MESI_PF.length - 1];
+  const ULTIMO = D.mesi[D.mesi.length - 1];
   const MESI_IT = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
   const { fmt, parseEuro, calendarioTesto, calendarioParse } = FORMATO;
   // Legge un campo euro: null = non valido (campo marcato, stato invariato).
@@ -384,11 +416,19 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   const copia = (o) => JSON.parse(JSON.stringify(o));
   const el = (id) => document.getElementById(id);
   const etichetta = (v) => v.replace(/^(ENTRATE|USCITE)_/, "").toLowerCase().replace(/_/g, " ");
+  const oraDi = (iso) => (iso ? String(iso).replace("T", " ").slice(0, 16) : "");
+  const segno = (v, conCent = true) => (v > 0 ? "+" : "") + fmt(v, conCent);
+  const somma = (o) => Object.values(o).reduce((a, b) => a + b, 0);
+  const periodoDi = (mesi) => { const k = Object.keys(mesi).sort(); return k.length ? (k.length === 1 ? meseIt(k[0]) : `${meseIt(k[0])} – ${meseIt(k[k.length - 1])}`) : "nessun mese"; };
+  const badgeStato = (s) => (/contratto|tua/.test(s) ? "ok" : /verificare|decidere/.test(s) ? "warn" : /fuori/.test(s) ? "bad" : "");
+  const statoIt = (s) => esc(String(s).replace(/_/g, " "));
+  const dataIt = (iso) => (/^\d{4}-\d{2}-\d{2}/.test(String(iso)) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : esc(iso));
 
   // ── stato ──
   let stato = { nome: D.seme.nome, scenario: copia(D.seme.scenario) };
   let ris = null;
-  const aperti = new Set();
+  const aperti = new Set();   // righe della tabella aperte (società|mese)
+  const aperte = new Set();   // tendine aperte: "canone", "p:<id>", "f:<id>"
 
   function mostraErrore(msg) {
     const e = el("errore");
@@ -396,7 +436,11 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     e.hidden = !msg;
   }
 
-  function ricalcola() {
+  function calcolaSicuro(scenario) {
+    try { return MOTORE.calcola(D, scenario); } catch (e) { return null; }
+  }
+
+  function ricalcola(opts = {}) {
     try {
       ris = MOTORE.calcola(D, stato.scenario);
     } catch (e) {
@@ -404,31 +448,56 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       return;
     }
     mostraErrore("");
-    render();
+    render(opts);
   }
 
   const vuoto = () => ({ nome: "Nessuna leva", scenario: { nome: "Nessuna leva", soglia: 0, canone: null, progetti: [], finanziamenti: [], manuali: [] } });
 
-  // ── testa e scenari ──
+  // Lo stato aperto/chiuso delle tendine si legge dal DOM prima di ridisegnare:
+  // l'evento toggle arriva in ritardo e un re-render in mezzo le richiuderebbe.
+  function sincronizzaAperte() {
+    document.querySelectorAll("details.leva[data-k], #canone-dett").forEach((d) => {
+      const k = d.id === "canone-dett" ? "canone" : d.dataset.k;
+      d.open ? aperte.add(k) : aperte.delete(k);
+    });
+  }
+
+  // Effetto delle leve fuori dal PF: delta a fine orizzonte meno delta all'ultimo mese PF.
+  function effettoOltrePF(soc, r = ris) {
+    const rs = r.righe.filter((x) => x.societa === soc), bs = D.baseline.righe.filter((x) => x.societa === soc);
+    const i = D.mesi.indexOf(ULTIMO_PF), n = D.mesi.length - 1;
+    return (rs[n].fin - bs[n].fin) - (rs[i].fin - bs[i].fin);
+  }
+
+  // ── testa, fonti e scenari ──
   function renderTesta() {
     const basi = SOC.map((s) => `${s}: ${D.base[s] ? nomeFile(D.base[s].file_sorgente) : "—"}`).join(" · ");
     const anc = Object.values(D.ancore)[0];
-    el("sub").textContent = `Ancora al ${anc ? anc.data : "—"} · PF ${basi} · generato ${D.generato_il.replace("T", " ")}` +
-      (D.acquisito_il ? ` · fonti del ${D.acquisito_il.replace("T", " ")}` : "");
-    const sel = el("sel-scenari");
-    sel.innerHTML = "";
-    const tutti = [{ ...D.seme, _k: "seme" }, { ...vuoto(), compatibile: true, _k: "vuoto" }, ...D.scenari.map((s, i) => ({ ...s, _k: String(i) }))];
+    el("sub").textContent = `Ancora al ${anc ? dataIt(anc.data) : "—"} · PF ${basi} · fonti del ${oraDi(D.acquisito_il) || "—"} · pagina del ${oraDi(D.generato_il)}`;
+  }
+
+  function renderScenario() {
+    const sel = document.createElement("select");
+    const tutti = [{ ...D.seme, _k: "seme", _e: `${D.seme.nome} · seme` }, { ...vuoto(), compatibile: true, _k: "vuoto", _e: "Solo PF, nessuna leva" },
+      ...D.scenari.map((s, i) => ({ ...s, _k: String(i), _e: `${s.nome} · salvato ${oraDi(s.salvato_il)}` }))];
+    el("scenario").innerHTML = `<div class="strumenti" style="margin-top:0"><label class="piccolo">Scenario <select id="sel-scenari"></select></label>
+      <input type="text" id="nome-scenario" class="nome" style="width:180px" placeholder="nome scenario">
+      <label class="piccolo">Soglia € <input type="text" class="eur" id="soglia"></label>
+      <button id="esporta" class="primario">Esporta scenario</button>
+      <button id="nessuna">Spegni tutte le leve</button></div>`;
+    const s0 = el("sel-scenari");
     for (const s of tutti) {
       const o = document.createElement("option");
       o.value = s._k;
-      o.textContent = s.nome + (s.compatibile ? "" : " · base diversa");
-      sel.appendChild(o);
+      o.textContent = s._e + (s.compatibile ? "" : " · base diversa");
+      s0.appendChild(o);
     }
-    sel.onchange = () => {
-      const s = sel.value === "seme" ? D.seme : sel.value === "vuoto" ? vuoto() : D.scenari[parseInt(sel.value, 10)];
+    s0.onchange = () => {
+      const s = s0.value === "seme" ? D.seme : s0.value === "vuoto" ? vuoto() : D.scenari[parseInt(s0.value, 10)];
       stato = { nome: s.nome, scenario: copia(s.scenario) };
       aperti.clear();
       el("nome-scenario").value = stato.nome;
+      el("soglia").value = fmt(stato.scenario.soglia || 0, false);
       ricalcola();
     };
     el("nome-scenario").value = stato.nome;
@@ -436,7 +505,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     el("soglia").value = fmt(stato.scenario.soglia || 0, false);
     el("soglia").onchange = (e) => { const v = euroDa(e.target); if (v === null) return; stato.scenario.soglia = v; ricalcola(); };
     el("esporta").onclick = esporta;
-    el("nessuna").onclick = () => { sel.value = "vuoto"; sel.onchange(); };
+    el("nessuna").onclick = () => { s0.value = "vuoto"; s0.onchange(); };
   }
 
   function esporta() {
@@ -448,6 +517,116 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  function renderFonti() {
+    const basi = SOC.map((s) => D.base[s] ? `<li>PF ${s}: <code>${esc(nomeFile(D.base[s].file_sorgente))}</code>, caricato il ${esc(String(D.base[s].data_caricamento).slice(0, 16))}</li>` : `<li>PF ${s}: assente</li>`).join("");
+    const ancore = SOC.map((s) => {
+      const a = D.ancore[s];
+      if (!a) return "";
+      const conti = Object.entries(a.conti).map(([banca, c]) => `<li>${esc(banca)} <span class="num">${fmt(c.saldo)}</span> <span class="badge ${c.attestato ? "ok" : "warn"}">${c.attestato ? "attestato" : "dichiarato"}</span> ${esc(c.motivo)}</li>`).join("");
+      return `<li>Ancora ${s} al ${dataIt(a.data)}: <span class="num">${fmt(a.saldo)}</span> <span class="badge ${a.attestato ? "ok" : "warn"}">${a.attestato ? "attestata" : "dichiarata"}</span><ul>${conti}</ul></li>`;
+    }).join("");
+    const nascosti = D.scenari_sostituiti.length ? ` Nascosti perché hanno lo stesso nome del seme: ${D.scenari_sostituiti.map((s) => `${esc(s.nome)} (${oraDi(s.salvato_il)})`).join(", ")}.` : "";
+    el("fonti").innerHTML = `<summary>Fonti e versioni</summary><ul>${basi}${ancore}
+      <li>Fonti lette da BigQuery il ${oraDi(D.acquisito_il) || "—"} · pagina generata il ${oraDi(D.generato_il)}</li>
+      <li>Seme «${esc(D.seme.nome)}» dal file locale, salvato il ${oraDi(D.seme.salvato_il)}${D.seme.compatibile ? "" : " (base PF diversa)"}</li>
+      <li>Scenari salvati su BigQuery nel menu: ${D.scenari.length}.${nascosti}</li>
+      <li>Mesi senza PF: ${D.mesi_ipotetici.length ? `${meseIt(D.mesi_ipotetici[0])} – ${meseIt(ULTIMO)}` : "nessuno"} (il PF finisce a ${meseIt(ULTIMO_PF)})</li></ul>`;
+  }
+
+  // ── canone: lo slider parte dal PF ──
+  const CPF = D.canone_pf && D.canone_pf.length ? D.canone_pf[0] : null;
+  const ANNO = CPF ? CPF.anno : Number(ULTIMO_PF.slice(0, 4));
+  const MAX_SLIDER = Math.max(30000000, Math.ceil(((CPF ? CPF.netto : 0) * 3) / 10000000) * 10000000);
+
+  function nettoSlider() {
+    const c = stato.scenario.canone;
+    if (!c) return CPF ? CPF.netto : 0;
+    const v = c.netto_per_anno[ANNO];
+    return v !== undefined ? v : 0;
+  }
+  function impostaCanone(netto) {
+    const sc = stato.scenario;
+    if (!sc.canone) {
+      sc.canone = { netto_per_anno: { [ANNO]: netto }, rate_n: CPF ? CPF.rate_n : 1, da_mese: CPF ? CPF.da_mese : MESI_PF[0], calendario: null, aliquota_iva: CPF ? CPF.aliquota_iva : 22 };
+    } else {
+      sc.canone.netto_per_anno[ANNO] = netto;
+    }
+  }
+  const calendarioAnno = (c) => !!(c && c.calendario && Object.keys(c.calendario).some((m) => m.slice(0, 4) === String(ANNO)));
+  function lordoAnno() {
+    const c = stato.scenario.canone;
+    if (!c) return CPF ? CPF.lordo : 0;
+    return MOTORE.flussiCanone(c, D.mesi).filter((f) => f.mese.slice(0, 4) === String(ANNO)).reduce((s, f) => s + f.importo, 0);
+  }
+
+  function renderCanone() {
+    const c = stato.scenario.canone;
+    const netto = nettoSlider();
+    const anni = c ? Object.entries(c.netto_per_anno).sort((a, b) => Number(a[0]) - Number(b[0])) : [];
+    const dett = c ? `<div class="riga">${anni.map(([a, v]) => `<label class="piccolo">${a} netto € <input type="text" class="eur" data-canone-anno="${a}" value="${fmt(v)}"></label>`).join("")}
+          <label class="piccolo">anno <input type="number" class="n" style="width:72px" min="2026" max="2040" data-canone-nuovo-anno value="${Math.max(...anni.map(([a]) => Number(a))) + 1}"></label>
+          <button data-canone-aggiungi>+ anno</button></div>
+        <div class="riga"><label class="piccolo">rate <input type="text" class="n" id="canone-rate" value="${c.rate_n}"></label>
+          <label class="piccolo">da mese ${selMesi(c.da_mese, "sel-canone-da")}</label>
+          <label class="piccolo">IVA % <input type="text" class="n" id="canone-iva" value="${c.aliquota_iva}"></label>
+          <button data-canone-pf>Torna al canone del PF</button></div>
+        <div class="riga"><label class="piccolo" style="flex:1">oppure calendario libero (mese=netto; vince sulle rate per quell'anno)<br>
+          <input type="text" class="nome" id="canone-cal" placeholder="2027-03=200.000,00; 2027-06=300.000,00" value="${esc(calendarioTesto(c.calendario))}"></label></div>
+        <div class="nota">Il canone è lordo in cassa: esce da ORTI ed entra in INTUR nello stesso mese. Negli anni coperti dalla scaletta sostituisce le righe «Fitto Hotel» del PF.</div>`
+      : `<div class="nota">Canone come nel PF${CPF ? `: ${fmt(CPF.netto, false)} € netto, ${CPF.rate_n} ${CPF.rate_n === 1 ? "rata" : "rate"} da ${meseIt(CPF.da_mese)}` : ": nessuna riga «Fitto Hotel» nel PF"}. Muovi lo slider, oppure <button data-canone-attiva class="mini">apri la scaletta</button> per anni, rate e calendario.</div>`;
+    el("canone").innerHTML = `<div class="testa"><div><strong>Canone Fitto Hotel</strong> <span class="piccolo">ORTI → INTUR · netto annuo ${ANNO}</span></div>
+        <div class="grande num" id="canone-val"></div></div>
+      <div class="slider"><input type="range" id="canone-slider" min="0" max="${MAX_SLIDER}" step="500000" value="${Math.min(Math.max(netto, 0), MAX_SLIDER)}" ${calendarioAnno(c) ? "disabled" : ""} aria-label="Canone netto annuo ${ANNO}">
+        <input type="text" class="eur" id="canone-num" value="${fmt(netto, false)}" aria-label="Canone netto annuo ${ANNO} in euro"></div>
+      <div class="piccolo" id="canone-info"></div>
+      <details id="canone-dett" ${aperte.has("canone") ? "open" : ""}><summary>Scaletta pluriennale e scadenze</summary>${dett}</details>`;
+    const slider = el("canone-slider"), num = el("canone-num");
+    slider.oninput = () => { impostaCanone(parseInt(slider.value, 10)); num.value = fmt(parseInt(slider.value, 10), false); ricalcola({ canoneLeggero: true }); };
+    slider.onchange = () => ricalcola();
+    num.onchange = () => { const v = euroDa(num); if (v === null || v < 0) return; impostaCanone(v); ricalcola(); };
+    const box = el("canone");
+    const att = box.querySelector("button[data-canone-attiva]");
+    if (att) att.onclick = () => { if (!stato.scenario.canone) impostaCanone(CPF ? CPF.netto : 0); el("canone-dett").open = true; ricalcola(); };
+    if (c) {
+      box.querySelectorAll("input[data-canone-anno]").forEach((inp) => { inp.onchange = () => { const v = euroDa(inp); if (v === null) return; c.netto_per_anno[inp.dataset.canoneAnno] = v; ricalcola(); }; });
+      box.querySelector("button[data-canone-aggiungi]").onclick = () => {
+        const inp = box.querySelector("input[data-canone-nuovo-anno]");
+        const a = inp.value.trim();
+        const ok = /^\d{4}$/.test(a) && +a >= 2026 && +a <= 2040 && !(a in c.netto_per_anno);
+        inp.classList.toggle("invalid", !ok);
+        if (ok) { c.netto_per_anno[a] = 0; ricalcola(); }
+      };
+      el("canone-rate").onchange = (e) => { c.rate_n = parseInt(e.target.value, 10) || 1; ricalcola(); };
+      el("canone-iva").onchange = (e) => { c.aliquota_iva = parseInt(e.target.value, 10) || 0; ricalcola(); };
+      box.querySelector("select.sel-canone-da").onchange = (e) => { c.da_mese = e.target.value; ricalcola(); };
+      el("canone-cal").onchange = (e) => {
+        const cal = calendarioParse(e.target.value);
+        e.target.classList.toggle("invalid", cal === null);
+        if (cal === null) return;
+        c.calendario = Object.keys(cal).length ? cal : null;
+        ricalcola();
+      };
+      box.querySelector("button[data-canone-pf]").onclick = () => { stato.scenario.canone = null; ricalcola(); };
+    }
+    aggiornaCanoneInfo();
+  }
+
+  function aggiornaCanoneInfo() {
+    const c = stato.scenario.canone;
+    const netto = nettoSlider();
+    el("canone-val").textContent = `${fmt(netto, false)} €`;
+    const parti = [`lordo ${fmt(lordoAnno(), false)} €`];
+    if (c) {
+      parti.push(calendarioAnno(c) ? `calendario libero per il ${ANNO} (slider fermo)` : `${c.rate_n} ${c.rate_n === 1 ? "rata" : "rate"} da ${meseIt(`${ANNO}-${c.da_mese.slice(5)}`)}`);
+      parti.push(`IVA ${c.aliquota_iva}%`);
+      if (CPF) parti.push(`PF: ${fmt(CPF.netto, false)} € netto`);
+    } else {
+      parti.push(CPF ? `${CPF.rate_n} ${CPF.rate_n === 1 ? "rata" : "rate"} da ${meseIt(CPF.da_mese)} · come nel PF` : "nessun canone nel PF");
+    }
+    const eff = SOC.map((s) => `${s} ${segno(ris.minimi[s].saldo - D.baseline.minimi[s].saldo, false)}`).join(" · ");
+    el("canone-info").innerHTML = `${parti.join(" · ")}<br>effetto di tutte le leve sui minimi: ${eff}`;
   }
 
   // ── voci di un mese (dettaglio e "tre voci più grandi") ──
@@ -476,22 +655,22 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       if (f.a === soc) add("E", f.nome + tag, f.importo);
       if (f.da === soc) add("U", f.nome + tag, f.importo);
     }
+    for (const r of (sc.manuali || [])) if (r.societa === soc && r.mese === mese) add(r.direzione, `${etichetta(r.voce_id)} (manuale)`, r.importo_cent !== undefined ? r.importo_cent : r.importo);
     for (const f of sc.finanziamenti) {
       if (f.societa !== soc) continue;
-      add("E", f.nome + " (erogazione)", f.erogazioni[mese] || 0);
-      add("U", f.nome + " (rata)", f.rate[mese] || 0);
+      add("E", `${f.nome} · erogazione`, f.erogazioni[mese] || 0);
+      add("U", `${f.nome} · rata`, f.rate[mese] || 0);
     }
     const [progetti] = MOTORE.riconcilia(sc.progetti, D.fatti);
     for (const p of progetti) {
       if (!p.acceso || p.societa !== soc) continue;
       for (const g of p.pagamenti) add("U", `${p.nome}: ${g.nome}`, MOTORE.iva(g.mesi[mese] || 0, g.aliquota_iva));
     }
-    for (const f of D.fatti) if (f.societa === soc && f.mese === mese) add("U", `fatto ${f.progetto_id} ${f.fornitore_id || ""}`, f.importo);
-    for (const r of sc.manuali) if (r.societa === soc && r.mese === mese) add(r.direzione, `${r.voce_id} (manuale)`, r.importo_cent !== undefined ? r.importo_cent : r.importo);
+    for (const f of D.fatti) if (f.societa === soc && f.mese === mese) add("U", `${f.progetto_id} · ${f.fornitore_id || "fatto"} (registrato)`, f.importo);
     return voci;
   }
 
-  // ── riquadri minimi ──
+  // ── minimi ──
   function renderMinimi() {
     const box = el("minimi");
     box.innerHTML = "";
@@ -499,45 +678,49 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       const m = ris.minimi[soc], b = D.baseline.minimi[soc], a = D.ancore[soc];
       const delta = m.saldo - b.saldo;
       const usc = Object.entries(vociMese(soc, m.mese).U).sort((x, y) => y[1] - x[1]).slice(0, 3);
-      const conti = Object.entries(a.conti).map(([banca, c]) =>
-        `<div>${esc(banca)} <span class="num">${fmt(c.saldo)}</span> <span class="badge ${c.attestato ? "ok" : "warn"}">${c.attestato ? "attestato" : "dichiarato"}</span> <span>${esc(c.motivo)}</span></div>`).join("");
-      const sotto = m.sotto_soglia.length ? `<div class="piccolo">sotto soglia: ${m.sotto_soglia.map(meseIt).join(", ")}</div>` : "";
-      const coda = m.coda_mese ? `<div class="piccolo">coda ipotetica: minimo ${meseIt(m.coda_mese)} <span class="num">${fmt(m.coda_saldo)}</span></div>` : "";
+      const sotto = m.sotto_soglia.length ? `<div class="piccolo">${stato.scenario.soglia ? `sotto la soglia di ${fmt(stato.scenario.soglia, false)}` : "sotto zero"}: ${m.sotto_soglia.map(meseIt).join(", ")}</div>` : "";
+      const eff = IPO.size ? effettoOltrePF(soc) : 0;
+      const oltre = IPO.size ? `<div class="oltre">oltre ${meseIt(ULTIMO_PF)}, senza PF: ${eff ? `leve ${segno(eff)} entro ${meseIt(ULTIMO)}` : "nessuna leva"}</div>` : "";
       box.insertAdjacentHTML("beforeend", `<div class="card">
-        <div><strong>${soc}</strong> · minimo a ${meseIt(m.mese)}${IPO.has(m.mese) ? ' <span class="badge">ipotetico</span>' : ""}
-          <span class="badge ${a.attestato ? "ok" : "warn"}">ancora ${a.attestato ? "attestata" : "dichiarata"}</span></div>
+        <div><strong>${soc}</strong> · minimo a ${meseIt(m.mese)} <span class="badge ${a.attestato ? "ok" : "warn"}" title="vedi Fonti e versioni">ancora ${a.attestato ? "attestata" : "dichiarata"}</span></div>
         <div class="saldo num ${m.saldo < 0 ? "neg" : ""}">${fmt(m.saldo)} €</div>
-        <div class="delta num">vs baseline (${fmt(b.saldo)} a ${meseIt(b.mese)}): ${delta === 0 ? "uguale" : (delta > 0 ? "+" : "") + fmt(delta)}</div>
-        ${sotto}${coda}
+        <div class="delta num">${delta === 0 ? "come con il solo PF" : `${segno(delta)} rispetto al solo PF`} · solo PF: minimo ${fmt(b.saldo)} a ${meseIt(b.mese)}</div>
+        ${sotto}
         <ul>${usc.map(([n, v]) => `<li>${esc(n)} <span class="num">${fmt(v)}</span></li>`).join("") || "<li>nessuna uscita nel mese</li>"}</ul>
-        <div class="conti">Ancora al ${esc(a.data)}: <span class="num">${fmt(a.saldo)}</span>${conti}</div>
+        ${oltre}
       </div>`);
     }
   }
 
-  // ── grafico SVG ──
+  // ── grafico SVG: linee nei mesi PF, barre dell'effetto leve nei mesi senza PF ──
   function grafico(soc) {
     const W = 640, H = 230, L = 62, R = 10, T = 12, B = 34;
     const n = D.mesi.length;
     const sce = ris.righe.filter((r) => r.societa === soc).map((r) => r.fin);
     const bas = D.baseline.righe.filter((r) => r.societa === soc).map((r) => r.fin);
-    const tutti = sce.concat(bas, [0]);
+    const nPF = MESI_PF.length;
+    const dPF = sce[nPF - 1] - bas[nPF - 1];
+    const eff = D.mesi.map((m, i) => (IPO.has(m) ? (sce[i] - bas[i]) - dPF : 0));
+    const tutti = sce.slice(0, nPF).concat(bas.slice(0, nPF), eff.slice(nPF), [0]);
     let lo = Math.min(...tutti), hi = Math.max(...tutti);
     if (hi === lo) hi = lo + 100;
     const pad = (hi - lo) * 0.06; lo -= pad; hi += pad;
     const x = (i) => L + (n === 1 ? 0 : (i * (W - L - R)) / (n - 1));
     const y = (v) => T + ((hi - v) * (H - T - B)) / (hi - lo);
-    const path = (vals) => vals.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-    const i0 = D.mesi.findIndex((m) => IPO.has(m));
-    const coda = i0 >= 0 ? `<rect x="${(x(i0) - (x(1) - x(0)) / 2).toFixed(1)}" y="${T}" width="${(W - R - x(i0) + (x(1) - x(0)) / 2).toFixed(1)}" height="${H - T - B}" fill="var(--ipo)"/>` : "";
+    const path = (vals) => vals.slice(0, nPF).map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    const dx = n > 1 ? x(1) - x(0) : 20;
+    const i0 = nPF < n ? nPF : -1;
+    const coda = i0 >= 0 ? `<rect x="${(x(i0) - dx / 2).toFixed(1)}" y="${T}" width="${(W - R - x(i0) + dx / 2).toFixed(1)}" height="${H - T - B}" fill="var(--ipo)"/>
+      <text x="${(x(i0) - dx / 2 + 4).toFixed(1)}" y="${T + 11}" font-size="10" fill="var(--muted)">senza PF · solo leve dopo ${meseIt(ULTIMO_PF)}</text>` : "";
+    const barre = i0 >= 0 ? D.mesi.slice(nPF).map((m, k) => { const i = nPF + k, v = eff[i]; if (!v) return ""; const y0 = y(0), y1 = y(v); return `<rect x="${(x(i) - dx * 0.3).toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}" width="${(dx * 0.6).toFixed(1)}" height="${Math.max(1, Math.abs(y1 - y0)).toFixed(1)}" fill="${v < 0 ? "var(--bad)" : "var(--accent)"}" opacity="0.35"><title>${meseIt(m)}: leve dopo ${meseIt(ULTIMO_PF)} ${segno(v)} € (nessun saldo previsto)</title></rect>`; }).join("") : "";
     const passo = n > 12 ? 2 : 1;
     const assi = D.mesi.map((m, i) => (i % passo ? "" : `<text x="${x(i).toFixed(1)}" y="${H - 12}" text-anchor="middle" font-size="10" fill="var(--muted)">${meseIt(m)}</text>`)).join("");
     const griglia = [lo + pad, (lo + hi) / 2, hi - pad].map((v) => `<text x="${L - 6}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)" class="num">${fmt(Math.round(v / 100) * 100, false)}</text>`).join("");
-    const punti = sce.map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${v < 0 ? "var(--bad)" : "var(--accent)"}"><title>${meseIt(D.mesi[i])}: ${fmt(v)} € (baseline ${fmt(bas[i])})</title></circle>`).join("");
+    const punti = sce.slice(0, nPF).map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${v < 0 ? "var(--bad)" : "var(--accent)"}"><title>${meseIt(D.mesi[i])}: ${fmt(v)} € (solo PF ${fmt(bas[i])})</title></circle>`).join("");
     return `<svg class="graf" viewBox="0 0 ${W} ${H}" role="img" aria-label="Saldo ${soc}">
       ${coda}
       <line x1="${L}" x2="${W - R}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>
-      ${griglia}
+      ${griglia}${barre}
       <path d="${path(bas)}" fill="none" stroke="var(--base-line)" stroke-width="1.5" stroke-dasharray="5 4"/>
       <path d="${path(sce)}" fill="none" stroke="var(--accent)" stroke-width="2"/>
       ${punti}${assi}
@@ -546,7 +729,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
 
   function renderGrafici() {
     el("grafici").innerHTML = SOC.map((soc) => `<h2>${soc} · saldo di fine mese</h2><div class="card">${grafico(soc)}
-      <div class="leg"><span><i></i>scenario</span><span><i class="base"></i>baseline (PF senza leve)</span><span><i class="ipo"></i>mesi ipotetici (ripetuti dal mese omologo)</span></div></div>`).join("");
+      <div class="leg"><span><i></i>scenario</span><span><i class="base"></i>solo PF, nessuna leva</span>${IPO.size ? `<span><i class="eff"></i>oltre il PF: effetto cumulato delle leve dopo ${meseIt(ULTIMO_PF)}, non un saldo</span>` : ""}</div></div>`).join("");
   }
 
   // ── tabelle per società ──
@@ -556,24 +739,30 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     for (const soc of SOC) {
       const righe = ris.righe.filter((r) => r.societa === soc);
       const basi = D.baseline.righe.filter((r) => r.societa === soc);
+      const iPF = MESI_PF.length - 1;
+      const dPF = righe[iPF].fin - basi[iPF].fin;
       const corpo = righe.map((r, i) => {
         const k = `${soc}|${r.mese}`;
-        const ent = Object.values(r.entrate).reduce((a, b) => a + b, 0);
-        const usc = Object.values(r.uscite).reduce((a, b) => a + b, 0);
-        const d = r.fin - basi[i].fin;
+        const ipo = IPO.has(r.mese);
+        const ent = somma(r.entrate), usc = somma(r.uscite);
+        const d = ipo ? (r.fin - basi[i].fin) - dPF : r.fin - basi[i].fin;
         let dett = "";
         if (aperti.has(k)) {
           const v = vociMese(soc, r.mese);
           const lista = (o, segno) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([n, x]) => `<li>${segno} ${esc(n)} <span class="num">${fmt(x)}</span></li>`).join("");
-          dett = `<tr class="dett"><td colspan="5">${IPO.has(r.mese) ? '<div class="nota">mese ipotetico: ripetuto dal mese omologo dell\'anno prima</div>' : ""}<ul>${lista(v.E, "+") + lista(v.U, "−") || "<li>nessun movimento</li>"}</ul></td></tr>`;
+          dett = `<tr class="dett"><td colspan="5">${ipo ? '<div class="nota">mese senza PF: contano solo le leve dello scenario</div>' : ""}<ul>${lista(v.E, "+") + lista(v.U, "−") || "<li>nessun movimento</li>"}</ul></td></tr>`;
         }
-        return `<tr class="mese ${IPO.has(r.mese) ? "ipo" : ""}" data-k="${k}">
-          <td>${meseIt(r.mese)}${IPO.has(r.mese) ? ' <span class="badge">ipo</span>' : ""}</td>
-          <td class="num ini">${fmt(r.ini)}</td><td class="num">${fmt(ent)}</td><td class="num">${fmt(usc)}</td>
-          <td class="num ${r.fin < 0 ? "neg" : ""}">${fmt(r.fin)}${d ? `<br><span class="piccolo num">${d > 0 ? "+" : ""}${fmt(d)}</span>` : ""}</td></tr>${dett}`;
+        const finale = ipo
+          ? `<td class="num ${d < 0 ? "neg" : ""}">${d ? `<span class="piccolo">leve</span> ${segno(d)}` : "—"}</td>`
+          : `<td class="num ${r.fin < 0 ? "neg" : ""}">${fmt(r.fin)}${d ? `<br><span class="piccolo num">${segno(d)}</span>` : ""}</td>`;
+        return `<tr class="mese ${ipo ? "ipo" : ""}" data-k="${k}">
+          <td>${meseIt(r.mese)}${ipo ? ' <span class="badge">senza PF</span>' : ""}</td>
+          <td class="num ini ${ipo ? "vuoto" : ""}">${ipo ? "—" : fmt(r.ini)}</td><td class="num ${ipo && !ent ? "vuoto" : ""}">${ipo && !ent ? "—" : fmt(ent)}</td><td class="num ${ipo && !usc ? "vuoto" : ""}">${ipo && !usc ? "—" : fmt(usc)}</td>
+          ${finale}</tr>${dett}`;
       }).join("");
       box.insertAdjacentHTML("beforeend", `<h2>${soc} · mese per mese <span class="piccolo">(tocca un mese per le voci)</span></h2>
-        <div class="card" style="padding:4px 8px"><table><thead><tr><th>mese</th><th class="ini">iniziale</th><th>entrate</th><th>uscite</th><th>finale</th></tr></thead><tbody>${corpo}</tbody></table></div>`);
+        <div class="card" style="padding:4px 8px"><table><thead><tr><th>mese</th><th class="ini">iniziale</th><th>entrate</th><th>uscite</th><th>finale</th></tr></thead><tbody>${corpo}</tbody></table>
+        ${IPO.size ? `<div class="nota">Da ${meseIt(D.mesi_ipotetici[0])} il PF non c'è: nessun saldo, solo l'effetto cumulato delle leve dopo ${meseIt(ULTIMO_PF)} rispetto al solo PF.</div>` : ""}</div>`);
     }
     box.querySelectorAll("tr.mese").forEach((tr) => {
       tr.onclick = () => { const k = tr.dataset.k; aperti.has(k) ? aperti.delete(k) : aperti.add(k); renderTabelle(); };
@@ -581,7 +770,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   }
 
   function renderConsolidato() {
-    const righe = ris.consolidato.map((c) => `<tr class="${IPO.has(c.mese) ? "ipo" : ""}"><td>${meseIt(c.mese)}</td><td class="num ${c.saldo < 0 ? "neg" : ""}">${fmt(c.saldo)}</td><td class="num">${fmt(c.intercompany_nettato)}</td><td class="num ${c.residuo ? "neg" : ""}">${fmt(c.residuo)}</td></tr>`).join("");
+    const righe = ris.consolidato.map((c) => { const ipo = IPO.has(c.mese); return `<tr class="${ipo ? "ipo" : ""}"><td>${meseIt(c.mese)}${ipo ? ' <span class="badge">senza PF</span>' : ""}</td><td class="num ${ipo ? "vuoto" : c.saldo < 0 ? "neg" : ""}">${ipo ? "—" : fmt(c.saldo)}</td><td class="num">${fmt(c.intercompany_nettato)}</td><td class="num ${c.residuo ? "neg" : ""}">${fmt(c.residuo)}</td></tr>`; }).join("");
     el("consolidato").innerHTML = `<table><thead><tr><th>mese</th><th>saldo gruppo</th><th>intercompany nettato</th><th>residuo (una gamba)</th></tr></thead><tbody>${righe}</tbody></table>
       <div class="nota">Il residuo è un flusso intercompany presente su una sola società: resta lì, non si inventa la contropartita.</div>`;
     const nr = ris.non_riconciliati;
@@ -590,7 +779,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     }</tbody></table><div class="nota">Un fatto riconciliato riduce il pagamento previsto dello stesso fornitore (dal mese più vecchio); gli altri impegni del progetto non si muovono.</div></div>` : "";
   }
 
-  // ── leve ──
+  // ── leve: progetti e finanziamenti a tendina ──
   const selMesi = (val, cls = "") => `<select class="${cls}">${D.mesi.map((m) => `<option value="${m}" ${m === val ? "selected" : ""}>${meseIt(m)}</option>`).join("")}</select>`;
   const selSoc = (val) => `<select data-campo="societa">${SOC.map((s) => `<option ${s === val ? "selected" : ""}>${s}</option>`).join("")}</select>`;
   // L'aliquota del pagamento entra tra le opzioni se non è tra le tre standard: la select non mente mai.
@@ -599,58 +788,75 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   function grigliaMesi(mesi, pref) {
     const chiavi = Object.keys(mesi).sort();
     const liberi = D.mesi.filter((m) => !(m in mesi));
-    return `<div class="mesi">${chiavi.map((m) => `<label>${meseIt(m)}<input type="text" class="eur" data-${pref}="${m}" value="${fmt(mesi[m], true)}"></label>`).join("")}
-      ${liberi.length ? `<label>+ mese<select data-${pref}-nuovo><option value="">…</option>${liberi.map((m) => `<option value="${m}">${meseIt(m)}</option>`).join("")}</select></label>` : ""}</div>`;
+    return `<div class="mesi">${chiavi.map((m) => `<label>${meseIt(m)}${IPO.has(m) ? " ·" : ""}<input type="text" class="eur" data-${pref}="${m}" value="${fmt(mesi[m], true)}"></label>`).join("")}
+      ${liberi.length ? `<label>+ mese<select data-${pref}-nuovo><option value="">…</option>${liberi.map((m) => `<option value="${m}">${meseIt(m)}${IPO.has(m) ? " (senza PF)" : ""}</option>`).join("")}</select></label>` : ""}</div>`;
+  }
+
+  // Peso di una leva: di quanto cambia il minimo della sua società togliendola (o accendendola).
+  function peso(variante, soc, acceso) {
+    const r = calcolaSicuro(variante);
+    if (!r) return "";
+    const fine = (x) => x.righe.filter((q) => q.societa === soc)[D.mesi.length - 1].fin;
+    const d = acceso ? ris.minimi[soc].saldo - r.minimi[soc].saldo : r.minimi[soc].saldo - ris.minimi[soc].saldo;
+    const df = acceso ? fine(ris) - fine(r) : fine(r) - fine(ris);
+    const pre = acceso ? "" : "se acceso: ";
+    if (!d) return `<span class="peso ${df < 0 ? "neg" : ""}">${pre}non muove il minimo ${soc}${df ? `, a ${meseIt(ULTIMO)} ${segno(df, false)}` : ""}</span>`;
+    return `<span class="peso ${d < 0 ? "neg" : ""}">${pre}${acceso ? "pesa " : ""}${segno(d, false)} sul minimo ${soc}</span>`;
   }
 
   function renderLeve() {
+    sincronizzaAperte();
     const sc = stato.scenario;
-    const c = sc.canone;
-    const anni = c ? Object.entries(c.netto_per_anno) : [];
-    const canone = `<div class="leva"><header><span class="nome">Canone Fitto Hotel (ORTI → INTUR)</span>
-        <label class="piccolo"><input type="checkbox" id="canone-on" ${c ? "checked" : ""}> scaletta</label></header>
-      ${c ? `<div class="riga">${anni.map(([a, v]) => `<label class="piccolo">${a} netto € <input type="text" class="eur" data-canone-anno="${a}" value="${fmt(v)}"></label>`).join("")}
-          <label class="piccolo">anno <input type="number" class="n" style="width:72px" min="2026" max="2040" data-canone-nuovo-anno value="${Math.max(...anni.map(([a]) => Number(a))) + 1}"></label>
-          <button data-canone-aggiungi>+ anno</button></div>
-        <div class="riga"><label class="piccolo">rate <input type="text" class="n" id="canone-rate" value="${c.rate_n}"></label>
-          <label class="piccolo">da mese ${selMesi(c.da_mese, "sel-canone-da")}</label>
-          <label class="piccolo">IVA % <input type="text" class="n" id="canone-iva" value="${c.aliquota_iva}"></label></div>
-        <div class="riga"><label class="piccolo" style="flex:1">oppure calendario (mese=netto; vince sulle rate per quell'anno)<br>
-          <input type="text" class="nome" id="canone-cal" placeholder="2027-03=200.000,00; 2027-06=300.000,00" value="${esc(calendarioTesto(c.calendario))}"></label></div>`
-        : `<div class="nota">Il canone resta quello del PF (gambe così come sono).</div>`}</div>`;
+    const progetti = sc.progetti.map((p, i) => {
+      const k = `p:${p.id}`;
+      const netto = p.pagamenti.reduce((s, g) => s + somma(g.mesi), 0);
+      const lordo = p.pagamenti.reduce((s, g) => s + Object.values(g.mesi).reduce((a, b) => a + MOTORE.iva(b, g.aliquota_iva), 0), 0);
+      const tuttiMesi = Object.assign({}, ...p.pagamenti.map((g) => g.mesi));
+      const variante = copia(sc); variante.progetti[i].acceso = !p.acceso;
+      return `<details class="leva ${p.acceso ? "" : "spento"}" data-k="${k}" data-p="${i}" ${aperte.has(k) ? "open" : ""}>
+      <summary><label class="sw" onclick="event.stopPropagation()" title="${p.acceso ? "acceso: conta in cassa" : "spento: non conta"}"><input type="checkbox" data-acceso ${p.acceso ? "checked" : ""} aria-label="accendi ${esc(p.nome)}"></label>
+        <span class="nome">${esc(p.nome)}</span>
+        <span class="badge">${esc(p.societa)}</span><span class="badge ${badgeStato(p.stato)}">${statoIt(p.stato)}</span>
+        <span class="num tot">${fmt(lordo, false)} €</span><span class="piccolo num">lordo in cassa · netto ${fmt(netto, false)} · ${periodoDi(tuttiMesi)}</span>
+        ${peso(variante, p.societa, p.acceso)}</summary>
+      <div class="corpo">
+        <div class="riga"><input type="text" class="nome" style="flex:1 1 140px;font-weight:600" data-campo="nome" value="${esc(p.nome)}">
+          ${selSoc(p.societa)} <input type="text" class="n" style="width:110px" data-campo="stato" value="${esc(p.stato)}" title="stato">
+          <button data-elimina-p title="elimina progetto">× elimina</button></div>
+        ${p.pagamenti.map((g, j) => `<div class="pag" data-g="${j}">
+          <div class="riga"><input type="text" class="nome" style="flex:1 1 140px" data-campo="nome" value="${esc(g.nome)}"> ${selIva(g.aliquota_iva)}
+            <input type="text" class="n" style="width:90px" data-campo="stato" value="${esc(g.stato)}" title="stato">
+            <input type="text" class="n" style="width:90px" data-campo="fornitore_id" value="${esc(g.fornitore_id || "")}" placeholder="fornitore" title="fornitore_id (riconcilia i fatti)">
+            <button data-elimina-g title="elimina pagamento">×</button></div>
+          <div class="piccolo num">netto ${fmt(somma(g.mesi))} · lordo ${fmt(Object.values(g.mesi).reduce((a, b) => a + MOTORE.iva(b, g.aliquota_iva), 0))}</div>
+          ${grigliaMesi(g.mesi, "mese")}
+          <div class="riga"><span class="piccolo">spalma</span> <input type="text" class="eur" data-spalma-tot placeholder="totale netto €"> <span class="piccolo">da</span> ${selMesi(Object.keys(g.mesi).sort()[0] || D.mesi[0], "sel-spalma-da")} <span class="piccolo">in</span> <input type="text" class="n" data-spalma-n value="${Math.max(1, Object.keys(g.mesi).length)}"> <button data-spalma>Spalma</button> <span class="nota" data-errore-spalma></span></div>
+          ${p.acceso ? "" : '<div class="nota">non conta finché il progetto è spento</div>'}
+        </div>`).join("")}
+        <div class="riga"><button data-aggiungi-g>+ pagamento</button></div>
+      </div></details>`;
+    }).join("");
+    el("progetti").innerHTML = `${progetti || '<div class="nota">nessun progetto nello scenario</div>'}
+      <div class="strumenti"><button id="aggiungi-p">+ progetto</button><button class="mini" data-apri="p">apri tutto</button><button class="mini" data-chiudi="p">chiudi tutto</button></div>`;
 
-    const progetti = sc.progetti.map((p, i) => `<div class="leva ${p.acceso ? "" : "spento"}" data-p="${i}">
-      <header><label><input type="checkbox" data-campo="acceso" ${p.acceso ? "checked" : ""}></label>
-        <input type="text" class="nome" style="flex:1 1 140px;font-weight:600" data-campo="nome" value="${esc(p.nome)}">
-        ${selSoc(p.societa)} <input type="text" class="n" style="width:90px" data-campo="stato" value="${esc(p.stato)}" title="stato">
-        <button data-elimina-p title="elimina progetto">×</button></header>
-      ${p.pagamenti.map((g, j) => `<div class="pag" data-g="${j}">
-        <div class="riga"><input type="text" class="nome" style="flex:1 1 140px" data-campo="nome" value="${esc(g.nome)}"> ${selIva(g.aliquota_iva)}
-          <input type="text" class="n" style="width:80px" data-campo="stato" value="${esc(g.stato)}" title="stato">
-          <input type="text" class="n" style="width:80px" data-campo="fornitore_id" value="${esc(g.fornitore_id || "")}" placeholder="fornitore" title="fornitore_id (riconcilia i fatti)">
-          <button data-elimina-g title="elimina pagamento">×</button></div>
-        <div class="piccolo num">netto ${fmt(Object.values(g.mesi).reduce((a, b) => a + b, 0))} · lordo ${fmt(Object.values(g.mesi).reduce((a, b) => a + MOTORE.iva(b, g.aliquota_iva), 0))}</div>
-        ${grigliaMesi(g.mesi, "mese")}
-        <div class="riga"><span class="piccolo">spalma</span> <input type="text" class="eur" data-spalma-tot placeholder="totale netto €"> <span class="piccolo">da</span> ${selMesi(Object.keys(g.mesi).sort()[0] || D.mesi[0], "sel-spalma-da")} <span class="piccolo">in</span> <input type="text" class="n" data-spalma-n value="${Math.max(1, Object.keys(g.mesi).length)}"> <button data-spalma>Spalma</button> <span class="nota" data-errore-spalma></span></div>
-        ${p.acceso ? "" : '<div class="nota">non conta finché il progetto è spento</div>'}
-      </div>`).join("")}
-      <div class="riga"><button data-aggiungi-g>+ pagamento</button></div>
-    </div>`).join("");
-
-    const finanz = sc.finanziamenti.map((f, i) => `<div class="leva" data-f="${i}">
-      <header><input type="text" class="nome" style="flex:1 1 140px;font-weight:600" data-campo="nome" value="${esc(f.nome)}"> ${selSoc(f.societa)}
-        <input type="text" class="n" style="width:100px" data-campo="stato" value="${esc(f.stato)}" title="stato">
-        ${f.stato === "da verificare" ? '<span class="badge warn">da verificare</span>' : ""}
-        <button data-elimina-f title="elimina">×</button></header>
-      <div class="piccolo">erogazioni</div>${grigliaMesi(f.erogazioni, "erog")}
-      <div class="piccolo">rate</div>${grigliaMesi(f.rate, "rata")}
-      ${Object.keys(f.rate).length ? "" : '<div class="nota">nessuna rata nell\'orizzonte</div>'}
-      <div class="nota">le erogazioni dello scenario sostituiscono le righe PF «finanziamenti» di ${esc(f.societa)}</div>
-    </div>`).join("");
-
-    el("leve").innerHTML = `<h3 style="margin-top:0">Canone</h3>${canone}
-      <h3>Progetti</h3>${progetti || '<div class="nota">nessun progetto</div>'}<div class="riga"><button id="aggiungi-p">+ progetto</button></div>
-      <h3>Finanziamenti</h3>${finanz || '<div class="nota">nessun finanziamento nello scenario</div>'}<div class="riga"><button id="aggiungi-f">+ finanziamento</button></div>`;
+    const finanz = sc.finanziamenti.map((f, i) => {
+      const k = `f:${f.id}`;
+      const variante = copia(sc); variante.finanziamenti.splice(i, 1);
+      return `<details class="leva" data-k="${k}" data-f="${i}" ${aperte.has(k) ? "open" : ""}>
+      <summary><span class="nome">${esc(f.nome)}</span><span class="badge">${esc(f.societa)}</span><span class="badge ${badgeStato(f.stato)}">${statoIt(f.stato)}</span>
+        <span class="num tot">${fmt(somma(f.erogazioni), false)} €</span><span class="piccolo num">erogato ${periodoDi(f.erogazioni)} · rate ${Object.keys(f.rate).length ? `${fmt(somma(f.rate), false)} (${periodoDi(f.rate)})` : "nessuna nell'orizzonte"}</span>
+        ${peso(variante, f.societa, true)}</summary>
+      <div class="corpo">
+        <div class="riga"><input type="text" class="nome" style="flex:1 1 140px;font-weight:600" data-campo="nome" value="${esc(f.nome)}"> ${selSoc(f.societa)}
+          <input type="text" class="n" style="width:110px" data-campo="stato" value="${esc(f.stato)}" title="stato">
+          <button data-elimina-f title="elimina">× elimina</button></div>
+        <div class="piccolo">erogazioni</div>${grigliaMesi(f.erogazioni, "erog")}
+        <div class="piccolo">rate</div>${grigliaMesi(f.rate, "rata")}
+        <div class="nota">le erogazioni dello scenario sostituiscono le righe PF «finanziamenti» di ${esc(f.societa)}</div>
+      </div></details>`;
+    }).join("");
+    el("finanziamenti").innerHTML = `${finanz || '<div class="nota">nessun finanziamento nello scenario</div>'}
+      <div class="strumenti"><button id="aggiungi-f">+ finanziamento</button><button class="mini" data-apri="f">apri tutto</button><button class="mini" data-chiudi="f">chiudi tutto</button></div>`;
     collegaLeve();
   }
 
@@ -664,38 +870,15 @@ if (typeof module !== "undefined") module.exports = FORMATO;
 
   function collegaLeve() {
     const sc = stato.scenario;
-    const box = el("leve");
-    // canone
-    const on = el("canone-on");
-    on.onchange = () => {
-      sc.canone = on.checked ? { netto_per_anno: { [D.mesi[D.mesi.length - 1].slice(0, 4)]: 0 }, rate_n: 1, da_mese: D.mesi[0], calendario: null, aliquota_iva: 22 } : null;
-      ricalcola();
-    };
-    if (sc.canone) {
-      box.querySelectorAll("input[data-canone-anno]").forEach((inp) => { inp.onchange = () => { const v = euroDa(inp); if (v === null) return; sc.canone.netto_per_anno[inp.dataset.canoneAnno] = v; ricalcola(); }; });
-      box.querySelector("button[data-canone-aggiungi]").onclick = () => {
-        const inp = box.querySelector("input[data-canone-nuovo-anno]");
-        const a = inp.value.trim();
-        const ok = /^\d{4}$/.test(a) && +a >= 2026 && +a <= 2040 && !(a in sc.canone.netto_per_anno);
-        inp.classList.toggle("invalid", !ok);
-        if (ok) { sc.canone.netto_per_anno[a] = 0; renderLeve(); }
-      };
-      el("canone-rate").onchange = (e) => { sc.canone.rate_n = parseInt(e.target.value, 10) || 1; ricalcola(); };
-      el("canone-iva").onchange = (e) => { sc.canone.aliquota_iva = parseInt(e.target.value, 10) || 0; ricalcola(); };
-      box.querySelector("select.sel-canone-da").onchange = (e) => { sc.canone.da_mese = e.target.value; ricalcola(); };
-      el("canone-cal").onchange = (e) => {
-        const cal = calendarioParse(e.target.value);
-        e.target.classList.toggle("invalid", cal === null);
-        if (cal === null) return;
-        sc.canone.calendario = Object.keys(cal).length ? cal : null;
-        ricalcola();
-      };
-    }
+    const tutte = (pre, aperto) => { document.querySelectorAll(`details.leva[data-k^="${pre}"]`).forEach((d) => { d.open = aperto; }); renderLeve(); };
+    document.querySelectorAll("button[data-apri]").forEach((b) => { b.onclick = () => tutte(`${b.dataset.apri}:`, true); });
+    document.querySelectorAll("button[data-chiudi]").forEach((b) => { b.onclick = () => tutte(`${b.dataset.chiudi}:`, false); });
     // progetti
-    box.querySelectorAll(".leva[data-p]").forEach((div) => {
+    el("progetti").querySelectorAll("details.leva[data-p]").forEach((div) => {
       const p = sc.progetti[parseInt(div.dataset.p, 10)];
-      div.querySelectorAll(":scope > header [data-campo]").forEach((inp) => {
-        inp.onchange = () => { p[inp.dataset.campo] = inp.type === "checkbox" ? inp.checked : inp.value; ricalcola(); };
+      div.querySelector("input[data-acceso]").onchange = (e) => { p.acceso = e.target.checked; ricalcola(); };
+      div.querySelectorAll(".corpo > .riga [data-campo]").forEach((inp) => {
+        inp.onchange = () => { p[inp.dataset.campo] = inp.value; ricalcola(); };
       });
       div.querySelector("button[data-elimina-p]").onclick = () => { sc.progetti.splice(sc.progetti.indexOf(p), 1); ricalcola(); };
       div.querySelector("button[data-aggiungi-g]").onclick = () => { p.pagamenti.push({ nome: "Nuovo pagamento", mesi: {}, aliquota_iva: 22, stato: "ipotesi", fornitore_id: null }); renderLeve(); };
@@ -714,42 +897,47 @@ if (typeof module !== "undefined") module.exports = FORMATO;
           const campoTot = pg.querySelector("input[data-spalma-tot]");
           const letto = euroDa(campoTot);
           if (letto === null) return;
-          const tot = letto || Object.values(g.mesi).reduce((a, b) => a + b, 0);
+          const tot = letto || somma(g.mesi);
           const da = pg.querySelector("select.sel-spalma-da").value;
           const n = parseInt(pg.querySelector("input[data-spalma-n]").value, 10) || 1;
           try { g.mesi = MOTORE.distribuisci(tot, da, n, D.mesi); ricalcola(); } catch (e) { pg.querySelector("[data-errore-spalma]").textContent = e.message; }
         };
       });
     });
-    el("aggiungi-p").onclick = () => { sc.progetti.push({ id: `P${Date.now().toString(36)}`, nome: "Nuovo progetto", societa: "INTUR", acceso: true, stato: "ipotesi", pagamenti: [] }); renderLeve(); };
+    el("aggiungi-p").onclick = () => { const id = `P${Date.now().toString(36)}`; sc.progetti.push({ id, nome: "Nuovo progetto", societa: "INTUR", acceso: true, stato: "ipotesi", pagamenti: [{ nome: "Pagamento", mesi: {}, aliquota_iva: 22, stato: "ipotesi", fornitore_id: null }] }); aperte.add(`p:${id}`); ricalcola(); };
     // finanziamenti
-    box.querySelectorAll(".leva[data-f]").forEach((div) => {
+    el("finanziamenti").querySelectorAll("details.leva[data-f]").forEach((div) => {
       const i = parseInt(div.dataset.f, 10);
       const f = sc.finanziamenti[i];
-      div.querySelectorAll(":scope > header [data-campo]").forEach((inp) => { inp.onchange = () => { f[inp.dataset.campo] = inp.value; ricalcola(); }; });
+      div.querySelectorAll(".corpo > .riga [data-campo]").forEach((inp) => { inp.onchange = () => { f[inp.dataset.campo] = inp.value; ricalcola(); }; });
       div.querySelector("button[data-elimina-f]").onclick = () => { sc.finanziamenti.splice(i, 1); ricalcola(); };
       leggiMesi(div, "erog", f.erogazioni);
       leggiMesi(div, "rata", f.rate);
     });
-    el("aggiungi-f").onclick = () => { sc.finanziamenti.push({ id: `F${Date.now().toString(36)}`, nome: "Nuovo finanziamento", societa: "INTUR", erogazioni: {}, rate: {}, stato: "da verificare" }); renderLeve(); };
+    el("aggiungi-f").onclick = () => { const id = `F${Date.now().toString(36)}`; sc.finanziamenti.push({ id, nome: "Nuovo finanziamento", societa: "INTUR", erogazioni: {}, rate: {}, stato: "da verificare" }); aperte.add(`f:${id}`); ricalcola(); };
   }
 
   function renderLimiti() {
     const extra = [];
-    if (ris.non_riconciliati.length) extra.push(`Nello scenario corrente ${ris.non_riconciliati.length} fatti non trovano un pagamento di progetto dello stesso fornitore.`);
+    if (ris.non_riconciliati.length) extra.push(`Nello scenario corrente ${ris.non_riconciliati.length} fatti non trovano un pagamento di progetto dello stesso fornitore nello scenario; contano comunque come uscita.`);
+    for (const p of stato.scenario.progetti) for (const g of p.pagamenti) if (/verificare/i.test(g.nome) || /verificare/i.test(g.stato)) extra.push(`${p.nome}: ${g.nome} — ${p.acceso ? "conta in cassa" : "spento"}, da verificare.`);
     el("limiti").innerHTML = `<h2>Limiti di questa pagina</h2><ul>${D.limiti.concat(extra).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`;
   }
 
-  function render() {
+  function render(opts = {}) {
+    sincronizzaAperte();
     renderMinimi();
     renderGrafici();
     renderTabelle();
     renderConsolidato();
     renderLeve();
     renderLimiti();
+    if (opts.canoneLeggero) aggiornaCanoneInfo(); else renderCanone();
   }
 
   renderTesta();
+  renderFonti();
+  renderScenario();
   ricalcola();
 })();
 </script>

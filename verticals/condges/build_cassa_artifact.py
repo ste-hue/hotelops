@@ -121,23 +121,64 @@ def scenari_da_snapshot(snapshot: dict) -> list[tuple[Scenario, Base, dict]]:
 
 
 def acquisisci(query=cf.query_bq) -> dict:
-    """Legge le fonti BigQuery e compone lo snapshot (coda ipotetica inclusa)."""
+    """Legge le fonti BigQuery e compone lo snapshot (mesi oltre il PF senza righe)."""
     ancore = cf.leggi_ancore(query)
     righe, flussi, base, mesi = cf.leggi_baseline(query)
     fatti = cf.leggi_fatti(query)
     scenari = cf.leggi_scenari(query)
+    # I mesi oltre il PF restano nell'orizzonte (le leve ci arrivano) ma senza
+    # righe PF né flussi copiati: nessun saldo inventato, solo effetto delle leve.
     mesi_tutti, coda = cf.mesi_ipotetici(mesi)
-    coda_ordinata = [m for m in mesi_tutti if m in coda]
     return snapshot_da_fonti(
         ancore=ancore,
-        pf=righe + cf.coda_ripetuta(righe, coda_ordinata),
-        intercompany=flussi + cf.coda_flussi(flussi, coda_ordinata),
+        pf=righe,
+        intercompany=flussi,
         base=base,
         mesi=mesi_tutti,
         mesi_ipotetici=coda,
         fatti=fatti,
         scenari=scenari,
     )
+
+
+def senza_coda(snapshot: dict) -> dict:
+    """Toglie righe PF e flussi intercompany dai mesi oltre il PF (snapshot vecchi
+    li portavano copiati dal mese omologo). La pagina non mostra saldi là, solo
+    l'effetto incrementale delle leve."""
+    coda = set(snapshot.get("mesi_ipotetici", []))
+    if not coda:
+        return snapshot
+    return {
+        **snapshot,
+        "pf": [r for r in snapshot["pf"] if r["mese"] not in coda],
+        "intercompany": [f for f in snapshot["intercompany"] if f["mese"] not in coda],
+    }
+
+
+def canone_pf(intercompany: list[dict], aliquota_iva: int = 22) -> list[dict]:
+    """Canone Fitto Hotel come sta nel PF, per anno: lordo, netto (IVA scorporata
+    half-up), mesi e numero di rate. È il punto di partenza dello slider."""
+    per_anno: dict[str, list[dict]] = {}
+    for f in intercompany:
+        if f["nome"].startswith("Fitto Hotel") and f["stato"] == "pf":
+            per_anno.setdefault(f["mese"][:4], []).append(f)
+    out = []
+    k = 100 + aliquota_iva
+    for anno in sorted(per_anno):
+        fl = sorted(per_anno[anno], key=lambda f: f["mese"])
+        lordo = sum(f["importo"] for f in fl)
+        out.append(
+            {
+                "anno": int(anno),
+                "lordo": lordo,
+                "netto": (lordo * 100 + k // 2) // k,
+                "aliquota_iva": aliquota_iva,
+                "mesi": [f["mese"] for f in fl],
+                "rate_n": len(fl),
+                "da_mese": fl[0]["mese"],
+            }
+        )
+    return out
 
 
 # ── payload ──
@@ -161,19 +202,10 @@ def _limiti(snapshot: dict, seme: Scenario, baseline: dict) -> list[str]:
     if coda:
         pf_fine = [m for m in snapshot["mesi"] if m not in coda]
         out.append(
-            f"Mesi ipotetici da {coda[0]} a {coda[-1]}: ripetono il mese omologo dell'anno prima "
-            f"(il PF finisce a {pf_fine[-1] if pf_fine else '-'})."
+            f"Mesi da {coda[0]} a {coda[-1]} senza PF (il PF finisce a "
+            f"{pf_fine[-1] if pf_fine else '-'}): nessun saldo previsto; la pagina mostra "
+            "solo l'effetto cumulato delle leve dello scenario, non un saldo di cassa."
         )
-        con_righe = {r["mese"] for r in snapshot["pf"]} | {
-            f["mese"] for f in snapshot["intercompany"]
-        }
-        vuoti = [m for m in coda if m not in con_righe]
-        if vuoti:
-            out.append(
-                "Mesi ipotetici senza mese omologo nel PF, quindi a zero movimenti: "
-                + ", ".join(vuoti)
-                + "."
-            )
     out.append(
         "I pagamenti di progetto sono netti: l'IVA si applica per aliquota (0/10/22%) "
         "nel mese del pagamento, con arrotondamento al centesimo."
@@ -208,17 +240,26 @@ def build_payload(
     scenari: list[tuple[Scenario, Base, dict]],
     generato_il: datetime | None = None,
     seme: tuple[Scenario, Base] | None = None,
+    seme_salvato_il: str | None = None,
 ) -> dict:
+    snapshot = senza_coda(snapshot)
     base = snapshot["base"]
     vuoto = Scenario("Nessuna leva", [], [])
     baseline = to_dict(calcola(input_da_snapshot(snapshot, vuoto)))
     sc_seme, base_seme = seme if seme else (vuoto, base)
-    seme_doc = _scenario_doc(sc_seme, base_seme)
+    seme_doc = _scenario_doc(
+        sc_seme, base_seme, {"salvato_il": seme_salvato_il} if seme_salvato_il else None
+    )
     seme_doc["compatibile"] = base_uguale(base_seme, base)
-    salvati = []
+    salvati, sostituiti = [], []
     for sc, b, meta in scenari:
         doc = _scenario_doc(sc, b, meta)
         doc["compatibile"] = base_uguale(b, base)
+        # Il seme locale è la versione viva: un salvato con lo stesso nome è una
+        # sua copia (o una versione superata) e non entra nel menu, ma resta dichiarato.
+        if seme and doc["nome"] == seme_doc["nome"]:
+            sostituiti.append({"nome": doc["nome"], "salvato_il": doc.get("salvato_il")})
+            continue
         salvati.append(doc)
     return {
         "schema": SCHEMA,
@@ -233,6 +274,8 @@ def build_payload(
         "fatti": snapshot["fatti"],
         "seme": seme_doc,
         "scenari": salvati,
+        "scenari_sostituiti": sostituiti,
+        "canone_pf": canone_pf(snapshot["intercompany"]),
         "baseline": baseline,
         "limiti": _limiti(snapshot, sc_seme, baseline),
     }
@@ -292,7 +335,12 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
     else:
         snapshot = cf.carica_snapshot()
     seme = carica_seme(SEME_PATH) if SEME_PATH.exists() else None
-    payload = build_payload(snapshot, scenari_da_snapshot(snapshot), seme=seme)
+    seme_salvato_il = (
+        json.loads(SEME_PATH.read_text(encoding="utf-8")).get("salvato_il") if seme else None
+    )
+    payload = build_payload(
+        snapshot, scenari_da_snapshot(snapshot), seme=seme, seme_salvato_il=seme_salvato_il
+    )
     html = render_html(payload)
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -310,6 +358,10 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
     )
     for s in payload["scenari"]:
         print(f"  scenario salvato: {s['nome']} compatibile={s['compatibile']}")
+    for s in payload["scenari_sostituiti"]:
+        print(f"  scenario salvato nascosto (stesso nome del seme): {s['nome']} {s['salvato_il']}")
+    for c in payload["canone_pf"]:
+        print(f"  canone PF {c['anno']}: netto {_eur(c['netto'])} in {c['rate_n']} rate da {c['da_mese']}")
     print(f"  limiti: {len(payload['limiti'])}")
     if push_env is not None:
         push_to_kv(html, json.dumps(payload, ensure_ascii=False), push_env)

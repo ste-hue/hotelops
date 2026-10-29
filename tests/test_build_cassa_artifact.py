@@ -213,14 +213,63 @@ def test_payload_porta_limiti_versioni_e_interi():
     assert p["seme"]["schema"] == SCHEMA and p["baseline"]["non_riconciliati"]
 
 
-def test_limiti_dicono_ipotetici_e_fatti_non_riconciliati():
+def test_limiti_dicono_mesi_senza_pf_e_fatti_non_riconciliati():
     testo = " ".join(build_payload(snapshot_sintetico(), [])["limiti"]).lower()
-    assert "ipotetic" in testo and "2027-04" in testo
-    assert (
-        "senza mese omologo nel pf, quindi a zero movimenti: 2027-04, 2027-05, 2027-06"
-        in testo
-    )
+    assert "mesi da 2027-04 a 2027-06 senza pf" in testo
+    assert "nessun saldo previsto" in testo and "effetto cumulato delle leve" in testo
+    assert "omologo" not in testo
     assert "non riconciliat" in testo and "iva" in testo
+
+
+def test_payload_toglie_righe_pf_e_flussi_dalla_coda():
+    """Snapshot vecchi portavano la coda copiata dal mese omologo: il payload la
+    scarta, e la baseline nei mesi senza PF resta piatta (nessun saldo inventato)."""
+    snap = snapshot_sintetico()
+    snap["pf"].append(
+        {"societa": "ORTI", "voce_id": "USCITE_SALARI", "mese": "2027-05",
+         "importo": to_cent(1000), "direzione": "U", "origine": "pf"}
+    )
+    snap["intercompany"].append(
+        {"nome": "Fitto Hotel (canone)", "da": "ORTI", "a": "INTUR", "mese": "2027-06",
+         "importo": to_cent(244_000), "stato": "pf"}
+    )
+    p = build_payload(snap, [])
+    assert all(r["mese"] not in CODA for r in p["pf"])
+    assert all(f["mese"] not in CODA for f in p["intercompany"])
+    orti = [r for r in p["baseline"]["righe"] if r["societa"] == "ORTI"]
+    fin_pf = next(r["fin"] for r in orti if r["mese"] == MESI_PF[-1])
+    assert all(r["fin"] == fin_pf for r in orti if r["mese"] in CODA)
+    assert snapshot_sintetico()["pf"] == snap["pf"][:-1]  # l'input non è mutato
+
+
+def test_salvato_con_il_nome_del_seme_resta_fuori_dal_menu():
+    sc, base = _scenario_base()
+    meta = {"nome": sc.nome, "salvato_il": "2026-10-29T13:47"}
+    p = build_payload(snapshot_sintetico(), [(sc, base, meta)], seme=(sc, base))
+    assert p["scenari"] == []
+    assert p["scenari_sostituiti"] == [{"nome": sc.nome, "salvato_il": "2026-10-29T13:47"}]
+    # senza seme (o con nome diverso) il salvato resta nel menu
+    assert build_payload(snapshot_sintetico(), [(sc, base, meta)])["scenari"][0]["nome"] == sc.nome
+    altro = {"nome": "altro", "salvato_il": "2026-10-29T13:47"}
+    p2 = build_payload(snapshot_sintetico(), [(sc, base, altro)], seme=(sc, base))
+    assert [s["nome"] for s in p2["scenari"]] == ["altro"] and p2["scenari_sostituiti"] == []
+
+
+def test_canone_pf_per_anno_scorpora_l_iva():
+    p = build_payload(snapshot_sintetico(), [])
+    c = p["canone_pf"]
+    assert len(c) == 1 and c[0]["anno"] == 2026
+    assert c[0]["lordo"] == to_cent(244_000) and c[0]["netto"] == to_cent(200_000)
+    assert c[0]["mesi"] == ["2026-11"] and c[0]["rate_n"] == 1 and c[0]["da_mese"] == "2026-11"
+    # due rate nello stesso anno, lordo non divisibile: il netto è half-up al centesimo
+    snap = snapshot_sintetico()
+    snap["intercompany"].append(
+        {"nome": "Fitto Hotel (canone)", "da": "ORTI", "a": "INTUR", "mese": "2026-12",
+         "importo": 1, "stato": "pf"}
+    )
+    c2 = build_payload(snap, [])["canone_pf"][0]
+    assert c2["rate_n"] == 2 and c2["lordo"] == to_cent(244_000) + 1
+    assert c2["netto"] == (c2["lordo"] * 100 + 61) // 122
 
 
 def test_scenario_salvato_con_base_diversa_marcato():
