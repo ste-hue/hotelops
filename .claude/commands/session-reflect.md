@@ -91,6 +91,31 @@ Steps:
    ```
    ## [YYYY-MM-DD] session | <slug> → <one-line summary>
    ```
+7b. **Controllo di propagazione — obbligatorio alla fine di ogni wrap** (deciso 2026-10-22, dopo
+   che dieci file fra cui un wrap intero sono rimasti un giorno sul solo disco di tong). Scrivere
+   nel vault **non** li fa uscire da questa macchina: Obsidian Sync propaga solo quando il client
+   è aperto.
+   ```bash
+   V="$HOME/Documents/Obsidian Vault"
+   # il processo si chiama 'electron', NON 'obsidian': si cerca per argomenti
+   pgrep -f '/usr/lib/obsidian/app' >/dev/null && echo "Obsidian: ATTIVO" || echo "Obsidian: non attivo"
+   echo "ultima attività del client: $(stat -c %y "$V/.obsidian/workspace.json" | cut -c1-19)"
+   find "$V" -type f -name '*.md' -newer "$V/.obsidian/workspace.json" | wc -l   # file non ancora visti dal client
+   ```
+   **Correzione del 25/10, e la prima versione di questo controllo era rotta per tre giri.**
+   `ps -eo comm | grep obsidian` dava **falso negativo sempre**: il binario è uno script che lancia
+   Electron, quindi il processo si chiama `electron` e il nome «obsidian» compare solo negli
+   argomenti. Controprova misurata: `pgrep obsidian` → **0 match**, `pgrep -f '/usr/lib/obsidian/app'`
+   → **4 match**, con la finestra aperta sul vault giusto. Dove c'è Hyprland, la verifica più diretta
+   è `hyprctl clients -j` e la classe `md.obsidian.Obsidian`, che dà anche **quale nota è a schermo**.
+   Si può aprire il client da qui (`nohup obsidian &`): il percorso del vault aperto sta in
+   `~/.config/obsidian/obsidian.json`.
+   Si riporta in una riga: *«scritto N file; Obsidian attivo/non attivo; M file più recenti
+   dell'ultima attività del client»*. Se M > 0 e il client non è attivo, **dirlo a Stefano con la
+   richiesta esplicita di aprire Obsidian** — altrimenti il wrap esiste solo qui.
+   **Limite dichiarato**: `workspace.json` attesta che il client è stato *aperto*, non che la
+   sincronizzazione sia *completata*. È un indizio, non una ricevuta (→ vault
+   `concepts/COERENZA_NON_RECENZA`, indizio ≠ prova); la ricevuta vera è lo stato di Sync nell'UI.
 8. **Chain to vault-loop Mode B with opt-out** — present:
    ```
    ✓ Session file written: sessions/<file>.md
@@ -185,6 +210,12 @@ Links to previous sessions, decisions, concepts, reports, commits, journal entri
 
 Generation rule: scan all `sessions/*.md` files, read frontmatter, produce table with **all open-threads files + last 10 closed files**, newest first.
 
+**Conta solo i file con `type: session`** (precisato 2026-10-25). In `sessions/` possono vivere
+altri tipi — un'agenda, un ordine del giorno — e senza il filtro un `status: active` finisce
+contato come 🟡, cioè come **drift dei thread**, falsando l'unico segnale per cui quel contatore
+esiste. I file di altro tipo si elencano in una riga sotto il totale, così restano visibili senza
+entrare in tabella.
+
 Format:
 
 ```markdown
@@ -208,6 +239,7 @@ Closed older than the last 10 are not listed here but still exist in the directo
 
 ## Relationship to other skills
 
+- **`mega-reflect`** (`.claude/commands/mega-reflect.md`, `/mega-reflect`) — lo stesso wrap allargato a **tutto il workspace**: interroga una volta ogni pane agente, conserva l'attribuzione di ogni contributo (osservato vs riferito) e produce **un solo** file di sessione con `scope: workspace`. Nata il 2026-10-20, quando sei pane su sei hanno dichiarato che un report di giornata non esiste. Le regole di scrittura sono quelle di Mode B §qui sopra, invariate: bozza mostrata, un solo sign-off, `_INDEX.md` rigenerato, riga in `log.md`. Usa quella quando la giornata è stata di più agenti, questa quando è stata tua.
 - **`session-context`** — manages `repo/STATUS.md`: short, recent, in-flight. session-reflect is richer and lives in the vault. session-context can still fire if Stefano wants STATUS.md updated; they don't overlap (different files).
 - **`regia-development`** — sviluppo del prodotto Regia, non memoria HotelOps né prerequisito per usare il motore. Entrambe le skill rimandano al contratto condiviso di §Raccordo con Regia.
 - **`vault-loop` Mode B** — **subsumed by chain-call** from session-reflect Mode B step 8 with opt-out. Standalone vault-loop Mode B only fires on triggers "capture" / "cattura" / "loop chiusura" — used rarely, when Stefano wants vault capture WITHOUT writing a session file.
@@ -218,6 +250,17 @@ Closed older than the last 10 are not listed here but still exist in the directo
 ## Anti-goals
 
 - **Don't reflect every chat.** Operational-only sessions (single bug fix, single CLI run) don't need reflection — they should go straight to commit. session-reflect is for sessions where carry-over exists.
+- **«Nulla in finestra» è una risposta completa e non va riempita** (regola aggiunta 2026-10-28, su
+  rilievo di chi l'aveva data). Con una cadenza giornaliera il silenzio è l'esito normale di molti
+  giorni: un formato che spinge a ripresentare il lavoro di ieri con la data di oggi **fabbrica una
+  seconda verità sullo stesso lavoro**, che è lo stesso difetto delle copie non dichiarate. Nel wrap
+  si scrive «nulla in finestra» e si va avanti — e se il lavoro di ieri serve al contesto, si **cita
+  il wrap di ieri**, non si ricopia.
+- **Un'ora di taglio va accompagnata dall'orologio** (2026-10-28): dichiarare l'ora non basta se le
+  fonti misurano tempi diversi. Misurato: le intestazioni scritte a mano nei messaggi fra agenti
+  erano avanti di **circa un'ora e mezza** sull'orologio di macchina, e la differenza ha attraversato
+  il taglio — lo stesso commit cadeva dentro per il log e fuori per le intestazioni. Nel wrap valgono
+  **i log e le date d'autore**, che sono misure; le intestazioni sono prosa.
 - **Don't duplicate `vault-loop` Mode B in the session file.** §Key insights flags durable bits with `→ candidate for vault`; the chain-call extracts them. Don't restate full decision content inside the session file.
 - **Don't auto-write.** Always propose, get sign-off, then write. Same for chain-call to vault-loop — opt-out prompt mandatory.
 - **Don't write fake confidence.** Declare uncertainty in the destination item or pending transfer. `open-threads` means a thread has no practical destination; an open business activity or a pending transfer already landed in a hub/STATUS does not reopen the wrap. §Blockers/questions keeps the uncertainty visible.
