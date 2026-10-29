@@ -404,3 +404,40 @@ def test_non_muta_input_con_fatti_e_canone():
     prima = copy.deepcopy(inp)
     calcola(inp)
     assert inp == prima
+
+
+def test_anno_coperto_senza_rate_emesse_non_cancella_il_canone_pf():
+    inp = inp9(
+        intercompany=[
+            Flusso(
+                "Fitto Hotel (canone)", "ORTI", "INTUR", "2026-11", eur(244_000), "pf"
+            )
+        ],
+        canone=ScalettaCanone({2026: eur(800_000), 2027: eur(800_000)}, 4, "2027-03"),
+    )
+    intur = {
+        r.mese: r.entrate["canone"] for r in calcola(inp).righe if r.societa == "INTUR"
+    }
+    assert intur["2026-11"] == eur(244_000) and intur["2027-03"] == eur(244_000)
+
+
+def test_fatto_senza_fornitore_non_erode_pagamenti_senza_fornitore():
+    p = Progetto(
+        "p", "P", "INTUR", True, "ipotesi", [Pagamento("a", {"2026-10": eur(1_000)}, 0)]
+    )
+    f = Fatto("INTUR", "p", None, "2026-10", eur(400), "ev")
+    ris = calcola(inp9(progetti=[p], fatti=[f]))
+    ott = _riga(ris, "INTUR", "2026-10")
+    assert ris.non_riconciliati == [f]
+    assert ott.uscite["fatto"] == eur(400) and ott.uscite["progetto"] == eur(1_000)
+
+
+def test_fatto_parziale_con_iva_22_differisce_al_piu_di_un_centesimo():
+    p = Progetto(
+        "p", "P", "INTUR", True, "ipotesi",
+        [Pagamento("a", {"2026-10": 100_001}, 22, fornitore_id="X")],
+    )  # fmt: skip
+    f = Fatto("INTUR", "p", "X", "2026-10", 33_333, "ev")
+    ott = _riga(calcola(inp9(progetti=[p], fatti=[f])), "INTUR", "2026-10")
+    # Il netto residuo e' ricavato dal lordo con arrotondamento half-up: scarto <= 1 cent.
+    assert abs(ott.uscite["fatto"] + ott.uscite["progetto"] - iva(100_001, 22)) <= 1

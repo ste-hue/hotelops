@@ -268,7 +268,7 @@ def _riconcilia(
             (
                 (m, pag)
                 for pag in (p.pagamenti if p else [])
-                if pag.fornitore_id == f.fornitore_id
+                if f.fornitore_id is not None and pag.fornitore_id == f.fornitore_id
                 for m in pag.mesi
             ),
             key=lambda x: x[0],
@@ -301,12 +301,14 @@ def calcola(inp: Input) -> Risultato:
     ]
     interc = inp.intercompany
     if sc.canone:
-        anni = {str(a) for a in sc.canone.netto_per_anno}
+        nuovi = flussi_canone(sc.canone, inp.mesi)
+        # Si tolgono i canoni PF solo degli anni in cui la scaletta emette davvero.
+        anni = {f.mese[:4] for f in nuovi}
         interc = [
             f
             for f in interc
             if not (f.nome.startswith("Fitto Hotel") and f.mese[:4] in anni)
-        ] + flussi_canone(sc.canone, inp.mesi)
+        ] + nuovi
     progetti, non_ric = _riconcilia(sc.progetti, inp.fatti)
     inp = replace(
         inp, pf=pf, intercompany=interc, scenario=replace(sc, progetti=progetti)
