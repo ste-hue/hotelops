@@ -492,3 +492,48 @@ def test_js_calendario_conserva_i_centesimi(tmp_path):
         "F.calendarioParse('2027-03=abc'), F.calendarioParse('')])",
     )
     assert json.loads(out) == [{"2027-03": 20000050, "2027-06": 30000000}, None, {}]
+
+
+# ── andata e ritorno: documento costruito come lo esporta la pagina → scenario_from_json ──
+
+
+def test_documento_esportato_dalla_pagina_rientra_in_python(tmp_path: Path):
+    """La pagina esporta `{schema, nome, salvato_il, base, scenario}` con lo scenario così come lo
+    tiene in memoria (copia del seme, MAI `MOTORE.normalizza`, che riscrive i manuali in `importo`
+    e romperebbe `scenario_from_json`) più i progetti e i finanziamenti nuovi creati con i default
+    letterali del template («+ progetto», «+ finanziamento», «+ pagamento»). Tutto deve rientrare
+    in `scenario_from_json` senza perdere nulla: è l'unico ponte browser → BigQuery."""
+    import json as _json
+
+    from verticals.condges.cassa_scenario import scenario_from_json
+
+    p = build_payload(snapshot_sintetico(), [], seme=_scenario_base())
+    html = render_html(p)
+    # I letterali con cui la pagina crea le leve nuove, presi dal template: se cambiano, il test
+    # cambia con loro (e non mente).
+    nuovo_p = re.search(r"sc\.progetti\.push\((\{.*?\})\);", html).group(1)
+    nuovo_f = re.search(r"sc\.finanziamenti\.push\((\{.*?\})\);", html).group(1)
+    nuovo_g = re.search(r"p\.pagamenti\.push\((\{.*?\})\);", html).group(1)
+    espr = (
+        "(() => { const sc = JSON.parse(JSON.stringify(D.seme.scenario)); const id = 'P1'; "
+        f"sc.progetti.push({nuovo_p}); const p = sc.progetti[sc.progetti.length - 1]; "
+        f"p.pagamenti.push({nuovo_g}); p.pagamenti[1].mesi = M.distribuisci(12000000, D.mesi[1], 3, D.mesi); "
+        f"sc.finanziamenti.push({nuovo_f}); const f = sc.finanziamenti[sc.finanziamenti.length - 1]; "
+        "f.erogazioni[D.mesi[0]] = 10000000; f.rate[D.mesi[2]] = 500000; "
+        "sc.canone = { netto_per_anno: { '2026': 30000000 }, rate_n: 2, da_mese: D.mesi[0], calendario: null, aliquota_iva: 22 }; "
+        "sc.soglia = 5000000; "
+        "return JSON.stringify({ schema: D.schema, nome: 'prova', salvato_il: new Date(0).toISOString(), base: D.base, scenario: { ...sc, nome: 'prova' } }); })()"
+    )
+    doc = esegui_node_fn(tmp_path, html, espr)
+    sc, base, meta = scenario_from_json(doc)
+    assert meta["nome"] == "prova" and base == p["base"]
+    assert sc.soglia == 5_000_000 and sc.canone.netto_per_anno == {2026: 30_000_000}
+    assert sc.canone.rate_n == 2 and sc.canone.aliquota_iva == 22
+    nuovo = sc.progetti[-1]
+    assert nuovo.id == "P1" and nuovo.acceso is True and len(nuovo.pagamenti) == 2
+    assert sum(nuovo.pagamenti[1].mesi.values()) == 12_000_000
+    fin = sc.finanziamenti[-1]
+    assert fin.erogazioni == {p["mesi"][0]: 10_000_000} and fin.rate == {p["mesi"][2]: 500_000}
+    # il giro completo: il documento riletto e riserializzato è identico nel contenuto
+    doc2 = _json.loads(doc)
+    assert doc2["schema"] == SCHEMA and set(doc2["scenario"]) >= {"progetti", "finanziamenti", "canone", "soglia", "manuali"}

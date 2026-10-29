@@ -8,7 +8,7 @@ OP_ITEM="aj7ieimu2jdwzfp6qzyw2migxq"   # Cloudflare API token (vault work)
 TEAM="panoramagroup"
 POLICY_NOMINATIVA="29a16983-8bb2-4104-bb0e-653dae8ef650"   # «Canone — nominativa»
 DOMINIO="cdg.panorama-host.com"
-WORKER_DIR="/Users/stefanodellapietra/dev/Projects/panorama_apps/cdg"
+WORKER_DIR="${WORKER_DIR:-/Users/stefanodellapietra/dev/Projects/panorama_apps/cdg}"   # sovrascrivibile: WORKER_DIR=… bash scripts/provision_cdg.sh
 
 tok='op item get '"$OP_ITEM"' --vault work --fields password --reveal'
 

@@ -1694,7 +1694,7 @@ class ScenarioRow(BaseModel):
     base: str  # JSON serializzato
     parametri: str  # JSON serializzato
     progetti_accesi: list[str]
-    note: Optional[str] = None
+    note: str | None = None
     raw_object_id: str
     hash_riga: str
     data_caricamento: str
@@ -1741,7 +1741,7 @@ class ProgettoPagamentoRow(BaseModel):
     importo_netto_cent: StrictInt
     aliquota_iva: int
     stato: str
-    fornitore_id: Optional[str] = None
+    fornitore_id: str | None = None
     societa_id: SocietaId
     raw_object_id: str
     hash_riga: str

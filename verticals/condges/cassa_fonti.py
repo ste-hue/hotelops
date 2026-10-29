@@ -391,4 +391,9 @@ def salva_snapshot(dati: dict, home: Path = SNAPSHOT_HOME) -> Path:
 
 
 def carica_snapshot(home: Path = SNAPSHOT_HOME) -> dict:
-    return json.loads((Path(home) / "latest.json").read_text(encoding="utf-8"))
+    f = Path(home) / "latest.json"
+    if not f.exists():
+        raise FileNotFoundError(
+            f"Nessuno snapshot in {f}: esegui `hotelops cdg cassa --aggiorna` (legge BigQuery)"
+        )
+    return json.loads(f.read_text(encoding="utf-8"))

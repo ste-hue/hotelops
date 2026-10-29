@@ -64,7 +64,7 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
    (la promozione per versione sostituisce la precedente); `hotelops cdg cassa --aggiorna` non
    deve fermarsi su `BaselineNonUnica`; in «Fonti e versioni» compare il nome del file nuovo e la
    data di caricamento.
-3. Il canone Fitto Hotel e i fitti verso terzi vengono isolati dal foglio dettaglio per fornitore
+3. Il canone Fitto Hotel e i fitti verso terzi vengono isolati dal foglio dettaglio per etichetta della riga («Fitto Hotel», «Ramo d'Azienda»)
    (`_riclassifica_dettaglio`), non per somma di voce: se il foglio cambia nome alle righe, la
    pagina perde il canone e lo slider parte da zero. Controllare «Canone come nel PF» in testa.
 
@@ -73,7 +73,7 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
 | Parola | Significato |
 |---|---|
 | **dichiarato** | saldo preso dal foglio di Rosa (`f_saldi_banca_chiusura_mensile`), senza estratto che lo attesti |
-| **attestato** (quadratura per conto) | saldo per cui esiste un movimento bancario con saldo alla data, o una chiusura precedente che quadra con i movimenti fino alla data; il motivo è scritto accanto |
+| **attestato** (quadratura per conto) | saldo per cui esiste una chiusura precedente dello stesso conto e i movimenti bancari in BigQuery coprono fino alla data e, sommati alla chiusura precedente, danno esattamente il saldo dichiarato (`cassa_fonti.leggi_ancore`). Altrimenti «dichiarato», con il motivo accanto: nessuna chiusura precedente, nessun movimento, movimenti che si fermano prima, scostamento in euro |
 | **ancora** | il saldo di partenza per società (somma dei conti) alla data dell'ultima chiusura mensile |
 | **solo PF, nessuna leva** | la baseline: PF vivo senza canone modificato, progetti, finanziamenti o righe manuali |
 | **seme** | lo scenario di partenza caricato dal file locale; nel menu con il suffisso «· seme» |
