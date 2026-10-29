@@ -164,6 +164,9 @@ def assegna_occorrenze(rows: list[dict]) -> list[dict]:
 def _match_voce(label: str) -> str | None:
     """Match a row label to a voce_id."""
     label_clean = label.strip()
+    # Erogazioni: "Finanziamento MPS 550K ARREDI" (INTUR) — NON "Mutui e Finanziamenti"
+    if label_clean.lower().startswith("finanziamento"):
+        return "ENTRATE_FINANZIAMENTI"
     # Try exact match first
     if label_clean in VOCE_MAP:
         return VOCE_MAP[label_clean]
@@ -278,24 +281,46 @@ def _detect_year_and_month_block(ws) -> list[tuple[int, int, int]]:
 # USCITE_RIBALTAMENTO_INTUR) e si spostano al centesimo da USCITE_UTENZE.
 # Se il totale del mese non li contiene, WARNING e nessuno spostamento: mai
 # un negativo inventato. Vale per il PF vivo e per l'archivio (stesso parser).
-INTERCOMPANY_DETTAGLIO: dict[str, tuple[str, str, str, str]] = {
-    # societa: (foglio, tag nell'etichetta, voce di partenza, voce di arrivo)
-    "ORTI": ("Utenze", "(intur)", "USCITE_UTENZE", "USCITE_RIBALTAMENTO_INTUR"),
+INTERCOMPANY_DETTAGLIO: dict[str, list[tuple[str, tuple[str, ...], str, str]]] = {
+    # societa: [(foglio, needles nell'etichetta normalizzata, voce di partenza, voce di arrivo)]
+    "ORTI": [
+        ("Utenze", ("(intur)",), "USCITE_UTENZE", "USCITE_RIBALTAMENTO_INTUR"),
+        # Canone ORTI→INTUR: "Fitto Ramo d' Azienda" (a volte "Fitto Hotel ...") dentro Godimento
+        # Beni di Terzi; Fitto AR / Fitto CVM restano godimento.
+        (
+            "Godimento Beni di Terzi",
+            ("fittohotel", "ramodazienda"),
+            "USCITE_GODIMENTO_BENI",
+            "USCITE_CANONE_PASSIVO",
+        ),
+    ],
 }
+
+
+def _normalizza_etichetta(label: str) -> str:
+    """Minuscolo, senza spazi né apostrofi (' e ’): "Fitto Ramo d' Azienda" → "fittoramodazienda"."""
+    return "".join(ch for ch in label.lower() if not ch.isspace() and ch not in "'’")
 
 
 def _riclassifica_dettaglio(
     wb, societa_id: str, records: list[dict], filepath: Path, now, logger: logging.Logger
 ) -> None:
-    cfg = INTERCOMPANY_DETTAGLIO.get(societa_id)
-    if not cfg or cfg[0] not in wb.sheetnames:
+    for regola in INTERCOMPANY_DETTAGLIO.get(societa_id, []):
+        _applica_regola_dettaglio(wb, regola, societa_id, records, filepath, now, logger)
+
+
+def _applica_regola_dettaglio(
+    wb, regola, societa_id: str, records: list[dict], filepath: Path, now, logger: logging.Logger
+) -> None:
+    foglio, needles, da_voce, a_voce = regola
+    if foglio not in wb.sheetnames:
         return
-    foglio, tag, da_voce, a_voce = cfg
     ws = wb[foglio]
     cols = _detect_year_and_month_block(ws)
     for r in range(3, 80):
         label = " ".join(str(ws.cell(r, c).value) for c in (1, 2) if ws.cell(r, c).value)
-        if tag not in label.lower():
+        norm = _normalizza_etichetta(label)
+        if not any(n in norm for n in needles):
             continue
         for col, anno, mese in cols:
             val = round(_v(ws.cell(r, col).value), 2)

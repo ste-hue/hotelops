@@ -129,3 +129,58 @@ def test_la_coppia_sta_nel_catalogo_e_nel_parser():
     assert intur["categoria"] == orti["categoria"] == "Ribaltamento"
     assert intur["fonte"] == orti["fonte"] == "MANUALE"
     assert VOCE_MAP["Ribaltamento Costi a Orti"] == "ENTRATE_RIBALTAMENTO_ORTI"
+
+
+# ── Canone ORTI→INTUR isolato nel dettaglio "Godimento Beni di Terzi" ────────
+
+
+def _pf_godimento(tmp_path: Path, totale: dict[int, float], righe: dict[str, dict[int, float]]) -> Path:
+    """PF ORTI con la riga Godimento Beni di Terzi (riga 20) e il foglio dettaglio omonimo."""
+    wb = Workbook()
+    pf = wb.active
+    pf.title = "Piano Finanziario"
+    _intestazione(pf, "ORTI")
+    pf["A20"] = "Godimento Beni di Terzi"
+    for col, val in totale.items():
+        pf.cell(20, col, val)
+    gd = wb.create_sheet("Godimento Beni di Terzi")
+    _intestazione(gd)
+    for i, (label, valori) in enumerate(righe.items()):
+        gd.cell(7 + i, 1, label)
+        for col, val in valori.items():
+            gd.cell(7 + i, col, val)
+    p = tmp_path / "ORTI_PF_2026-09.xlsx"
+    wb.save(p)
+    return p
+
+
+@pytest.mark.parametrize(
+    "etichetta", ["Fitto Hotel ramo d'azienda", "Fitto Ramo d' Azienda", "Fitto Ramo d’Azienda"]
+)
+def test_canone_passa_a_canone_passivo(tmp_path, log, etichetta):
+    p = _pf_godimento(
+        tmp_path,
+        {COL_GEN: 294_000.0, COL_FEB: 50_000.0},
+        {etichetta: {COL_GEN: 244_000.0}, "Fitto CVM": {COL_GEN: 50_000.0, COL_FEB: 50_000.0}},
+    )
+    v = _per_voce(parse_piano_finanziario(p, None, log))
+    assert v[("USCITE_CANONE_PASSIVO", 1)] == pytest.approx(244_000.0)
+    assert v[("USCITE_GODIMENTO_BENI", 1)] == pytest.approx(50_000.0)
+    assert v[("USCITE_GODIMENTO_BENI", 2)] == pytest.approx(50_000.0)
+    assert ("USCITE_CANONE_PASSIVO", 2) not in v
+
+
+def test_fitto_ar_e_cvm_restano_godimento(tmp_path, log):
+    p = _pf_godimento(
+        tmp_path, {COL_GEN: 90_000.0}, {"Fitto AR": {COL_GEN: 40_000.0}, "Fitto CVM": {COL_GEN: 50_000.0}}
+    )
+    v = _per_voce(parse_piano_finanziario(p, None, log))
+    assert v == {("USCITE_GODIMENTO_BENI", 1): pytest.approx(90_000.0)}
+
+
+def test_canone_non_contenuto_nel_totale_non_sposta_e_avvisa(tmp_path, log, caplog):
+    p = _pf_godimento(tmp_path, {COL_GEN: 100_000.0}, {"Fitto Ramo d' Azienda": {COL_GEN: 244_000.0}})
+    with caplog.at_level(logging.WARNING):
+        v = _per_voce(parse_piano_finanziario(p, None, log))
+    assert v == {("USCITE_GODIMENTO_BENI", 1): pytest.approx(100_000.0)}
+    assert "non spostato" in caplog.text
