@@ -625,8 +625,20 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     } else {
       parti.push(CPF ? `${CPF.rate_n} ${CPF.rate_n === 1 ? "rata" : "rate"} da ${meseIt(CPF.da_mese)} · come nel PF` : "nessun canone nel PF");
     }
+    // Il canone mese per mese: esce da ORTI ed entra in INTUR nello stesso mese. Si dice sempre,
+    // perché il minimo di ORTI può stare in un mese diverso e non muoversi anche se il canone cambia.
+    const pfFl = D.intercompany.filter((f) => f.nome.startsWith("Fitto Hotel") && f.stato === "pf");
+    const scFl = c ? MOTORE.flussiCanone(c, D.mesi) : pfFl;
+    const perMese = {};
+    for (const f of scFl) perMese[f.mese] = (perMese[f.mese] || 0) + f.importo;
+    const pfPerMese = {};
+    for (const f of pfFl) pfPerMese[f.mese] = (pfPerMese[f.mese] || 0) + f.importo;
+    const mesiCan = Object.keys(perMese).sort();
+    const esce = mesiCan.length ? mesiCan.map((m) => `${meseIt(m)} ${fmt(perMese[m], false)}`).join(", ") : "nessun mese nell'orizzonte";
+    const diffMesi = [...new Set([...Object.keys(perMese), ...Object.keys(pfPerMese)])].sort().filter((m) => (perMese[m] || 0) !== (pfPerMese[m] || 0));
+    const vsPF = diffMesi.length ? `<br>rispetto al PF: ${diffMesi.map((m) => `${meseIt(m)} ORTI ${segno(-((perMese[m] || 0) - (pfPerMese[m] || 0)), false)} · INTUR ${segno((perMese[m] || 0) - (pfPerMese[m] || 0), false)}`).join(", ")}` : "";
     const eff = SOC.map((s) => `${s} ${segno(ris.minimi[s].saldo - D.baseline.minimi[s].saldo, false)}`).join(" · ");
-    el("canone-info").innerHTML = `${parti.join(" · ")}<br>effetto di tutte le leve sui minimi: ${eff}`;
+    el("canone-info").innerHTML = `${parti.join(" · ")}<br>esce da ORTI ed entra in INTUR (lordo): ${esce}${vsPF}<br>effetto di tutte le leve sui minimi: ${eff}`;
   }
 
   // ── voci di un mese (dettaglio e "tre voci più grandi") ──
