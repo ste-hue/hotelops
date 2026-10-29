@@ -22,8 +22,18 @@ from ingest.flussi.ingest_piano_finanziario_xlsx import (
 )
 
 MESI = [
-    "GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO", "GIUGNO",
-    "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE",
+    "GENNAIO",
+    "FEBBRAIO",
+    "MARZO",
+    "APRILE",
+    "MAGGIO",
+    "GIUGNO",
+    "LUGLIO",
+    "AGOSTO",
+    "SETTEMBRE",
+    "OTTOBRE",
+    "NOVEMBRE",
+    "DICEMBRE",
 ]
 COL_GEN, COL_FEB = 3, 4
 
@@ -37,7 +47,37 @@ def _intestazione(ws, societa: str | None = None) -> None:
         ws["A2"] = societa
 
 
-def _pf(tmp_path: Path, societa: str, utenze_pf: dict[int, float], vodafone: dict[int, float]) -> Path:
+def _pf_angelina(
+    tmp_path: Path,
+    societa: str,
+    godimento_pf: dict[int, float],
+    fitto_ar: dict[int, float],
+) -> Path:
+    """PF con la voce Godimento (riga 20) e il foglio «Godimento Beni di Terzi» con la riga 651101 Fitto AR."""
+    wb = Workbook()
+    pf = wb.active
+    pf.title = "Piano Finanziario"
+    _intestazione(pf, societa)
+    pf["A20"] = "Godimento Beni di Terzi"
+    for col, val in godimento_pf.items():
+        pf.cell(20, col, val)
+    g = wb.create_sheet("Godimento Beni di Terzi")
+    _intestazione(g)
+    g["A6"] = "651101"
+    g["B6"] = "Fitto AR"
+    for col, val in fitto_ar.items():
+        g.cell(6, col, val)
+    p = tmp_path / f"{societa}_PF_2026-01.xlsx"
+    wb.save(p)
+    return p
+
+
+def _pf(
+    tmp_path: Path,
+    societa: str,
+    utenze_pf: dict[int, float],
+    vodafone: dict[int, float],
+) -> Path:
     """PF con la sola voce Utenze (riga 15) e un foglio Utenze con la riga Vodafone (intur)."""
     wb = Workbook()
     pf = wb.active
@@ -119,7 +159,13 @@ def test_intur_non_viene_toccata(tmp_path, log):
 
 def test_la_coppia_sta_nel_catalogo_e_nel_parser():
     """Stessa categoria, direzione opposta: una riconciliazione le trova con una regola sola."""
-    csv_path = Path(__file__).resolve().parents[1] / "core" / "bq" / "dimensioni" / "d_voci_piano_finanziario.csv"
+    csv_path = (
+        Path(__file__).resolve().parents[1]
+        / "core"
+        / "bq"
+        / "dimensioni"
+        / "d_voci_piano_finanziario.csv"
+    )
     with csv_path.open(newline="") as fh:
         voci = {r["voce_id"]: r for r in csv.DictReader(fh)}
     intur = voci["ENTRATE_RIBALTAMENTO_ORTI"]
@@ -129,3 +175,60 @@ def test_la_coppia_sta_nel_catalogo_e_nel_parser():
     assert intur["categoria"] == orti["categoria"] == "Ribaltamento"
     assert intur["fonte"] == orti["fonte"] == "MANUALE"
     assert VOCE_MAP["Ribaltamento Costi a Orti"] == "ENTRATE_RIBALTAMENTO_ORTI"
+
+
+# ── Fitto Angelina (AR): gamba propria, intercompany (proposta 29/10/2026, in attesa di Stefano) ──
+
+
+def test_orti_fitto_ar_del_foglio_godimento_va_su_uscite_fitto_angelina(tmp_path, log):
+    """ORTI giugno 2027 reale: Godimento 379.000 = 244.000 ramo + 120.000 AR + 15.000 CVM."""
+    p = _pf_angelina(tmp_path, "ORTI", {COL_GEN: 379_000.0}, {COL_GEN: 120_000.0})
+    v = _per_voce(parse_piano_finanziario(p, None, log))
+    assert v[("USCITE_FITTO_ANGELINA", 1)] == pytest.approx(120_000.0)
+    assert v[("USCITE_GODIMENTO_BENI", 1)] == pytest.approx(
+        259_000.0
+    )  # ramo + CVM restano insieme
+
+
+def test_intur_fitto_ar_del_pf_principale_va_su_entrate_affitti_angelina(tmp_path, log):
+    wb = Workbook()
+    pf = wb.active
+    pf.title = "Piano Finanziario"
+    _intestazione(pf, "INTUR")
+    pf["A10"] = "Fitto Hotel"
+    pf.cell(10, COL_GEN, 244_000.0)
+    pf["A11"] = "Fitto AR"
+    pf.cell(11, COL_GEN, 60_000.0)
+    p = tmp_path / "INTUR_PF_2026-01.xlsx"
+    wb.save(p)
+    v = _per_voce(parse_piano_finanziario(p, None, log))
+    assert v[("ENTRATE_AFFITTI_INTUR", 1)] == pytest.approx(244_000.0)
+    assert v[("ENTRATE_AFFITTI_ANGELINA", 1)] == pytest.approx(60_000.0)
+
+
+def test_la_coppia_angelina_sta_nel_catalogo_senza_pattern_esolver():
+    """Fonte MANUALE: i conti 53.01.33 e 65.01.05.91 cadono già nei pattern delle voci madri
+    ('53', '650105'); un pattern proprio li conterebbe due volte nella vista consuntivo."""
+    csv_path = (
+        Path(__file__).resolve().parents[1]
+        / "core"
+        / "bq"
+        / "dimensioni"
+        / "d_voci_piano_finanziario.csv"
+    )
+    with csv_path.open(newline="") as fh:
+        voci = {r["voce_id"]: r for r in csv.DictReader(fh)}
+    e, u_ = voci["ENTRATE_AFFITTI_ANGELINA"], voci["USCITE_FITTO_ANGELINA"]
+    assert (e["sezione"], e["societa_id"], e["fonte"], e["cod_conto_pattern"]) == (
+        "ENTRATE",
+        "INTUR",
+        "MANUALE",
+        "",
+    )
+    assert (u_["sezione"], u_["societa_id"], u_["fonte"], u_["cod_conto_pattern"]) == (
+        "USCITE",
+        "ORTI",
+        "MANUALE",
+        "",
+    )
+    assert VOCE_MAP["Fitto AR"] == "ENTRATE_AFFITTI_ANGELINA"

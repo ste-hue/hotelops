@@ -41,8 +41,11 @@ MESI = [
     "DICEMBRE",
 ]
 COL_LUG = 3 + 6  # luglio 2026: il caso reale di INTUR_PF_2026-07
-VOCE = "ENTRATE_AFFITTI_INTUR"
-FITTI = {"Fitto Hotel": {COL_LUG: 488_000.0}, "Fitto AR": {COL_LUG: 60_000.0}}
+VOCE = "USCITE_UTENZE"
+# Due etichette che il parser manda sulla stessa voce (match per prefisso su "Utenze"): è il caso
+# che collideva con la chiave vecchia. Fino al 29/10 l'esempio era "Fitto Hotel" + "Fitto AR"
+# (INTUR_PF_2026-07, 488.000 + 60.000): con la voce propria per Angelina non collidono più.
+FITTI = {"Utenze": {COL_LUG: 488_000.0}, "Utenze Gas": {COL_LUG: 60_000.0}}
 
 
 def _pf(path: Path, righe: dict[str, dict[int, float]]) -> Path:
@@ -82,7 +85,7 @@ def test_due_righe_sulla_stessa_voce_e_mese_restano_due_con_hash_distinti(
 
 
 def test_nessuna_collisione_e_stessi_hash_a_ogni_ricarico(tmp_path, log):
-    p = _pf(tmp_path / "INTUR_PF_2026-07.xlsx", {**FITTI, "Utenze": {COL_LUG: 1_000.0}})
+    p = _pf(tmp_path / "INTUR_PF_2026-07.xlsx", {**FITTI, "Mutui e Finanziamenti": {COL_LUG: 1_000.0}})
     prima = [r["hash_riga"] for r in build_rows([p], log)]
     seconda = [r["hash_riga"] for r in build_rows([p], log)]
     assert len(prima) == 3 and len(set(prima)) == 3

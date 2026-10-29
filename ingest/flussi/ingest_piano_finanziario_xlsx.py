@@ -114,7 +114,7 @@ VOCE_MAP: dict[str, str] = {
     "Deposito Fitto": "USCITE_DEPOSITO_FITTO",
     # INTUR-specific voci
     "Fitto Hotel": "ENTRATE_AFFITTI_INTUR",  # canone ORTI→INTUR (conto 53.xx)
-    "Fitto AR": "ENTRATE_AFFITTI_INTUR",  # affitto ramo d'azienda (same 53.xx)
+    "Fitto AR": "ENTRATE_AFFITTI_ANGELINA",  # fitto Angelina (65.01.05.91 / 53.01.33): gamba propria, intercompany
     "Entrate Farmacia": "ENTRATE_AFFITTI_MINORI",  # affitto farmacia (47.95.xx)
     "Ribaltamento Costi a Orti": "ENTRATE_RIBALTAMENTO_ORTI",  # intercompany INTUR→ORTI, blocco ENTRATE (28/10/2026)
     "Entrate Spiaggia": "ENTRATE_SPIAGGIA",
@@ -278,23 +278,55 @@ def _detect_year_and_month_block(ws) -> list[tuple[int, int, int]]:
 # USCITE_RIBALTAMENTO_INTUR) e si spostano al centesimo da USCITE_UTENZE.
 # Se il totale del mese non li contiene, WARNING e nessuno spostamento: mai
 # un negativo inventato. Vale per il PF vivo e per l'archivio (stesso parser).
-INTERCOMPANY_DETTAGLIO: dict[str, tuple[str, str, str, str]] = {
-    # societa: (foglio, tag nell'etichetta, voce di partenza, voce di arrivo)
-    "ORTI": ("Utenze", "(intur)", "USCITE_UTENZE", "USCITE_RIBALTAMENTO_INTUR"),
+# Regole di dettaglio per società: (foglio, tag nell'etichetta, voce da cui togliere, voce in cui mettere).
+# Il PF principale somma; il foglio di dettaglio tiene la gamba separata. Stesso meccanismo del
+# ribaltamento (28/10): si sposta solo se il totale del mese lo contiene, mai un negativo.
+INTERCOMPANY_DETTAGLIO: dict[str, list[tuple[str, str, str, str]]] = {
+    "ORTI": [
+        ("Utenze", "(intur)", "USCITE_UTENZE", "USCITE_RIBALTAMENTO_INTUR"),
+        # riga «651101 Fitto AR» del foglio Godimento = fitto Angelina, intercompany, non terzi
+        (
+            "Godimento Beni di Terzi",
+            "fitto ar",
+            "USCITE_GODIMENTO_BENI",
+            "USCITE_FITTO_ANGELINA",
+        ),
+    ],
 }
 
 
 def _riclassifica_dettaglio(
-    wb, societa_id: str, records: list[dict], filepath: Path, now, logger: logging.Logger
+    wb,
+    societa_id: str,
+    records: list[dict],
+    filepath: Path,
+    now,
+    logger: logging.Logger,
 ) -> None:
-    cfg = INTERCOMPANY_DETTAGLIO.get(societa_id)
-    if not cfg or cfg[0] not in wb.sheetnames:
+    for regola in INTERCOMPANY_DETTAGLIO.get(societa_id, []):
+        _applica_regola_dettaglio(
+            wb, societa_id, records, filepath, now, logger, regola
+        )
+
+
+def _applica_regola_dettaglio(
+    wb,
+    societa_id: str,
+    records: list[dict],
+    filepath: Path,
+    now,
+    logger: logging.Logger,
+    regola,
+) -> None:
+    foglio, tag, da_voce, a_voce = regola
+    if foglio not in wb.sheetnames:
         return
-    foglio, tag, da_voce, a_voce = cfg
     ws = wb[foglio]
     cols = _detect_year_and_month_block(ws)
     for r in range(3, 80):
-        label = " ".join(str(ws.cell(r, c).value) for c in (1, 2) if ws.cell(r, c).value)
+        label = " ".join(
+            str(ws.cell(r, c).value) for c in (1, 2) if ws.cell(r, c).value
+        )
         if tag not in label.lower():
             continue
         for col, anno, mese in cols:
@@ -302,7 +334,13 @@ def _riclassifica_dettaglio(
             if val == 0:
                 continue
             rec = next(
-                (x for x in records if x["voce_id"] == da_voce and x["anno"] == anno and x["mese"] == mese),
+                (
+                    x
+                    for x in records
+                    if x["voce_id"] == da_voce
+                    and x["anno"] == anno
+                    and x["mese"] == mese
+                ),
                 None,
             )
             if rec is None or rec["importo"] + 0.005 < val:
@@ -328,7 +366,9 @@ def _riclassifica_dettaglio(
                     "data_caricamento": now.isoformat(),
                 }
             )
-            logger.info(f"  riclassificato {da_voce}→{a_voce} {anno}-{mese:02d} {val:,.2f} ({label.strip()})")
+            logger.info(
+                f"  riclassificato {da_voce}→{a_voce} {anno}-{mese:02d} {val:,.2f} ({label.strip()})"
+            )
 
 
 def setup_logger() -> logging.Logger:
