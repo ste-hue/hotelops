@@ -397,3 +397,49 @@ def test_replica_cassa_panorama():
     if "atteso_cent" in d:
         assert ris["minimi"]["INTUR"]["saldo"] == d["atteso_cent"]["INTUR"]
         assert ris["minimi"]["ORTI"]["saldo"] == d["atteso_cent"]["ORTI"]
+
+
+# ── fix round 1: niente finestre modali, input euro validato, calendario al centesimo ──
+
+
+def esegui_node_formato(tmp_path: Path, html: str, espressione: str) -> str:
+    """Esegue `espressione` con F = FORMATO (script id="formato"); stampa il risultato."""
+    if NODE is None:
+        pytest.skip("node non installato")
+    formato = re.search(r'<script id="formato">(.*?)</script>', html, re.S).group(1)
+    (tmp_path / "formato.js").write_text(formato, encoding="utf-8")
+    (tmp_path / "run.js").write_text(
+        f"const F=require('./formato.js');console.log({espressione});", encoding="utf-8"
+    )
+    r = subprocess.run([NODE, "run.js"], cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    return r.stdout.strip()
+
+
+def test_html_senza_finestre_modali():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert "alert(" not in html and "prompt(" not in html and "confirm(" not in html
+    assert '<script id="formato">' in html and "Nessuna leva" in html
+    assert "Azzera leve" not in html
+
+
+def test_js_parse_euro_validato(tmp_path):
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        "JSON.stringify([F.parseEuro('abc'), F.parseEuro('1.234,567'), F.parseEuro('100,01'), "
+        "F.parseEuro('1.234'), F.parseEuro('-1.549,23'), F.parseEuro(''), F.parseEuro('1.234.567,8')])",
+    )
+    assert json.loads(out) == [None, None, 10001, 123400, -154923, 0, 123456780]
+
+
+def test_js_calendario_conserva_i_centesimi(tmp_path):
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        "JSON.stringify([F.calendarioParse(F.calendarioTesto({'2027-06': 30000000, '2027-03': 20000050})), "
+        "F.calendarioParse('2027-03=abc'), F.calendarioParse('')])",
+    )
+    assert json.loads(out) == [{"2027-03": 20000050, "2027-06": 30000000}, None, {}]
