@@ -561,10 +561,12 @@ def cmd_promote(args):
 
 
 def cmd_cdg(args):
-    """CdG: scenario salva/lista (lineage), cassa (pagina, Task 8)."""
+    """CdG: scenario salva/lista (lineage), cassa (pagina HTML)."""
     if args.cdg_cmd == "cassa":
-        print("non ancora disponibile (Task 8)")
-        sys.exit(1)
+        from verticals.condges.build_cassa_artifact import DEFAULT_OUT, run
+
+        run(Path(args.out) if args.out else DEFAULT_OUT, args.aggiorna, args.push)
+        return
 
     if args.scenario_cmd == "salva":
         from ingest.intake import intake_file
@@ -1409,10 +1411,10 @@ def main():
     p_css.add_argument("file")
     p_css.add_argument("--nome", default=None, help="Solo informativo (il nome vive nel documento)")
     cs_sub.add_parser("lista", help="Scenari salvati (p_scenari per creato_il)")
-    p_cc = cdg_sub.add_parser("cassa", help="Pagina Cassa (non ancora disponibile)")
-    p_cc.add_argument("--aggiorna", action="store_true")
-    p_cc.add_argument("--push", action="store_true")
-    p_cc.add_argument("--out", default=None)
+    p_cc = cdg_sub.add_parser("cassa", help="Pagina Cassa (HTML autonomo da snapshot locale)")
+    p_cc.add_argument("--aggiorna", action="store_true", help="Rilegge BigQuery e salva lo snapshot (senza: latest.json)")
+    p_cc.add_argument("--push", action="store_true", help="Pubblica HTML e dati nel KV del Worker cdg")
+    p_cc.add_argument("--out", default=None, help="File HTML (default docs/reports/artifacts/cassa.html)")
 
     p_intake = sub.add_parser(
         "intake",

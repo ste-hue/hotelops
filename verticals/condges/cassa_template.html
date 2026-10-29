@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Cassa · CdG</title>
+<style>
+:root{
+  --bg:#faf9f6; --card:#ffffff; --ink:#1d1c1a; --muted:#6d6a64; --line:#e5e2db; --soft:#f1efe9;
+  --accent:#1d5c87; --ok:#3f6b58; --warn:#a86400; --bad:#b3261e; --warn-bg:#fbf1dd; --bad-bg:#fbe6e3; --ok-bg:#e4efe9;
+  --ipo:#ebe9e3; --base-line:#8d8a83;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#151513; --card:#1d1d1a; --ink:#ecebe6; --muted:#9c988f; --line:#32312d; --soft:#252521;
+  --accent:#7db7e0; --ok:#86b8a0; --warn:#e2a64a; --bad:#f08a80; --warn-bg:#3a2e17; --bad-bg:#3d201d; --ok-bg:#1f3a2e;
+  --ipo:#23231f; --base-line:#7a776f;
+}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;overflow-x:hidden}
+main{max-width:1180px;margin:0 auto;padding:22px 16px 56px}
+h1{font-size:22px;font-weight:650;letter-spacing:-.01em;margin:0}
+h2{font-size:16px;font-weight:620;margin:22px 0 8px}
+h3{font-size:14px;font-weight:620;margin:12px 0 6px}
+.sub{color:var(--muted);margin:2px 0 0;font-size:13px}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.neg{color:var(--bad)}
+.griglia{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,380px);gap:22px;align-items:start}
+@media (max-width:900px){.griglia{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.minimi{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+@media (max-width:560px){.minimi{grid-template-columns:1fr}}
+.minimi .saldo{font-size:26px;font-weight:650;margin:2px 0}
+.minimi .delta{font-size:13px;color:var(--muted)}
+.minimi ul{margin:6px 0 0;padding-left:16px;font-size:13px}
+.badge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);background:var(--soft);color:var(--muted);margin-left:4px;vertical-align:middle}
+.badge.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+.badge.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+.badge.bad{background:var(--bad-bg);color:var(--bad);border-color:transparent}
+.conti{margin:8px 0 0;font-size:12px;color:var(--muted)}
+.conti div{margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:5px 6px;text-align:right;border-bottom:1px solid var(--line);vertical-align:top}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:500;font-size:12px}
+tr.ipo td{background:var(--ipo)}
+tr.mese{cursor:pointer}
+tr.mese:hover td{background:var(--soft)}
+tr.dett td{background:var(--soft);text-align:left;font-size:12px;padding:6px 8px 8px}
+tr.dett ul{margin:0;padding-left:16px;columns:2;column-gap:18px}
+@media (max-width:560px){th.ini,td.ini{display:none} table{font-size:12px} tr.dett ul{columns:1}}
+svg.graf{width:100%;height:auto;display:block;margin-top:8px}
+.leg{font-size:12px;color:var(--muted);margin-top:4px}
+.leg span{display:inline-block;margin-right:12px}
+.leg i{display:inline-block;width:18px;border-top:2px solid var(--accent);vertical-align:middle;margin-right:4px}
+.leg i.base{border-top:2px dashed var(--base-line)}
+.leg i.ipo{width:12px;height:10px;border:0;background:var(--ipo);border-radius:2px}
+.barra{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+button,select,input,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px;max-width:100%}
+button{cursor:pointer;background:var(--soft)}
+button.primario{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+input.eur{width:110px;text-align:right}
+input.n{width:56px;text-align:right}
+input.nome{width:100%}
+.leva{border-top:1px solid var(--line);padding:10px 0}
+.leva:first-of-type{border-top:0}
+.leva.spento{color:var(--muted)}
+.leva.spento .pag{opacity:.75}
+.leva header{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.leva header .nome{flex:1 1 160px;font-weight:600}
+.leva .riga{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;margin-top:6px;font-size:13px}
+.pag{margin:8px 0 0 0;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--soft)}
+.pag .mesi{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.pag .mesi label{font-size:11px;color:var(--muted);display:flex;flex-direction:column}
+.pag .mesi input{width:92px;text-align:right;font-size:12px;padding:3px 5px}
+.nota{font-size:12px;color:var(--muted);font-style:italic;margin-top:4px}
+.limiti{margin-top:18px;padding:10px 14px;border-radius:8px;background:var(--warn-bg);color:var(--ink)}
+.limiti h2{margin:0 0 6px;color:var(--warn)}
+.limiti ul{margin:0;padding-left:18px;font-size:13px}
+.piccolo{font-size:12px;color:var(--muted)}
+details summary{cursor:pointer;color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Cassa · ORTI e INTUR</h1>
+  <p class="sub" id="sub"></p>
+</header>
+
+<div class="barra" id="barra">
+  <label class="piccolo">Scenario <select id="sel-scenari"></select></label>
+  <input type="text" id="nome-scenario" class="nome" style="width:200px" placeholder="nome scenario">
+  <label class="piccolo">Soglia € <input type="text" class="eur" id="soglia"></label>
+  <button id="esporta" class="primario">Esporta scenario</button>
+  <button id="azzera">Azzera leve</button>
+</div>
+
+<section class="minimi" id="minimi"></section>
+
+<div class="griglia">
+  <div>
+    <div id="grafici"></div>
+    <div id="tabelle"></div>
+    <h2>Consolidato</h2>
+    <div class="card" id="consolidato"></div>
+    <div id="fatti"></div>
+  </div>
+  <aside>
+    <h2 style="margin-top:0">Leve</h2>
+    <div class="card" id="leve"></div>
+  </aside>
+</div>
+
+<section class="limiti" id="limiti"></section>
+</main>
+
+<script type="application/json" id="dati">__DATA__</script>
+
+<script id="motore">
+// Porting di verticals/condges/cassa_motore.py: stessa sequenza di `calcola`,
+// interi (centesimi) ovunque. Nessun formato, nessun round.
+const MOTORE = (() => {
+  const ORIGINI = ["pf", "canone", "finanziamento", "progetto", "manuale", "fatto"];
+  const SOCIETA = ["ORTI", "INTUR"];
+
+  function iva(netto, aliquota) {
+    return Math.floor((netto * (100 + aliquota) + 50) / 100);
+  }
+
+  function distribuisci(totale, da, n, mesi) {
+    if (n < 1) throw new Error(`numero rate non valido: ${n}`);
+    const i = mesi.indexOf(da);
+    if (i < 0 || i + n > mesi.length) throw new Error(`oltre l'orizzonte: ${n} rate da ${da}`);
+    // Math.floor = `//` di Python (coincide con trunc per importi positivi).
+    const quota = Math.floor(totale / n);
+    const out = {};
+    for (let k = 0; k < n - 1; k++) out[mesi[i + k]] = quota;
+    out[mesi[i + n - 1]] = totale - quota * (n - 1);
+    return out;
+  }
+
+  function flussiCanone(s, mesi) {
+    const out = [];
+    const anni = Object.keys(s.netto_per_anno).map(Number).sort((a, b) => a - b);
+    for (const anno of anni) {
+      const netto = s.netto_per_anno[anno];
+      const cal = Object.entries(s.calendario || {})
+        .filter(([m]) => m.slice(0, 4) === String(anno))
+        .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+      let lordi;
+      if (cal.length) {
+        lordi = cal.map(([m, v]) => [m, iva(v, s.aliquota_iva)]);
+      } else {
+        const da = `${anno}-${s.da_mese.slice(5)}`;
+        if (!mesi.includes(da)) continue;
+        lordi = Object.entries(distribuisci(iva(netto, s.aliquota_iva), da, s.rate_n, mesi));
+      }
+      for (const [m, v] of lordi) {
+        if (mesi.includes(m)) out.push({ nome: "Fitto Hotel (canone)", da: "ORTI", a: "INTUR", mese: m, importo: v, stato: "scenario" });
+      }
+    }
+    return out;
+  }
+
+  function riconcilia(progetti, fatti) {
+    progetti = JSON.parse(JSON.stringify(progetti));
+    const perId = {};
+    for (const p of progetti) perId[p.id] = p;
+    const nonRic = [];
+    for (const f of fatti) {
+      const p = perId[f.progetto_id];
+      const slot = [];
+      for (const pag of (p ? p.pagamenti : [])) {
+        if (f.fornitore_id != null && pag.fornitore_id === f.fornitore_id) {
+          for (const m of Object.keys(pag.mesi)) slot.push({ m, pag });
+        }
+      }
+      slot.sort((a, b) => (a.m < b.m ? -1 : a.m > b.m ? 1 : 0));
+      if (!slot.length) { nonRic.push(f); continue; }
+      let resto = f.importo;
+      for (const { m, pag } of slot) {
+        if (resto <= 0) break;
+        const lordo = iva(pag.mesi[m], pag.aliquota_iva);
+        const presa = Math.min(resto, lordo);
+        resto -= presa;
+        const k = 100 + pag.aliquota_iva;
+        pag.mesi[m] = presa === lordo ? 0 : Math.floor(((lordo - presa) * 100 + Math.floor(k / 2)) / k);
+      }
+    }
+    return [progetti, nonRic];
+  }
+
+  function zero() {
+    const o = {};
+    for (const k of ORIGINI) o[k] = 0;
+    return o;
+  }
+
+  function somma(o) {
+    let s = 0;
+    for (const k of ORIGINI) s += o[k];
+    return s;
+  }
+
+  function movimenti(inp, societa, mese) {
+    const ent = zero(), usc = zero();
+    const sc = inp.scenario;
+    const add = (r) => {
+      if (r.societa === societa && r.mese === mese) (r.direzione === "E" ? ent : usc)[r.origine] += r.importo;
+    };
+    for (const r of inp.pf) add(r);
+    for (const r of sc.manuali) add(r);
+    for (const f of inp.intercompany) {
+      if (f.mese !== mese) continue;
+      if (f.stato === "una_gamba") {
+        if (SOCIETA.includes(f.da)) {
+          if (f.da === societa) usc.canone += f.importo;
+        } else if (f.a === societa) ent.canone += f.importo;
+        continue;
+      }
+      if (f.a === societa) ent.canone += f.importo;
+      if (f.da === societa) usc.canone += f.importo;
+    }
+    for (const fin of sc.finanziamenti) {
+      if (fin.societa === societa) {
+        ent.finanziamento += fin.erogazioni[mese] || 0;
+        usc.finanziamento += fin.rate[mese] || 0;
+      }
+    }
+    for (const p of sc.progetti) {
+      if (p.acceso && p.societa === societa) {
+        for (const pag of p.pagamenti) usc.progetto += iva(pag.mesi[mese] || 0, pag.aliquota_iva);
+      }
+    }
+    for (const f of inp.fatti) {
+      if (f.societa === societa && f.mese === mese) usc.fatto += f.importo;
+    }
+    return [ent, usc];
+  }
+
+  // Scenario = la parte `scenario` del documento cdg-cassa-scenario/1 (manuali con importo_cent).
+  function normalizza(scenario) {
+    const sc = JSON.parse(JSON.stringify(scenario));
+    sc.progetti = sc.progetti || [];
+    sc.finanziamenti = sc.finanziamenti || [];
+    sc.canone = sc.canone || null;
+    sc.soglia = sc.soglia || 0;
+    sc.manuali = (sc.manuali || []).map((r) => ({
+      societa: r.societa, voce_id: r.voce_id, mese: r.mese,
+      importo: r.importo_cent !== undefined ? r.importo_cent : r.importo,
+      direzione: r.direzione, origine: r.origine,
+    }));
+    return sc;
+  }
+
+  function calcola(payload, scenario) {
+    const sc = normalizza(scenario);
+    const conFin = new Set(sc.finanziamenti.map((f) => f.societa));
+    const pf = payload.pf.filter((r) => !(r.voce_id === "ENTRATE_FINANZIAMENTI" && conFin.has(r.societa)));
+    let interc = payload.intercompany;
+    if (sc.canone) {
+      const nuovi = flussiCanone(sc.canone, payload.mesi);
+      const anni = new Set(nuovi.map((f) => f.mese.slice(0, 4)));
+      interc = interc.filter((f) => !(f.nome.startsWith("Fitto Hotel") && anni.has(f.mese.slice(0, 4)))).concat(nuovi);
+    }
+    const [progetti, nonRic] = riconcilia(sc.progetti, payload.fatti);
+    const ipo = new Set(payload.mesi_ipotetici);
+    const inp = { mesi: payload.mesi, ancore: payload.ancore, pf, intercompany: interc, fatti: payload.fatti, scenario: { ...sc, progetti } };
+
+    const righe = [];
+    for (const soc of SOCIETA) {
+      let saldo = inp.ancore[soc].saldo;
+      for (const mese of inp.mesi) {
+        const [ent, usc] = movimenti(inp, soc, mese);
+        const fin = saldo + somma(ent) - somma(usc);
+        righe.push({ mese, societa: soc, ini: saldo, entrate: ent, uscite: usc, fin });
+        saldo = fin;
+      }
+    }
+
+    const primoMin = (rs) => rs.reduce((m, r) => (r.fin < m.fin ? r : m));
+    const minimi = {};
+    for (const soc of SOCIETA) {
+      const mie = righe.filter((r) => r.societa === soc);
+      const pfR = mie.filter((r) => !ipo.has(r.mese));
+      const coda = mie.filter((r) => ipo.has(r.mese));
+      const m = primoMin(pfR.length ? pfR : coda);
+      const c = coda.length ? primoMin(coda) : null;
+      minimi[soc] = {
+        mese: m.mese, saldo: m.fin,
+        sotto_soglia: pfR.filter((r) => r.fin < sc.soglia).map((r) => r.mese),
+        coda_mese: c ? c.mese : null, coda_saldo: c ? c.fin : null,
+      };
+    }
+
+    const consolidato = [];
+    for (const mese of inp.mesi) {
+      const fl = inp.intercompany.filter((f) => f.mese === mese && SOCIETA.includes(f.da) && SOCIETA.includes(f.a));
+      const flTutti = inp.intercompany.filter((f) => f.mese === mese);
+      consolidato.push({
+        mese,
+        saldo: righe.filter((r) => r.mese === mese).reduce((s, r) => s + r.fin, 0),
+        intercompany_nettato: fl.filter((f) => f.stato !== "una_gamba").reduce((s, f) => s + f.importo, 0),
+        residuo: flTutti.filter((f) => f.stato === "una_gamba").reduce((s, f) => s + f.importo, 0),
+      });
+    }
+    return { righe, minimi, consolidato, non_riconciliati: nonRic };
+  }
+
+  return { ORIGINI, SOCIETA, calcola, distribuisci, iva, flussiCanone, riconcilia, normalizza };
+})();
+if (typeof module !== "undefined") module.exports = MOTORE;
+</script>
+
+<script id="app">
+(() => {
+  const D = JSON.parse(document.getElementById("dati").textContent);
+  const SOC = MOTORE.SOCIETA;
+  const IPO = new Set(D.mesi_ipotetici);
+  const MESI_IT = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
+
+  // ── formato: l'euro esiste solo qui ──
+  function fmt(cent, conCent = true) {
+    const neg = cent < 0;
+    const a = Math.abs(cent);
+    const e = Math.floor(a / 100), c = a % 100;
+    const s = String(e).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return (neg ? "−" : "") + s + (conCent ? "," + String(c).padStart(2, "0") : "");
+  }
+  function parseEuro(txt) {
+    let s = String(txt || "").replace(/[\s€]/g, "");
+    if (!s) return 0;
+    const neg = s.startsWith("-") || s.startsWith("−");
+    s = s.replace(/^[-−]/, "");
+    const sep = Math.max(s.lastIndexOf(","), s.lastIndexOf("."));
+    let intero = s, dec = "";
+    if (sep >= 0 && s.length - sep - 1 <= 2) { dec = s.slice(sep + 1); intero = s.slice(0, sep); }
+    intero = intero.replace(/[.,]/g, "");
+    dec = (dec + "00").slice(0, 2);
+    const cent = (parseInt(intero || "0", 10) * 100) + parseInt(dec, 10);
+    return neg ? -cent : cent;
+  }
+  const meseIt = (m) => `${MESI_IT[parseInt(m.slice(5), 10) - 1]} ${m.slice(2, 4)}`;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const copia = (o) => JSON.parse(JSON.stringify(o));
+  const el = (id) => document.getElementById(id);
+  const etichetta = (v) => v.replace(/^(ENTRATE|USCITE)_/, "").toLowerCase().replace(/_/g, " ");
+
+  // ── stato ──
+  let stato = { nome: D.seme.nome, scenario: copia(D.seme.scenario) };
+  let ris = null;
+  const aperti = new Set();
+
+  function ricalcola() {
+    try {
+      ris = MOTORE.calcola(D, stato.scenario);
+      render();
+    } catch (e) {
+      alert(`Scenario non calcolabile: ${e.message}`);
+    }
+  }
+
+  // ── testa e scenari ──
+  function renderTesta() {
+    const basi = SOC.map((s) => `${s}: ${D.base[s] ? D.base[s].file_sorgente : "—"}`).join(" · ");
+    const anc = Object.values(D.ancore)[0];
+    el("sub").textContent = `Ancora al ${anc ? anc.data : "—"} · PF ${basi} · generato ${D.generato_il.replace("T", " ")}` +
+      (D.acquisito_il ? ` · fonti del ${D.acquisito_il.replace("T", " ")}` : "");
+    const sel = el("sel-scenari");
+    sel.innerHTML = "";
+    const tutti = [{ ...D.seme, _k: "seme" }, ...D.scenari.map((s, i) => ({ ...s, _k: String(i) }))];
+    for (const s of tutti) {
+      const o = document.createElement("option");
+      o.value = s._k;
+      o.textContent = s.nome + (s.compatibile ? "" : " · base diversa");
+      sel.appendChild(o);
+    }
+    sel.onchange = () => {
+      const s = sel.value === "seme" ? D.seme : D.scenari[parseInt(sel.value, 10)];
+      stato = { nome: s.nome, scenario: copia(s.scenario) };
+      aperti.clear();
+      ricalcola();
+    };
+    el("nome-scenario").value = stato.nome;
+    el("nome-scenario").oninput = (e) => { stato.nome = e.target.value; stato.scenario.nome = e.target.value; };
+    el("soglia").value = fmt(stato.scenario.soglia || 0, false);
+    el("soglia").onchange = (e) => { stato.scenario.soglia = parseEuro(e.target.value); ricalcola(); };
+    el("esporta").onclick = esporta;
+    el("azzera").onclick = () => {
+      stato = { nome: "Nessuna leva", scenario: { nome: "Nessuna leva", soglia: 0, canone: null, progetti: [], finanziamenti: [], manuali: [] } };
+      aperti.clear();
+      ricalcola();
+    };
+  }
+
+  function esporta() {
+    const doc = { schema: D.schema, nome: stato.nome, salvato_il: new Date().toISOString(), base: D.base, scenario: { ...stato.scenario, nome: stato.nome } };
+    const blob = new Blob([JSON.stringify(doc, null, 1)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `cassa-scenario-${(stato.nome || "scenario").replace(/[^\w.-]+/g, "_")}.json`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  // ── voci di un mese (dettaglio e "tre voci più grandi") ──
+  function vociMese(soc, mese) {
+    const sc = stato.scenario;
+    const voci = { E: {}, U: {} };
+    const add = (dir, nome, imp) => { if (imp) voci[dir][nome] = (voci[dir][nome] || 0) + imp; };
+    const conFin = new Set(sc.finanziamenti.map((f) => f.societa));
+    for (const r of D.pf) {
+      if (r.societa === soc && r.mese === mese && !(r.voce_id === "ENTRATE_FINANZIAMENTI" && conFin.has(soc))) add(r.direzione, etichetta(r.voce_id), r.importo);
+    }
+    let interc = D.intercompany;
+    if (sc.canone) {
+      const nuovi = MOTORE.flussiCanone(sc.canone, D.mesi);
+      const anni = new Set(nuovi.map((f) => f.mese.slice(0, 4)));
+      interc = interc.filter((f) => !(f.nome.startsWith("Fitto Hotel") && anni.has(f.mese.slice(0, 4)))).concat(nuovi);
+    }
+    for (const f of interc) {
+      if (f.mese !== mese) continue;
+      const tag = f.stato === "una_gamba" ? " (una gamba)" : f.stato === "scenario" ? " (scaletta)" : "";
+      if (f.stato === "una_gamba") {
+        if (SOC.includes(f.da)) { if (f.da === soc) add("U", f.nome + tag, f.importo); }
+        else if (f.a === soc) add("E", f.nome + tag, f.importo);
+        continue;
+      }
+      if (f.a === soc) add("E", f.nome + tag, f.importo);
+      if (f.da === soc) add("U", f.nome + tag, f.importo);
+    }
+    for (const f of sc.finanziamenti) {
+      if (f.societa !== soc) continue;
+      add("E", f.nome + " (erogazione)", f.erogazioni[mese] || 0);
+      add("U", f.nome + " (rata)", f.rate[mese] || 0);
+    }
+    const [progetti] = MOTORE.riconcilia(sc.progetti, D.fatti);
+    for (const p of progetti) {
+      if (!p.acceso || p.societa !== soc) continue;
+      for (const g of p.pagamenti) add("U", `${p.nome}: ${g.nome}`, MOTORE.iva(g.mesi[mese] || 0, g.aliquota_iva));
+    }
+    for (const f of D.fatti) if (f.societa === soc && f.mese === mese) add("U", `fatto ${f.progetto_id} ${f.fornitore_id || ""}`, f.importo);
+    for (const r of sc.manuali) if (r.societa === soc && r.mese === mese) add(r.direzione, `${r.voce_id} (manuale)`, r.importo_cent !== undefined ? r.importo_cent : r.importo);
+    return voci;
+  }
+
+  // ── riquadri minimi ──
+  function renderMinimi() {
+    const box = el("minimi");
+    box.innerHTML = "";
+    for (const soc of SOC) {
+      const m = ris.minimi[soc], b = D.baseline.minimi[soc], a = D.ancore[soc];
+      const delta = m.saldo - b.saldo;
+      const usc = Object.entries(vociMese(soc, m.mese).U).sort((x, y) => y[1] - x[1]).slice(0, 3);
+      const conti = Object.entries(a.conti).map(([banca, c]) =>
+        `<div>${esc(banca)} <span class="num">${fmt(c.saldo)}</span> <span class="badge ${c.attestato ? "ok" : "warn"}">${c.attestato ? "attestato" : "dichiarato"}</span> <span>${esc(c.motivo)}</span></div>`).join("");
+      const sotto = m.sotto_soglia.length ? `<div class="piccolo">sotto soglia: ${m.sotto_soglia.map(meseIt).join(", ")}</div>` : "";
+      const coda = m.coda_mese ? `<div class="piccolo">coda ipotetica: minimo ${meseIt(m.coda_mese)} <span class="num">${fmt(m.coda_saldo)}</span></div>` : "";
+      box.insertAdjacentHTML("beforeend", `<div class="card">
+        <div><strong>${soc}</strong> · minimo a ${meseIt(m.mese)}${IPO.has(m.mese) ? ' <span class="badge">ipotetico</span>' : ""}
+          <span class="badge ${a.attestato ? "ok" : "warn"}">ancora ${a.attestato ? "attestata" : "dichiarata"}</span></div>
+        <div class="saldo num ${m.saldo < 0 ? "neg" : ""}">${fmt(m.saldo)} €</div>
+        <div class="delta num">vs baseline (${fmt(b.saldo)} a ${meseIt(b.mese)}): ${delta === 0 ? "uguale" : (delta > 0 ? "+" : "") + fmt(delta)}</div>
+        ${sotto}${coda}
+        <ul>${usc.map(([n, v]) => `<li>${esc(n)} <span class="num">${fmt(v)}</span></li>`).join("") || "<li>nessuna uscita nel mese</li>"}</ul>
+        <div class="conti">Ancora al ${a.data}: <span class="num">${fmt(a.saldo)}</span>${conti}</div>
+      </div>`);
+    }
+  }
+
+  // ── grafico SVG ──
+  function grafico(soc) {
+    const W = 640, H = 230, L = 62, R = 10, T = 12, B = 34;
+    const n = D.mesi.length;
+    const sce = ris.righe.filter((r) => r.societa === soc).map((r) => r.fin);
+    const bas = D.baseline.righe.filter((r) => r.societa === soc).map((r) => r.fin);
+    const tutti = sce.concat(bas, [0]);
+    let lo = Math.min(...tutti), hi = Math.max(...tutti);
+    if (hi === lo) hi = lo + 100;
+    const pad = (hi - lo) * 0.06; lo -= pad; hi += pad;
+    const x = (i) => L + (n === 1 ? 0 : (i * (W - L - R)) / (n - 1));
+    const y = (v) => T + ((hi - v) * (H - T - B)) / (hi - lo);
+    const path = (vals) => vals.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    const i0 = D.mesi.findIndex((m) => IPO.has(m));
+    const coda = i0 >= 0 ? `<rect x="${(x(i0) - (x(1) - x(0)) / 2).toFixed(1)}" y="${T}" width="${(W - R - x(i0) + (x(1) - x(0)) / 2).toFixed(1)}" height="${H - T - B}" fill="var(--ipo)"/>` : "";
+    const passo = n > 12 ? 2 : 1;
+    const assi = D.mesi.map((m, i) => (i % passo ? "" : `<text x="${x(i).toFixed(1)}" y="${H - 12}" text-anchor="middle" font-size="10" fill="var(--muted)">${meseIt(m)}</text>`)).join("");
+    const griglia = [lo + pad, (lo + hi) / 2, hi - pad].map((v) => `<text x="${L - 6}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)" class="num">${fmt(Math.round(v / 100) * 100, false)}</text>`).join("");
+    const punti = sce.map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${v < 0 ? "var(--bad)" : "var(--accent)"}"><title>${meseIt(D.mesi[i])}: ${fmt(v)} € (baseline ${fmt(bas[i])})</title></circle>`).join("");
+    return `<svg class="graf" viewBox="0 0 ${W} ${H}" role="img" aria-label="Saldo ${soc}">
+      ${coda}
+      <line x1="${L}" x2="${W - R}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>
+      ${griglia}
+      <path d="${path(bas)}" fill="none" stroke="var(--base-line)" stroke-width="1.5" stroke-dasharray="5 4"/>
+      <path d="${path(sce)}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+      ${punti}${assi}
+    </svg>`;
+  }
+
+  function renderGrafici() {
+    el("grafici").innerHTML = SOC.map((soc) => `<h2>${soc} · saldo di fine mese</h2><div class="card">${grafico(soc)}
+      <div class="leg"><span><i></i>scenario</span><span><i class="base"></i>baseline (PF senza leve)</span><span><i class="ipo"></i>mesi ipotetici (ripetuti dal mese omologo)</span></div></div>`).join("");
+  }
+
+  // ── tabelle per società ──
+  function renderTabelle() {
+    const box = el("tabelle");
+    box.innerHTML = "";
+    for (const soc of SOC) {
+      const righe = ris.righe.filter((r) => r.societa === soc);
+      const basi = D.baseline.righe.filter((r) => r.societa === soc);
+      const corpo = righe.map((r, i) => {
+        const k = `${soc}|${r.mese}`;
+        const ent = Object.values(r.entrate).reduce((a, b) => a + b, 0);
+        const usc = Object.values(r.uscite).reduce((a, b) => a + b, 0);
+        const d = r.fin - basi[i].fin;
+        let dett = "";
+        if (aperti.has(k)) {
+          const v = vociMese(soc, r.mese);
+          const lista = (o, segno) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([n, x]) => `<li>${segno} ${esc(n)} <span class="num">${fmt(x)}</span></li>`).join("");
+          dett = `<tr class="dett"><td colspan="5">${IPO.has(r.mese) ? '<div class="nota">mese ipotetico: ripetuto dal mese omologo dell\'anno prima</div>' : ""}<ul>${lista(v.E, "+") + lista(v.U, "−") || "<li>nessun movimento</li>"}</ul></td></tr>`;
+        }
+        return `<tr class="mese ${IPO.has(r.mese) ? "ipo" : ""}" data-k="${k}">
+          <td>${meseIt(r.mese)}${IPO.has(r.mese) ? ' <span class="badge">ipo</span>' : ""}</td>
+          <td class="num ini">${fmt(r.ini)}</td><td class="num">${fmt(ent)}</td><td class="num">${fmt(usc)}</td>
+          <td class="num ${r.fin < 0 ? "neg" : ""}">${fmt(r.fin)}${d ? `<br><span class="piccolo num">${d > 0 ? "+" : ""}${fmt(d)}</span>` : ""}</td></tr>${dett}`;
+      }).join("");
+      box.insertAdjacentHTML("beforeend", `<h2>${soc} · mese per mese <span class="piccolo">(tocca un mese per le voci)</span></h2>
+        <div class="card" style="padding:4px 8px"><table><thead><tr><th>mese</th><th class="ini">iniziale</th><th>entrate</th><th>uscite</th><th>finale</th></tr></thead><tbody>${corpo}</tbody></table></div>`);
+    }
+    box.querySelectorAll("tr.mese").forEach((tr) => {
+      tr.onclick = () => { const k = tr.dataset.k; aperti.has(k) ? aperti.delete(k) : aperti.add(k); renderTabelle(); };
+    });
+  }
+
+  function renderConsolidato() {
+    const righe = ris.consolidato.map((c) => `<tr class="${IPO.has(c.mese) ? "ipo" : ""}"><td>${meseIt(c.mese)}</td><td class="num ${c.saldo < 0 ? "neg" : ""}">${fmt(c.saldo)}</td><td class="num">${fmt(c.intercompany_nettato)}</td><td class="num ${c.residuo ? "neg" : ""}">${fmt(c.residuo)}</td></tr>`).join("");
+    el("consolidato").innerHTML = `<table><thead><tr><th>mese</th><th>saldo gruppo</th><th>intercompany nettato</th><th>residuo (una gamba)</th></tr></thead><tbody>${righe}</tbody></table>
+      <div class="nota">Il residuo è un flusso intercompany presente su una sola società: resta lì, non si inventa la contropartita.</div>`;
+    const nr = ris.non_riconciliati;
+    el("fatti").innerHTML = D.fatti.length ? `<h2>Fatti (pagamenti registrati)</h2><div class="card"><table><thead><tr><th>mese</th><th>società</th><th>progetto · fornitore</th><th>importo</th><th>stato</th></tr></thead><tbody>${
+      D.fatti.map((f) => { const n = nr.some((x) => x.evento_id === f.evento_id); return `<tr><td>${meseIt(f.mese)}</td><td>${f.societa}</td><td>${esc(f.progetto_id)} · ${esc(f.fornitore_id || "—")}</td><td class="num">${fmt(f.importo)}</td><td><span class="badge ${n ? "bad" : "ok"}">${n ? "non riconciliato" : "riconciliato"}</span></td></tr>`; }).join("")
+    }</tbody></table><div class="nota">Un fatto riconciliato riduce il pagamento previsto dello stesso fornitore (dal mese più vecchio); gli altri impegni del progetto non si muovono.</div></div>` : "";
+  }
+
+  // ── leve ──
+  const selMesi = (val, cls = "") => `<select class="${cls}">${D.mesi.map((m) => `<option value="${m}" ${m === val ? "selected" : ""}>${meseIt(m)}</option>`).join("")}</select>`;
+  const selSoc = (val) => `<select data-campo="societa">${SOC.map((s) => `<option ${s === val ? "selected" : ""}>${s}</option>`).join("")}</select>`;
+  const selIva = (val) => `<select data-campo="aliquota_iva">${[0, 10, 22].map((a) => `<option value="${a}" ${a === val ? "selected" : ""}>IVA ${a}%</option>`).join("")}</select>`;
+
+  function grigliaMesi(mesi, pref) {
+    const chiavi = Object.keys(mesi).sort();
+    const liberi = D.mesi.filter((m) => !(m in mesi));
+    return `<div class="mesi">${chiavi.map((m) => `<label>${meseIt(m)}<input type="text" class="eur" data-${pref}="${m}" value="${fmt(mesi[m], true)}"></label>`).join("")}
+      ${liberi.length ? `<label>+ mese<select data-${pref}-nuovo><option value="">…</option>${liberi.map((m) => `<option value="${m}">${meseIt(m)}</option>`).join("")}</select></label>` : ""}</div>`;
+  }
+
+  function renderLeve() {
+    const sc = stato.scenario;
+    const c = sc.canone;
+    const anni = c ? Object.entries(c.netto_per_anno) : [];
+    const canone = `<div class="leva"><header><span class="nome">Canone Fitto Hotel (ORTI → INTUR)</span>
+        <label class="piccolo"><input type="checkbox" id="canone-on" ${c ? "checked" : ""}> scaletta</label></header>
+      ${c ? `<div class="riga">${anni.map(([a, v]) => `<label class="piccolo">${a} netto € <input type="text" class="eur" data-canone-anno="${a}" value="${fmt(v)}"></label>`).join("")}
+          <button data-canone-aggiungi>+ anno</button></div>
+        <div class="riga"><label class="piccolo">rate <input type="text" class="n" id="canone-rate" value="${c.rate_n}"></label>
+          <label class="piccolo">da mese ${selMesi(c.da_mese, "sel-canone-da")}</label>
+          <label class="piccolo">IVA % <input type="text" class="n" id="canone-iva" value="${c.aliquota_iva}"></label></div>
+        <div class="riga"><label class="piccolo" style="flex:1">oppure calendario (mese=netto; vince sulle rate per quell'anno)<br>
+          <input type="text" class="nome" id="canone-cal" placeholder="2027-03=200000; 2027-06=300000" value="${esc(Object.entries(c.calendario || {}).map(([m, v]) => `${m}=${fmt(v, false).replace(/\./g, "")}`).join("; "))}"></label></div>`
+        : `<div class="nota">Il canone resta quello del PF (gambe così come sono).</div>`}</div>`;
+
+    const progetti = sc.progetti.map((p, i) => `<div class="leva ${p.acceso ? "" : "spento"}" data-p="${i}">
+      <header><label><input type="checkbox" data-campo="acceso" ${p.acceso ? "checked" : ""}></label>
+        <input type="text" class="nome" style="flex:1 1 140px;font-weight:600" data-campo="nome" value="${esc(p.nome)}">
+        ${selSoc(p.societa)} <input type="text" class="n" style="width:90px" data-campo="stato" value="${esc(p.stato)}" title="stato">
+        <button data-elimina-p title="elimina progetto">×</button></header>
+      ${p.pagamenti.map((g, j) => `<div class="pag" data-g="${j}">
+        <div class="riga"><input type="text" class="nome" style="flex:1 1 140px" data-campo="nome" value="${esc(g.nome)}"> ${selIva(g.aliquota_iva)}
+          <input type="text" class="n" style="width:80px" data-campo="stato" value="${esc(g.stato)}" title="stato">
+          <input type="text" class="n" style="width:80px" data-campo="fornitore_id" value="${esc(g.fornitore_id || "")}" placeholder="fornitore" title="fornitore_id (riconcilia i fatti)">
+          <button data-elimina-g title="elimina pagamento">×</button></div>
+        <div class="piccolo num">netto ${fmt(Object.values(g.mesi).reduce((a, b) => a + b, 0))} · lordo ${fmt(Object.values(g.mesi).reduce((a, b) => a + MOTORE.iva(b, g.aliquota_iva), 0))}</div>
+        ${grigliaMesi(g.mesi, "mese")}
+        <div class="riga"><span class="piccolo">spalma</span> <input type="text" class="eur" data-spalma-tot placeholder="totale netto €"> <span class="piccolo">da</span> ${selMesi(Object.keys(g.mesi).sort()[0] || D.mesi[0], "sel-spalma-da")} <span class="piccolo">in</span> <input type="text" class="n" data-spalma-n value="${Math.max(1, Object.keys(g.mesi).length)}"> <button data-spalma>Spalma</button></div>
+        ${p.acceso ? "" : '<div class="nota">non conta finché il progetto è spento</div>'}
+      </div>`).join("")}
+      <div class="riga"><button data-aggiungi-g>+ pagamento</button></div>
+    </div>`).join("");
+
+    const finanz = sc.finanziamenti.map((f, i) => `<div class="leva" data-f="${i}">
+      <header><input type="text" class="nome" style="flex:1 1 140px;font-weight:600" data-campo="nome" value="${esc(f.nome)}"> ${selSoc(f.societa)}
+        <input type="text" class="n" style="width:100px" data-campo="stato" value="${esc(f.stato)}" title="stato">
+        ${f.stato === "da verificare" ? '<span class="badge warn">da verificare</span>' : ""}
+        <button data-elimina-f title="elimina">×</button></header>
+      <div class="piccolo">erogazioni</div>${grigliaMesi(f.erogazioni, "erog")}
+      <div class="piccolo">rate</div>${grigliaMesi(f.rate, "rata")}
+      ${Object.keys(f.rate).length ? "" : '<div class="nota">nessuna rata nell\'orizzonte</div>'}
+      <div class="nota">le erogazioni dello scenario sostituiscono le righe PF «finanziamenti» di ${f.societa}</div>
+    </div>`).join("");
+
+    el("leve").innerHTML = `<h3 style="margin-top:0">Canone</h3>${canone}
+      <h3>Progetti</h3>${progetti || '<div class="nota">nessun progetto</div>'}<div class="riga"><button id="aggiungi-p">+ progetto</button></div>
+      <h3>Finanziamenti</h3>${finanz || '<div class="nota">nessun finanziamento nello scenario</div>'}<div class="riga"><button id="aggiungi-f">+ finanziamento</button></div>`;
+    collegaLeve();
+  }
+
+  function leggiMesi(root, pref, mesi) {
+    root.querySelectorAll(`input[data-${pref}]`).forEach((inp) => {
+      inp.onchange = () => { const v = parseEuro(inp.value); if (v) mesi[inp.dataset[pref]] = v; else delete mesi[inp.dataset[pref]]; ricalcola(); };
+    });
+    const nuovo = root.querySelector(`select[data-${pref}-nuovo]`);
+    if (nuovo) nuovo.onchange = () => { if (nuovo.value) { mesi[nuovo.value] = 0; renderLeve(); } };
+  }
+
+  function collegaLeve() {
+    const sc = stato.scenario;
+    const box = el("leve");
+    // canone
+    const on = el("canone-on");
+    on.onchange = () => {
+      sc.canone = on.checked ? { netto_per_anno: { [D.mesi[D.mesi.length - 1].slice(0, 4)]: 0 }, rate_n: 1, da_mese: D.mesi[0], calendario: null, aliquota_iva: 22 } : null;
+      ricalcola();
+    };
+    if (sc.canone) {
+      box.querySelectorAll("input[data-canone-anno]").forEach((inp) => { inp.onchange = () => { sc.canone.netto_per_anno[inp.dataset.canoneAnno] = parseEuro(inp.value); ricalcola(); }; });
+      box.querySelector("button[data-canone-aggiungi]").onclick = () => {
+        const a = prompt("anno", String(Math.max(...Object.keys(sc.canone.netto_per_anno).map(Number)) + 1));
+        if (a && /^\d{4}$/.test(a)) { sc.canone.netto_per_anno[a] = 0; renderLeve(); }
+      };
+      el("canone-rate").onchange = (e) => { sc.canone.rate_n = parseInt(e.target.value, 10) || 1; ricalcola(); };
+      el("canone-iva").onchange = (e) => { sc.canone.aliquota_iva = parseInt(e.target.value, 10) || 0; ricalcola(); };
+      box.querySelector("select.sel-canone-da").onchange = (e) => { sc.canone.da_mese = e.target.value; ricalcola(); };
+      el("canone-cal").onchange = (e) => {
+        const cal = {};
+        for (const parte of e.target.value.split(";")) {
+          const [m, v] = parte.split("=").map((s) => s.trim());
+          if (/^\d{4}-\d{2}$/.test(m || "")) cal[m] = parseEuro(v);
+        }
+        sc.canone.calendario = Object.keys(cal).length ? cal : null;
+        ricalcola();
+      };
+    }
+    // progetti
+    box.querySelectorAll(".leva[data-p]").forEach((div) => {
+      const p = sc.progetti[parseInt(div.dataset.p, 10)];
+      div.querySelectorAll(":scope > header [data-campo]").forEach((inp) => {
+        inp.onchange = () => { p[inp.dataset.campo] = inp.type === "checkbox" ? inp.checked : inp.value; ricalcola(); };
+      });
+      div.querySelector("button[data-elimina-p]").onclick = () => { sc.progetti.splice(sc.progetti.indexOf(p), 1); ricalcola(); };
+      div.querySelector("button[data-aggiungi-g]").onclick = () => { p.pagamenti.push({ nome: "Nuovo pagamento", mesi: {}, aliquota_iva: 22, stato: "ipotesi", fornitore_id: null }); renderLeve(); };
+      div.querySelectorAll(".pag").forEach((pg) => {
+        const g = p.pagamenti[parseInt(pg.dataset.g, 10)];
+        pg.querySelectorAll(":scope > .riga [data-campo]").forEach((inp) => {
+          inp.onchange = () => {
+            const v = inp.value;
+            g[inp.dataset.campo] = inp.dataset.campo === "aliquota_iva" ? parseInt(v, 10) : inp.dataset.campo === "fornitore_id" ? (v || null) : v;
+            ricalcola();
+          };
+        });
+        pg.querySelector("button[data-elimina-g]").onclick = () => { p.pagamenti.splice(p.pagamenti.indexOf(g), 1); ricalcola(); };
+        leggiMesi(pg, "mese", g.mesi);
+        pg.querySelector("button[data-spalma]").onclick = () => {
+          const tot = parseEuro(pg.querySelector("input[data-spalma-tot]").value) || Object.values(g.mesi).reduce((a, b) => a + b, 0);
+          const da = pg.querySelector("select.sel-spalma-da").value;
+          const n = parseInt(pg.querySelector("input[data-spalma-n]").value, 10) || 1;
+          try { g.mesi = MOTORE.distribuisci(tot, da, n, D.mesi); ricalcola(); } catch (e) { alert(e.message); }
+        };
+      });
+    });
+    el("aggiungi-p").onclick = () => { sc.progetti.push({ id: `P${Date.now().toString(36)}`, nome: "Nuovo progetto", societa: "INTUR", acceso: true, stato: "ipotesi", pagamenti: [] }); renderLeve(); };
+    // finanziamenti
+    box.querySelectorAll(".leva[data-f]").forEach((div) => {
+      const i = parseInt(div.dataset.f, 10);
+      const f = sc.finanziamenti[i];
+      div.querySelectorAll(":scope > header [data-campo]").forEach((inp) => { inp.onchange = () => { f[inp.dataset.campo] = inp.value; ricalcola(); }; });
+      div.querySelector("button[data-elimina-f]").onclick = () => { sc.finanziamenti.splice(i, 1); ricalcola(); };
+      leggiMesi(div, "erog", f.erogazioni);
+      leggiMesi(div, "rata", f.rate);
+    });
+    el("aggiungi-f").onclick = () => { sc.finanziamenti.push({ id: `F${Date.now().toString(36)}`, nome: "Nuovo finanziamento", societa: "INTUR", erogazioni: {}, rate: {}, stato: "da verificare" }); renderLeve(); };
+  }
+
+  function renderLimiti() {
+    const extra = [];
+    if (ris.non_riconciliati.length) extra.push(`Nello scenario corrente ${ris.non_riconciliati.length} fatti non trovano un pagamento di progetto dello stesso fornitore.`);
+    el("limiti").innerHTML = `<h2>Limiti di questa pagina</h2><ul>${D.limiti.concat(extra).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`;
+  }
+
+  function render() {
+    renderMinimi();
+    renderGrafici();
+    renderTabelle();
+    renderConsolidato();
+    renderLeve();
+    renderLimiti();
+  }
+
+  renderTesta();
+  ricalcola();
+})();
+</script>
+</body>
+</html>

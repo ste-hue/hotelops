@@ -33,6 +33,8 @@ docs/reports/artifacts/
 # (*.html sopra ignorerebbe index.html → negazione esplicita)
 verticals/hub/publish/site/data/*.json
 !verticals/hub/publish/site/index.html
+# Template della pagina Cassa (CdG): sorgente, non artefatto
+!verticals/condges/cassa_template.html
 .wrangler/
 
 # Personal working docs (not for commit)
