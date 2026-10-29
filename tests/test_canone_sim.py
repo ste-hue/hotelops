@@ -17,15 +17,35 @@ from verticals.condges import canone_sim as cs
 def _anno(y, ricavi, rate_i):
     return {
         "year": y,
-        "orti": {"revenue": ricavi, "operatingCostRate": 0.6, "angelinaRent": 100_000,
-                 "depreciation": 100_000, "interest": 50_000, "debtService": 400_000,
-                 "revenueBreakdown": {"rooms": ricavi * 0.6, "otherHotel": ricavi * 0.4}},
-        "intur": {"beachRevenue": 100_000, "otherRentRevenue": 150_000 if y <= 2028 else 50_000,
-                  "operatingCosts": 500_000, "depreciation": 300_000, "interest": 60_000,
-                  "reserveReleasePayment": 0, "debtService": rate_i,
-                  "debtServiceBreakdown": {"existing": rate_i - 100_000, "sal": 60_000, "mcc": 40_000},
-                  "cashBridge": {"newLoanDrawdowns": 0, "investmentSpend": 0,
-                                 "investmentVATPaid": 0, "investmentVATRecovered": 0}},
+        "orti": {
+            "revenue": ricavi,
+            "operatingCostRate": 0.6,
+            "angelinaRent": 100_000,
+            "depreciation": 100_000,
+            "interest": 50_000,
+            "debtService": 400_000,
+            "revenueBreakdown": {"rooms": ricavi * 0.6, "otherHotel": ricavi * 0.4},
+        },
+        "intur": {
+            "beachRevenue": 100_000,
+            "otherRentRevenue": 150_000 if y <= 2028 else 50_000,
+            "operatingCosts": 500_000,
+            "depreciation": 300_000,
+            "interest": 60_000,
+            "reserveReleasePayment": 0,
+            "debtService": rate_i,
+            "debtServiceBreakdown": {
+                "existing": rate_i - 100_000,
+                "sal": 60_000,
+                "mcc": 40_000,
+            },
+            "cashBridge": {
+                "newLoanDrawdowns": 0,
+                "investmentSpend": 0,
+                "investmentVATPaid": 0,
+                "investmentVATRecovered": 0,
+            },
+        },
     }
 
 
@@ -33,15 +53,39 @@ def _anno(y, ricavi, rate_i):
 def inputs(tmp_path, monkeypatch):
     monkeypatch.setenv("CANONE_SIM_HOME", str(tmp_path))
     doc = {
-        "source": "sintetico.xlsx", "sourceSHA256": "abc123",
-        "common": {"taxRate": 0.25, "maintenanceRate": 0.01, "workingCapitalRate": 0.05,
-                   "targetDSCR": 1.2, "bandPosition": 0.5, "roundingEUR": 1000},
-        "prior2025": {"ortiRevenue": 3_800_000, "inturRevenue": 1_000_000, "inturClosingCash": 100_000},
-        "prior2026": {"ortiRevenue": 4_000_000, "inturRevenue": 1_050_000,
-                      "inturClosingCash": 200_000, "appliedRent": 800_000},
-        "years": {str(y): _anno(y, 4_000_000 * 1.05 ** (y - 2026), 300_000) for y in range(2026, 2032)},
+        "source": "sintetico.xlsx",
+        "sourceSHA256": "abc123",
+        "common": {
+            "taxRate": 0.25,
+            "maintenanceRate": 0.01,
+            "workingCapitalRate": 0.05,
+            "targetDSCR": 1.2,
+            "bandPosition": 0.5,
+            "roundingEUR": 1000,
+        },
+        "prior2025": {
+            "ortiRevenue": 3_800_000,
+            "inturRevenue": 1_000_000,
+            "inturClosingCash": 100_000,
+        },
+        "prior2026": {
+            "ortiRevenue": 4_000_000,
+            "inturRevenue": 1_050_000,
+            "inturClosingCash": 200_000,
+            "appliedRent": 800_000,
+        },
+        "years": {
+            str(y): _anno(y, 4_000_000 * 1.05 ** (y - 2026), 300_000)
+            for y in range(2026, 2032)
+        },
         "sourceCells": {"common": "Assunzioni!B1:B4"},
-        "contractDraft": {"2027": 800_000, "2028": 850_000, "2029": 900_000, "2030": 900_000, "2031": 900_000},
+        "contractDraft": {
+            "2027": 800_000,
+            "2028": 850_000,
+            "2029": 900_000,
+            "2030": 900_000,
+            "2031": 900_000,
+        },
     }
     # coerenza della base: cassa/ricavi INTUR 2026 = quelli che il motore calcola
     grezzo = cs.load_inputs(json.dumps(doc).encode())
@@ -53,7 +97,13 @@ def inputs(tmp_path, monkeypatch):
 
 def test_base_usa_la_bozza_e_le_crescite_del_bp(inputs):
     base = cs.scenario_base(inputs)
-    assert [base["anni"][y]["canone"] for y in cs.anni(inputs)] == [800_000, 850_000, 900_000, 900_000, 900_000]
+    assert [base["anni"][y]["canone"] for y in cs.anni(inputs)] == [
+        800_000,
+        850_000,
+        900_000,
+        900_000,
+        900_000,
+    ]
     assert base["anni"][2027]["crescita"] == pytest.approx(0.05)
     assert cs.modifiche(inputs, base) == []
 
@@ -74,7 +124,9 @@ def test_ricavi_e_crescita_sono_la_stessa_leva(inputs):
     cs.imposta_ricavi(inputs, s, 2028, 5_000_000)
     r = {x["anno"]: x for x in cs.calculate(inputs, s)}
     assert r[2028]["ricavi_o"] == pytest.approx(5_000_000)
-    assert s["anni"][2028]["crescita"] == pytest.approx(5_000_000 / r[2027]["ricavi_o"] - 1)
+    assert s["anni"][2028]["crescita"] == pytest.approx(
+        5_000_000 / r[2027]["ricavi_o"] - 1
+    )
     # gli anni dopo tengono la loro crescita %
     assert r[2029]["ricavi_o"] == pytest.approx(5_000_000 * 1.05)
 
@@ -108,10 +160,25 @@ def test_anni_in_sequenza_il_canone_di_un_anno_tocca_il_successivo(inputs):
 
 def test_dettaglio_orti_e_intur_chiudono_sul_cfads(inputs):
     r = cs.calculate(inputs, cs.scenario_base(inputs))[0]
-    orti = r["ricavi_o"] - r["costi_o"] - r["canone"] - r["angelina_o"] - r["tax_o"] - r["man_o"] - r["ccn_o"]
+    orti = (
+        r["ricavi_o"]
+        - r["costi_o"]
+        - r["canone"]
+        - r["angelina_o"]
+        - r["tax_o"]
+        - r["man_o"]
+        - r["ccn_o"]
+    )
     assert orti == pytest.approx(r["cfads_o"])
-    intur = (r["altri_ricavi_i"] + r["canone"] - r["costi_i"] - r["tax_i"] - r["man_i"]
-             - r["ccn_i"] - r["affr_i"])
+    intur = (
+        r["altri_ricavi_i"]
+        + r["canone"]
+        - r["costi_i"]
+        - r["tax_i"]
+        - r["man_i"]
+        - r["ccn_i"]
+        - r["affr_i"]
+    )
     assert intur == pytest.approx(r["cfads_i"])
 
 
@@ -125,15 +192,48 @@ def test_canone_di_equilibrio_pareggia_i_dscr_senza_toccare_la_scaletta(inputs):
     assert r["dscr_o"] == pytest.approx(r["dscr_i"], abs=1e-6)
 
 
-def test_angelina_a_terzi_toglie_ricavi_a_intur_solo_2027_28(inputs):
+def test_angelina_va_a_intur_in_ogni_anno_per_default(inputs):
+    """Decisione di Stefano del 29/10/2026: Angelina a INTUR, sempre; il tetto 2028 non esiste più."""
+    s = cs.scenario_base(inputs)
+    righe = cs.calculate(inputs, s)
+    assert all(r["angelina_a_intur"] == 100_000 for r in righe)  # anche 2029+
+
+
+def test_angelina_a_terzi_e_uno_scenario_datato(inputs):
     s = cs.scenario_base(inputs)
     base = cs.calculate(inputs, s)
     s["angelina"] = cs.ANGELINA_TERZI
+    with pytest.raises(ValueError, match="data esplicita"):
+        cs.calculate(inputs, s)
+    s["angelina_dal"] = 2028
     terzi = cs.calculate(inputs, s)
-    assert terzi[0]["altri_ricavi_i"] == base[0]["altri_ricavi_i"] - 100_000
-    assert terzi[0]["angelina_a_intur"] == 0
-    assert terzi[2]["altri_ricavi_i"] == base[2]["altri_ricavi_i"]
+    anni = [r["anno"] for r in terzi]
+    for r, b in zip(terzi, base):
+        if r["anno"] >= 2028:
+            assert (
+                r["angelina_a_intur"] == 0
+                and r["altri_ricavi_i"] == b["altri_ricavi_i"] - 100_000
+            )
+        else:
+            assert (
+                r["angelina_a_intur"] == 100_000
+                and r["altri_ricavi_i"] == b["altri_ricavi_i"]
+            )
     assert [r["canone"] for r in terzi] == [r["canone"] for r in base]
+    assert 2029 in anni  # la data vale anche oltre il vecchio tetto
+
+
+def test_scenario_terzi_senza_data_non_si_riapre(inputs):
+    s = cs.scenario_base(inputs)
+    s["angelina"] = cs.ANGELINA_TERZI
+    s["angelina_dal"] = 2027
+    doc = json.loads(cs.scenario_to_json(inputs, s))
+    assert doc["angelina_dal"] == 2027
+    riaperto, _ = cs.scenario_from_json(inputs, json.dumps(doc))
+    assert riaperto["angelina_dal"] == 2027
+    doc.pop("angelina_dal")
+    with pytest.raises(ValueError, match="senza data"):
+        cs.scenario_from_json(inputs, json.dumps(doc))
 
 
 def test_scenario_salva_riapri_ed_esporta(inputs):
@@ -142,10 +242,16 @@ def test_scenario_salva_riapri_ed_esporta(inputs):
     s["anni"][2031]["canone"] = 950_000
     path = cs.salva_scenario(inputs, s)
     doc = json.loads(path.read_text())
-    assert doc["nome"] == "Prova crescente" and doc["salvato_il"] and doc["fonte"]["sha256_fonte"] == "abc123"
+    assert (
+        doc["nome"] == "Prova crescente"
+        and doc["salvato_il"]
+        and doc["fonte"]["sha256_fonte"] == "abc123"
+    )
     riaperto = cs.scenari_salvati(inputs)["Prova crescente"]
     assert riaperto["anni"] == s["anni"]
-    assert cs.modifiche(inputs, riaperto) == [{"anno": 2031, "campo": "canone", "base": 900_000, "valore": 950_000}]
+    assert cs.modifiche(inputs, riaperto) == [
+        {"anno": 2031, "campo": "canone", "base": 900_000, "valore": 950_000}
+    ]
     # lo snapshot dei dati di base viene archiviato accanto allo scenario
     assert (cs.home() / "inputs" / f"{inputs['_sha256'][:12]}.json").exists()
 
@@ -178,38 +284,75 @@ def test_import_rifiuta_file_estranei_e_scalette_decrescenti(inputs):
 
 def _finta_query(sql):
     if "f_produzione_pms" in sql:
-        riga = {"dal": date(2026, 4, 1), "al": date(2026, 9, 1), "caricato": datetime(2026, 9, 2)}
+        riga = {
+            "dal": date(2026, 4, 1),
+            "al": date(2026, 9, 1),
+            "caricato": datetime(2026, 9, 2),
+        }
         return [
             {"business_unit_id": "HOTEL", "classe": "01ROOM", "importo": 1000, **riga},
             {"business_unit_id": "HOTEL", "classe": "02FB", "importo": 200, **riga},
             {"business_unit_id": "HOTEL", "classe": "80AFFITT", "importo": 50, **riga},
-            {"business_unit_id": "RESIDENCE", "classe": "01ROOM", "importo": 300, **riga},
-            {"business_unit_id": "RESIDENCE", "classe": "04BEALL", "importo": 10, **riga},
+            {
+                "business_unit_id": "RESIDENCE",
+                "classe": "01ROOM",
+                "importo": 300,
+                **riga,
+            },
+            {
+                "business_unit_id": "RESIDENCE",
+                "classe": "04BEALL",
+                "importo": 10,
+                **riga,
+            },
         ]
     if "f_bilancino" in sql:
-        return [{"societa_id": "ORTI", "mese": "2026-09", "ricavi": 900.0, "costi": 500.0,
-                 "canone": 100.0, "caricato": "2026-09-25"}]
+        return [
+            {
+                "societa_id": "ORTI",
+                "mese": "2026-09",
+                "ricavi": 900.0,
+                "costi": 500.0,
+                "canone": 100.0,
+                "caricato": "2026-09-25",
+            }
+        ]
     raise PermissionError("accesso negato")
 
 
 def test_adapter_classificano_e_una_fonte_che_fallisce_risulta_bloccata(inputs):
-    snap = cf.salva_osservati(cf.aggiorna(query=_finta_query, adesso=datetime(2026, 10, 1, 12)))
+    snap = cf.salva_osservati(
+        cf.aggiorna(query=_finta_query, adesso=datetime(2026, 10, 1, 12))
+    )
     v = snap["fonti"]["pms"]["dati"]["valori"]
-    assert (v["hotel_camere"], v["hotel_altri"], v["affitti"], v["residence"], v["spiaggia_ospiti"]) == (1000, 200, 50, 300, 10)
+    assert (
+        v["hotel_camere"],
+        v["hotel_altri"],
+        v["affitti"],
+        v["residence"],
+        v["spiaggia_ospiti"],
+    ) == (1000, 200, 50, 300, 10)
     assert snap["fonti"]["bilancino"]["dati"]["ORTI"]["parziale"] is True
-    assert snap["fonti"]["saldi"]["stato"] == cf.BLOCCATA and "dati" not in snap["fonti"]["saldi"]
+    assert (
+        snap["fonti"]["saldi"]["stato"] == cf.BLOCCATA
+        and "dati" not in snap["fonti"]["saldi"]
+    )
     stato = {r["fonte"]: r for r in cf.stato_fonti(inputs, snap)}
     assert stato["Banche · saldi di fine mese"]["stato"].startswith("BLOCCATA")
     assert {r["tipo"] for r in stato.values()} == {cf.OSSERVATO, cf.IMPEGNO, cf.IPOTESI}
 
 
 def test_fonte_bloccata_conserva_l_ultimo_dato_buono_con_la_sua_data(inputs):
-    cf.salva_osservati(cf.aggiorna(query=_finta_query, adesso=datetime(2026, 10, 1, 12)))
+    cf.salva_osservati(
+        cf.aggiorna(query=_finta_query, adesso=datetime(2026, 10, 1, 12))
+    )
 
     def tutto_giu(sql):
         raise ConnectionError("rete assente")
 
-    snap = cf.salva_osservati(cf.aggiorna(query=tutto_giu, adesso=datetime(2026, 10, 2, 9)))
+    snap = cf.salva_osservati(
+        cf.aggiorna(query=tutto_giu, adesso=datetime(2026, 10, 2, 9))
+    )
     pms = cf.carica_osservati()["fonti"]["pms"]
     assert pms["stato"] == cf.BLOCCATA
     assert pms["dati"]["valori"]["hotel_camere"] == 1000
@@ -238,10 +381,15 @@ def test_registry_ha_canone_sensibile_e_admin_lo_vede():
 _REALI = cs.inputs_path()
 
 
-@pytest.mark.skipif(not _REALI.exists(), reason="dati reali del BP non presenti (fuori da git)")
+@pytest.mark.skipif(
+    not _REALI.exists(), reason="dati reali del BP non presenti (fuori da git)"
+)
 def test_replica_del_bp_con_canone_automatico():
     inputs = cs.load_inputs(_REALI.read_bytes())
-    righe = [cs.riga_2026(inputs), *cs.calculate(inputs, cs.scenario_base(inputs), canone_automatico=True)]
+    righe = [
+        cs.riga_2026(inputs),
+        *cs.calculate(inputs, cs.scenario_base(inputs), canone_automatico=True),
+    ]
     for r in righe:
         e = inputs["years"][str(r["anno"])]["expected"]
         assert r["canone"] == pytest.approx(e["appliedRent"], abs=1e-6)
@@ -261,32 +409,61 @@ def test_cruscotto_html_calcola_come_python(inputs, tmp_path):
 
     from verticals.condges import build_canone_artifact as build
 
-    html = build.render_html(build.build_payload(inputs, None, datetime(2026, 10, 1, 12)))
+    html = build.render_html(
+        build.build_payload(inputs, None, datetime(2026, 10, 1, 12))
+    )
     assert "__DATA__" not in html and "expected" not in html
     if shutil.which("node") is None:
         pytest.skip("node non installato")
-    dati = re.search(r'<script type="application/json" id="dati">(.*?)</script>', html, re.S).group(1)
+    dati = re.search(
+        r'<script type="application/json" id="dati">(.*?)</script>', html, re.S
+    ).group(1)
     motore = re.search(r'<script id="motore">(.*?)</script>', html, re.S).group(1)
     (tmp_path / "motore.js").write_text(motore, encoding="utf-8")
     (tmp_path / "dati.json").write_text(dati.replace("<\\/", "</"), encoding="utf-8")
     (tmp_path / "run.js").write_text(
         "const M=require('./motore.js'),D=require('./dati.json');"
-        "const sc=M.copia(D.base);sc.anni[2026].canone=700000;sc.anni[2028].crescita=-0.03;sc.anni[2029].costi=0.66;sc.angelina='terzi';"
+        "const sc=M.copia(D.base);sc.anni[2026].canone=700000;sc.anni[2028].crescita=-0.03;sc.anni[2029].costi=0.66;sc.angelina='terzi';sc.angelina_dal=2028;"
         "console.log(JSON.stringify({base:M.calcola(D,D.base),mod:M.righe(D,sc).slice(1),"
         "r26:M.riga2026(D,sc),eq:M.equilibrio(D,D.base,2028),lim:M.limiti(D,D.base,2029),"
         "lim26:M.limiti(D,D.base,2026)}));",
         encoding="utf-8",
     )
-    out = json.loads(subprocess.run(["node", "run.js"], cwd=tmp_path, capture_output=True, text=True, check=True).stdout)
+    out = json.loads(
+        subprocess.run(
+            ["node", "run.js"], cwd=tmp_path, capture_output=True, text=True, check=True
+        ).stdout
+    )
 
     s = cs.scenario_base(inputs)
     mod = cs.copia(s)
-    mod["anni"][2028]["crescita"], mod["anni"][2029]["costi"], mod["angelina"] = -0.03, 0.66, cs.ANGELINA_TERZI
+    mod["anni"][2028]["crescita"], mod["anni"][2029]["costi"], mod["angelina"] = (
+        -0.03,
+        0.66,
+        cs.ANGELINA_TERZI,
+    )
+    mod["angelina_dal"] = 2028
     mod["anni"][2026]["canone"] = 700_000
-    chiavi = ("canone", "ricavi_o", "cfads_o", "cfads_i", "dscr_o", "dscr_i", "dscr_g", "cassa_i",
-              "canone_min_intur", "canone_max_orti", "manca_i", "tax_o", "ccn_i")
-    for js, py in ((out["base"], cs.calculate(inputs, s)), (out["mod"], cs.calculate(inputs, mod)),
-                   ([out["r26"]], [cs.riga_2026(inputs, mod)])):
+    chiavi = (
+        "canone",
+        "ricavi_o",
+        "cfads_o",
+        "cfads_i",
+        "dscr_o",
+        "dscr_i",
+        "dscr_g",
+        "cassa_i",
+        "canone_min_intur",
+        "canone_max_orti",
+        "manca_i",
+        "tax_o",
+        "ccn_i",
+    )
+    for js, py in (
+        (out["base"], cs.calculate(inputs, s)),
+        (out["mod"], cs.calculate(inputs, mod)),
+        ([out["r26"]], [cs.riga_2026(inputs, mod)]),
+    ):
         assert len(js) == len(py)
         for a, b in zip(js, py):
             for k in chiavi:
@@ -319,9 +496,13 @@ def test_push_cruscotto_scrive_solo_la_chiave_html(monkeypatch):
         return _Risposta()
 
     monkeypatch.setattr(requests, "put", finta_put)
-    build.push_to_kv("<html>x</html>", {"CLOUDFLARE_API_TOKEN": "t", "CLOUDFLARE_ACCOUNT_ID": "acc"})
+    build.push_to_kv(
+        "<html>x</html>", {"CLOUDFLARE_API_TOKEN": "t", "CLOUDFLARE_ACCOUNT_ID": "acc"}
+    )
     url, corpo, headers = chiamate[0]
-    assert url.endswith(f"/accounts/acc/storage/kv/namespaces/{build.KV_NAMESPACE_ID}/bulk")
+    assert url.endswith(
+        f"/accounts/acc/storage/kv/namespaces/{build.KV_NAMESPACE_ID}/bulk"
+    )
     assert corpo == [{"key": "html", "value": "<html>x</html>"}]
     assert headers == {"Authorization": "Bearer t"}
 
@@ -340,7 +521,9 @@ def test_2026_modificabile_e_si_propaga_al_2027(inputs):
     assert dopo[0]["dscr_i"] < prima[0]["dscr_i"]  # meno canone → INTUR peggiora
     assert dopo[0]["costi_o"] > prima[0]["costi_o"]
     assert dopo[1]["canone"] == prima[1]["canone"]  # la scaletta 2027 non si muove
-    assert dopo[1]["ccn_i"] != pytest.approx(prima[1]["ccn_i"])  # ma il circolante INTUR 2027 sì
+    assert dopo[1]["ccn_i"] != pytest.approx(
+        prima[1]["ccn_i"]
+    )  # ma il circolante INTUR 2027 sì
     assert {d["anno"] for d in cs.modifiche(inputs, s)} == {2026}
 
 
@@ -348,7 +531,9 @@ def test_2026_non_puo_superare_il_2027(inputs):
     s = cs.scenario_base(inputs)
     s["anni"][2026]["canone"] = 820_000  # 2027 è a 800.000
     assert any("2027" in e for e in cs.errori_scaletta(inputs, s))
-    s["anni"][2026]["canone"] = 500_000  # scendere nel 2026 è ammesso: è il primo gradino
+    s["anni"][2026]["canone"] = (
+        500_000  # scendere nel 2026 è ammesso: è il primo gradino
+    )
     assert cs.errori_scaletta(inputs, s) == []
 
 

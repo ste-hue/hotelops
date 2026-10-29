@@ -39,7 +39,9 @@ _APERTE = [
 ]
 
 
-def build_payload(inputs: dict, osservati: dict | None, generato_il: datetime | None = None) -> dict:
+def build_payload(
+    inputs: dict, osservati: dict | None, generato_il: datetime | None = None
+) -> dict:
     """Tutto ciò che la pagina mostra o calcola. Niente ``expected`` né metadati interni."""
     years = {
         y: {"orti": v["orti"], "intur": v["intur"]}
@@ -54,8 +56,12 @@ def build_payload(inputs: dict, osservati: dict | None, generato_il: datetime | 
         "prior2025": inputs["prior2025"],
         "prior2026": inputs["prior2026"],
         "years": years,
-        "base": {"nome": "Base", "angelina": base["angelina"],
-                 "anni": {str(y): v for y, v in base["anni"].items()}},
+        "base": {
+            "nome": "Base",
+            "angelina": base["angelina"],
+            "angelina_dal": base.get("angelina_dal"),
+            "anni": {str(y): v for y, v in base["anni"].items()},
+        },
         "fonti": cf.stato_fonti(inputs, osservati),
         "confronti": cf.base_vs_osservato(inputs, osservati),
         "osservati_del": (osservati or {}).get("acquisito_il", ""),
@@ -84,7 +90,9 @@ def load_push_env() -> dict[str, str]:
     env = {k: os.environ.get(k, "") for k in PUSH_ENV_VARS}
     missing = [k for k, v in env.items() if not v]
     if missing:
-        raise RuntimeError(f"--push richiede variabili d'ambiente mancanti: {', '.join(missing)}")
+        raise RuntimeError(
+            f"--push richiede variabili d'ambiente mancanti: {', '.join(missing)}"
+        )
     return env
 
 
@@ -97,7 +105,8 @@ def push_to_kv(html: str, env: dict[str, str]) -> None:
         f"/storage/kv/namespaces/{KV_NAMESPACE_ID}/bulk"
     )
     r = requests.put(
-        url, json=[{"key": "html", "value": html}],
+        url,
+        json=[{"key": "html", "value": html}],
         headers={"Authorization": f"Bearer {env['CLOUDFLARE_API_TOKEN']}"},
         timeout=60,
     )
@@ -221,8 +230,9 @@ footer{color:var(--muted);font-size:12.5px;margin-top:18px}
     <div class="corpo">
       <div class="scroll"><table class="t" id="ipotesi"></table></div>
       <p class="nota">Il 2026 è in corso: i valori di partenza sono l'atterraggio del business plan, modificabili fino a chiusura d'anno. Ricavi e crescita sono la stessa leva: cambi uno, l'altro segue, e gli anni dopo tengono la loro crescita. Il canone non si muove quando cambi queste ipotesi.</p>
-      <p class="nota">Fitto Angelina 2027–28 (pagato da ORTI):
-        <select id="angelina"><option value="intur">a INTUR · ipotesi del file</option><option value="terzi">a terzi · ipotesi alternativa</option></select>
+      <p class="nota">Fitto Angelina (pagato da ORTI): a INTUR, sempre (decisione di Stefano del 29/10/2026). Scenario alternativo, datato:
+        <select id="angelina"><option value="intur">a INTUR</option><option value="terzi">a terzi dall'anno…</option></select>
+        <select id="angelina_dal" aria-label="Angelina a terzi dall'anno"><option value="">—</option><option>2027</option><option>2028</option><option>2029</option><option>2030</option><option>2031</option></select>
       </p>
     </div>
   </details>
@@ -275,12 +285,19 @@ const MOTORE = (() => {
   const excelRound = x => Math.sign(x) * Math.floor(Math.abs(x) + 0.5);
   const ratio = (a, b) => (b ? a / b : null);
 
-  function riga(D, y, crescita, costi, canone, angelina, prevRev, prevInturRev, prevCash, w) {
+  // Angelina a terzi solo con scenario «terzi» E anno esplicito (angelinaDal); altrimenti a INTUR in ogni anno.
+  function angelinaATerzi(angelina, angelinaDal, y) {
+    if (angelina !== 'terzi') return false;
+    if (!angelinaDal) throw new Error('Angelina a terzi richiede una data esplicita (angelina_dal): il destinatario per default è INTUR, sempre');
+    return y >= Number(angelinaDal);
+  }
+
+  function riga(D, y, crescita, costi, canone, angelina, angelinaDal, prevRev, prevInturRev, prevCash, w) {
     const c = D.common, t = c.taxRate, m = c.maintenanceRate, s = c.targetDSCR;
     const o = D.years[y].orti, i = D.years[y].intur;
     const ricaviO = prevRev * (1 + crescita), costiO = ricaviO * costi, ebitdaAnte = ricaviO - costiO;
-    const aTerzi = (y === 2027 || y === 2028) && angelina === 'terzi';
-    const angelinaAIntur = y <= 2028 && !aTerzi ? o.angelinaRent : 0;
+    const aTerzi = angelinaATerzi(angelina, angelinaDal, y);
+    const angelinaAIntur = aTerzi ? 0 : o.angelinaRent;
     const altriI = i.beachRevenue + i.otherRentRevenue - (aTerzi ? o.angelinaRent : 0);
     const manO = m * ricaviO, ccnO = w * (ricaviO - prevRev), affr = i.reserveReleasePayment;
 
@@ -324,14 +341,14 @@ const MOTORE = (() => {
   function riga2026(D, sc) {
     const o = D.years[2026].orti, p = D.prior2025;
     const l = (sc && sc.anni[2026]) || {crescita: o.revenue / p.ortiRevenue - 1, costi: o.operatingCostRate, canone: D.prior2026.appliedRent};
-    return riga(D, 2026, l.crescita, l.costi, l.canone, 'intur', p.ortiRevenue, p.inturRevenue, p.inturClosingCash, 0);
+    return riga(D, 2026, l.crescita, l.costi, l.canone, 'intur', null, p.ortiRevenue, p.inturRevenue, p.inturClosingCash, 0);
   }
 
   function calcola(D, sc, automatico) {
     let prec = riga2026(D, sc);
     return ANNI.map(y => {
       const p = sc.anni[y];
-      prec = riga(D, y, p.crescita, p.costi, automatico ? null : p.canone, sc.angelina,
+      prec = riga(D, y, p.crescita, p.costi, automatico ? null : p.canone, sc.angelina, sc.angelina_dal,
         prec.ricavi_o, prec.ricavi_i, prec.cassa_i, D.common.workingCapitalRate);
       return prec;
     });
@@ -392,7 +409,7 @@ if (typeof module !== 'undefined') module.exports = MOTORE;
   const scrivi = lista => { try { localStorage.setItem(CHIAVE, JSON.stringify(lista)); return true; } catch (e) { return false; } };
 
   const diverso = (y, campo) => Math.abs(sc.anni[y][campo] - D.base.anni[y][campo]) > 1e-9;
-  const modificato = () => sc.angelina !== D.base.angelina || TUTTI.some(y => ['canone', 'crescita', 'costi'].some(c => diverso(y, c)));
+  const modificato = () => sc.angelina !== D.base.angelina || (sc.angelina_dal || null) !== (D.base.angelina_dal || null) || TUTTI.some(y => ['canone', 'crescita', 'costi'].some(c => diverso(y, c)));
 
   function cellaDscr(v, vCfr, tetto) {
     const k = classe(v);
@@ -440,6 +457,8 @@ if (typeof module !== 'undefined') module.exports = MOTORE;
         <td><input class="n pct ${diverso(r.anno, 'crescita') ? 'mod' : ''}" inputmode="decimal" data-campo="crescita" data-anno="${r.anno}" value="${pct(r.crescita)}" aria-label="Crescita ${r.anno}"></td>
         <td><input class="n pct ${diverso(r.anno, 'costi') ? 'mod' : ''}" inputmode="decimal" data-campo="costi" data-anno="${r.anno}" value="${pct(r.incidenza_costi)}" aria-label="Costi su ricavi ${r.anno}"></td></tr>`).join('');
     $('angelina').value = sc.angelina;
+    $('angelina_dal').value = sc.angelina_dal ? String(sc.angelina_dal) : '';
+    $('angelina_dal').disabled = sc.angelina !== 'terzi';
 
     // dettaglio
     $('tabs').innerHTML = tutte.map(r => `<button data-tab="${r.anno}" class="${r.anno === anno ? 'on' : ''}">${r.anno}</button>`).join('');
@@ -517,10 +536,11 @@ if (typeof module !== 'undefined') module.exports = MOTORE;
     disegna();
   }
 
-  const documento = () => ({schema: D.schema, nome: sc.nome, salvato_il: new Date().toISOString().slice(0, 19), fonte: D.fonte, angelina: sc.angelina, anni: sc.anni});
+  const documento = () => ({schema: D.schema, nome: sc.nome, salvato_il: new Date().toISOString().slice(0, 19), fonte: D.fonte, angelina: sc.angelina, angelina_dal: sc.angelina_dal || null, anni: sc.anni});
   function valida(doc) {
     if (!doc || doc.schema !== D.schema) throw new Error('non è uno scenario del simulatore canone');
     if (!['intur', 'terzi'].includes(doc.angelina)) throw new Error('fitto Angelina non valido');
+    if (doc.angelina === 'terzi' && !doc.angelina_dal) throw new Error('scenario con Angelina a terzi senza data (angelina_dal): salvato prima del 29/10/2026, va riaperto e datato');
     let prec = 0;
     if (doc.anni && !doc.anni[2026]) doc.anni[2026] = D.base.anni[2026];  // scenari salvati prima del 2026 modificabile
     for (const y of TUTTI) {
@@ -543,7 +563,8 @@ if (typeof module !== 'undefined') module.exports = MOTORE;
       disegna();
     }
     else if (e.target.matches('input.n')) modifica(e.target);
-    else if (e.target.id === 'angelina') { sc.angelina = e.target.value; disegna(); }
+    else if (e.target.id === 'angelina') { sc.angelina = e.target.value; if (sc.angelina === 'terzi' && !sc.angelina_dal) sc.angelina_dal = 2027; if (sc.angelina === 'intur') sc.angelina_dal = null; disegna(); }
+    else if (e.target.id === 'angelina_dal') { sc.angelina_dal = e.target.value ? Number(e.target.value) : null; disegna(); }
     else if (e.target.id === 'file' && e.target.files[0]) {
       e.target.files[0].text().then(t => {
         const s = valida(JSON.parse(t));
@@ -606,7 +627,9 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
 
     path = cs.inputs_path()
     if not path.exists():
-        raise SystemExit(f"Dati di base non trovati: {path} (numeri del BP, fuori da git).")
+        raise SystemExit(
+            f"Dati di base non trovati: {path} (numeri del BP, fuori da git)."
+        )
     inputs = cs.load_inputs(path.read_bytes())
     osservati = cf.salva_osservati(cf.aggiorna()) if aggiorna else cf.carica_osservati()
 
@@ -624,10 +647,16 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Build cruscotto Canone ORTI → INTUR")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    ap.add_argument("--aggiorna", action="store_true",
-                    help="interroga le fonti osservate (BigQuery, sola lettura) prima del build")
-    ap.add_argument("--push", action="store_true",
-                    help="dopo il build, pubblica la pagina nel KV del Worker canone (dietro Access)")
+    ap.add_argument(
+        "--aggiorna",
+        action="store_true",
+        help="interroga le fonti osservate (BigQuery, sola lettura) prima del build",
+    )
+    ap.add_argument(
+        "--push",
+        action="store_true",
+        help="dopo il build, pubblica la pagina nel KV del Worker canone (dietro Access)",
+    )
     args = ap.parse_args()
     run(args.out, args.aggiorna, args.push)
 
