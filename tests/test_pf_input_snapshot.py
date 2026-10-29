@@ -12,9 +12,21 @@ Two defects lived in the same write path (issue #120, P0 of the map):
 
 The table is declared SNAPSHOT in source_registry.yaml; the code appended.
 Aligning it to a real snapshot fixes both.
+
+3. MIXED VERSIONS (2026-10-28) — the snapshot key was the cell (societa, fonte,
+   anno, mese, voce): a cell Rosa zeroed or moved yields no row (the parser skips
+   zeros), so it was never deleted and the previous file's row survived next to
+   the new ones. Measured on the live table: rows of three files per company,
+   +732.000 INTUR / +498.488 ORTI of canone absent from the September sheet.
+   The key is now the plan itself (societa, fonte): every ingest replaces the
+   whole plan of that company. Decided by Stefano on 2026-10-29.
 """
 
+from types import SimpleNamespace
+
+from core.bq.write import _snapshot
 from ingest.flussi.ingest_piano_finanziario_xlsx import (
+    NATURAL_KEY,
     assegna_occorrenze,
     make_hash,
     scrivi_su_bq,
@@ -71,11 +83,12 @@ def test_make_hash_discriminates_on_occurrence():
     assert a != b
 
 
-def test_write_is_a_snapshot_scoped_to_societa_fonte_and_period(monkeypatch):
-    """A revised plan must REPLACE its perimeter, not append next to it.
+def test_write_is_a_snapshot_of_the_whole_plan_per_societa_and_fonte(monkeypatch):
+    """A new version must REPLACE the whole plan of its company, not its cells.
 
-    After #124 the view SUMs the rows of the winning fonte, so an appended
-    revision would inflate the PF instead of superseding it.
+    After #124 the view SUMs the rows of the winning fonte, so anything left
+    behind (an appended revision, or a cell the new sheet no longer has)
+    inflates the PF instead of superseding it.
     """
     calls = []
     monkeypatch.setattr(
@@ -95,7 +108,9 @@ def test_write_is_a_snapshot_scoped_to_societa_fonte_and_period(monkeypatch):
     assert "fonte" in natural_key, (
         "without fonte in the key the DELETE would wipe SCADENZIARIO and BVA_2026"
     )
-    assert set(natural_key) == {"societa_id", "fonte", "anno", "mese", "voce_id"}
+    assert set(natural_key) == {"societa_id", "fonte"}, (
+        "a key with anno/mese/voce keeps the rows of cells the new sheet dropped"
+    )
 
 
 def test_empty_batch_writes_nothing(monkeypatch):
@@ -106,3 +121,56 @@ def test_empty_batch_writes_nothing(monkeypatch):
     )
     scrivi_su_bq([])
     assert calls == []
+
+
+class _ClientFinto:
+    """Cattura la DELETE di _snapshot; l'INSERT va a vuoto."""
+
+    def __init__(self):
+        self.sql = []
+
+    def query(self, sql, job_config=None):
+        self.sql.append(sql)
+        return SimpleNamespace(result=lambda: None)
+
+    def load_table_from_json(self, rows, table, job_config=None):
+        return SimpleNamespace(result=lambda: None)
+
+
+def test_the_delete_covers_the_whole_plan_of_the_company_not_the_cells():
+    """Il file di settembre non ha più il canone a ottobre e dicembre (zeri):
+    con la chiave per cella quelle righe di luglio restavano; con (societa, fonte)
+    la DELETE è una sola tupla per società, qualunque sia il contenuto del file."""
+    settembre = assegna_occorrenze(
+        [
+            _riga(voce="ENTRATE_AFFITTI_INTUR", mese=9, importo=244000.0),
+            _riga(voce="ENTRATE_AFFITTI_INTUR", mese=6, importo=244000.0),
+            _riga(voce="USCITE_UTENZE", mese=10, importo=3750.0),
+        ]
+    )
+    client = _ClientFinto()
+    _snapshot(client, "p.d.f_piano_finanziario_input", settembre, NATURAL_KEY)
+
+    assert len(client.sql) == 1
+    delete = " ".join(client.sql[0].split())
+    assert delete == (
+        "DELETE FROM `p.d.f_piano_finanziario_input` "
+        "WHERE (societa_id, fonte) IN ( ('INTUR', 'PIANO_FINANZIARIO') )"
+    )
+    assert "anno" not in delete and "mese" not in delete and "voce_id" not in delete
+
+
+def test_the_delete_never_touches_another_fonte_or_company():
+    client = _ClientFinto()
+    _snapshot(
+        client,
+        "p.d.f_piano_finanziario_input",
+        assegna_occorrenze([_riga()]),
+        NATURAL_KEY,
+    )
+    delete = client.sql[0]
+    assert (
+        "SCADENZIARIO" not in delete
+        and "BVA_2026" not in delete
+        and "ORTI" not in delete
+    )

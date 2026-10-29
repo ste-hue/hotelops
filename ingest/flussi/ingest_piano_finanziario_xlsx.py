@@ -490,19 +490,30 @@ def quality_summary(rows: list[dict], logger: logging.Logger) -> None:
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
 
-NATURAL_KEY = ["societa_id", "fonte", "anno", "mese", "voce_id"]
+# Chiave dello snapshot = identità del piano (società, fonte), NON la cella.
+# Con la chiave per cella (societa, fonte, anno, mese, voce) una cella che Rosa
+# azzera o svuota non produce riga (il parser salta gli zeri) e quindi non viene
+# cancellata: la riga del file precedente sopravvive accanto alle nuove. Misurato
+# il 28/10/2026 sul PF vivo: righe di tre file per società, +732.000 INTUR e
+# +498.488 ORTI di canone che nel foglio di settembre non esistono. Decisione di
+# Stefano del 29/10/2026 («vai»): ogni promozione sostituisce per intero il piano
+# della società per quella fonte, come fa il foglio.
+NATURAL_KEY = ["societa_id", "fonte"]
 
 
 def scrivi_su_bq(rows: list[dict]) -> None:
-    """Write the plan as a SNAPSHOT of its own perimeter.
+    """Write the plan as a SNAPSHOT of the whole plan of each (societa, fonte).
 
     The registry has always declared this source SNAPSHOT; the code appended
     with a hash filter, which meant a revised amount on an existing key was
-    silently skipped — the plan in BigQuery could never move. DELETE+INSERT
-    scoped to (societa, fonte, anno, mese, voce) makes a re-ingest supersede
-    its perimeter instead, which is what the view expects: since #124 it SUMs
-    the rows of the winning fonte, so appending a revision would inflate the
-    plan rather than replace it.
+    silently skipped — the plan in BigQuery could never move. The first fix
+    (#120) scoped DELETE+INSERT to the cell (societa, fonte, anno, mese, voce):
+    a revised amount superseded its cell, but a cell that disappeared from the
+    sheet (zeroed, moved) left its old row behind — the table mixed versions.
+    Scoping the DELETE to (societa, fonte) makes every ingest replace the whole
+    plan of that company, which is what a plan version is. Effect to know: a
+    file parsed thin (formulas without cached values) replaces a full plan with
+    a thin one — check the row count before promoting.
 
     ``fonte`` is in the key on purpose: SCADENZIARIO (no pipeline in the repo,
     not regenerable) and BVA_2026 live in the same table and must not be
