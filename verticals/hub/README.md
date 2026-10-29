@@ -53,11 +53,17 @@ Browser ──▶ [IAP edge]  ──▶  [roles.py grants]  ──▶  app conce
 | Email | Vede |
 |---|---|
 | `stefano@panoramagroup.it` / `ste.dellapietra@gmail.com` | tutto (admin) |
-| `gm@panoramagroup.it` (direttore) | Finanza + Operations + Cashflow + Canone |
-| `stedepi@gmail.com` (padre) | reviews, mutui, canone |
-| `amministrazione@panoramagroup.it` (Rosa) | Finanza + Cashflow + Canone |
+| `gm@panoramagroup.it` (direttore) | Finanza + Operations + Cashflow + Canone + CdG |
+| `stedepi@gmail.com` (padre) | reviews, mutui, canone, cdg |
+| `amministrazione@panoramagroup.it` (Rosa) | Finanza + Cashflow + Canone + CdG |
 | `fom@panoramagroup.it` (Anna) / `fb@panoramagroup.it` (S. Amato) | fb, spiaggia, reviews |
 | `magazzino@panoramagroup.it` (Mario) | fb, spiaggia |
+
+### Porte verso le app edge (HUB_EMBED_VS_EDGE)
+Mutui, Canone e **CdG** (dal 2026-10-29, pagina Cassa su `cdg.panorama-host.com`) non sono
+embed: la pagina hub è un link, l'app vive dietro Cloudflare Access con policy nominativa.
+Dare il tile qui **e** mettere la persona nella policy Access sono due atti distinti.
+Procedura CdG: [`docs/procedures/cdg_cassa.md`](../../docs/procedures/cdg_cassa.md).
 
 ### Aggiungere una persona
 1. **IAP allowlist**: aggiungere la sua email in Console (IAP → `hotelops-hub`). Senza questo
@@ -79,7 +85,7 @@ HubApp("reviews", "Reviews", "⭐", "Operations", "page", reviews.render, "reput
 |---|---|---|
 | `page` | una `render()` Streamlit | montata in nav + tile Home |
 | `bind` | URL esterno (str) | solo tile, link in nuova scheda (es. Banche → Looker) |
-| `soon` | `None` | placeholder "coming soon" (es. CdG) |
+| `soon` | `None` | placeholder "coming soon" |
 
 Gruppo `Progetti` (2026-10-26): una pagina, una card per progetto CapEx aperto (tappe +
 link ad app di avanzamento, cartella Drive, cockpit). Le tappe sono dichiarate in
