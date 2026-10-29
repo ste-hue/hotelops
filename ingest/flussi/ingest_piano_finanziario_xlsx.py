@@ -114,7 +114,7 @@ VOCE_MAP: dict[str, str] = {
     "Deposito Fitto": "USCITE_DEPOSITO_FITTO",
     # INTUR-specific voci
     "Fitto Hotel": "ENTRATE_AFFITTI_INTUR",  # canone ORTI→INTUR (conto 53.xx)
-    "Fitto AR": "ENTRATE_AFFITTI_INTUR",  # affitto ramo d'azienda (same 53.xx)
+    "Fitto AR": "ENTRATE_AFFITTI_ANGELINA",  # fitto Angelina (65.01.05.91 / 53.01.33): gamba propria, intercompany
     "Entrate Farmacia": "ENTRATE_AFFITTI_MINORI",  # affitto farmacia (47.95.xx)
     "Ribaltamento Costi a Orti": "ENTRATE_RIBALTAMENTO_ORTI",  # intercompany INTUR→ORTI, blocco ENTRATE (28/10/2026)
     "Entrate Spiaggia": "ENTRATE_SPIAGGIA",
@@ -283,6 +283,11 @@ def _detect_year_and_month_block(ws) -> list[tuple[int, int, int]]:
 # un negativo inventato. Vale per il PF vivo e per l'archivio (stesso parser).
 INTERCOMPANY_DETTAGLIO: dict[str, list[tuple[str, tuple[str, ...], str, str]]] = {
     # societa: [(foglio, needles nell'etichetta normalizzata, voce di partenza, voce di arrivo)]
+    # Il PF principale somma; il foglio di dettaglio tiene le gambe separate. Stesso meccanismo
+    # del ribaltamento (28/10): si sposta solo se il totale del mese lo contiene, mai un negativo.
+    # Le due righe intercompany del foglio Godimento sono una famiglia sola, con due destinazioni:
+    # il canone del ramo d'azienda (USCITE_CANONE_PASSIVO, 29/10) e il fitto Angelina
+    # (USCITE_FITTO_ANGELINA, 30/10). Fitto CVM resta godimento: va a terzi.
     "ORTI": [
         ("Utenze", ("(intur)",), "USCITE_UTENZE", "USCITE_RIBALTAMENTO_INTUR"),
         # Canone ORTI→INTUR: "Fitto Ramo d' Azienda" (a volte "Fitto Hotel ...") dentro Godimento
@@ -292,6 +297,15 @@ INTERCOMPANY_DETTAGLIO: dict[str, list[tuple[str, tuple[str, ...], str, str]]] =
             ("fittohotel", "ramodazienda"),
             "USCITE_GODIMENTO_BENI",
             "USCITE_CANONE_PASSIVO",
+        ),
+        # Fitto Angelina ORTI→INTUR: riga «651101 Fitto AR» dello stesso foglio. Intercompany,
+        # non terzi: 120.000/anno in due rate da 60.000, a INTUR finché non va al proprietario
+        # (Stefano, 30/10/2026: "2027 o 2028" — data non decisa).
+        (
+            "Godimento Beni di Terzi",
+            ("fittoar",),
+            "USCITE_GODIMENTO_BENI",
+            "USCITE_FITTO_ANGELINA",
         ),
     ],
 }
@@ -303,7 +317,12 @@ def _normalizza_etichetta(label: str) -> str:
 
 
 def _riclassifica_dettaglio(
-    wb, societa_id: str, records: list[dict], filepath: Path, now, logger: logging.Logger
+    wb,
+    societa_id: str,
+    records: list[dict],
+    filepath: Path,
+    now,
+    logger: logging.Logger,
 ) -> None:
     for regola in INTERCOMPANY_DETTAGLIO.get(societa_id, []):
         _applica_regola_dettaglio(wb, regola, societa_id, records, filepath, now, logger)
@@ -327,7 +346,13 @@ def _applica_regola_dettaglio(
             if val == 0:
                 continue
             rec = next(
-                (x for x in records if x["voce_id"] == da_voce and x["anno"] == anno and x["mese"] == mese),
+                (
+                    x
+                    for x in records
+                    if x["voce_id"] == da_voce
+                    and x["anno"] == anno
+                    and x["mese"] == mese
+                ),
                 None,
             )
             if rec is None or rec["importo"] + 0.005 < val:
@@ -353,7 +378,9 @@ def _applica_regola_dettaglio(
                     "data_caricamento": now.isoformat(),
                 }
             )
-            logger.info(f"  riclassificato {da_voce}→{a_voce} {anno}-{mese:02d} {val:,.2f} ({label.strip()})")
+            logger.info(
+                f"  riclassificato {da_voce}→{a_voce} {anno}-{mese:02d} {val:,.2f} ({label.strip()})"
+            )
 
 
 def setup_logger() -> logging.Logger:
