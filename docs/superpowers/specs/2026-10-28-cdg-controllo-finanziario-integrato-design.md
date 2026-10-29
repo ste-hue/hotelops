@@ -34,6 +34,10 @@ superficie», che resta vero per la sintesi).
 | Entrate | Nei PF le entrate sono sempre state previsioni. Il consuntivo incassi è la **Stampa Cassa** HotelCube per struttura (tre export del 28/10, in GCS) |
 | Infrastruttura Cloudflare | Token con permessi Access/KV/Workers in 1Password (`panorama_apps · CLOUDFLARE_API_TOKEN access · prod`, vault `work`): Worker, KV, dominio e app Access li crea il costruttore con `cf` e `wrangler` |
 | Movimenti stale | Cancellate il 28/10 le 579 righe 2026 non più presenti negli export completi (INTUR pareggia al centesimo, ORTI residuo 31,40 €) |
+| **Chi paga i progetti** | **INTUR**, tutti e tre (terzo piano, soft restyling, terrazza). Firmato 28/10. I CAPEX nuovi nascono con `societa_pagante_id = INTUR` |
+| **Versione di un PF** | **Il mese nel nome del file**, che è il *primo mese proiettato*. Firmato 28/10: «una volta al mese per entrambe le società, partendo dai saldi banca al 31 del mese prima». La data di creazione è **irrilevante**. La regola del mandato «non fidarti del nome» va letta come «fidati del nome come **primo mese aperto**, mai come data di produzione». Prova: `PF ORTI 2026-09` creato il 20/10 e `PF INTUR 2026-09` creato il 29/09 sono **la stessa versione**, entrambi ancorati al 31/08 |
+| **Riserva minima di cassa** | **Non esiste.** Firmato 28/10. I 50 k in `core/bq/views/v_previsione_cassa.sql:196` sono un default del codice che si era travestito da policy. Conseguenza: senza soglia, «investimento sostenibile» degrada a «resta sopra zero» — con ORTI a 43.604 di minimo a gennaio 2027 e zero affidamento. Da riproporre a Stefano in Fase 3 con i dodici mesi davanti |
+| **Periodicità del canone** | Non si parametrizza: **si legge dal foglio** (vedi §Il motore, voce Canone) |
 
 ## Fase 0 — Ricognizione: cosa esiste davvero
 
@@ -92,7 +96,7 @@ Headless, Python puro, nessun I/O nei calcoli (stesso principio di `canone_sim`)
 - **Mesi chiusi nella cascata saldi**: li riempie il solo movimento bancario (`f_banche_movimenti`), l'unico che riconcilia con l'ancora. Prima nota e Stampa Cassa misurano gli scostamenti per voce (Fase 2), non la cassa bancaria: sono due consuntivi diversi e la pagina dice quale sta leggendo.
 - **Scostamenti**: per voce e mese, `consuntivo − previsione(versione)` e rapporto con `SAFE_DIVIDE`; consuntivo assente = mancante, mai zero; previsioni di marzo, giugno e settembre affiancate per la stessa voce.
 - **Progetti**: un progetto distribuisce pagamenti secondo la modalità; la somma delle rate coincide con l'importo con controllo degli arrotondamenti; attivabile per scenario.
-- **Canone**: la scaletta contrattuale vale sia per il DSCR (`canone_sim`, annuale, **netta**) sia per la cassa (rate alle scadenze contrattuali, oggi bimestrali da 122 k = 100 k + IVA 22%, **lorde**). Il motore cassa applica l'IVA alla scaletta netta. Nel consolidato l'IVA non si netta (debito INTUR e credito ORTI hanno timing diverso): resta come flusso fiscale di ciascuna società.
+- **Canone**: la scaletta contrattuale vale sia per il DSCR (`canone_sim`, annuale, **netta**) sia per la cassa (rate alle scadenze contrattuali, **lorde**: il profilo si **legge dalla voce** `USCITE_GODIMENTO_BENI` del PF, non si assume. Misurato il 28/10 su `f_piano_finanziario_input` a fonte singola: **due rate, 244.000 e 488.000** (= 200 k e 400 k più IVA 22%), cioè i 600 k di contratto in un terzo e due terzi — **non** sei rate bimestrali da 122 k, come diceva una stesura precedente di questa riga. Un profilo bimestrale avrebbe prodotto sei punti di cassa inesistenti). Il motore cassa applica l'IVA alla scaletta netta. Nel consolidato l'IVA non si netta (debito INTUR e credito ORTI hanno timing diverso): resta come flusso fiscale di ciascuna società.
 - **Mutui**: rate dal calendario esportato dall'app Mutui, per società titolare; il PF le contiene già nella riga «Mutui e Finanziamenti»: il motore sostituisce **solo le righe del foglio dettaglio che corrispondono ai cinque finanziamenti** e lascia il resto (Kross, Unicredit, leasing, interessi fidi se presenti).
 - **Riproducibilità**: stesso snapshot delle fonti, stesso scenario, stesso risultato; ogni cifra porta `origine` e `raw_object_id`.
 
@@ -143,9 +147,66 @@ Un revisore indipendente ha letto il documento; queste sono le risposte che ho d
 
 Nomi definitivi delle tabelle `p_*` e delle viste, struttura del payload dell'app edge, ordine dei task dentro ogni fase, scelta tra estendere `v_previsione_cassa` o affiancarle una vista sul dataset previsioni, formato di import del JSON Mutui.
 
-## Domande ancora aperte per Stefano
+## Domande per Stefano — **chiuse il 28/10**
 
-1. **Chi paga i progetti**: terzo piano, soft restyling e terrazza non sono in `d_progetti`. Per ciascuno, la cassa che si muove è INTUR (proprietaria dell'immobile) o ORTI (gestore)? Decide quale saldo scende e se il canone c'entra.
-2. **Data di elaborazione dei PF storici**: il mandato dice di non fidarsi del nome del file. Nei file c'è `DATA RILEVAZ` solo per INTUR (e in quello di settembre dice 30/09 mentre i saldi sono al 31/08); per ORTI vale la data di modifica su Drive o la chiedo a Rosa?
-3. **Riserva minima di cassa** per società (i 50 k attuali sono un default, non una tua decisione).
-4. **Canone in cassa**: le rate restano bimestrali da 122 k anche negli scenari con canone diverso, o la periodicità è una leva?
+Le quattro domande di questa sezione sono state firmate da Stefano il 28/10 e sono ora righe della
+tabella *Decisioni di Stefano* qui sopra. Si lasciano qui le due che hanno una conseguenza operativa
+oltre alla risposta:
+
+- **Chi paga i progetti → INTUR.** Terzo piano, soft restyling e terrazza non sono ancora in
+  `d_progetti` (che contiene solo `HPAN25PIANO1` e `SPIAGGIA_LOTTO7`): vanno creati con
+  `societa_pagante_id = INTUR`. È la cassa di INTUR che scende negli scenari.
+- **Riserva minima → non esiste.** Non è «da decidere»: oggi non c'è. Chi legge
+  `v_previsione_cassa` non deve prendere i 50 k per una soglia aziendale.
+
+## Il raccordo intercompany si fa sul dettaglio, non per somma di voce
+
+Aggiunto il 28/10 dopo un errore di misura che vale la pena lasciare scritto.
+
+Confrontando le due voci aggregate — ORTI `USCITE_GODIMENTO_BENI` contro INTUR
+`ENTRATE_AFFITTI_INTUR` — risultava uno scarto di **499.847** su sedici mesi, segnalato come
+«intercompany non riconciliato». Era un artefatto, per due motivi indipendenti:
+
+1. **Fonti mescolate.** `ENTRATE_AFFITTI_INTUR` porta 1.032.383 di `BVA_2026` oltre al piano;
+   `USCITE_GODIMENTO_BENI` non ha alcuna riga `BVA_2026`. Il confronto sommava *un piano più un
+   budget* contro *un piano solo*. `CLAUDE.md` lo vieta: «tutti i budget hanno tag `fonte` — mai
+   mischiare senza filtro esplicito».
+2. **Nessuna delle due voci è «il canone».** `USCITE_GODIMENTO_BENI` contiene anche Fitto AR
+   (120.000) e Fitto CVM (15.000) verso **terzi**; `ENTRATE_AFFITTI_INTUR` contiene Farmacia e altri.
+
+A fonte singola (`fonte = 'PIANO_FINANZIARIO'`) **cinque mesi su nove combaciano al centesimo** e
+la cumulata si chiude a −91.000, non a mezzo milione. Restano due righe, con cause diverse:
+
+| mese | ORTI paga | INTUR incassa | differenza | cosa è |
+| --- | --- | --- | --- | --- |
+| giu–lug 26 | 538.000 · 648.000 | 488.000 · 548.000 | −150.000 | mesi chiusi: è storia, non previsione |
+| ott 26 | 50.000 | 244.000 | **+194.000** | **sfasamento**: INTUR attende la rata, ORTI ha messo il Fitto CVM di novembre |
+| giu 27 | 379.000 | 244.000 | −135.000 | **spiegato**: Fitto AR 120.000 + Fitto CVM 15.000 verso terzi |
+
+**Regola che ne esce**, coerente con §Il motore: il canone si isola dal **foglio dettaglio per voce
+del master di Rosa** (fornitore INTUR) e si confronta **a fonte singola**. Un confronto fra somme di
+voce produce uno scarto che non esiste, e un segno che si inverte è la firma di uno sfasamento o di
+una voce verso terzi, mai di un importo mancante.
+
+## Nota per chi progetterà `p_pf_righe` con `direzione` (28/10/2026)
+
+Il parser `ingest/flussi/ingest_piano_finanziario_xlsx.py` mappa la riga `Caparre da girocontare a
+Orti` — che nel master INTUR sta nel **blocco USCITE** — sulla voce `ENTRATE_CAPARRE_INTUR`
+(`VOCE_MAP`, commento «align to d_voci»). Il segno si perde **anche nel PF vivo**
+(`f_piano_finanziario_input`), non solo nell'archivio. Oggi non ha effetto perché in tutte le 14
+versioni 2026 quella riga pesa solo nella colonna snapshot (130.556,57 al 01/09/2026), mai in una
+colonna mensile. Ma «non ha effetto» è una proprietà dei dati di adesso, non della mappatura: il
+giorno in cui una caparra da girare cade in un mese, cade con il segno sbagliato. `p_pf_righe` deve
+prendere la direzione **dal blocco del foglio** (sopra/sotto `TOTALE ENTRATE`), non dal prefisso
+della voce.
+
+Due differenze misurate sui 22 file storici (script `~/.local/share/hotelops/pf-storici-20261028/pf_quadratura.py`,
+fuori dal repo, durevole su disco), nessuna corretta a mano:
+- il template INTUR 2025 esclude `Entrate Spiaggia` dal proprio `TOTALE ENTRATE` (`=SUM(4:8)`, la riga
+  sta a 9/10): 185.000 nel 2026. Il parser la include; sbaglia il foglio;
+- `Ribaltamento Costi a Orti` (INTUR ott–dic 2025: 3.120,55 e 9.111,86) non ha voce in
+  `d_voci_piano_finanziario` e viene saltata con WARNING. È un flusso intercompany INTUR→ORTI:
+  senza voce non entra in nessuna riconciliazione. Aprire il vocabolario è di Stefano.
+- Gli output di `pf-rotate` (openpyxl) **non hanno valori calcolati** e il parser legge solo le
+  costanti: le versioni maggio 2026 caricate l'8/06 erano 16 e 23 righe su 65 e 93. Rimedio
+  verificato: ricalcolo headless LibreOffice (0 differenze sui 21 file che avevano la cache Excel).
