@@ -6,10 +6,11 @@ sempre positive; la direzione sta in `direzione`.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+import copy
+from dataclasses import asdict, dataclass, field, replace
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, Literal
+from typing import Literal
 
 from core.schemas import ORIGINI_CASSA as ORIGINI
 
@@ -23,6 +24,7 @@ __all__ = [
     "Progetto",
     "Finanziamento",
     "Fatto",
+    "ScalettaCanone",
     "Scenario",
     "Input",
     "RigaMese",
@@ -32,6 +34,7 @@ __all__ = [
     "to_cent",
     "iva",
     "calcola",
+    "flussi_canone",
     "distribuisci",
     "to_dict",
 ]
@@ -123,11 +126,20 @@ class Fatto:
 
 
 @dataclass(frozen=True)
+class ScalettaCanone:
+    netto_per_anno: dict[int, int]
+    rate_n: int
+    da_mese: str
+    calendario: dict[str, int] | None = None
+    aliquota_iva: int = 22
+
+
+@dataclass(frozen=True)
 class Scenario:
     nome: str
     progetti: list[Progetto]
     finanziamenti: list[Finanziamento]
-    canone: Any = None  # ScalettaCanone | None (Task 2)
+    canone: ScalettaCanone | None = None
     manuali: list[Riga] = field(default_factory=list)
     soglia: int = 0
 
@@ -196,7 +208,15 @@ def _movimenti(
     for f in inp.intercompany:
         if f.mese != mese:
             continue
-        if f.a == societa and f.stato != "una_gamba":
+        if f.stato == "una_gamba":
+            # Una sola gamba: conta dal lato di chi la conosce, mai la contropartita.
+            if f.da in SOCIETA:
+                if f.da == societa:
+                    usc["canone"] += f.importo
+            elif f.a == societa:
+                ent["canone"] += f.importo
+            continue
+        if f.a == societa:
             ent["canone"] += f.importo
         if f.da == societa:
             usc["canone"] += f.importo
@@ -214,7 +234,83 @@ def _movimenti(
     return ent, usc
 
 
+def flussi_canone(s: ScalettaCanone, mesi: list[str]) -> list[Flusso]:
+    """Canone lordo ORTI -> INTUR: il calendario libero di un anno vince sulle rate."""
+    out: list[Flusso] = []
+    for anno, netto in sorted(s.netto_per_anno.items()):
+        cal = {m: v for m, v in (s.calendario or {}).items() if m[:4] == str(anno)}
+        if cal:
+            lordi = {m: iva(v, s.aliquota_iva) for m, v in sorted(cal.items())}
+        else:
+            # Stesso mese di partenza in ogni anno; anno fuori orizzonte: saltato.
+            da = f"{anno}-{s.da_mese[5:]}"
+            if da not in mesi:
+                continue
+            lordi = distribuisci(iva(netto, s.aliquota_iva), da, s.rate_n, mesi)
+        out += [
+            Flusso("Fitto Hotel (canone)", "ORTI", "INTUR", m, v, "scenario")
+            for m, v in lordi.items()
+            if m in mesi
+        ]
+    return out
+
+
+def _riconcilia(
+    progetti: list[Progetto], fatti: list[Fatto]
+) -> tuple[list[Progetto], list[Fatto]]:
+    """Riduce (su copie) i pagamenti dello stesso fornitore, dal mese piu' vecchio."""
+    progetti = copy.deepcopy(progetti)
+    per_id = {p.id: p for p in progetti}
+    non_ric: list[Fatto] = []
+    for f in fatti:
+        p = per_id.get(f.progetto_id)
+        slot = sorted(
+            (
+                (m, pag)
+                for pag in (p.pagamenti if p else [])
+                if pag.fornitore_id == f.fornitore_id
+                for m in pag.mesi
+            ),
+            key=lambda x: x[0],
+        )
+        if not slot:
+            non_ric.append(f)
+            continue
+        resto = f.importo
+        for m, pag in slot:
+            if resto <= 0:
+                break
+            lordo = iva(pag.mesi[m], pag.aliquota_iva)
+            presa = min(resto, lordo)
+            resto -= presa
+            k = 100 + pag.aliquota_iva
+            # Netto residuo arrotondato half-up (esatto per aliquota 0).
+            pag.mesi[m] = 0 if presa == lordo else ((lordo - presa) * 100 + k // 2) // k
+    return progetti, non_ric
+
+
 def calcola(inp: Input) -> Risultato:
+    sc = inp.scenario
+    pf = inp.pf
+    # Le erogazioni dello scenario sostituiscono le righe PF di finanziamento.
+    con_fin = {f.societa for f in sc.finanziamenti}
+    pf = [
+        r
+        for r in pf
+        if not (r.voce_id == "ENTRATE_FINANZIAMENTI" and r.societa in con_fin)
+    ]
+    interc = inp.intercompany
+    if sc.canone:
+        anni = {str(a) for a in sc.canone.netto_per_anno}
+        interc = [
+            f
+            for f in interc
+            if not (f.nome.startswith("Fitto Hotel") and f.mese[:4] in anni)
+        ] + flussi_canone(sc.canone, inp.mesi)
+    progetti, non_ric = _riconcilia(sc.progetti, inp.fatti)
+    inp = replace(
+        inp, pf=pf, intercompany=interc, scenario=replace(sc, progetti=progetti)
+    )
     righe: list[RigaMese] = []
     for soc in SOCIETA:
         saldo = inp.ancore[soc].saldo
@@ -229,7 +325,8 @@ def calcola(inp: Input) -> Risultato:
         mie = [r for r in righe if r.societa == soc]
         pf = [r for r in mie if r.mese not in inp.mesi_ipotetici]
         coda = [r for r in mie if r.mese in inp.mesi_ipotetici]
-        m = min(pf, key=lambda r: r.fin)
+        # Tutti i mesi ipotetici: nessun mese PF, il minimo e' quello della coda.
+        m = min(pf or coda, key=lambda r: r.fin)
         c = min(coda, key=lambda r: r.fin) if coda else None
         minimi[soc] = Minimo(
             mese=m.mese,
@@ -246,6 +343,7 @@ def calcola(inp: Input) -> Risultato:
             for f in inp.intercompany
             if f.mese == mese and f.da in SOCIETA and f.a in SOCIETA
         ]
+        fl_tutti = [f for f in inp.intercompany if f.mese == mese]
         consolidato.append(
             Consolidato(
                 mese=mese,
@@ -253,13 +351,15 @@ def calcola(inp: Input) -> Risultato:
                 intercompany_nettato=sum(
                     f.importo for f in fl if f.stato != "una_gamba"
                 ),
-                residuo=sum(f.importo for f in fl if f.stato == "una_gamba"),
+                residuo=sum(f.importo for f in fl_tutti if f.stato == "una_gamba"),
             )
         )
-    return Risultato(righe, minimi, consolidato, [])
+    return Risultato(righe, minimi, consolidato, non_ric)
 
 
 def distribuisci(totale: int, da: str, n: int, mesi: list[str]) -> dict[str, int]:
+    if n < 1:
+        raise ValueError(f"numero rate non valido: {n}")
     if da not in mesi or mesi.index(da) + n > len(mesi):
         raise ValueError(f"oltre l'orizzonte: {n} rate da {da}")
     i = mesi.index(da)
