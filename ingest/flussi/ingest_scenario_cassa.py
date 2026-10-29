@@ -22,7 +22,6 @@ from core.schemas import (
     ProgettoPagamentoRow,
     ScenarioFlussoRow,
     ScenarioRow,
-    validate_batch,
 )
 from verticals.condges.cassa_scenario import righe_p, scenario_id
 
@@ -41,12 +40,13 @@ def ingest(path: Path, raw_object_id: str, dry_run: bool, autore: str) -> dict:
         ("p_scenario_flussi", P_SCENARIO_FLUSSI, ScenarioFlussoRow, flussi),
         ("p_progetti_pagamenti", P_PROGETTI_PAGAMENTI, ProgettoPagamentoRow, pagamenti),
     ]
-    righe = {}
-    for nome, tabella, modello, rows in tabelle:
-        validate_batch(rows, modello, nome)
-        righe[nome] = len(rows)
-        if not dry_run:
-            bq_write_validated(tabella, [modello(**r) for r in rows], mode="append")
+    # Tutte e tre le liste validate PRIMA di scrivere: append-only, un fallimento
+    # a metà lascerebbe il padre p_scenari duplicato al retry.
+    modelli = [(t, [m(**r) for r in rows]) for _, t, m, rows in tabelle]
+    righe = {nome: len(rows) for nome, _, _, rows in tabelle}
+    if not dry_run:
+        for tabella, models in modelli:
+            bq_write_validated(tabella, models, mode="append")
     return {"scenario_id": scenario_id(raw), "righe": righe}
 
 

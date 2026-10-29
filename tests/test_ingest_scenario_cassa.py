@@ -1,6 +1,8 @@
 import subprocess
 import sys
 
+import pytest
+
 from core.config import P_PROGETTI_PAGAMENTI, P_SCENARI, P_SCENARIO_FLUSSI
 from core.lineage.source_resolver import load_registry
 from ingest.flussi import ingest_scenario_cassa as mod
@@ -64,3 +66,19 @@ def test_source_nel_registry():
     d = load_registry().sources["CDG_SCENARIOCASSA_GROUP_APPEND"]
     assert d.canonical_table == "hotelops_previsioni.p_scenari"
     assert d.loop_targets == ["cdg_cassa"]
+
+
+def test_validazione_prima_di_scrivere(monkeypatch, tmp_path):
+    chiamate = []
+    monkeypatch.setattr(mod, "bq_write_validated", lambda *a, **k: chiamate.append(a))
+    vera = mod.righe_p
+
+    def righe_rotte(*a, **k):
+        scenari, flussi, pagamenti = vera(*a, **k)
+        pagamenti[-1] = {**pagamenti[-1], "aliquota_iva": 4}
+        return scenari, flussi, pagamenti
+
+    monkeypatch.setattr(mod, "righe_p", righe_rotte)
+    with pytest.raises(ValueError):
+        ingest(file_scenario(tmp_path), "rid", dry_run=False, autore="t")
+    assert chiamate == []
