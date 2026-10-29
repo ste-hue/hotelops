@@ -15,7 +15,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, StrictInt, field_validator, model_validator
 
 
 # ── Shared types ─────────────────────────────────────────────────────────────
@@ -1680,3 +1680,81 @@ def make_hash(*parts: str) -> str:
 
 # Origini delle righe della pagina Cassa (motore verticals/condges/cassa_motore.py)
 ORIGINI_CASSA = ("pf", "canone", "finanziamento", "progetto", "manuale", "fatto")
+
+
+# ── hotelops_previsioni.p_* (scenari di cassa salvati, importi in centesimi) ──
+
+
+class ScenarioRow(BaseModel):
+    scenario_id: str
+    nome: str
+    creato_il: str
+    autore: str
+    schema_doc: str
+    base: str  # JSON serializzato
+    parametri: str  # JSON serializzato
+    progetti_accesi: list[str]
+    note: Optional[str] = None
+    raw_object_id: str
+    hash_riga: str
+    data_caricamento: str
+
+
+def _mese_aaaa_mm(v: str) -> str:
+    import re
+
+    if not re.fullmatch(r"\d{4}-\d{2}", v):
+        raise ValueError(f"mese '{v}' non in formato YYYY-MM")
+    return v
+
+
+class ScenarioFlussoRow(BaseModel):
+    scenario_id: str
+    societa_id: SocietaId
+    mese: str
+    voce_id: str
+    importo_cent: StrictInt
+    direzione: Literal["E", "U"]
+    origine: str
+    raw_object_id: str
+    hash_riga: str
+    data_caricamento: str
+
+    @field_validator("mese")
+    @classmethod
+    def _mese(cls, v: str) -> str:
+        return _mese_aaaa_mm(v)
+
+    @field_validator("origine")
+    @classmethod
+    def _origine(cls, v: str) -> str:
+        if v not in ORIGINI_CASSA:
+            raise ValueError(f"origine '{v}' non in {ORIGINI_CASSA}")
+        return v
+
+
+class ProgettoPagamentoRow(BaseModel):
+    scenario_id: str
+    progetto_id: str
+    pagamento: str
+    mese: str
+    importo_netto_cent: StrictInt
+    aliquota_iva: int
+    stato: str
+    fornitore_id: Optional[str] = None
+    societa_id: SocietaId
+    raw_object_id: str
+    hash_riga: str
+    data_caricamento: str
+
+    @field_validator("mese")
+    @classmethod
+    def _mese(cls, v: str) -> str:
+        return _mese_aaaa_mm(v)
+
+    @field_validator("aliquota_iva")
+    @classmethod
+    def _aliquota(cls, v: int) -> int:
+        if v not in (0, 10, 22):
+            raise ValueError(f"aliquota_iva {v} non in (0, 10, 22)")
+        return v

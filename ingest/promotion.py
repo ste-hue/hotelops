@@ -134,10 +134,12 @@ def _count_canonical_rows(canonical_table: str, raw_object_id: str) -> Optional[
         from core.config import DATASET, PROJECT
 
         client = get_client()
-        sql = (
-            f"SELECT COUNT(*) AS n FROM `{PROJECT}.{DATASET}.{canonical_table}` "
-            "WHERE raw_object_id = @id"
-        )
+        # "dataset.tabella" = dataset esplicito (es. hotelops_previsioni.p_scenari)
+        if canonical_table.count(".") == 1:
+            fq = f"{PROJECT}.{canonical_table}"
+        else:
+            fq = f"{PROJECT}.{DATASET}.{canonical_table}"
+        sql = f"SELECT COUNT(*) AS n FROM `{fq}` WHERE raw_object_id = @id"
         job_config = bigquery.QueryJobConfig(
             query_parameters=[
                 bigquery.ScalarQueryParameter("id", "STRING", raw_object_id)

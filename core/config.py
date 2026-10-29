@@ -6,6 +6,18 @@ DATASET = "hotelops"
 def _t(name: str) -> str:
     return f"{PROJECT}.{DATASET}.{name}"
 
+# Dataset separato per gli scenari di cassa salvati (non sono fatti: vedi Governance)
+DATASET_PREVISIONI = "hotelops_previsioni"
+
+
+def _p(name: str) -> str:
+    return f"{PROJECT}.{DATASET_PREVISIONI}.{name}"
+
+
+P_SCENARI = _p("p_scenari")
+P_SCENARIO_FLUSSI = _p("p_scenario_flussi")
+P_PROGETTI_PAGAMENTI = _p("p_progetti_pagamenti")
+
 # Fact tables
 F_BANCHE_MOVIMENTI          = _t("f_banche_movimenti")
 F_SALDI_BANCA_SNAPSHOT      = _t("f_saldi_banca_snapshot")
