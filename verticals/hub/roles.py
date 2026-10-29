@@ -63,16 +63,18 @@ _assert_s1("OPERATIONS", OPERATIONS)
 # Mappa email → app concesse. Versionata in git; sensibili nominate a mano (S1).
 # canone (sensibile, dati riservati): concesso a mano a Rosa, direttore e padre il 2026-10-26;
 # serve anche la policy Cloudflare Access di canone.panorama-host.com, qui c'è solo la porta.
+# cdg (sensibile, dati riservati): concesso a mano a Rosa, direttore e padre il 2026-10-29
+# (pagina Cassa su cdg.panorama-host.com, stessa policy Access nominativa di canone).
 _GRANTS: dict[str, frozenset[str]] = {
     "stefano@panoramagroup.it": ALL,  # Stefano (Workspace/IAP) — admin
     "ste.dellapietra@gmail.com": ALL,  # Stefano (gmail) — ridondanza
-    "amministrazione@panoramagroup.it": FINANZA | {"cashflow", "accodamenti", "spiaggia", "bilancini", "canone"},  # Rosa
+    "amministrazione@panoramagroup.it": FINANZA | {"cashflow", "accodamenti", "spiaggia", "bilancini", "canone", "cdg"},  # Rosa
     "fom@panoramagroup.it": OPERATIONS,  # Anna (room division)
     "fb@panoramagroup.it": OPERATIONS,  # Stefano Amato (F&B)
     "gm@panoramagroup.it": FINANZA
     | OPERATIONS
     | {"cashflow", "cdg", "bilancini", "canone"},  # Antonio Russo (direttore)
-    "stedepi@gmail.com": frozenset({"reviews", "mutui", "canone"}),  # padre
+    "stedepi@gmail.com": frozenset({"reviews", "mutui", "canone", "cdg"}),  # padre
     "magazzino@panoramagroup.it": frozenset({"fb", "spiaggia"}),  # Mario (economato)
 }
 

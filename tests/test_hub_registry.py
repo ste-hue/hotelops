@@ -40,6 +40,7 @@ def test_pages_solo_kind_page():
         "canone",
         "regia",
         "progetti",
+        "cdg",
     }
 
 
@@ -71,7 +72,8 @@ def test_validate_rifiuta_id_duplicato():
 
 
 def test_cashflow_accodamenti_sono_sensibili():
-    # cdg non è più qui: spento (kind=soon, 2026-07-05) → niente superficie di scrittura
+    # cdg: spento 2026-07-05, riacceso 2026-10-29 come porta verso cdg.panorama-host.com
+    # (dati riservati, nessun write-path BQ) → sensibile.
     from verticals.hub.registry import APPS
 
     sens = {a.id for a in APPS if a.sensitive}
@@ -90,6 +92,7 @@ def test_cashflow_accodamenti_sono_sensibili():
         "canone",
         "regia",
         "progetti",
+        "cdg",
     }
 
 

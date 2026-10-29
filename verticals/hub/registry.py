@@ -14,6 +14,7 @@ from verticals.hub.pages_ import (
     accodamenti,
     bilancini,
     canone,
+    cdg,
     cashflow,
     fb,
     mutui,
@@ -68,9 +69,9 @@ APPS: list[HubApp] = [
     HubApp("canone", "Canone", "🤝", "Finanza", "page", canone.render, "scaletta ORTI → INTUR & DSCR (edge app)", sensitive=True),
     # regia: sensibile per dati riservati (priorità, numeri di direzione) — nessun write-path BQ.
     HubApp("regia", "Management OS", "🧭", "Finanza", "page", regia.render, "priorità 2027, numeri, regia (app edge)", sensitive=True),
-    # CdG spento 2026-07-05 (troppi dati, redesign "budget vs reale" in arrivo);
-    # riaccendere = ripristinare kind=page + import (pages_/cdg.py resta nel codice).
-    HubApp("cdg", "CdG", "📊", "Finanza", "soon", None, "controllo di gestione (in redesign)"),
+    # cdg: spento 2026-07-05, riacceso 2026-10-29 come porta verso cdg.panorama-host.com
+    # (pagina Cassa). Sensibile per dati riservati (saldi, PF, progetti) — nessun write-path BQ.
+    HubApp("cdg", "CdG", "📊", "Finanza", "page", cdg.render, "controllo di gestione · Cassa (edge app)", sensitive=True),
     # ── Operations ───────────────────────────────────────────────────────────
     HubApp("fb", "Food & Beverage", "🍽", "Operations", "page", fb.render, "food cost & coperti"),
     HubApp("spiaggia", "Spiaggia", "🏖️", "Operations", "page", spiaggia.render, "ricavo stabilimento & quadratura"),
