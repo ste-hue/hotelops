@@ -24,13 +24,24 @@ Aligning it to a real snapshot fixes both.
 
 from types import SimpleNamespace
 
+import pytest
+
 from core.bq.write import _snapshot
 from ingest.flussi.ingest_piano_finanziario_xlsx import (
     NATURAL_KEY,
+    SOGLIA_SOTTILE,
     assegna_occorrenze,
     make_hash,
+    piani_sottili,
     scrivi_su_bq,
 )
+
+
+def _tabella_vuota(monkeypatch):
+    monkeypatch.setattr(
+        "ingest.flussi.ingest_piano_finanziario_xlsx.righe_in_tabella",
+        lambda client=None: {},
+    )
 
 
 def _riga(
@@ -91,6 +102,7 @@ def test_write_is_a_snapshot_of_the_whole_plan_per_societa_and_fonte(monkeypatch
     inflates the PF instead of superseding it.
     """
     calls = []
+    _tabella_vuota(monkeypatch)
     monkeypatch.setattr(
         "ingest.flussi.ingest_piano_finanziario_xlsx.bq_write_validated",
         lambda table, rows, mode="append", natural_key=None: calls.append(
@@ -174,3 +186,46 @@ def test_the_delete_never_touches_another_fonte_or_company():
         and "BVA_2026" not in delete
         and "ORTI" not in delete
     )
+
+
+# ── Recinto per il file sottile (soglia misurata sui 22 file archiviati, 29/10/2026) ──
+
+
+def test_la_soglia_separa_le_versioni_legittime_dai_file_sottili_misurati():
+    """Peggior legittimo sui 22 file: INTUR 2026-08 56 righe dopo 69 (0,81). File sottili
+    misurati: INTUR 2026-05 16 su 65, ORTI 2026-05 23 su 97, ORTI 2026-06 18 su 80."""
+    assert SOGLIA_SOTTILE == 0.5
+    k = ("INTUR", "PIANO_FINANZIARIO")
+    assert piani_sottili({k: 56}, {k: 69}) == []
+    assert piani_sottili({k: 16}, {k: 65}) == [
+        "INTUR/PIANO_FINANZIARIO: 16 righe nel file contro 65 in tabella (25%)"
+    ]
+    o = ("ORTI", "PIANO_FINANZIARIO")
+    assert (
+        len(piani_sottili({o: 23}, {o: 97})) == 1
+        and len(piani_sottili({o: 18}, {o: 80})) == 1
+    )
+    assert piani_sottili({o: 80}, {}) == []  # tabella vuota: nessun confronto possibile
+    assert (
+        piani_sottili({o: 80}, {("ORTI", "SCADENZIARIO"): 500}) == []
+    )  # altra fonte non conta
+
+
+def test_un_file_sottile_non_viene_scritto_senza_il_flag(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "ingest.flussi.ingest_piano_finanziario_xlsx.righe_in_tabella",
+        lambda client=None: {("INTUR", "PIANO_FINANZIARIO"): 80},
+    )
+    monkeypatch.setattr(
+        "ingest.flussi.ingest_piano_finanziario_xlsx.bq_write_validated",
+        lambda *a, **k: calls.append(a),
+    )
+    rows = assegna_occorrenze(
+        [_riga(voce=f"USCITE_VOCE_{m}", mese=7) for m in range(18)]
+    )  # 18 righe su 80
+    with pytest.raises(SystemExit, match="piano sottile, non scrivo"):
+        scrivi_su_bq(rows)
+    assert calls == []
+    scrivi_su_bq(rows, accetta_sottile=True)
+    assert len(calls) == 1
