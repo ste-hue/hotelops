@@ -725,6 +725,42 @@ sources:
       filters: "per struttura, max 1000 righe per export"
       format: xlsx
 
+  # ── CdG scenari di cassa (documento JSON dalla pagina Cassa) — APPEND ────
+  CDG_SCENARIOCASSA_GROUP_APPEND:
+    system: CDG
+    dataset: SCENARIOCASSA
+    dataset_label: "Scenari di cassa del CdG (documento cdg-cassa-scenario/1 esportato dalla pagina Cassa)"
+    societa: GROUP
+    business_unit: null
+    lifecycle: APPEND
+    canonical_table: hotelops_previsioni.p_scenari
+    parser_module: ingest.flussi.ingest_scenario_cassa
+    hash_basis: hash_riga
+    loop_targets: [cdg_cassa]
+    promotion_policy: AUTO
+    detector_category: scenario_cassa
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "cdg/scenari_cassa"
+    notes: |
+      Documento JSON `cdg-cassa-scenario/1` esportato dalla pagina Cassa del CdG
+      («Esporta scenario»). Il parser scrive tre tabelle in hotelops_previsioni
+      (p_scenari, p_scenario_flussi, p_progetti_pagamenti), importi in centesimi,
+      append-only, FK raw_object_id. Scenario = proiezione salvata, non fatto:
+      vive nel dataset p_*, mai nel pool f_*. Nessuna cadenza di calendario.
+    freshness:
+      tier: M
+      cadence: adhoc
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "pagina Cassa (browser)"
+      report: "Esporta scenario"
+      format: json
+
   # ── RistoCube Stampa Cassa (documenti fiscali POS) — RAW_ONLY ─────────────
   RISTOCUBE_STAMPACASSA_ORTI_APPEND:
     system: RISTOCUBE

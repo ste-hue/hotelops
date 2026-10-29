@@ -560,6 +560,41 @@ def cmd_promote(args):
     sys.exit(1)
 
 
+def cmd_cdg(args):
+    """CdG: scenario salva/lista (lineage), cassa (pagina, Task 8)."""
+    if args.cdg_cmd == "cassa":
+        print("non ancora disponibile (Task 8)")
+        sys.exit(1)
+
+    if args.scenario_cmd == "salva":
+        from ingest.intake import intake_file
+        from ingest.promotion import promote_raw_object
+        from verticals.condges.cassa_scenario import scenario_id
+
+        fp = Path(args.file)
+        if args.nome:
+            print(f"nome: {args.nome} (informativo: il nome vive nel documento)")
+        print(f"scenario_id: {scenario_id(fp.read_bytes())}")
+        ir = intake_file(fp, source_name="CDG_SCENARIOCASSA_GROUP_APPEND", actor="cli")
+        print(f"raw_object_id: {ir.raw_object_id}")
+        r = promote_raw_object(ir.raw_object_id, actor="cli")
+        print(
+            f"status={r.status} reason={r.reason or '-'} rows={r.rows_written} noop={r.noop}"
+        )
+        if r.status == "REJECTED":
+            sys.exit(2)
+        return
+
+    from core.bq.client import get_client
+    from core.config import P_SCENARI
+
+    rows = get_client().query(
+        f"SELECT creato_il, scenario_id, nome, autore FROM `{P_SCENARI}` ORDER BY creato_il"
+    ).result()
+    for r in rows:
+        print(f"{r.creato_il} | {r.scenario_id} | {r.nome} | {r.autore}")
+
+
 def cmd_lineage(args):
     """Inspect a raw_object: identity + event history + current status."""
     from core.bq.client import get_client
@@ -1366,6 +1401,19 @@ def main():
     p_di.add_argument("--root", action="append")
     p_di.add_argument("--dry-run", action="store_true")
 
+    p_cdg = sub.add_parser("cdg", help="Controllo di Gestione: scenari di cassa, pagina Cassa")
+    cdg_sub = p_cdg.add_subparsers(dest="cdg_cmd", required=True)
+    p_cs = cdg_sub.add_parser("scenario", help="Scenari di cassa salvati")
+    cs_sub = p_cs.add_subparsers(dest="scenario_cmd", required=True)
+    p_css = cs_sub.add_parser("salva", help="Intake + promote del documento scenario (JSON)")
+    p_css.add_argument("file")
+    p_css.add_argument("--nome", default=None, help="Solo informativo (il nome vive nel documento)")
+    cs_sub.add_parser("lista", help="Scenari salvati (p_scenari per creato_il)")
+    p_cc = cdg_sub.add_parser("cassa", help="Pagina Cassa (non ancora disponibile)")
+    p_cc.add_argument("--aggiorna", action="store_true")
+    p_cc.add_argument("--push", action="store_true")
+    p_cc.add_argument("--out", default=None)
+
     p_intake = sub.add_parser(
         "intake",
         help="Lineage: registra un file (raw blob + RAW_INGESTED event)",
@@ -1533,6 +1581,7 @@ def main():
         "saldo": cmd_saldo,
         "health": cmd_health,
         "drive": cmd_drive,
+        "cdg": cmd_cdg,
         "previsione": cmd_previsione,
         "prev": cmd_previsione,
         "voci": cmd_voci,
