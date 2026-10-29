@@ -458,6 +458,14 @@ Consolidamento ("torniamo su main, worktree-only d'ora in poi"). Esito:
 - **Spiaggia: decidere mount hub** (A rimando / B merge `main`→`worktree-app-store` con conflitto `cli.py` / C cherry-pick) + cleanup worktree (`git worktree remove .worktrees/spiaggia` + `git branch -d feat/spiaggia-vertical`, branch già su origin).
 - **Spiaggia: legenda metodi pagamento** -- riempire `METHOD_LABELS` in `ingest/flussi/ingest_spiaggia.py` (codici 1/14/2/3) quando arriva l'info da Spiagge.it, poi re-promote.
 
+## HANDOFF (2026-10-29, CdG Cassa — passaggio Mac → tong)
+
+> Branch `feat/cdg-cassa-pagina` (su origin, non mergiato): pagina Cassa del CdG — motore in centesimi, scenari versionati in `hotelops_previsioni`, fonti BQ con ancore attestate per conto, builder + template con motore JS a parità col Python, `hotelops cdg cassa` / `hotelops cdg scenario`. Task 1–8 completi e revisionati (suite verde). **Gate aperto**: Stefano ha ricevuto il render con dati reali (PF settembre ri-promossi, seme «Base 29/10»); Task 9–11, revisione finale e merge solo dopo il suo ok. Onboarding completo per l'agente successivo su tong: `~/.local/share/hotelops/cdg-cassa-handoff/HANDOFF.md` (ledger, brief, report, snapshot, seme, render). Piano: `docs/superpowers/plans/2026-10-29-cdg-cassa-pagina.md`.
+
+- [ ] Stefano: ok sul render (o correzioni) → poi T9 hub tile+grant, T10 Worker `cdg` + `scripts/provision_cdg.sh` (provisioning Cloudflare lo lancia Stefano con `!`), T11 procedura/STATUS/README hub, revisione finale del branch.
+- [ ] Decisioni aperte emerse dal render: Fitto AR 60.000 (nov) solo lato INTUR → residuo intercompany; date vere delle erogazioni MPS 935k / MCC 550k; Staff House («decidere»), ascensori+garage (fuori perimetro), soft restyling 33×5.000 e terrazza spenti nel seme; saldi al 30/09 dichiarati (solo MPS attestato), Sella INTUR scostamento 1.549,23.
+- [ ] Lineage: dal commit `076b6cd` il download da GCS conserva il nome originale del file; le righe PF già promosse il 29/10 portano ancora `file_sorgente` col prefisso tempfile (si pulisce alla prossima ri-promozione).
+
 ## HANDOFF (2026-10-26, rito del giorno 1 / cantiere INTUR)
 
 > Sessione vault `HotelOps/sessions/2026-10-26_rito_del_giorno_1_e_cantiere_intur`. Mergiato su `main` (`66f14b9`): Kross+Unicredit nell'anchor ORTI (`77db7a3`), rito del giorno 1 (`de7054f`), `pianfin-out/2026-10_rotation-26-10/` (`5da0ca4`).
