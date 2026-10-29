@@ -166,6 +166,11 @@ def scenario_from_json(raw: str | bytes) -> tuple[Scenario, Base, dict]:
         )
         for p in s["progetti"]
     ]
+    for p in progetti:
+        nomi = [g.nome for g in p.pagamenti]
+        for n in set(nomi):
+            if nomi.count(n) > 1:
+                raise ValueError(f"progetto {p.id}: pagamento {n!r} duplicato")
     fin = [
         Finanziamento(
             id=f["id"],
@@ -258,7 +263,9 @@ def righe_p(
                 "importo_cent": importo,
                 "direzione": direzione,
                 "origine": origine,
-                "hash_riga": _hash(sid, societa, mese, voce, direzione, origine),
+                "hash_riga": _hash(
+                    sid, societa, mese, voce, direzione, origine, importo
+                ),
             }
         )
 
@@ -268,7 +275,7 @@ def righe_p(
         for m, v in f.rate.items():
             flusso(f.societa, m, f.id, v, "U", "finanziamento")
     for r in sc.manuali:
-        flusso(r.societa, r.mese, r.voce_id, r.importo, r.direzione, r.origine)
+        flusso(r.societa, r.mese, r.voce_id, r.importo, r.direzione, "manuale")
 
     pagamenti = [
         {

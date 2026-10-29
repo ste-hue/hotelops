@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from datetime import date, datetime
 
 import pytest
@@ -155,3 +156,60 @@ def test_carica_seme(tmp_path):
     f = tmp_path / "seme.json"
     f.write_text(scenario_to_json(sc, base, "seme"), encoding="utf-8")
     assert carica_seme(f) == (sc, base)
+
+
+def _righe(sc, base):
+    return righe_p(scenario_to_json(sc, base, "t"), "rid", datetime(2026, 10, 29), "s")
+
+
+def test_manuali_stessa_chiave_importi_diversi_hash_diversi():
+    sc, base = scenario_sintetico()
+    sc = replace(
+        sc,
+        manuali=[
+            Riga("ORTI", "x", "2026-12", 100, "U", "manuale"),
+            Riga("ORTI", "x", "2026-12", 200, "U", "manuale"),
+        ],
+    )
+    rows = _righe(sc, base)
+    man = [r for r in rows[1] if r["origine"] == "manuale"]
+    assert len({r["hash_riga"] for r in man}) == 2
+    ((sc2, _, _),) = scenario_da_righe(*rows)
+    assert sorted(r.importo for r in sc2.manuali) == [100, 200]
+
+
+def test_pagamento_duplicato_nel_progetto_rifiutato():
+    sc, base = scenario_sintetico()
+    p = sc.progetti[0]
+    dup = replace(sc, progetti=[replace(p, pagamenti=[p.pagamenti[0]] * 2)])
+    with pytest.raises(ValueError, match="P1.*Lavori"):
+        scenario_from_json(scenario_to_json(dup, base, "t"))
+
+
+def test_manuale_con_altra_origine_resta_manuale():
+    sc, base = scenario_sintetico()
+    sc = replace(sc, manuali=[Riga("ORTI", "x", "2026-12", 123, "U", "pf")])
+    ((sc2, _, _),) = scenario_da_righe(*_righe(sc, base))
+    assert [(r.importo, r.origine) for r in sc2.manuali] == [(123, "manuale")]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("progetti", 0, "pagamenti", 0, "mesi", "2026-10"),
+        ("soglia",),
+        ("canone", "netto_per_anno", "2027"),
+        ("canone", "calendario", "2027-05"),
+        ("finanziamenti", 0, "rate", "2027-01"),
+    ],
+)
+def test_importo_non_intero_in_ogni_campo(path):
+    sc, base = scenario_sintetico()
+    sc = replace(sc, canone=replace(sc.canone, calendario={"2027-05": 100}))
+    doc = json.loads(scenario_to_json(sc, base, "t"))
+    d = doc["scenario"]
+    for k in path[:-1]:
+        d = d[k]
+    d[path[-1]] = 1.5
+    with pytest.raises(ValueError, match="centesimi"):
+        scenario_from_json(json.dumps(doc))
