@@ -30,9 +30,12 @@ from core.bq.write import _snapshot
 from ingest.flussi.ingest_piano_finanziario_xlsx import (
     NATURAL_KEY,
     SOGLIA_SOTTILE,
+    SQL_RIGHE_PER_VERSIONE,
     assegna_occorrenze,
+    base_confronto,
     make_hash,
     piani_sottili,
+    righe_in_tabella,
     scrivi_su_bq,
 )
 
@@ -229,3 +232,47 @@ def test_un_file_sottile_non_viene_scritto_senza_il_flag(monkeypatch):
     assert calls == []
     scrivi_su_bq(rows, accetta_sottile=True)
     assert len(calls) == 1
+
+
+def test_la_base_del_confronto_e_la_versione_piu_piena_non_la_somma():
+    """PF vivo del 28/10 (coordinatore): INTUR PF_2026-09 65 · Gen.2026 45 · PF_2026-07 23.
+    Contro la somma (133) settembre varrebbe 49 % e verrebbe rifiutato per colpa del
+    miscuglio; contro la versione più piena (65) vale 100 %. Il sottile resta sottile."""
+    k = ("INTUR", "PIANO_FINANZIARIO")
+    per_versione = {
+        (*k, "INTUR_PF_2026-09.xlsx"): 65,
+        (*k, "INTUR Piano Finanziario Gen.2026.xlsx"): 45,
+        (*k, "INTUR_PF_2026-07.xlsx"): 23,
+        ("ORTI", "PIANO_FINANZIARIO", "ORTI_PF_2026-09.xlsx"): 104,
+    }
+    base = base_confronto(per_versione)
+    assert base == {k: 65, ("ORTI", "PIANO_FINANZIARIO"): 104}
+    assert piani_sottili({k: 65}, base) == []
+    assert len(piani_sottili({k: 16}, base)) == 1
+
+
+class _ClientVersioni:
+    def __init__(self, righe):
+        self.righe, self.sql = righe, None
+
+    def query(self, sql):
+        self.sql = sql
+        return SimpleNamespace(
+            result=lambda: iter(
+                SimpleNamespace(societa_id=s, fonte=f, file_sorgente=v, n=n)
+                for (s, f, v), n in self.righe.items()
+            )
+        )
+
+
+def test_righe_in_tabella_legge_per_versione_e_tiene_la_piu_piena():
+    c = _ClientVersioni(
+        {
+            ("INTUR", "PIANO_FINANZIARIO", "a.xlsx"): 65,
+            ("INTUR", "PIANO_FINANZIARIO", "b.xlsx"): 45,
+            ("INTUR", "PIANO_FINANZIARIO", "c.xlsx"): 23,
+        }
+    )
+    assert righe_in_tabella(c) == {("INTUR", "PIANO_FINANZIARIO"): 65}
+    assert c.sql == SQL_RIGHE_PER_VERSIONE
+    assert "GROUP BY 1, 2, 3" in c.sql and "file_sorgente" in c.sql
