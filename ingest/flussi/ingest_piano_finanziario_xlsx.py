@@ -562,14 +562,33 @@ def piani_sottili(
     return out
 
 
+SQL_RIGHE_PER_VERSIONE = f"SELECT societa_id, fonte, file_sorgente, COUNT(*) AS n FROM `{BQ_TABLE}` GROUP BY 1, 2, 3"
+
+
+def base_confronto(
+    per_versione: dict[tuple[str, str, str], int],
+) -> dict[tuple[str, str], int]:
+    """Termine di paragone per (società, fonte): la versione singola più piena in tabella,
+    non la somma delle versioni. Su una tabella che mescola versioni (il caso del 28/10:
+    INTUR 65+45+23) la somma rifiuterebbe un file pieno (65/133 = 49 %) per colpa della
+    tabella; dopo la prima promozione con la chiave per versione max e somma coincidono."""
+    out: dict[tuple[str, str], int] = {}
+    for (societa, fonte, _file), n in per_versione.items():
+        out[(societa, fonte)] = max(out.get((societa, fonte), 0), n)
+    return out
+
+
 def righe_in_tabella(client=None) -> dict[tuple[str, str], int]:
-    """Righe oggi in tabella per (società, fonte)."""
+    """Righe della versione più piena oggi in tabella, per (società, fonte)."""
     if client is None:
         from core.bq.client import get_client
 
         client = get_client()
-    sql = f"SELECT societa_id, fonte, COUNT(*) AS n FROM `{BQ_TABLE}` GROUP BY 1, 2"
-    return {(r.societa_id, r.fonte): int(r.n) for r in client.query(sql).result()}
+    per_versione = {
+        (r.societa_id, r.fonte, r.file_sorgente): int(r.n)
+        for r in client.query(SQL_RIGHE_PER_VERSIONE).result()
+    }
+    return base_confronto(per_versione)
 
 
 def scrivi_su_bq(rows: list[dict], accetta_sottile: bool = False) -> None:
