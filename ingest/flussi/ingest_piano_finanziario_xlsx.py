@@ -303,7 +303,12 @@ def _normalizza_etichetta(label: str) -> str:
 
 
 def _riclassifica_dettaglio(
-    wb, societa_id: str, records: list[dict], filepath: Path, now, logger: logging.Logger
+    wb,
+    societa_id: str,
+    records: list[dict],
+    filepath: Path,
+    now,
+    logger: logging.Logger,
 ) -> None:
     for regola in INTERCOMPANY_DETTAGLIO.get(societa_id, []):
         _applica_regola_dettaglio(wb, regola, societa_id, records, filepath, now, logger)
@@ -327,7 +332,13 @@ def _applica_regola_dettaglio(
             if val == 0:
                 continue
             rec = next(
-                (x for x in records if x["voce_id"] == da_voce and x["anno"] == anno and x["mese"] == mese),
+                (
+                    x
+                    for x in records
+                    if x["voce_id"] == da_voce
+                    and x["anno"] == anno
+                    and x["mese"] == mese
+                ),
                 None,
             )
             if rec is None or rec["importo"] + 0.005 < val:
@@ -353,7 +364,9 @@ def _applica_regola_dettaglio(
                     "data_caricamento": now.isoformat(),
                 }
             )
-            logger.info(f"  riclassificato {da_voce}→{a_voce} {anno}-{mese:02d} {val:,.2f} ({label.strip()})")
+            logger.info(
+                f"  riclassificato {da_voce}→{a_voce} {anno}-{mese:02d} {val:,.2f} ({label.strip()})"
+            )
 
 
 def setup_logger() -> logging.Logger:
@@ -526,7 +539,40 @@ def quality_summary(rows: list[dict], logger: logging.Logger) -> None:
 NATURAL_KEY = ["societa_id", "fonte"]
 
 
-def scrivi_su_bq(rows: list[dict]) -> None:
+# Recinto per il file sottile. Con la chiave per versione un PF letto a metà (formule
+# senza valori cached: 18 righe su 80 entrano senza errore) sostituirebbe un piano pieno.
+# Soglia misurata sui 22 file archiviati (29/10/2026): fra versioni legittime il
+# rapporto righe/precedente sta in 0,81–1,70; i file sottili misurati in 0,19–0,25.
+SOGLIA_SOTTILE = 0.5
+
+
+def piani_sottili(
+    in_batch: dict[tuple[str, str], int],
+    in_tabella: dict[tuple[str, str], int],
+    soglia: float = SOGLIA_SOTTILE,
+) -> list[str]:
+    """Coppie (società, fonte) del batch con meno di `soglia` × le righe oggi in tabella."""
+    out = []
+    for chiave, n in sorted(in_batch.items()):
+        t = in_tabella.get(chiave, 0)
+        if t and n < soglia * t:
+            out.append(
+                f"{chiave[0]}/{chiave[1]}: {n} righe nel file contro {t} in tabella ({n / t:.0%})"
+            )
+    return out
+
+
+def righe_in_tabella(client=None) -> dict[tuple[str, str], int]:
+    """Righe oggi in tabella per (società, fonte)."""
+    if client is None:
+        from core.bq.client import get_client
+
+        client = get_client()
+    sql = f"SELECT societa_id, fonte, COUNT(*) AS n FROM `{BQ_TABLE}` GROUP BY 1, 2"
+    return {(r.societa_id, r.fonte): int(r.n) for r in client.query(sql).result()}
+
+
+def scrivi_su_bq(rows: list[dict], accetta_sottile: bool = False) -> None:
     """Write the plan as a SNAPSHOT of the whole plan of each (societa, fonte).
 
     The registry has always declared this source SNAPSHOT; the code appended
@@ -546,6 +592,18 @@ def scrivi_su_bq(rows: list[dict]) -> None:
     """
     if not rows:
         return
+    if not accetta_sottile:
+        in_batch: dict[tuple[str, str], int] = {}
+        for r in rows:
+            k = (r["societa_id"], r["fonte"])
+            in_batch[k] = in_batch.get(k, 0) + 1
+        sottili = piani_sottili(in_batch, righe_in_tabella())
+        if sottili:
+            raise SystemExit(
+                "piano sottile, non scrivo (formule senza valori cached?): "
+                + "; ".join(sottili)
+                + " — ricalcola con soffice --headless, o --accetta-sottile se è voluto"
+            )
     bq_write_validated(
         BQ_TABLE,
         [PianoFinanziarioInputRow(**r) for r in rows],
@@ -592,6 +650,12 @@ def main() -> None:
         "--societa", choices=["ORTI", "INTUR"], help="Override società detection"
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--accetta-sottile",
+        action="store_true",
+        help=f"scrivi anche se il file ha meno del {SOGLIA_SOTTILE:.0%} delle righe oggi in tabella "
+        "per (società, fonte) — di norma è un file con formule senza valori cached",
+    )
     parser.add_argument("--output-dir", default="output")
     parser.add_argument(
         "--latest-only",
@@ -669,7 +733,7 @@ def main() -> None:
         logger.error("google-cloud-bigquery non installato")
         sys.exit(1)
 
-    scrivi_su_bq(all_rows)
+    scrivi_su_bq(all_rows, accetta_sottile=args.accetta_sottile)
     logger.info(f"  {BQ_TABLE}: {len(all_rows)} righe (snapshot su {NATURAL_KEY})")
     logger.info("✓ DONE")
 
