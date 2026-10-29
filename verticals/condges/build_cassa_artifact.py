@@ -43,6 +43,7 @@ from verticals.condges.cassa_scenario import (
 
 DEFAULT_OUT = Path("docs/reports/artifacts/cassa.html")
 SEME_PATH = cf.SNAPSHOT_HOME / "base_scenario.json"
+CANONE_PATH = cf.SNAPSHOT_HOME / "canone_dichiarato.json"
 TEMPLATE = Path(__file__).with_name("cassa_template.html")
 
 KV_KEY = "cassa_html"
@@ -181,6 +182,58 @@ def canone_pf(intercompany: list[dict], aliquota_iva: int = 22) -> list[dict]:
     return out
 
 
+def canone_riferimento(intercompany: list[dict], dichiarato: dict | None = None) -> dict:
+    """Il canone di riferimento dello slider. L'annuo viene dal file dichiarato
+    (`canone_dichiarato.json`: netto_annuo, aliquota_iva, rate_pf, fonte); le rate nell'orizzonte
+    vengono dal PF nel payload. Senza file dichiarato l'annuo è la somma delle rate PF
+    nell'orizzonte, e si dice che NON è l'annuo."""
+    al = int((dichiarato or {}).get("aliquota_iva", 22))
+    k = 100 + al
+    rate = sorted(
+        (f for f in intercompany if f["nome"].startswith("Fitto Hotel") and f["stato"] == "pf"),
+        key=lambda f: f["mese"],
+    )
+    per_mese: dict[str, int] = {}
+    for f in rate:
+        per_mese[f["mese"]] = per_mese.get(f["mese"], 0) + f["importo"]
+    rate_orizzonte = [
+        {"mese": m, "lordo": v, "netto": (v * 100 + k // 2) // k} for m, v in per_mese.items()
+    ]
+    netto_pf = sum(r["netto"] for r in rate_orizzonte)
+    contratto = None
+    if dichiarato and dichiarato.get("calendario_contratto"):
+        contratto = {
+            "rate_mese": {str(m).zfill(2): int(v) for m, v in dichiarato["calendario_contratto"].items()},
+            "fonte": dichiarato.get("contratto_fonte", ""),
+        }
+    if dichiarato and dichiarato.get("netto_annuo"):
+        netto_annuo = int(dichiarato["netto_annuo"])
+        return {
+            "dichiarato": True,
+            "contratto": contratto,
+            "netto_annuo": netto_annuo,
+            "lordo_annuo": (netto_annuo * k + 50) // 100,
+            "aliquota_iva": al,
+            "rate_pf": {m: int(v) for m, v in (dichiarato.get("rate_pf") or {}).items()},
+            "fonte": dichiarato.get("fonte", ""),
+            "dichiarato_il": dichiarato.get("dichiarato_il"),
+            "rate_orizzonte": rate_orizzonte,
+            "netto_pf_orizzonte": netto_pf,
+        }
+    return {
+        "dichiarato": False,
+        "contratto": None,
+        "netto_annuo": netto_pf,
+        "lordo_annuo": (netto_pf * k + 50) // 100,
+        "aliquota_iva": al,
+        "rate_pf": {},
+        "fonte": "nessun annuo dichiarato: somma delle rate PF nell'orizzonte, non è l'annuo",
+        "dichiarato_il": None,
+        "rate_orizzonte": rate_orizzonte,
+        "netto_pf_orizzonte": netto_pf,
+    }
+
+
 # ── payload ──
 
 
@@ -235,12 +288,46 @@ def _limiti(snapshot: dict, seme: Scenario, baseline: dict) -> list[str]:
     return out
 
 
+def _limiti_canone(c: dict, mesi: list[str] = (), mesi_ipotetici: set[str] = frozenset()) -> list[str]:
+    out = []
+    if c.get("contratto"):
+        k = 100 + c["aliquota_iva"]
+        pf = {r["mese"]: r["lordo"] for r in c["rate_orizzonte"]}
+        for m in mesi:
+            if m in mesi_ipotetici:
+                continue
+            netto = c["contratto"]["rate_mese"].get(m[5:7])
+            if netto is None:
+                continue
+            lordo = (netto * k + 50) // 100
+            if pf.get(m, 0) != lordo:
+                out.append(
+                    f"Contratto art. 3: rata del canone il 30/{m[5:7]}/{m[:4]} = {_eur(lordo)} lordo; "
+                    f"il PF ne ha {_eur(pf.get(m, 0))}: ORTI e INTUR differiscono dal contratto di "
+                    f"{_eur(lordo - pf.get(m, 0))} da quel mese (lo slider usa il calendario del contratto)."
+                )
+    if c["dichiarato"]:
+        rate = ", ".join(f"{m} {_eur(v)}" for m, v in sorted(c["rate_pf"].items())) or "nessuna"
+        return out + [
+            f"Canone Fitto Hotel: annuo dichiarato {_eur(c['netto_annuo'])} netto "
+            f"({_eur(c['lordo_annuo'])} lordo, IVA {c['aliquota_iva']}%), dichiarato il "
+            f"{c['dichiarato_il'] or '-'}; il PF ne mostra queste rate: {rate}. "
+            "Lo slider scala le rate del PF nell'orizzonte in proporzione all'annuo; "
+            "le rate fuori orizzonte non entrano in cassa qui."
+        ]
+    return [
+        f"Canone Fitto Hotel: nessun annuo dichiarato; lo slider parte da {_eur(c['netto_annuo'])} "
+        "netto = somma delle rate PF nell'orizzonte, che NON è l'annuo."
+    ]
+
+
 def build_payload(
     snapshot: dict,
     scenari: list[tuple[Scenario, Base, dict]],
     generato_il: datetime | None = None,
     seme: tuple[Scenario, Base] | None = None,
     seme_salvato_il: str | None = None,
+    canone_dichiarato: dict | None = None,
 ) -> dict:
     snapshot = senza_coda(snapshot)
     base = snapshot["base"]
@@ -275,9 +362,14 @@ def build_payload(
         "seme": seme_doc,
         "scenari": salvati,
         "scenari_sostituiti": sostituiti,
-        "canone_pf": canone_pf(snapshot["intercompany"]),
+        "canone_rif": canone_riferimento(snapshot["intercompany"], canone_dichiarato),
         "baseline": baseline,
-        "limiti": _limiti(snapshot, sc_seme, baseline),
+        "limiti": _limiti(snapshot, sc_seme, baseline)
+        + _limiti_canone(
+            canone_riferimento(snapshot["intercompany"], canone_dichiarato),
+            list(snapshot["mesi"]),
+            set(snapshot["mesi_ipotetici"]),
+        ),
     }
 
 
@@ -338,8 +430,15 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
     seme_salvato_il = (
         json.loads(SEME_PATH.read_text(encoding="utf-8")).get("salvato_il") if seme else None
     )
+    canone_dichiarato = (
+        json.loads(CANONE_PATH.read_text(encoding="utf-8")) if CANONE_PATH.exists() else None
+    )
     payload = build_payload(
-        snapshot, scenari_da_snapshot(snapshot), seme=seme, seme_salvato_il=seme_salvato_il
+        snapshot,
+        scenari_da_snapshot(snapshot),
+        seme=seme,
+        seme_salvato_il=seme_salvato_il,
+        canone_dichiarato=canone_dichiarato,
     )
     html = render_html(payload)
     out = Path(out)
@@ -360,8 +459,12 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
         print(f"  scenario salvato: {s['nome']} compatibile={s['compatibile']}")
     for s in payload["scenari_sostituiti"]:
         print(f"  scenario salvato nascosto (stesso nome del seme): {s['nome']} {s['salvato_il']}")
-    for c in payload["canone_pf"]:
-        print(f"  canone PF {c['anno']}: netto {_eur(c['netto'])} in {c['rate_n']} rate da {c['da_mese']}")
+    c = payload["canone_rif"]
+    print(
+        f"  canone di riferimento: {_eur(c['netto_annuo'])} netto/anno "
+        f"({'dichiarato' if c['dichiarato'] else 'NON dichiarato: somma rate PF nell orizzonte'}); "
+        f"rate PF nell'orizzonte: {', '.join(r['mese'] + ' ' + _eur(r['lordo']) for r in c['rate_orizzonte']) or 'nessuna'}"
+    )
     print(f"  limiti: {len(payload['limiti'])}")
     if push_env is not None:
         push_to_kv(html, json.dumps(payload, ensure_ascii=False), push_env)

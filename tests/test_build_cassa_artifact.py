@@ -255,21 +255,35 @@ def test_salvato_con_il_nome_del_seme_resta_fuori_dal_menu():
     assert [s["nome"] for s in p2["scenari"]] == ["altro"] and p2["scenari_sostituiti"] == []
 
 
-def test_canone_pf_per_anno_scorpora_l_iva():
+def test_canone_riferimento_dichiarato_o_dalle_rate_pf():
+    # senza file dichiarato: l'annuo è la somma delle rate PF nell'orizzonte, e si dice
     p = build_payload(snapshot_sintetico(), [])
-    c = p["canone_pf"]
-    assert len(c) == 1 and c[0]["anno"] == 2026
-    assert c[0]["lordo"] == to_cent(244_000) and c[0]["netto"] == to_cent(200_000)
-    assert c[0]["mesi"] == ["2026-11"] and c[0]["rate_n"] == 1 and c[0]["da_mese"] == "2026-11"
-    # due rate nello stesso anno, lordo non divisibile: il netto è half-up al centesimo
+    c = p["canone_rif"]
+    assert c["dichiarato"] is False and c["netto_annuo"] == to_cent(200_000)
+    assert c["rate_orizzonte"] == [{"mese": "2026-11", "lordo": to_cent(244_000), "netto": to_cent(200_000)}]
+    assert "NON è l'annuo" in " ".join(p["limiti"])
+    # con il file dichiarato: annuo 600.000, rate PF note, fonte; le rate nell'orizzonte restano dal PF
+    dich = {"netto_annuo": to_cent(600_000), "aliquota_iva": 22, "rate_pf": {"2026-09": to_cent(244_000), "2026-11": to_cent(244_000)}, "fonte": "Stefano 29/10", "dichiarato_il": "2026-10-29"}
+    p2 = build_payload(snapshot_sintetico(), [], canone_dichiarato=dich)
+    c2 = p2["canone_rif"]
+    assert c2["dichiarato"] is True and c2["netto_annuo"] == to_cent(600_000) and c2["lordo_annuo"] == to_cent(732_000)
+    assert c2["netto_pf_orizzonte"] == to_cent(200_000) and c2["rate_pf"]["2026-09"] == to_cent(244_000)
+    testo = " ".join(p2["limiti"])
+    assert "annuo dichiarato 600.000,00 €" in testo and "2026-09" in testo
+    assert c2["contratto"] is None
+    # con il calendario del contratto: le rate contrattuali che il PF non ha diventano limiti
+    dich["calendario_contratto"] = {"06": to_cent(200_000), "09": to_cent(200_000), "12": to_cent(200_000)}
+    dich["contratto_fonte"] = "art. 3"
+    p3 = build_payload(snapshot_sintetico(), [], canone_dichiarato=dich)
+    assert p3["canone_rif"]["contratto"] == {"rate_mese": {"06": to_cent(200_000), "09": to_cent(200_000), "12": to_cent(200_000)}, "fonte": "art. 3"}
+    lim = [l for l in p3["limiti"] if l.startswith("Contratto art. 3")]
+    # orizzonte PF ott 26–mar 27: il contratto ha dic 26; il PF sintetico ha 244.000 a nov 26 e niente a dic
+    assert len(lim) == 1 and "30/12/2026" in lim[0] and "244.000,00 €" in lim[0] and "il PF ne ha 0,00 €" in lim[0]
+    # IVA scorporata half-up anche con lordo non divisibile
     snap = snapshot_sintetico()
-    snap["intercompany"].append(
-        {"nome": "Fitto Hotel (canone)", "da": "ORTI", "a": "INTUR", "mese": "2026-12",
-         "importo": 1, "stato": "pf"}
-    )
-    c2 = build_payload(snap, [])["canone_pf"][0]
-    assert c2["rate_n"] == 2 and c2["lordo"] == to_cent(244_000) + 1
-    assert c2["netto"] == (c2["lordo"] * 100 + 61) // 122
+    snap["intercompany"].append({"nome": "Fitto Hotel (canone)", "da": "ORTI", "a": "INTUR", "mese": "2026-12", "importo": 1, "stato": "pf"})
+    c3 = build_payload(snap, [])["canone_rif"]
+    assert c3["rate_orizzonte"][-1] == {"mese": "2026-12", "lordo": 1, "netto": (1 * 100 + 61) // 122}
 
 
 def test_scenario_salvato_con_base_diversa_marcato():

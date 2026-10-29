@@ -532,33 +532,88 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       <li>Fonti lette da BigQuery il ${oraDi(D.acquisito_il) || "—"} · pagina generata il ${oraDi(D.generato_il)}</li>
       <li>Seme «${esc(D.seme.nome)}» dal file locale, salvato il ${oraDi(D.seme.salvato_il)}${D.seme.compatibile ? "" : " (base PF diversa)"}</li>
       <li>Scenari salvati su BigQuery nel menu: ${D.scenari.length}.${nascosti}</li>
+      ${CONTR ? `<li>Contratto del canone: ${esc(CONTR.fonte)}</li>` : ""}
+      <li>Canone di riferimento: ${CR.dichiarato ? `${fmt(CR.netto_annuo, false)} € netto/anno dichiarato il ${esc(CR.dichiarato_il || "—")} — ${esc(CR.fonte)}` : esc(CR.fonte)}</li>
       <li>Mesi senza PF: ${D.mesi_ipotetici.length ? `${meseIt(D.mesi_ipotetici[0])} – ${meseIt(ULTIMO)}` : "nessuno"} (il PF finisce a ${meseIt(ULTIMO_PF)})</li></ul>`;
   }
 
   // ── canone: lo slider parte dal PF ──
-  const CPF = D.canone_pf && D.canone_pf.length ? D.canone_pf[0] : null;
-  const ANNO = CPF ? CPF.anno : Number(ULTIMO_PF.slice(0, 4));
-  const MAX_SLIDER = Math.max(30000000, Math.ceil(((CPF ? CPF.netto : 0) * 3) / 10000000) * 10000000);
+  // Canone di riferimento: l'annuo è DICHIARATO (file canone_dichiarato.json), le rate nell'orizzonte
+  // sono quelle del PF. Lo slider muove l'annuo e scala le rate PF nell'orizzonte in proporzione.
+  const CR = D.canone_rif || { dichiarato: false, netto_annuo: 0, lordo_annuo: 0, aliquota_iva: 22, rate_pf: {}, fonte: "", rate_orizzonte: [], netto_pf_orizzonte: 0 };
+  const RATE_ORIZ = CR.rate_orizzonte.filter((r) => D.mesi.includes(r.mese));
+  const CONTR = CR.contratto || null;   // {rate_mese: {"06": netto, ...}, fonte}
+  // Rate del contratto nei mesi dell'orizzonte (anche oltre il PF: lì contano come effetto leve), in netto.
+  const rateContratto = (nettoAnnuo) => {
+    const cal = {};
+    if (!CONTR || !CR.netto_annuo) return cal;
+    for (const m of D.mesi) {
+      const q = CONTR.rate_mese[m.slice(5, 7)];
+      if (q !== undefined) cal[m] = Math.round((q * nettoAnnuo) / CR.netto_annuo);
+    }
+    return cal;
+  };
+  const ANNO = RATE_ORIZ.length ? Number(RATE_ORIZ[0].mese.slice(0, 4)) : Number(ULTIMO_PF.slice(0, 4));
+  const MAX_SLIDER = Math.max(30000000, Math.ceil((CR.netto_annuo * 2) / 10000000) * 10000000);
 
+  // Netto delle rate PF nell'orizzonte per l'anno di riferimento (base della proporzione).
+  const nettoPfAnno = () => RATE_ORIZ.filter((r) => r.mese.slice(0, 4) === String(ANNO)).reduce((s, r) => s + r.netto, 0);
+  // Netto nell'orizzonte dello scenario corrente per l'anno di riferimento.
+  function nettoScenarioAnno() {
+    const c = stato.scenario.canone;
+    if (!c) return nettoPfAnno();
+    const cal = Object.entries(c.calendario || {}).filter(([m]) => m.slice(0, 4) === String(ANNO) && D.mesi.includes(m));
+    if (cal.length) return cal.reduce((s, [, v]) => s + v, 0);
+    try {
+      const k = 100 + c.aliquota_iva;
+      return MOTORE.flussiCanone(c, D.mesi).filter((f) => f.mese.slice(0, 4) === String(ANNO)).reduce((s, f) => s + Math.floor((f.importo * 100 + Math.floor(k / 2)) / k), 0);
+    } catch (e) { return 0; }
+  }
+  // Annuo implicito: netto scenario nell'orizzonte / netto PF nell'orizzonte × annuo dichiarato.
   function nettoSlider() {
     const c = stato.scenario.canone;
-    if (!c) return CPF ? CPF.netto : 0;
-    const v = c.netto_per_anno[ANNO];
-    return v !== undefined ? v : 0;
+    if (!c) return CR.netto_annuo;
+    const base = CONTR
+      ? Object.entries(rateContratto(CR.netto_annuo)).filter(([m]) => m.slice(0, 4) === String(ANNO)).reduce((s, [, v]) => s + v, 0)
+      : nettoPfAnno();
+    if (!base || !CR.netto_annuo) return nettoScenarioAnno();
+    return Math.round((nettoScenarioAnno() * CR.netto_annuo) / base);
   }
-  function impostaCanone(netto) {
+  // Imposta l'annuo: le rate PF dell'anno nell'orizzonte vengono scalate in proporzione (calendario).
+  function impostaCanone(nettoAnnuo) {
     const sc = stato.scenario;
+    if (CONTR) {
+      const cal = rateContratto(nettoAnnuo);
+      const perAnno = {};
+      for (const [m, v] of Object.entries(cal)) perAnno[m.slice(0, 4)] = (perAnno[m.slice(0, 4)] || 0) + v;
+      const primo = Object.keys(cal).sort()[0] || MESI_PF[0];
+      if (!sc.canone) {
+        sc.canone = { netto_per_anno: perAnno, rate_n: Object.keys(CONTR.rate_mese).length, da_mese: primo, calendario: cal, aliquota_iva: CR.aliquota_iva };
+      } else {
+        sc.canone.netto_per_anno = { ...sc.canone.netto_per_anno, ...perAnno };
+        sc.canone.calendario = { ...(sc.canone.calendario || {}), ...cal };
+      }
+      return;
+    }
+    const fattore = CR.netto_annuo ? nettoAnnuo / CR.netto_annuo : 0;
+    const rate = RATE_ORIZ.filter((r) => r.mese.slice(0, 4) === String(ANNO));
+    const cal = {};
+    for (const r of rate) cal[r.mese] = Math.round(r.netto * fattore);
+    if (!rate.length) cal[`${ANNO}-${ULTIMO_PF.slice(5)}`] = Math.round(nettoAnnuo / 1);
+    const totale = Object.values(cal).reduce((a, b) => a + b, 0);
     if (!sc.canone) {
-      sc.canone = { netto_per_anno: { [ANNO]: netto }, rate_n: CPF ? CPF.rate_n : 1, da_mese: CPF ? CPF.da_mese : MESI_PF[0], calendario: null, aliquota_iva: CPF ? CPF.aliquota_iva : 22 };
+      sc.canone = { netto_per_anno: { [ANNO]: totale }, rate_n: Math.max(1, rate.length), da_mese: rate.length ? rate[0].mese : MESI_PF[0], calendario: cal, aliquota_iva: CR.aliquota_iva };
     } else {
-      sc.canone.netto_per_anno[ANNO] = netto;
+      sc.canone.netto_per_anno[ANNO] = totale;
+      const altri = Object.fromEntries(Object.entries(sc.canone.calendario || {}).filter(([m]) => m.slice(0, 4) !== String(ANNO)));
+      sc.canone.calendario = { ...altri, ...cal };
     }
   }
   const calendarioAnno = (c) => !!(c && c.calendario && Object.keys(c.calendario).some((m) => m.slice(0, 4) === String(ANNO)));
   function lordoAnno() {
     const c = stato.scenario.canone;
-    if (!c) return CPF ? CPF.lordo : 0;
-    return MOTORE.flussiCanone(c, D.mesi).filter((f) => f.mese.slice(0, 4) === String(ANNO)).reduce((s, f) => s + f.importo, 0);
+    if (!c) return RATE_ORIZ.filter((r) => r.mese.slice(0, 4) === String(ANNO)).reduce((s, r) => s + r.lordo, 0);
+    try { return MOTORE.flussiCanone(c, D.mesi).filter((f) => f.mese.slice(0, 4) === String(ANNO)).reduce((s, f) => s + f.importo, 0); } catch (e) { return 0; }
   }
 
   function renderCanone() {
@@ -575,11 +630,11 @@ if (typeof module !== "undefined") module.exports = FORMATO;
         <div class="riga"><label class="piccolo" style="flex:1">oppure calendario libero (mese=netto; vince sulle rate per quell'anno)<br>
           <input type="text" class="nome" id="canone-cal" placeholder="2027-03=200.000,00; 2027-06=300.000,00" value="${esc(calendarioTesto(c.calendario))}"></label></div>
         <div class="nota">Il canone è lordo in cassa: esce da ORTI ed entra in INTUR nello stesso mese. Negli anni coperti dalla scaletta sostituisce le righe «Fitto Hotel» del PF.</div>`
-      : `<div class="nota">Canone come nel PF${CPF ? `: ${fmt(CPF.netto, false)} € netto, ${CPF.rate_n} ${CPF.rate_n === 1 ? "rata" : "rate"} da ${meseIt(CPF.da_mese)}` : ": nessuna riga «Fitto Hotel» nel PF"}. Muovi lo slider, oppure <button data-canone-attiva class="mini">apri la scaletta</button> per anni, rate e calendario.</div>`;
-    el("canone").innerHTML = `<div class="testa"><div><strong>Canone Fitto Hotel</strong> <span class="piccolo">ORTI → INTUR · netto annuo ${ANNO}</span></div>
+      : `<div class="nota">Canone come nel PF: rate nell'orizzonte ${RATE_ORIZ.length ? RATE_ORIZ.map((r) => `${meseIt(r.mese)} ${fmt(r.lordo, false)} lordo`).join(", ") : "nessuna"}. ${CONTR ? ` Il contratto prevede ${Object.keys(CONTR.rate_mese).sort().map((mm) => `30/${mm}`).join(", ")}: <button data-canone-contratto class="mini">applica il calendario del contratto</button>.` : ""} Muovi lo slider, oppure <button data-canone-attiva class="mini">apri la scaletta</button> per anni, rate e calendario.</div>`;
+    el("canone").innerHTML = `<div class="testa"><div><strong>Canone Fitto Hotel</strong> <span class="piccolo">ORTI → INTUR · netto annuo${CR.dichiarato ? " (dichiarato)" : " (dalle rate PF nell'orizzonte)"}</span></div>
         <div class="grande num" id="canone-val"></div></div>
-      <div class="slider"><input type="range" id="canone-slider" min="0" max="${MAX_SLIDER}" step="500000" value="${Math.min(Math.max(netto, 0), MAX_SLIDER)}" ${calendarioAnno(c) ? "disabled" : ""} aria-label="Canone netto annuo ${ANNO}">
-        <input type="text" class="eur" id="canone-num" value="${fmt(netto, false)}" aria-label="Canone netto annuo ${ANNO} in euro"></div>
+      <div class="slider"><input type="range" id="canone-slider" min="0" max="${MAX_SLIDER}" step="500000" value="${Math.min(Math.max(netto, 0), MAX_SLIDER)}" aria-label="Canone netto annuo">
+        <input type="text" class="eur" id="canone-num" value="${fmt(netto, false)}" aria-label="Canone netto annuo in euro"></div>
       <div class="piccolo" id="canone-info"></div>
       <details id="canone-dett" ${aperte.has("canone") ? "open" : ""}><summary>Scaletta pluriennale e scadenze</summary>${dett}</details>`;
     const slider = el("canone-slider"), num = el("canone-num");
@@ -587,8 +642,10 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     slider.onchange = () => ricalcola();
     num.onchange = () => { const v = euroDa(num); if (v === null || v < 0) return; impostaCanone(v); ricalcola(); };
     const box = el("canone");
+    const contr = box.querySelector("button[data-canone-contratto]");
+    if (contr) contr.onclick = () => { impostaCanone(CR.netto_annuo); ricalcola(); };
     const att = box.querySelector("button[data-canone-attiva]");
-    if (att) att.onclick = () => { if (!stato.scenario.canone) impostaCanone(CPF ? CPF.netto : 0); el("canone-dett").open = true; ricalcola(); };
+    if (att) att.onclick = () => { if (!stato.scenario.canone) impostaCanone(CR.netto_annuo); el("canone-dett").open = true; ricalcola(); };
     if (c) {
       box.querySelectorAll("input[data-canone-anno]").forEach((inp) => { inp.onchange = () => { const v = euroDa(inp); if (v === null) return; c.netto_per_anno[inp.dataset.canoneAnno] = v; ricalcola(); }; });
       box.querySelector("button[data-canone-aggiungi]").onclick = () => {
@@ -617,17 +674,17 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     const c = stato.scenario.canone;
     const netto = nettoSlider();
     el("canone-val").textContent = `${fmt(netto, false)} €`;
-    const parti = [`lordo ${fmt(lordoAnno(), false)} €`];
-    if (c) {
-      parti.push(calendarioAnno(c) ? `calendario libero per il ${ANNO} (slider fermo)` : `${c.rate_n} ${c.rate_n === 1 ? "rata" : "rate"} da ${meseIt(`${ANNO}-${c.da_mese.slice(5)}`)}`);
-      parti.push(`IVA ${c.aliquota_iva}%`);
-      if (CPF) parti.push(`PF: ${fmt(CPF.netto, false)} € netto`);
-    } else {
-      parti.push(CPF ? `${CPF.rate_n} ${CPF.rate_n === 1 ? "rata" : "rate"} da ${meseIt(CPF.da_mese)} · come nel PF` : "nessun canone nel PF");
-    }
+    const parti = [`lordo annuo ${fmt(Math.round((netto * (100 + CR.aliquota_iva) + 50) / 100), false)} €`];
+    if (CR.dichiarato) parti.push(`annuo dichiarato ${fmt(CR.netto_annuo, false)} netto (${fmt(CR.lordo_annuo, false)} lordo) il ${CR.dichiarato_il || "—"}`);
+    else parti.push("nessun annuo dichiarato: la base è la somma delle rate PF nell'orizzonte");
+    const ratePf = Object.entries(CR.rate_pf || {}).sort().map(([m, v]) => `${meseIt(m)} ${fmt(v, false)}`).join(", ");
+    if (CONTR) parti.push(`contratto: rate il ${Object.keys(CONTR.rate_mese).sort().map((mm) => `30/${mm}`).join(", ")} da ${fmt(Object.values(CONTR.rate_mese)[0], false)} netto`);
+    if (ratePf) parti.push(`rate nel PF: ${ratePf}`);
+    if (c) parti.push(`IVA ${c.aliquota_iva}%`); else parti.push("come nel PF");
     // Il canone mese per mese: esce da ORTI ed entra in INTUR nello stesso mese. Si dice sempre,
     // perché il minimo di ORTI può stare in un mese diverso e non muoversi anche se il canone cambia.
     const pfFl = D.intercompany.filter((f) => f.nome.startsWith("Fitto Hotel") && f.stato === "pf");
+    const fuori = Object.keys(CR.rate_pf || {}).filter((m) => !D.mesi.includes(m));
     const scFl = c ? MOTORE.flussiCanone(c, D.mesi) : pfFl;
     const perMese = {};
     for (const f of scFl) perMese[f.mese] = (perMese[f.mese] || 0) + f.importo;
@@ -638,7 +695,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     const diffMesi = [...new Set([...Object.keys(perMese), ...Object.keys(pfPerMese)])].sort().filter((m) => (perMese[m] || 0) !== (pfPerMese[m] || 0));
     const vsPF = diffMesi.length ? `<br>rispetto al PF: ${diffMesi.map((m) => `${meseIt(m)} ORTI ${segno(-((perMese[m] || 0) - (pfPerMese[m] || 0)), false)} · INTUR ${segno((perMese[m] || 0) - (pfPerMese[m] || 0), false)}`).join(", ")}` : "";
     const eff = SOC.map((s) => `${s} ${segno(ris.minimi[s].saldo - D.baseline.minimi[s].saldo, false)}`).join(" · ");
-    el("canone-info").innerHTML = `${parti.join(" · ")}<br>esce da ORTI ed entra in INTUR (lordo): ${esce}${vsPF}<br>effetto di tutte le leve sui minimi: ${eff}`;
+    el("canone-info").innerHTML = `${parti.join(" · ")}<br>esce da ORTI ed entra in INTUR nell'orizzonte (lordo): ${esce}${fuori.length ? ` · fuori orizzonte: ${fuori.map(meseIt).join(", ")}` : ""}${vsPF}<br>effetto di tutte le leve sui minimi: ${eff}`;
   }
 
   // ── voci di un mese (dettaglio e "tre voci più grandi") ──
