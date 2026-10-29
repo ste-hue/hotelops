@@ -107,6 +107,7 @@ def test_gcs_backend_cleanup_removes_temp(tmp_path: Path) -> None:
     backend = GCSBackend(bucket="hotelops-raw")
     assert backend.cleanup(str(f)) is True
     assert not f.exists()
+    assert tmp_path.exists()  # cartella non nostra: resta
 
 
 def test_gcs_backend_rejects_non_gs_uri() -> None:
@@ -153,3 +154,29 @@ def test_gcs_backend_upload_resumable_con_timeout_esplicito(
     # timeout per-request esplicito, ben oltre il default di 60s
     _, kwargs = fake_blob.upload_from_filename.call_args
     assert kwargs.get("timeout", 0) >= 300
+
+
+def test_gcs_backend_download_keeps_original_name_in_temp_dir(
+    fake_storage_client,
+) -> None:
+    fake_client, fake_bucket, fake_blob = fake_storage_client
+    fake_blob.download_to_filename.side_effect = lambda dest: Path(dest).write_bytes(
+        b"x"
+    )
+
+    from core.lineage.raw_storage import GCSBackend
+
+    backend = GCSBackend(bucket="hotelops-raw")
+    local = backend.download_to_temp(
+        raw_uri="gs://hotelops-raw/ESOLVER_PF_ORTI_SNAPSHOT/2026/10/ORTI_PF_2026-09.xlsx",
+        generation=None,
+    )
+    parent = os.path.dirname(local)
+    try:
+        # Il parser usa il basename come file_sorgente: deve essere il nome vero.
+        assert os.path.basename(local) == "ORTI_PF_2026-09.xlsx"
+        assert os.path.basename(parent).startswith("hotelops_raw_")
+        assert Path(local).read_bytes() == b"x"
+    finally:
+        assert backend.cleanup(local) is True
+    assert not os.path.exists(local) and not os.path.exists(parent)

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -18,6 +19,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
+
+# Prefisso della cartella temporanea del download GCS (cleanup la rimuove solo se c'è).
+_TEMP_PREFIX = "hotelops_raw_"
 
 log = logging.getLogger(__name__)
 
@@ -147,9 +151,10 @@ class GCSBackend(RawStorageBackend):
                 f"uri bucket={parsed.netloc}"
             )
         key = parsed.path.lstrip("/")
-        suffix = "_" + os.path.basename(key) if key else ""
-        fd, dest = tempfile.mkstemp(prefix="hotelops_raw_", suffix=suffix)
-        os.close(fd)
+        # Cartella temporanea + nome originale: i parser usano il basename come file_sorgente.
+        dest = os.path.join(
+            tempfile.mkdtemp(prefix=_TEMP_PREFIX), os.path.basename(key) or "raw"
+        )
 
         client = _storage_client()
         blob = (
@@ -163,4 +168,8 @@ class GCSBackend(RawStorageBackend):
     def cleanup(self, local_path: str) -> bool:
         if os.path.exists(local_path):
             os.unlink(local_path)
+        parent = os.path.dirname(local_path)
+        # Solo la cartella temporanea creata da download_to_temp, mai altre.
+        if os.path.basename(parent).startswith(_TEMP_PREFIX) and os.path.isdir(parent):
+            shutil.rmtree(parent)
         return True
