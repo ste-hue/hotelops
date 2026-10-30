@@ -218,10 +218,37 @@ def test_payload_porta_limiti_versioni_e_interi():
 
 def test_limiti_dicono_mesi_senza_pf_e_fatti_non_riconciliati():
     testo = " ".join(build_payload(snapshot_sintetico(), [])["limiti"]).lower()
-    assert "mesi da 2027-04 a 2027-06 senza pf" in testo
-    assert "nessun saldo previsto" in testo and "effetto cumulato delle leve" in testo
+    assert "da apr 27 a giu 27 il pf non c'è" in testo
+    assert "nessun saldo" in testo and "quanto le leve dello scenario spostano la cassa" in testo
     assert "omologo" not in testo
-    assert "non riconciliat" in testo and "iva" in testo
+    assert "non trovano un pagamento di progetto" in testo and "iva" in testo
+
+
+def test_limiti_saldi_una_frase_per_societa_in_parole_semplici():
+    lim = build_payload(snapshot_sintetico(), [])["limiti"]
+    orti = [x for x in lim if x.startswith("ORTI ·")]
+    assert orti == [
+        "ORTI · saldi di fine mese al 30/09/2026. Verificati con i movimenti: MPS. "
+        "Da verificare: Intesa (movimenti caricati fino al 28/09/2026)."
+    ]
+    # INTUR ha tutti i conti verificati: nessuna frase
+    assert not [x for x in lim if x.startswith("INTUR ·")]
+
+
+def test_limiti_saldi_motivi_tradotti():
+    snap = snapshot_sintetico()
+    snap["ancore"]["ORTI"]["conti"] = {
+        "MPS_KROSS": {"saldo": 1, "attestato": False, "motivo": "scostamento 1.549,23"},
+        "UNICREDIT": {"saldo": 1, "attestato": False, "motivo": "nessun movimento dopo il 2026-08-31"},
+        "SELLA": {"saldo": 1, "attestato": False, "motivo": "nessuna chiusura precedente"},
+        "INTESA": {"saldo": 1, "attestato": False, "motivo": "nessuna chiusura al 2026-09-30 (ultima 2026-08-31)"},
+    }
+    (orti,) = [x for x in build_payload(snap, [])["limiti"] if x.startswith("ORTI ·")]
+    assert "Nessuno verificato con i movimenti." in orti
+    assert "MPS Kross (la somma dei movimenti non torna di 1.549,23 €)" in orti
+    assert "Unicredit (nessun movimento caricato dopo il 31/08/2026)" in orti
+    assert "Sella (manca il saldo del mese prima)" in orti
+    assert "Intesa (nessun saldo al 30/09/2026, l'ultimo è del 31/08/2026)" in orti
 
 
 def test_payload_toglie_righe_pf_e_flussi_dalla_coda():
@@ -272,16 +299,16 @@ def test_canone_riferimento_dichiarato_o_dalle_rate_pf():
     assert c2["dichiarato"] is True and c2["netto_annuo"] == to_cent(600_000) and c2["lordo_annuo"] == to_cent(732_000)
     assert c2["netto_pf_orizzonte"] == to_cent(200_000) and c2["rate_pf"]["2026-09"] == to_cent(244_000)
     testo = " ".join(p2["limiti"])
-    assert "annuo dichiarato 600.000,00 €" in testo and "2026-09" in testo
+    assert "600.000,00 € netto l'anno" in testo and "set 26" in testo
     assert c2["contratto"] is None
     # con il calendario del contratto: le rate contrattuali che il PF non ha diventano limiti
     dich["calendario_contratto"] = {"06": to_cent(200_000), "09": to_cent(200_000), "12": to_cent(200_000)}
     dich["contratto_fonte"] = "art. 3"
     p3 = build_payload(snapshot_sintetico(), [], canone_dichiarato=dich)
     assert p3["canone_rif"]["contratto"] == {"rate_mese": {"06": to_cent(200_000), "09": to_cent(200_000), "12": to_cent(200_000)}, "fonte": "art. 3"}
-    lim = [x for x in p3["limiti"] if x.startswith("Contratto art. 3")]
+    lim = [x for x in p3["limiti"] if x.startswith("Canone, contratto art. 3")]
     # orizzonte PF ott 26–mar 27: il contratto ha dic 26; il PF sintetico ha 244.000 a nov 26 e niente a dic
-    assert len(lim) == 1 and "30/12/2026" in lim[0] and "244.000,00 €" in lim[0] and "il PF ne ha 0,00 €" in lim[0]
+    assert len(lim) == 1 and "30/12/2026" in lim[0] and "244.000,00 €" in lim[0] and "nel PF non c'è" in lim[0]
     # IVA scorporata half-up anche con lordo non divisibile
     snap = snapshot_sintetico()
     snap["intercompany"].append({"nome": "Fitto Hotel (canone)", "da": "ORTI", "a": "INTUR", "mese": "2026-12", "importo": 1, "stato": "pf"})
@@ -315,8 +342,8 @@ def test_seme_porta_i_limiti_dei_finanziamenti():
     sc = replace(sc, finanziamenti=[mcc])
     p = build_payload(snapshot_sintetico(), [], seme=(sc, base))
     testo = " ".join(p["limiti"]).lower()
-    assert "rate dei nuovi finanziamenti assenti: mcc 550.000" in testo
-    assert "finanziamenti da verificare: mcc 550.000" in testo
+    assert "mcc 550.000: da verificare, non ancora deliberato; senza rate di rimborso" in testo
+    assert "le entrate da finanziamenti del pf di quella società non contano" in testo
     assert p["seme"]["scenario"]["nome"] == "s" and p["seme"]["compatibile"] is True
     # senza seme: scenario vuoto, nessuna frase sui finanziamenti
     senza = " ".join(build_payload(snapshot_sintetico(), [])["limiti"]).lower()
