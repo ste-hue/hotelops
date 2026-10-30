@@ -276,7 +276,7 @@ def test_canone_riferimento_dichiarato_o_dalle_rate_pf():
     dich["contratto_fonte"] = "art. 3"
     p3 = build_payload(snapshot_sintetico(), [], canone_dichiarato=dich)
     assert p3["canone_rif"]["contratto"] == {"rate_mese": {"06": to_cent(200_000), "09": to_cent(200_000), "12": to_cent(200_000)}, "fonte": "art. 3"}
-    lim = [l for l in p3["limiti"] if l.startswith("Contratto art. 3")]
+    lim = [x for x in p3["limiti"] if x.startswith("Contratto art. 3")]
     # orizzonte PF ott 26–mar 27: il contratto ha dic 26; il PF sintetico ha 244.000 a nov 26 e niente a dic
     assert len(lim) == 1 and "30/12/2026" in lim[0] and "244.000,00 €" in lim[0] and "il PF ne ha 0,00 €" in lim[0]
     # IVA scorporata half-up anche con lordo non divisibile
