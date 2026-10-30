@@ -27,14 +27,14 @@ h3{font-size:14px;font-weight:620;margin:12px 0 6px}
 .num{font-variant-numeric:tabular-nums;white-space:nowrap}
 .neg{color:var(--bad)}
 .griglia{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,380px);gap:22px;align-items:start}
-@media (max-width:900px){.griglia{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:900px){.griglia{grid-template-columns:minmax(0,1fr);row-gap:0}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0;overflow-x:auto}
 .invalid{border-color:var(--bad);background:var(--bad-bg)}
 .errore{margin-top:10px;padding:8px 12px;border-radius:8px;background:var(--bad-bg);color:var(--bad);font-size:13px}
 .minimi{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
 @media (max-width:560px){.minimi{grid-template-columns:1fr}}
 .minimi .saldo{font-size:26px;font-weight:650;margin:2px 0}
-.minimi .delta{font-size:13px;color:var(--muted)}
+.minimi .delta{font-size:13px;color:var(--muted);white-space:normal}
 .minimi ul{margin:6px 0 0;padding-left:16px;font-size:13px}
 .badge{display:inline-block;white-space:nowrap;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);background:var(--soft);color:var(--muted);margin-left:4px;vertical-align:middle}
 .badge.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent}
@@ -148,8 +148,19 @@ td.bersaglio{box-shadow:inset 0 0 0 2px var(--accent);border-radius:8px}
 td.puo{background:color-mix(in srgb,var(--accent) 6%,transparent)}
 .fantasma{position:fixed;pointer-events:none;z-index:50;transform:translate(-50%,-60%) scale(1.12);box-shadow:0 6px 18px rgba(0,0,0,.22)}
 .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:12px;font-size:13px;z-index:60;max-width:92vw;display:flex;gap:12px;align-items:center;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.toast[hidden]{display:none}
 .toast button{background:transparent;color:var(--bg);border-color:var(--bg);font-size:12px;padding:2px 8px}
 @media (max-width:600px){table.cal .voce{max-width:104px;font-size:11px;padding-right:4px}table.cal th,table.cal td{min-width:50px;padding:4px 2px}.chip{min-width:40px;padding:3px 5px}}
+details.blocco{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+details.blocco>summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;gap:2px 10px;align-items:baseline;padding:11px 14px;min-height:24px}
+details.blocco>summary::-webkit-details-marker{display:none}
+details.blocco>summary::before{content:"▸";color:var(--muted);width:12px;transition:transform .15s}
+details.blocco[open]>summary::before{transform:rotate(90deg)}
+details.blocco>summary .b-t{font-weight:620}
+details.blocco>summary .b-s{color:var(--muted);font-size:13px;flex:1 1 220px}
+details.blocco>.dentro{padding:0 12px 12px}
+details.blocco .card{border:0;padding:4px 2px}
+.blocchi-cmd{display:flex;gap:6px;margin-top:10px}
 .leg i.eff{width:12px;height:10px;border:0;background:var(--accent);opacity:.35;border-radius:2px}
 </style>
 </head>
@@ -163,30 +174,44 @@ td.puo{background:color-mix(in srgb,var(--accent) 6%,transparent)}
 
 <section class="minimi" id="minimi"></section>
 
-<section class="card canone" id="canone"></section>
-
-<section class="card" id="calendario" style="margin-top:14px"></section>
+<div class="blocchi-cmd"><button class="mini" id="apri-tutto">apri tutto</button><button class="mini" id="chiudi-tutto">chiudi tutto</button></div>
+<details class="blocco" data-blocco="canone"><summary><span class="b-t">Canone ORTI → INTUR</span><span class="b-s" id="som-canone"></span></summary>
+<div class="dentro"><section class="card canone" id="canone"></section></div>
+</details>
+<details class="blocco" data-blocco="calendario"><summary><span class="b-t">Calendario dei pagamenti</span><span class="b-s" id="som-calendario"></span></summary>
+<div class="dentro"><section class="card" id="calendario"></section></div>
+</details>
 <div id="toast" class="toast" hidden></div>
 
 <div class="griglia">
   <div>
-    <div id="grafici"></div>
+<details class="blocco" data-blocco="saldo"><summary><span class="b-t">Saldo di fine mese</span><span class="b-s" id="som-saldo"></span></summary>
+<div class="dentro"><div id="grafici"></div></div>
+</details>
   </div>
   <aside>
-    <div class="card" id="scenario"></div>
+<details class="blocco" data-blocco="leve"><summary><span class="b-t">Scenario e leve</span><span class="b-s" id="som-leve"></span></summary>
+<div class="dentro"><div class="card" id="scenario"></div>
     <h2>Progetti</h2>
     <div class="card" id="progetti"></div>
     <h2>Finanziamenti</h2>
-    <div class="card" id="finanziamenti"></div>
+    <div class="card" id="finanziamenti"></div></div>
+</details>
   </aside>
 </div>
 
-<div id="tabelle"></div>
-<h2>Consolidato</h2>
-<div class="card" id="consolidato"></div>
-<div id="fatti"></div>
-
-<section class="limiti" id="limiti"></section>
+<details class="blocco" data-blocco="tabelle"><summary><span class="b-t">Mese per mese, voce per voce</span><span class="b-s" id="som-tabelle"></span></summary>
+<div class="dentro"><div id="tabelle"></div></div>
+</details>
+<details class="blocco" data-blocco="consolidato"><summary><span class="b-t">Consolidato</span><span class="b-s" id="som-consolidato"></span></summary>
+<div class="dentro"><div class="card" id="consolidato"></div></div>
+</details>
+<details class="blocco" data-blocco="fatti"><summary><span class="b-t">Pagamenti registrati</span><span class="b-s" id="som-fatti"></span></summary>
+<div class="dentro"><div id="fatti"></div></div>
+</details>
+<details class="blocco" data-blocco="limiti"><summary><span class="b-t">Limiti di questa pagina</span><span class="b-s" id="som-limiti"></span></summary>
+<div class="dentro"><section class="limiti" id="limiti"></section></div>
+</details>
 <details class="fonti" id="fonti"></details>
 </main>
 
@@ -1082,7 +1107,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     el("consolidato").innerHTML = `<table><thead><tr><th>mese</th><th>saldo gruppo</th><th>intercompany nettato</th><th>residuo (una gamba)</th></tr></thead><tbody>${righe}</tbody></table>
       <div class="nota">Il residuo è un flusso intercompany presente su una sola società: resta lì, non si inventa la contropartita.</div>`;
     const nr = ris.non_riconciliati;
-    el("fatti").innerHTML = D.fatti.length ? `<h2>Fatti (pagamenti registrati)</h2><div class="card"><table><thead><tr><th>mese</th><th>società</th><th>progetto · fornitore</th><th>importo</th><th>stato</th></tr></thead><tbody>${
+    el("fatti").innerHTML = D.fatti.length ? `<div class="card"><table><thead><tr><th>mese</th><th>società</th><th>progetto · fornitore</th><th>importo</th><th>stato</th></tr></thead><tbody>${
       D.fatti.map((f) => { const n = nr.some((x) => x.evento_id === f.evento_id); return `<tr><td>${meseIt(f.mese)}</td><td>${esc(f.societa)}</td><td>${esc(f.progetto_id)} · ${esc(f.fornitore_id || "—")}</td><td class="num">${fmt(f.importo)}</td><td><span class="badge ${n ? "bad" : "ok"}">${n ? "non riconciliato" : "riconciliato"}</span></td></tr>`; }).join("")
     }</tbody></table><div class="nota">Un fatto riconciliato riduce il pagamento previsto dello stesso fornitore (dal mese più vecchio); gli altri impegni del progetto non si muovono.</div></div>` : "";
   }
@@ -1347,7 +1372,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     const extra = [];
     if (ris.non_riconciliati.length) extra.push(`Nello scenario corrente ${ris.non_riconciliati.length} fatti non trovano un pagamento di progetto dello stesso fornitore nello scenario; contano comunque come uscita.`);
     for (const p of stato.scenario.progetti) for (const g of p.pagamenti) if (/verificare/i.test(g.nome) || /verificare/i.test(g.stato)) extra.push(`${p.nome}: ${g.nome} — ${p.acceso ? "conta in cassa" : "spento"}, da verificare.`);
-    el("limiti").innerHTML = `<h2>Limiti di questa pagina</h2><ul>${D.limiti.concat(extra).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`;
+    el("limiti").innerHTML = `<ul>${D.limiti.concat(extra).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`;
   }
 
   // ── calendario dei pagamenti: una riga per leva, una colonna per mese; le rate si trascinano ──
@@ -1476,11 +1501,44 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     renderCalendario();
     renderLimiti();
     if (opts.canoneLeggero) aggiornaCanoneInfo(); else renderCanone();
+    riassunti();
+  }
+
+  // Blocchi apribili: chiusi danno il quadro (titolo + una riga), aperti il dettaglio.
+  // Quali sono aperti è una comodità di chi guarda: resta nel suo browser, se il browser lo permette.
+  const CHIAVE_BLOCCHI = "cdg-cassa-blocchi";
+  function blocchi() { return [...document.querySelectorAll("details.blocco")]; }
+  function salvaBlocchi() {
+    try { localStorage.setItem(CHIAVE_BLOCCHI, JSON.stringify(blocchi().filter((d) => d.open).map((d) => d.dataset.blocco))); } catch (e) { /* senza memoria va bene lo stesso */ }
+  }
+  function collegaBlocchi() {
+    let aperti = [];
+    try { aperti = JSON.parse(localStorage.getItem(CHIAVE_BLOCCHI) || "[]"); } catch (e) { aperti = []; }
+    blocchi().forEach((d) => { d.open = aperti.includes(d.dataset.blocco); d.addEventListener("toggle", salvaBlocchi); });
+    el("apri-tutto").onclick = () => { blocchi().forEach((d) => { if (!d.hidden) d.open = true; }); };
+    el("chiudi-tutto").onclick = () => { blocchi().forEach((d) => { d.open = false; }); };
+  }
+  function riassunti() {
+    const sc = stato.scenario;
+    const som = (k, t) => { el(`som-${k}`).textContent = t; };
+    som("canone", `${fmt(lordoSlider(), false)} € lordo l'anno · ${sc.canone ? "scaletta dello scenario" : "come nel PF"}`);
+    const righe = righeCalendario();
+    som("calendario", `${righe.length} righe da trascinare, ${meseIt(D.mesi[0])} – ${meseIt(D.mesi[D.mesi.length - 1])}`);
+    som("saldo", `${SOC.join(" e ")}, scenario contro solo PF`);
+    const accesi = sc.progetti.filter((p) => p.acceso).length;
+    som("leve", `«${stato.nome}» · ${accesi} progetti accesi su ${sc.progetti.length} · ${sc.finanziamenti.length} finanziamenti`);
+    som("tabelle", `${SOC.join(" e ")}: entrate, uscite e leve per mese`);
+    som("consolidato", "le due società insieme, intercompany tolto");
+    const fb = document.querySelector('details.blocco[data-blocco="fatti"]');
+    fb.hidden = !D.fatti.length;
+    som("fatti", `${D.fatti.length} pagamenti già fatti`);
+    som("limiti", `${el("limiti").querySelectorAll("li").length} cose che la pagina non sa`);
   }
 
   renderTesta();
   renderFonti();
   renderScenario();
+  collegaBlocchi();
   ricalcola();
 })();
 </script>
