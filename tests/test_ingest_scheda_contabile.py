@@ -163,3 +163,18 @@ def test_multibank_row_with_dropped_dare_cell_is_recovered_from_valuta_columns(t
         ("MPS", 0.0, 1103.51),
         ("MPS", 200.0, 0.0),
     ]
+
+
+def test_multibank_orti_maps_unicredit_and_revolut(tmp_path):
+    # Esolver ORTI: Cc4 = UNICREDIT, Cc5 = REVOLUT (banche estere). Prima venivano scartati in silenzio.
+    from ingest.flussi.ingest_scheda_contabile import parse_mastrino_multibank
+
+    rows = [
+        [date(2026, 8, 5), "PNC n 17", "GIROFONDI DA MPS", 10000, 0, 10000, "", 4, "UNICREDIT"],
+        [date(2026, 8, 6), "PNC n 18", "mov REVOLUT", 0, 250, 9750, "", 5, "REVOLUT"],
+        [date(2026, 8, 6), "PNC n 19", "mov MPS", 0, 10000, -250, "", 2, "MONTE DEI PASCHI"],
+    ]
+    path = _make_scheda_xlsx(tmp_path, rows)
+    out = parse_mastrino_multibank(path, "ORTI")
+
+    assert sorted(r["banca_id"] for r in out) == ["MPS", "REVOLUT", "UNICREDIT"]
