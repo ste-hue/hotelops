@@ -570,6 +570,89 @@ def test_js_canone_non_divisibile_resto_sull_ultima_rata(tmp_path):
     }
 
 
+ORIZ_JS = "['2026-10','2026-11','2026-12','2027-01','2027-02','2027-03','2027-04','2027-05','2027-06']"
+
+
+def test_js_spalma_con_cadenza_e_resto_sull_ultima(tmp_path):
+    """Rateizza: 100.000 in 3 rate ogni 2 mesi da nov 26 -> nov, gen, mar; il resto va sull'ultima."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        f"JSON.stringify([F.spalma(10000000, '2026-11', 3, 2, {ORIZ_JS}), F.spalma(100, '2026-10', 1, 1, {ORIZ_JS})])",
+    )
+    assert json.loads(out) == [
+        {"2026-11": 3333333, "2027-01": 3333333, "2027-03": 3333334},
+        {"2026-10": 100},
+    ]
+
+
+def test_js_spalma_oltre_orizzonte_dice_dove_cade(tmp_path):
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        f"(() => {{ try {{ F.spalma(100, '2027-04', 3, 2, {ORIZ_JS}); return 'nessun errore'; }} catch (e) {{ return e.message; }} }})()",
+    )
+    assert "giu 27" in out and "ago 27" in out
+
+
+def test_js_sposta_mantiene_importi_e_totale(tmp_path):
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        f"(() => {{ const r = [F.sposta({{'2026-11': 5, '2027-01': 7}}, 1, {ORIZ_JS})];"
+        f" try {{ F.sposta({{'2027-06': 5}}, 1, {ORIZ_JS}); }} catch (e) {{ r.push('errore'); }}"
+        f" return JSON.stringify(r); }})()",
+    )
+    assert json.loads(out) == [{"2026-12": 5, "2027-02": 7}, "errore"]
+
+
+def test_js_forma_rate_legge_come_si_paga(tmp_path):
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        "JSON.stringify(["
+        f"F.formaRate({{'2026-11': 3333333, '2027-01': 3333333, '2027-03': 3333334}}, {ORIZ_JS}),"
+        f"F.formaRate({{'2026-11': 100, '2026-12': 900}}, {ORIZ_JS}),"
+        f"F.formaRate({{'2026-11': 100, '2026-12': 100, '2027-03': 100}}, {ORIZ_JS}),"
+        f"F.formaRate({{}}, {ORIZ_JS})])",
+    )
+    assert json.loads(out) == [
+        {"n": 3, "primo": "2026-11", "ultimo": "2027-03", "passo": 2, "quota": 3333333, "totale": 10000000},
+        {"n": 2, "primo": "2026-11", "ultimo": "2026-12", "passo": 1, "quota": None, "totale": 1000},
+        {"n": 3, "primo": "2026-11", "ultimo": "2027-03", "passo": None, "quota": 100, "totale": 300},
+        {"n": 0, "primo": None, "ultimo": None, "passo": None, "quota": None, "totale": 0},
+    ]
+
+
+def test_js_leggi_documento_importato(tmp_path):
+    """Importa scenario: il file esportato dalla pagina rientra; file sbagliati danno un errore leggibile."""
+    p = build_payload(snapshot_sintetico(), [])
+    html = render_html(p)
+    sc, _ = scenario_sintetico()
+    doc = scenario_to_json(sc, p["base"])
+    (tmp_path / "doc.json").write_text(doc, encoding="utf-8")
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        "(() => { const fs = require('fs'); const t = fs.readFileSync('./doc.json', 'utf8');"
+        " const ok = F.leggiDocumento(t, 'cdg-cassa-scenario/1');"
+        " const rotto = JSON.parse(t); rotto.scenario.progetti[0].pagamenti[0].mesi = {'2027-1': 5};"
+        " return JSON.stringify([ok.errore || null, ok.nome, ok.scenario.progetti.length,"
+        " F.leggiDocumento('non json', 'cdg-cassa-scenario/1').errore,"
+        " F.leggiDocumento(JSON.stringify({schema: 'altro/1'}), 'cdg-cassa-scenario/1').errore,"
+        " F.leggiDocumento(JSON.stringify(rotto), 'cdg-cassa-scenario/1').errore]); })()",
+    )
+    errore, nome, n_prog, e_json, e_schema, e_mese = json.loads(out)
+    assert errore is None and nome and n_prog >= 1
+    assert "JSON" in e_json
+    assert "altro/1" in e_schema
+    assert "2027-1" in e_mese
+
+
 # ── andata e ritorno: documento costruito come lo esporta la pagina → scenario_from_json ──
 
 
