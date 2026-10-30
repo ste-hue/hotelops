@@ -174,6 +174,9 @@ def esegui_node_fn(tmp_path: Path, html: str, espressione: str) -> str:
         pytest.skip("node non installato")
     dati, motore = _estrai(html)
     (tmp_path / "motore.js").write_text(motore, encoding="utf-8")
+    formato = re.search(r'<script id="formato">(.*?)</script>', html, re.S)
+    if formato:
+        (tmp_path / "formato.js").write_text(formato.group(1), encoding="utf-8")
     (tmp_path / "dati.json").write_text(dati, encoding="utf-8")
     (tmp_path / "run.js").write_text(
         "const M=require('./motore.js'),D=require('./dati.json'),MESI_9=D.mesi;"
@@ -508,6 +511,20 @@ def test_js_calendario_conserva_i_centesimi(tmp_path):
     assert json.loads(out) == [{"2027-03": 20000050, "2027-06": 30000000}, None, {}]
 
 
+def test_script_della_pagina_compila(tmp_path):
+    """Ogni script della pagina si carica: i test sui blocchi estratti non vedono una
+    dichiarazione doppia nello script `app` (pagina bianca, 30/10)."""
+    if NODE is None:
+        pytest.skip("node non installato")
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    for nome in ("motore", "formato", "app"):
+        js = re.search(rf'<script id="{nome}">(.*?)</script>', html, re.S).group(1)
+        f = tmp_path / f"{nome}.js"
+        f.write_text(js, encoding="utf-8")
+        r = subprocess.run([NODE, "--check", str(f)], capture_output=True, text=True)
+        assert r.returncode == 0, f"{nome}: {r.stderr}"
+
+
 def test_js_netto_da_lordo_rientra_nel_lordo(tmp_path):
     """Lo slider è in lordo IVA inclusa: 732.000 lordo al 22% → 600.000 netto, e l'IVA sul netto rifà il lordo."""
     html = render_html(build_payload(snapshot_sintetico(), []))
@@ -518,6 +535,39 @@ def test_js_netto_da_lordo_rientra_nel_lordo(tmp_path):
         "F.nettoDaLordo(0, 22), F.nettoDaLordo(100, 0), F.nettoDaLordo(12201, 22)])",
     )
     assert json.loads(out) == [60000000, 20000000, 0, 100, 10001]
+
+
+def test_js_canone_tondo_resta_tondo(tmp_path):
+    """1.200.000 lordo sullo slider: rate scalate in lordo (400.000,00 ciascuna) e annuo mostrato
+    1.200.000,00, non 1.199.999,99 (il giro lordo→netto→scala→lordo perdeva un centesimo)."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        "JSON.stringify([F.scalaRate({'2027-06': 24400000, '2027-09': 24400000}, 120000000, 73200000, 22), "
+        "F.annuoDaLordi(80000000, 48800000, 73200000), F.annuoDaLordi(5, 0, 73200000)])",
+    )
+    assert json.loads(out) == [{"2027-06": 32786885, "2027-09": 32786885}, 120000000, 5]
+
+
+def test_js_canone_non_divisibile_resto_sull_ultima_rata(tmp_path):
+    """1.000.000 lordo in tre rate: 333.333,33 + 333.333,33 + 333.333,34, e ogni netto ridà
+    esattamente il suo lordo con l'IVA del motore."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    rif = "{'2026-12': 24400000, '2027-06': 24400000, '2027-09': 24400000, '2027-12': 24400000}"
+    out = esegui_node_fn(
+        tmp_path,
+        html,
+        "(() => { const F = require('./formato.js');"
+        f" const cal = F.scalaRate({rif}, 100000000, 73200000, 22);"
+        " return JSON.stringify(Object.fromEntries(Object.entries(cal).map(([m, n]) => [m, M.iva(n, 22)]))); })()",
+    )
+    assert json.loads(out) == {
+        "2026-12": 33333333,
+        "2027-06": 33333333,
+        "2027-09": 33333333,
+        "2027-12": 33333334,
+    }
 
 
 # ── andata e ritorno: documento costruito come lo esporta la pagina → scenario_from_json ──
