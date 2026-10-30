@@ -729,6 +729,25 @@ def test_js_contratto_ricostruito_dai_pagamenti_rigenera_gli_stessi(tmp_path):
     assert [g["mesi"] for g in rigenerati] == [g["mesi"] for g in AMCN_PAGAMENTI]
 
 
+def test_js_sposta_una_rata_nel_calendario(tmp_path):
+    """Trascinare una rata: l'importo passa al mese di arrivo (si somma se c'è già), il totale non cambia."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        "JSON.stringify([F.spostaRata({'2026-11': 5, '2027-01': 7}, '2026-11', '2026-12'),"
+        " F.spostaRata({'2026-11': 5, '2027-01': 7}, '2026-11', '2027-01'),"
+        " F.spostaRata({'2026-11': 5}, '2026-11', '2026-11'),"
+        " F.spostaRata({'2026-11': 5}, '2026-12', '2027-01')])",
+    )
+    assert json.loads(out) == [
+        {"2026-12": 5, "2027-01": 7},
+        {"2027-01": 12},
+        {"2026-11": 5},
+        {"2026-11": 5},
+    ]
+
+
 # ── andata e ritorno: documento costruito come lo esporta la pagina → scenario_from_json ──
 
 
