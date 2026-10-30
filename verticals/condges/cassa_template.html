@@ -392,7 +392,12 @@ const FORMATO = (() => {
     }
     return cal;
   }
-  return { fmt, parseEuro, calendarioTesto, calendarioParse };
+  // Lordo IVA inclusa -> netto, in centesimi interi (inverso di iva(): netto*(100+al)/100 arrotondato).
+  function nettoDaLordo(lordo, aliquota) {
+    const k = 100 + aliquota;
+    return Math.floor((lordo * 100 + Math.floor(k / 2)) / k);
+  }
+  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo };
 })();
 if (typeof module !== "undefined") module.exports = FORMATO;
 </script>
@@ -406,7 +411,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   const ULTIMO_PF = MESI_PF[MESI_PF.length - 1];
   const ULTIMO = D.mesi[D.mesi.length - 1];
   const MESI_IT = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
-  const { fmt, parseEuro, calendarioTesto, calendarioParse } = FORMATO;
+  const { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo } = FORMATO;
   // Legge un campo euro: null = non valido (campo marcato, stato invariato).
   const euroDa = (inp) => { const v = parseEuro(inp.value); inp.classList.toggle("invalid", v === null); return v; };
   // Nome del PF senza il prefisso del file temporaneo del promote (solo a video: `base` resta com'è).
@@ -533,13 +538,14 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       <li>Seme «${esc(D.seme.nome)}» dal file locale, salvato il ${oraDi(D.seme.salvato_il)}${D.seme.compatibile ? "" : " (base PF diversa)"}</li>
       <li>Scenari salvati su BigQuery nel menu: ${D.scenari.length}.${nascosti}</li>
       ${CONTR ? `<li>Contratto del canone: ${esc(CONTR.fonte)}</li>` : ""}
-      <li>Canone di riferimento: ${CR.dichiarato ? `${fmt(CR.netto_annuo, false)} € netto/anno dichiarato il ${esc(CR.dichiarato_il || "—")} — ${esc(CR.fonte)}` : esc(CR.fonte)}</li>
+      <li>Canone di riferimento: ${CR.dichiarato ? `${fmt(CR.lordo_annuo, false)} € lordo/anno IVA inclusa (${fmt(CR.netto_annuo, false)} netto) dichiarato il ${esc(CR.dichiarato_il || "—")} — ${esc(CR.fonte)}` : esc(CR.fonte)}</li>
       <li>Mesi senza PF: ${D.mesi_ipotetici.length ? `${meseIt(D.mesi_ipotetici[0])} – ${meseIt(ULTIMO)}` : "nessuno"} (il PF finisce a ${meseIt(ULTIMO_PF)})</li></ul>`;
   }
 
   // ── canone: lo slider parte dal PF ──
   // Canone di riferimento: l'annuo è DICHIARATO (file canone_dichiarato.json), le rate nell'orizzonte
   // sono quelle del PF. Lo slider muove l'annuo e scala le rate PF nell'orizzonte in proporzione.
+  // Slider e campo sono in LORDO IVA inclusa (è cassa); il motore resta in netto + aliquota.
   const CR = D.canone_rif || { dichiarato: false, netto_annuo: 0, lordo_annuo: 0, aliquota_iva: 22, rate_pf: {}, fonte: "", rate_orizzonte: [], netto_pf_orizzonte: 0 };
   const RATE_ORIZ = CR.rate_orizzonte.filter((r) => D.mesi.includes(r.mese));
   const CONTR = CR.contratto || null;   // {rate_mese: {"06": netto, ...}, fonte}
@@ -616,9 +622,13 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     try { return MOTORE.flussiCanone(c, D.mesi).filter((f) => f.mese.slice(0, 4) === String(ANNO)).reduce((s, f) => s + f.importo, 0); } catch (e) { return 0; }
   }
 
+  // Aliquota con cui lo slider converte lordo <-> netto: quella dello scenario se c'è, altrimenti il riferimento.
+  const aliquotaSlider = () => (stato.scenario.canone ? stato.scenario.canone.aliquota_iva : CR.aliquota_iva);
+  const lordoSlider = () => MOTORE.iva(nettoSlider(), aliquotaSlider());
   function renderCanone() {
     const c = stato.scenario.canone;
-    const netto = nettoSlider();
+    const lordo = lordoSlider();
+    const MAX_LORDO = MOTORE.iva(MAX_SLIDER, aliquotaSlider());
     const anni = c ? Object.entries(c.netto_per_anno).sort((a, b) => Number(a[0]) - Number(b[0])) : [];
     const dett = c ? `<div class="riga">${anni.map(([a, v]) => `<label class="piccolo">${a} netto € <input type="text" class="eur" data-canone-anno="${a}" value="${fmt(v)}"></label>`).join("")}
           <label class="piccolo">anno <input type="number" class="n" style="width:72px" min="2026" max="2040" data-canone-nuovo-anno value="${Math.max(...anni.map(([a]) => Number(a))) + 1}"></label>
@@ -631,16 +641,16 @@ if (typeof module !== "undefined") module.exports = FORMATO;
           <input type="text" class="nome" id="canone-cal" placeholder="2027-03=200.000,00; 2027-06=300.000,00" value="${esc(calendarioTesto(c.calendario))}"></label></div>
         <div class="nota">Il canone è lordo in cassa: esce da ORTI ed entra in INTUR nello stesso mese. Negli anni coperti dalla scaletta sostituisce le righe «Fitto Hotel» del PF.</div>`
       : `<div class="nota">Canone come nel PF: rate nell'orizzonte ${RATE_ORIZ.length ? RATE_ORIZ.map((r) => `${meseIt(r.mese)} ${fmt(r.lordo, false)} lordo`).join(", ") : "nessuna"}. ${CONTR ? ` Il contratto prevede ${Object.keys(CONTR.rate_mese).sort().map((mm) => `30/${mm}`).join(", ")}: <button data-canone-contratto class="mini">applica il calendario del contratto</button>.` : ""} Muovi lo slider, oppure <button data-canone-attiva class="mini">apri la scaletta</button> per anni, rate e calendario.</div>`;
-    el("canone").innerHTML = `<div class="testa"><div><strong>Canone Fitto Hotel</strong> <span class="piccolo">ORTI → INTUR · netto annuo${CR.dichiarato ? " (dichiarato)" : " (dalle rate PF nell'orizzonte)"}</span></div>
+    el("canone").innerHTML = `<div class="testa"><div><strong>Canone Fitto Hotel</strong> <span class="piccolo">ORTI → INTUR · lordo annuo IVA inclusa${CR.dichiarato ? " (dichiarato)" : " (dalle rate PF nell'orizzonte)"}</span></div>
         <div class="grande num" id="canone-val"></div></div>
-      <div class="slider"><input type="range" id="canone-slider" min="0" max="${MAX_SLIDER}" step="500000" value="${Math.min(Math.max(netto, 0), MAX_SLIDER)}" aria-label="Canone netto annuo">
-        <input type="text" class="eur" id="canone-num" value="${fmt(netto, false)}" aria-label="Canone netto annuo in euro"></div>
+      <div class="slider"><input type="range" id="canone-slider" min="0" max="${MAX_LORDO}" step="100000" value="${Math.min(Math.max(lordo, 0), MAX_LORDO)}" aria-label="Canone lordo annuo IVA inclusa">
+        <input type="text" class="eur" id="canone-num" value="${fmt(lordo, false)}" aria-label="Canone lordo annuo IVA inclusa in euro"></div>
       <div class="piccolo" id="canone-info"></div>
       <details id="canone-dett" ${aperte.has("canone") ? "open" : ""}><summary>Scaletta pluriennale e scadenze</summary>${dett}</details>`;
     const slider = el("canone-slider"), num = el("canone-num");
-    slider.oninput = () => { impostaCanone(parseInt(slider.value, 10)); num.value = fmt(parseInt(slider.value, 10), false); ricalcola({ canoneLeggero: true }); };
+    slider.oninput = () => { const l = parseInt(slider.value, 10); impostaCanone(nettoDaLordo(l, aliquotaSlider())); num.value = fmt(l, false); ricalcola({ canoneLeggero: true }); };
     slider.onchange = () => ricalcola();
-    num.onchange = () => { const v = euroDa(num); if (v === null || v < 0) return; impostaCanone(v); ricalcola(); };
+    num.onchange = () => { const v = euroDa(num); if (v === null || v < 0) return; impostaCanone(nettoDaLordo(v, aliquotaSlider())); ricalcola(); };
     const box = el("canone");
     const contr = box.querySelector("button[data-canone-contratto]");
     if (contr) contr.onclick = () => { impostaCanone(CR.netto_annuo); ricalcola(); };
@@ -673,8 +683,8 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   function aggiornaCanoneInfo() {
     const c = stato.scenario.canone;
     const netto = nettoSlider();
-    el("canone-val").textContent = `${fmt(netto, false)} €`;
-    const parti = [`lordo annuo ${fmt(Math.round((netto * (100 + CR.aliquota_iva) + 50) / 100), false)} €`];
+    el("canone-val").textContent = `${fmt(lordoSlider(), false)} €`;
+    const parti = [`netto annuo ${fmt(netto, false)} € (IVA ${aliquotaSlider()}%)`];
     if (CR.dichiarato) parti.push(`annuo dichiarato ${fmt(CR.netto_annuo, false)} netto (${fmt(CR.lordo_annuo, false)} lordo) il ${CR.dichiarato_il || "—"}`);
     else parti.push("nessun annuo dichiarato: la base è la somma delle rate PF nell'orizzonte");
     const ratePf = Object.entries(CR.rate_pf || {}).sort().map(([m, v]) => `${meseIt(m)} ${fmt(v, false)}`).join(", ");

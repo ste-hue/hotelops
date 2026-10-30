@@ -461,7 +461,7 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
         print(f"  scenario salvato nascosto (stesso nome del seme): {s['nome']} {s['salvato_il']}")
     c = payload["canone_rif"]
     print(
-        f"  canone di riferimento: {_eur(c['netto_annuo'])} netto/anno "
+        f"  canone di riferimento: {_eur(c['lordo_annuo'])} lordo/anno IVA inclusa ({_eur(c['netto_annuo'])} netto) "
         f"({'dichiarato' if c['dichiarato'] else 'NON dichiarato: somma rate PF nell orizzonte'}); "
         f"rate PF nell'orizzonte: {', '.join(r['mese'] + ' ' + _eur(r['lordo']) for r in c['rate_orizzonte']) or 'nessuna'}"
     )

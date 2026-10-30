@@ -508,6 +508,18 @@ def test_js_calendario_conserva_i_centesimi(tmp_path):
     assert json.loads(out) == [{"2027-03": 20000050, "2027-06": 30000000}, None, {}]
 
 
+def test_js_netto_da_lordo_rientra_nel_lordo(tmp_path):
+    """Lo slider è in lordo IVA inclusa: 732.000 lordo al 22% → 600.000 netto, e l'IVA sul netto rifà il lordo."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        "JSON.stringify([F.nettoDaLordo(73200000, 22), F.nettoDaLordo(24400000, 22), "
+        "F.nettoDaLordo(0, 22), F.nettoDaLordo(100, 0), F.nettoDaLordo(12201, 22)])",
+    )
+    assert json.loads(out) == [60000000, 20000000, 0, 100, 10001]
+
+
 # ── andata e ritorno: documento costruito come lo esporta la pagina → scenario_from_json ──
 
 
