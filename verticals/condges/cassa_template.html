@@ -72,13 +72,25 @@ input.nome{width:100%}
 .leva header{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
 .leva header .nome{flex:1 1 160px;font-weight:600}
 .leva .riga{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;margin-top:6px;font-size:13px}
-.pag{margin:8px 0 0 0;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--soft)}
+.pag{margin:8px 0 0 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.pag-testa{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.pag-nome{font-weight:600;flex:1 1 160px}
+.pag-tot{font-weight:600;white-space:nowrap}
+.frase{font-size:13px;line-height:1.45;margin-top:3px}
+details.sotto{margin-top:6px}
+details.sotto>summary{font-size:12px;color:var(--accent)}
+.contratto{margin:8px 0 12px;padding:12px 14px;border:1px solid var(--accent);border-radius:12px;background:var(--card)}
+.c-testa{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.c-testa strong{font-size:14px}
+.contratto .riga{margin-top:8px}
+.contratto .quota{display:inline-flex;gap:4px;align-items:center;margin-right:8px}
+.ok-t{color:var(--ok)}
+.warn-t{color:var(--warn)}
 .pag .mesi{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 .pag .mesi label{font-size:11px;color:var(--muted);display:flex;flex-direction:column}
 .pag .mesi input{width:92px;text-align:right;font-size:12px;padding:3px 5px}
 .nota{font-size:12px;color:var(--muted);font-style:italic;margin-top:4px}
-.come{margin-top:8px;padding:6px 8px;border-left:3px solid var(--accent);background:var(--card)}
-.come .frase{font-size:13px;margin-bottom:4px}
+.come{margin-top:6px}
 .come .errore-r{color:var(--bad);font-size:12px;font-style:normal}
 .limiti{margin-top:18px;padding:10px 14px;border-radius:8px;background:var(--warn-bg);color:var(--ink)}
 .limiti h2{margin:0 0 6px;color:var(--warn)}
@@ -429,7 +441,8 @@ const FORMATO = (() => {
 
   // Rateizza `totale` in n rate, una ogni `passo` mesi a partire da `da`, dentro l'orizzonte `orizzonte`.
   // Stessa regola di MOTORE.distribuisci: quote uguali, il resto dei centesimi sull'ultima.
-  function spalma(totale, da, n, passo, orizzonte) {
+  // I mesi delle n rate, una ogni `passo` mesi da `da`; errore leggibile se si esce dall'orizzonte.
+  function mesiRate(da, n, passo, orizzonte) {
     if (!(n >= 1)) throw new Error(`numero di rate non valido: ${n}`);
     if (!(passo >= 1)) throw new Error(`cadenza non valida: ${passo}`);
     const i = orizzonte.indexOf(da);
@@ -441,10 +454,85 @@ const FORMATO = (() => {
       const cade = `${a + Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`;
       throw new Error(`l'ultima rata cadrebbe a ${meseIt(cade)}, oltre l'orizzonte che finisce a ${meseIt(orizzonte[orizzonte.length - 1])}`);
     }
+    return Array.from({ length: n }, (_, k) => orizzonte[i + k * passo]);
+  }
+  function spalma(totale, da, n, passo, orizzonte) {
+    const mesi = mesiRate(da, n, passo, orizzonte);
     const quota = Math.floor(totale / n);
     const out = {};
-    for (let k = 0; k < n; k++) out[orizzonte[i + k * passo]] = k === n - 1 ? totale - quota * (n - 1) : quota;
+    mesi.forEach((m, k) => { out[m] = k === n - 1 ? totale - quota * (n - 1) : quota; });
     return out;
+  }
+
+  // ── contratti: dai patti (anticipo, SAL, ritenuta, o quote %) ai pagamenti ──
+  const pctTesto = (x) => String(x).replace(".", ",");
+  const bp = (pct) => Math.round(Number(pct) * 100);            // percentuale in punti base, intera
+  const diPct = (totale, pct) => Math.round((totale * bp(pct)) / 10000);
+  // Genera i pagamenti verso il fornitore del contratto. L'ultima quota prende sempre il resto:
+  // la somma dei pagamenti è il totale del contratto al centesimo.
+  function pagamentiDaContratto(c, orizzonte) {
+    const F = String(c.fornitore || "").trim();
+    if (!F) throw new Error("serve il fornitore: i pagamenti generati si riconoscono da lì");
+    const T = c.totale;
+    if (!(Number.isInteger(T) && T > 0)) throw new Error("serve il totale del contratto");
+    const pag = (nome, mesi) => ({ nome: `${F} · ${nome}`, mesi, aliquota_iva: c.aliquota_iva, stato: c.stato || "contratto", fornitore_id: F });
+    const dentro = (m, cosa) => { if (!orizzonte.includes(m)) throw new Error(`${cosa}: ${m ? meseIt(m) : "mese mancante"} fuori dall'orizzonte`); };
+    if (c.modo === "percentuali") {
+      const quote = c.quote || [];
+      const somma = quote.reduce((t, q) => t + bp(q.pct), 0);
+      if (somma !== 10000) throw new Error(`le percentuali fanno ${pctTesto(somma / 100)}%, devono fare 100%`);
+      const mesi = {};
+      let resto = T;
+      quote.forEach((q, k) => {
+        dentro(q.mese, `quota ${pctTesto(q.pct)}%`);
+        const v = k === quote.length - 1 ? resto : diPct(T, q.pct);
+        resto -= v;
+        mesi[q.mese] = (mesi[q.mese] || 0) + v;
+      });
+      return [pag("a percentuali", mesi)];
+    }
+    const a = Number(c.anticipo_pct) || 0, r = Number(c.ritenuta_pct) || 0;
+    if (a < 0 || r < 0 || bp(a) + bp(r) >= 10000) throw new Error(`anticipo ${pctTesto(a)}% e ritenuta ${pctTesto(r)}% insieme devono restare sotto il 100%`);
+    const A = diPct(T, a), R = diPct(T, r), S = T - A - R;
+    const out = [];
+    if (A) { dentro(c.anticipo_mese, "anticipo"); out.push(pag(`anticipo ${pctTesto(a)}%`, { [c.anticipo_mese]: A })); }
+    if (c.sal_modo === "ogni") {
+      const X = c.sal_ogni;
+      if (!(Number.isInteger(X) && X > 0)) throw new Error("serve l'importo di lavori per ogni SAL");
+      const n = Math.ceil(T / X);
+      const q = X - diPct(X, a) - diPct(X, r);
+      const mesi = {};
+      mesiRate(c.sal_da, n, c.sal_passo || 1, orizzonte).forEach((m, k) => { mesi[m] = k === n - 1 ? S - q * (n - 1) : q; });
+      out.push(pag("SAL", mesi));
+    } else {
+      out.push(pag("SAL", spalma(S, c.sal_da, c.sal_n, c.sal_passo || 1, orizzonte)));
+    }
+    if (R) { dentro(c.svincolo_mese, "svincolo della ritenuta"); out.push(pag(`svincolo ritenuta ${pctTesto(r)}%`, { [c.svincolo_mese]: R })); }
+    return out;
+  }
+  // Ricostruisce un contratto dai pagamenti già presenti verso F: un pagamento «anticipo N%» e uno
+  // «ritenuta N%» (una rata ciascuno), il resto sono SAL. Serve a partire da quello che c'è.
+  function contrattoDaPagamenti(pagamenti, F, orizzonte) {
+    const suoi = pagamenti.filter((g) => g.fornitore_id === F);
+    const tot = (g) => Object.values(g.mesi).reduce((t, v) => t + v, 0);
+    const pct = (g, parola) => {
+      const m = new RegExp(`${parola}\\s*(\\d+(?:[.,]\\d+)?)\\s*%`, "i").exec(g.nome);
+      return m && Object.keys(g.mesi).length === 1 ? Number(m[1].replace(",", ".")) : null;
+    };
+    const ant = suoi.find((g) => pct(g, "anticipo") !== null);
+    const rit = suoi.find((g) => g !== ant && pct(g, "ritenuta") !== null);
+    const sal = suoi.filter((g) => g !== ant && g !== rit);
+    const salMesi = {};
+    for (const g of sal) for (const [m, v] of Object.entries(g.mesi)) salMesi[m] = (salMesi[m] || 0) + v;
+    const f = formaRate(salMesi, orizzonte);
+    const primo = ordinati(Object.assign({}, ...suoi.map((g) => g.mesi)))[0] || orizzonte[0];
+    return {
+      fornitore: F, totale: suoi.reduce((t, g) => t + tot(g), 0), aliquota_iva: suoi.length ? suoi[0].aliquota_iva : 22,
+      stato: suoi.length ? suoi[0].stato : "contratto", modo: "sal",
+      anticipo_pct: ant ? pct(ant, "anticipo") : 0, anticipo_mese: ant ? Object.keys(ant.mesi)[0] : primo,
+      ritenuta_pct: rit ? pct(rit, "ritenuta") : 0, svincolo_mese: rit ? Object.keys(rit.mesi)[0] : orizzonte[orizzonte.length - 1],
+      sal_modo: "n", sal_n: Math.max(1, f.n), sal_ogni: 0, sal_da: f.primo || primo, sal_passo: f.passo || 1, quote: [],
+    };
   }
   // Sposta tutte le rate di `delta` mesi, importi e totale invariati.
   function sposta(mesi, delta, orizzonte) {
@@ -498,7 +586,7 @@ const FORMATO = (() => {
     }
     return { nome: doc.nome || sc.nome || "importato", base: doc.base || {}, scenario: sc, salvato_il: doc.salvato_il || null };
   }
-  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento };
+  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti };
 })();
 if (typeof module !== "undefined") module.exports = FORMATO;
 </script>
@@ -562,7 +650,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   // Lo stato aperto/chiuso delle tendine si legge dal DOM prima di ridisegnare:
   // l'evento toggle arriva in ritardo e un re-render in mezzo le richiuderebbe.
   function sincronizzaAperte() {
-    document.querySelectorAll("details.leva[data-k], #canone-dett").forEach((d) => {
+    document.querySelectorAll("details.leva[data-k], details.sotto[data-k], #canone-dett").forEach((d) => {
       const k = d.id === "canone-dett" ? "canone" : d.dataset.k;
       d.open ? aperte.add(k) : aperte.delete(k);
     });
@@ -981,7 +1069,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   }
   function bloccoRate(mesi, aliquota) {
     const f = FORMATO.formaRate(mesi, D.mesi);
-    return `<div class="come"><div class="frase"><strong>Come si paga:</strong> ${esc(comeSiPaga(mesi, aliquota))}</div>
+    return `<div class="come">
       <div class="riga"><label class="piccolo">totale <input type="text" class="eur" data-spalma-tot value="${fmt(f.totale)}"></label>
         ${aliquota ? '<select data-spalma-base><option value="netto">netto</option><option value="lordo">lordo IVA inclusa</option></select>' : ""}
         <label class="piccolo">in <input type="text" class="n" data-spalma-n value="${Math.max(1, f.n)}"> rate</label>
@@ -992,6 +1080,74 @@ if (typeof module !== "undefined") module.exports = FORMATO;
         <button class="mini" data-sposta="1" ${f.n ? "" : "disabled"}>tutto un mese dopo ▶</button>
         <span class="errore-r" data-errore-spalma></span></div>
       <div class="piccolo">mese per mese (puoi correggere ogni importo)</div></div>`;
+  }
+  const selMeseA = (val, attr) => `<select ${attr}>${D.mesi.map((m) => `<option value="${m}" ${m === val ? "selected" : ""}>${meseIt(m)}</option>`).join("")}</select>`;
+  const pctIt = (x) => String(x || 0).replace(".", ",");
+  function riassuntoContratto(c) {
+    if (c.modo === "percentuali") return (c.quote || []).map((q) => `${pctIt(q.pct)}% a ${meseIt(q.mese)}`).join(" · ") || "nessuna quota";
+    const sal = c.sal_modo === "ogni" ? `un SAL ogni ${fmt(c.sal_ogni || 0, false)} di lavori` : `${c.sal_n} SAL`;
+    const passo = (PASSI.find(([x]) => x === (c.sal_passo || 1)) || [0, ""])[1];
+    return [c.anticipo_pct ? `anticipo ${pctIt(c.anticipo_pct)}% a ${meseIt(c.anticipo_mese)}` : "",
+      `${sal} ${passo} da ${meseIt(c.sal_da)}`, c.ritenuta_pct ? `ritenuta ${pctIt(c.ritenuta_pct)}% svincolata a ${meseIt(c.svincolo_mese)}` : ""].filter(Boolean).join(" · ");
+  }
+  function bloccoContratto(p, c, ci) {
+    const F = String(c.fornitore || "").trim();
+    const fatti = p.pagamenti.filter((g) => F && g.fornitore_id === F).reduce((t, g) => t + somma(g.mesi), 0);
+    const diff = fatti - (c.totale || 0);
+    // Verifica mese per mese: i pagamenti verso F seguono i patti scritti qui sopra?
+    const perMese = (lista) => { const o = {}; for (const g of lista) for (const [m, v] of Object.entries(g.mesi)) o[m] = (o[m] || 0) + v; return JSON.stringify(Object.entries(o).filter(([, v]) => v).sort()); };
+    let seguono = false;
+    try { seguono = perMese(FORMATO.pagamentiDaContratto(c, D.mesi)) === perMese(p.pagamenti.filter((g) => g.fornitore_id === F)); } catch (e) { seguono = false; }
+    const verifica = !F ? "" : seguono
+      ? `<span class="ok-t">✓ i pagamenti verso ${esc(F)} seguono questi patti: ${fmt(c.totale, false)} netto</span>`
+      : diff !== 0
+        ? `<span class="warn-t">i pagamenti verso ${esc(F)} fanno ${fmt(fatti, false)}: ${diff < 0 ? "mancano" : "avanzano"} ${fmt(Math.abs(diff), false)}. Premi «Genera».</span>`
+        : `<span class="warn-t">il totale torna, ma le rate verso ${esc(F)} non seguono ancora questi patti. Premi «Genera».</span>`;
+    const iva = [0, 10, 22].includes(c.aliquota_iva) ? [0, 10, 22] : [0, 10, 22, c.aliquota_iva].sort((a, b) => a - b);
+    const patti = c.modo === "percentuali"
+      ? `<div class="riga">${(c.quote || []).map((q, qi) => `<span class="quota"><input type="text" class="n" data-q-pct="${qi}" value="${pctIt(q.pct)}">% a ${selMeseA(q.mese, `data-q-mese="${qi}"`)}<button class="mini" data-q-togli="${qi}" title="togli quota">×</button></span>`).join("")}
+          <button class="mini" data-q-aggiungi>+ quota</button></div>`
+      : `<div class="riga">anticipo <input type="text" class="n" data-cc-pct="anticipo_pct" value="${pctIt(c.anticipo_pct)}">% a ${selMeseA(c.anticipo_mese, 'data-cc="anticipo_mese"')}
+          · ritenuta <input type="text" class="n" data-cc-pct="ritenuta_pct" value="${pctIt(c.ritenuta_pct)}">% svincolata a ${selMeseA(c.svincolo_mese, 'data-cc="svincolo_mese"')}</div>
+        <div class="riga">SAL <select data-cc="sal_modo"><option value="n" ${c.sal_modo !== "ogni" ? "selected" : ""}>in rate uguali</option><option value="ogni" ${c.sal_modo === "ogni" ? "selected" : ""}>uno ogni … € di lavori</option></select>
+          ${c.sal_modo === "ogni" ? `ogni <input type="text" class="eur" data-cc-eur="sal_ogni" value="${fmt(c.sal_ogni || 0)}">` : `<input type="text" class="n" data-cc-int="sal_n" value="${c.sal_n || 1}"> SAL`}
+          <select data-cc-int="sal_passo">${PASSI.map(([x, e]) => `<option value="${x}" ${x === (c.sal_passo || 1) ? "selected" : ""}>${e}</option>`).join("")}</select>
+          dal ${selMeseA(c.sal_da, 'data-cc="sal_da"')}</div>`;
+    return `<div class="contratto" data-c="${ci}">
+      <div class="c-testa"><strong>Contratto ${esc(F || "nuovo")}</strong><span class="piccolo">${esc(riassuntoContratto(c))}</span></div>
+      <div class="riga">fornitore <input type="text" class="n" style="width:110px" data-cc="fornitore" value="${esc(F)}">
+        totale <input type="text" class="eur" data-cc-eur="totale" value="${fmt(c.totale || 0)}"> netto
+        <select data-cc-int="aliquota_iva">${iva.map((a) => `<option value="${a}" ${a === c.aliquota_iva ? "selected" : ""}>IVA ${a}%</option>`).join("")}</select>
+        <select data-cc="modo"><option value="sal" ${c.modo !== "percentuali" ? "selected" : ""}>anticipo + SAL + ritenuta</option><option value="percentuali" ${c.modo === "percentuali" ? "selected" : ""}>a percentuali</option></select></div>
+      ${patti}
+      <div class="riga"><button class="primario" data-genera>Genera i pagamenti</button> ${verifica} <span class="errore-r" data-errore-c></span></div>
+      <div class="riga"><span class="nota">«Genera» sostituisce i pagamenti di questo progetto verso ${esc(F || "il fornitore")}; gli altri restano.</span> <button class="mini" data-togli-c>togli il contratto</button></div>
+    </div>`;
+  }
+  function collegaContratto(root, p, c) {
+    const sc = p.contratti;
+    root.querySelectorAll("[data-cc]").forEach((x) => { x.onchange = () => { c[x.dataset.cc] = x.value; renderLeve(); }; });
+    root.querySelectorAll("[data-cc-int]").forEach((x) => { x.onchange = () => { c[x.dataset.ccInt] = parseInt(x.value, 10) || 0; renderLeve(); }; });
+    root.querySelectorAll("[data-cc-eur]").forEach((x) => { x.onchange = () => { const v = euroDa(x); if (v === null) return; c[x.dataset.ccEur] = v; renderLeve(); }; });
+    const pct = (x) => { const v = Number(String(x.value).replace(",", ".")); const ok = x.value.trim() !== "" && v >= 0 && v <= 100; x.classList.toggle("invalid", !ok); return ok ? v : null; };
+    root.querySelectorAll("[data-cc-pct]").forEach((x) => { x.onchange = () => { const v = pct(x); if (v === null) return; c[x.dataset.ccPct] = v; renderLeve(); }; });
+    root.querySelectorAll("[data-q-pct]").forEach((x) => { x.onchange = () => { const v = pct(x); if (v === null) return; c.quote[+x.dataset.qPct].pct = v; renderLeve(); }; });
+    root.querySelectorAll("[data-q-mese]").forEach((x) => { x.onchange = () => { c.quote[+x.dataset.qMese].mese = x.value; renderLeve(); }; });
+    root.querySelectorAll("[data-q-togli]").forEach((x) => { x.onclick = () => { c.quote.splice(+x.dataset.qTogli, 1); renderLeve(); }; });
+    const qa = root.querySelector("[data-q-aggiungi]");
+    if (qa) qa.onclick = () => { c.quote = c.quote || []; c.quote.push({ pct: 0, mese: (c.quote[c.quote.length - 1] || {}).mese || D.mesi[0] }); renderLeve(); };
+    root.querySelector("[data-togli-c]").onclick = () => { sc.splice(sc.indexOf(c), 1); renderLeve(); };
+    root.querySelector("[data-genera]").onclick = () => {
+      try {
+        const nuovi = FORMATO.pagamentiDaContratto(c, D.mesi);
+        const F = String(c.fornitore).trim();
+        const i = p.pagamenti.findIndex((g) => g.fornitore_id === F);
+        const altri = p.pagamenti.filter((g) => g.fornitore_id !== F);
+        altri.splice(i < 0 ? altri.length : i, 0, ...nuovi);
+        p.pagamenti = altri;
+        ricalcola();
+      } catch (e) { root.querySelector("[data-errore-c]").textContent = e.message; }
+    };
   }
   function collegaRate(root, leggi, scrivi, aliquota) {
     const err = root.querySelector("[data-errore-spalma]");
@@ -1049,16 +1205,22 @@ if (typeof module !== "undefined") module.exports = FORMATO;
         <div class="riga"><input type="text" class="nome" style="flex:1 1 140px;font-weight:600" data-campo="nome" value="${esc(p.nome)}">
           ${selSoc(p.societa)} <input type="text" class="n" style="width:110px" data-campo="stato" value="${esc(p.stato)}" title="stato">
           <button data-elimina-p title="elimina progetto">× elimina</button></div>
-        ${p.pagamenti.map((g, j) => `<div class="pag" data-g="${j}">
-          <div class="riga"><input type="text" class="nome" style="flex:1 1 140px" data-campo="nome" value="${esc(g.nome)}"> ${selIva(g.aliquota_iva)}
-            <input type="text" class="n" style="width:90px" data-campo="stato" value="${esc(g.stato)}" title="stato">
-            <input type="text" class="n" style="width:90px" data-campo="fornitore_id" value="${esc(g.fornitore_id || "")}" placeholder="fornitore" title="fornitore_id (riconcilia i fatti)">
-            <button data-elimina-g title="elimina pagamento">×</button></div>
-          ${bloccoRate(g.mesi, g.aliquota_iva)}
-          ${grigliaMesi(g.mesi, "mese")}
+        ${(p.contratti || []).map((c, ci) => bloccoContratto(p, c, ci)).join("")}
+        ${p.pagamenti.map((g, j) => { const kg = `g:${p.id}:${j}`; return `<div class="pag" data-g="${j}">
+          <div class="pag-testa"><span class="pag-nome">${esc(g.nome)}</span>${g.fornitore_id ? `<span class="badge">${esc(g.fornitore_id)}</span>` : ""}
+            <span class="num pag-tot">${fmt(Object.values(g.mesi).reduce((a, b) => a + MOTORE.iva(b, g.aliquota_iva), 0), false)} €</span></div>
+          <div class="frase">${esc(comeSiPaga(g.mesi, g.aliquota_iva))}</div>
+          <details class="sotto" data-k="${kg}" ${aperte.has(kg) ? "open" : ""}><summary>modifica nome, IVA e rate</summary>
+            <div class="riga"><input type="text" class="nome" style="flex:1 1 140px" data-campo="nome" value="${esc(g.nome)}"> ${selIva(g.aliquota_iva)}
+              <input type="text" class="n" style="width:90px" data-campo="stato" value="${esc(g.stato)}" title="stato">
+              <input type="text" class="n" style="width:90px" data-campo="fornitore_id" value="${esc(g.fornitore_id || "")}" placeholder="fornitore" title="fornitore_id (riconcilia i fatti)">
+              <button data-elimina-g title="elimina pagamento">× elimina</button></div>
+            ${bloccoRate(g.mesi, g.aliquota_iva)}
+            ${grigliaMesi(g.mesi, "mese")}
+          </details>
           ${p.acceso ? "" : '<div class="nota">non conta finché il progetto è spento</div>'}
-        </div>`).join("")}
-        <div class="riga"><button data-aggiungi-g>+ pagamento</button></div>
+        </div>`; }).join("")}
+        <div class="riga"><button data-aggiungi-g>+ pagamento</button><button data-aggiungi-c>+ contratto</button></div>
       </div></details>`;
     }).join("");
     el("progetti").innerHTML = `${progetti || '<div class="nota">nessun progetto nello scenario</div>'}
@@ -1076,7 +1238,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
           <input type="text" class="n" style="width:110px" data-campo="stato" value="${esc(f.stato)}" title="stato">
           <button data-elimina-f title="elimina">× elimina</button></div>
         <div class="piccolo">erogazioni</div>${grigliaMesi(f.erogazioni, "erog")}
-        <div class="piccolo"><strong>rate di rimborso</strong></div><div class="rate-f">${bloccoRate(f.rate, null)}</div>${grigliaMesi(f.rate, "rata")}
+        <div class="piccolo"><strong>rate di rimborso</strong></div><div class="frase">${esc(comeSiPaga(f.rate, null))}</div><div class="rate-f">${bloccoRate(f.rate, null)}</div>${grigliaMesi(f.rate, "rata")}
         <div class="nota">le erogazioni dello scenario sostituiscono le righe PF «finanziamenti» di ${esc(f.societa)}</div>
       </div></details>`;
     }).join("");
@@ -1106,10 +1268,20 @@ if (typeof module !== "undefined") module.exports = FORMATO;
         inp.onchange = () => { p[inp.dataset.campo] = inp.value; ricalcola(); };
       });
       div.querySelector("button[data-elimina-p]").onclick = () => { sc.progetti.splice(sc.progetti.indexOf(p), 1); ricalcola(); };
+      div.querySelectorAll(".contratto").forEach((box) => collegaContratto(box, p, p.contratti[+box.dataset.c]));
+      div.querySelector("button[data-aggiungi-c]").onclick = () => {
+        p.contratti = p.contratti || [];
+        const usati = new Set(p.contratti.map((c) => String(c.fornitore).trim()));
+        const F = (p.pagamenti.find((g) => g.fornitore_id && !usati.has(g.fornitore_id)) || {}).fornitore_id;
+        p.contratti.push(F ? FORMATO.contrattoDaPagamenti(p.pagamenti, F, D.mesi)
+          : { fornitore: "", totale: 0, aliquota_iva: 22, stato: "contratto", modo: "sal", anticipo_pct: 0, anticipo_mese: D.mesi[0], ritenuta_pct: 0,
+              svincolo_mese: D.mesi[D.mesi.length - 1], sal_modo: "n", sal_n: 1, sal_ogni: 0, sal_da: D.mesi[0], sal_passo: 1, quote: [] });
+        renderLeve();
+      };
       div.querySelector("button[data-aggiungi-g]").onclick = () => { p.pagamenti.push({ nome: "Nuovo pagamento", mesi: {}, aliquota_iva: 22, stato: "ipotesi", fornitore_id: null }); renderLeve(); };
       div.querySelectorAll(".pag").forEach((pg) => {
         const g = p.pagamenti[parseInt(pg.dataset.g, 10)];
-        pg.querySelectorAll(":scope > .riga [data-campo]").forEach((inp) => {
+        pg.querySelectorAll(".sotto > .riga [data-campo]").forEach((inp) => {
           inp.onchange = () => {
             const v = inp.value;
             g[inp.dataset.campo] = inp.dataset.campo === "aliquota_iva" ? parseInt(v, 10) : inp.dataset.campo === "fornitore_id" ? (v || null) : v;

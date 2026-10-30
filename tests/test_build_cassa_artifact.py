@@ -653,6 +653,82 @@ def test_js_leggi_documento_importato(tmp_path):
     assert "2027-1" in e_mese
 
 
+AMCN_JS = (
+    "{fornitore: 'AMCN', totale: 48200000, aliquota_iva: 0, modo: 'sal', anticipo_pct: 15,"
+    " anticipo_mese: '2026-10', ritenuta_pct: 10, svincolo_mese: '2027-05', sal_modo: 'n', sal_n: 5,"
+    " sal_ogni: 0, sal_da: '2026-11', sal_passo: 1, quote: []}"
+)
+AMCN_PAGAMENTI = [
+    {"nome": "AMCN · anticipo 15%", "mesi": {"2026-10": 7230000}, "aliquota_iva": 0, "stato": "contratto", "fornitore_id": "AMCN"},
+    {
+        "nome": "AMCN · SAL",
+        "mesi": {m: 7230000 for m in ("2026-11", "2026-12", "2027-01", "2027-02", "2027-03")},
+        "aliquota_iva": 0,
+        "stato": "contratto",
+        "fornitore_id": "AMCN",
+    },
+    {"nome": "AMCN · svincolo ritenuta 10%", "mesi": {"2027-05": 4820000}, "aliquota_iva": 0, "stato": "contratto", "fornitore_id": "AMCN"},
+]
+
+
+def test_js_contratto_anticipo_sal_ritenuta(tmp_path):
+    """Contratto AMCN 482.000: anticipo 15% a ott 26, 5 SAL mensili da nov 26, ritenuta 10% a mag 27."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_formato(tmp_path, html, f"JSON.stringify(F.pagamentiDaContratto({AMCN_JS}, {ORIZ_JS}))")
+    assert json.loads(out) == AMCN_PAGAMENTI
+
+
+def test_js_contratto_sal_ogni_importo_di_lavori(tmp_path):
+    """SAL ogni 100.000 di lavori su 250.000, anticipo 10%, ritenuta 5%: 3 SAL da 85.000, 85.000, 42.500."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    c = (
+        "{fornitore: 'X', totale: 25000000, aliquota_iva: 22, modo: 'sal', anticipo_pct: 10, anticipo_mese: '2026-10',"
+        " ritenuta_pct: 5, svincolo_mese: '2027-06', sal_modo: 'ogni', sal_n: 0, sal_ogni: 10000000,"
+        " sal_da: '2026-12', sal_passo: 2, quote: []}"
+    )
+    out = esegui_node_formato(tmp_path, html, f"JSON.stringify(F.pagamentiDaContratto({c}, {ORIZ_JS}).map((g) => g.mesi))")
+    assert json.loads(out) == [
+        {"2026-10": 2500000},
+        {"2026-12": 8500000, "2027-02": 8500000, "2027-04": 4250000},
+        {"2027-06": 1250000},
+    ]
+
+
+def test_js_contratto_a_percentuali_e_errori(tmp_path):
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    base = "fornitore: 'Y', totale: 10000000, aliquota_iva: 10, modo: 'percentuali', quote: "
+    espr = (
+        "(() => { const r = [F.pagamentiDaContratto({" + base + "[{pct: 30, mese: '2026-11'}, {pct: 40, mese: '2027-02'},"
+        " {pct: 30, mese: '2027-05'}]}, " + ORIZ_JS + ")[0].mesi];"
+        " for (const c of [{" + base + "[{pct: 30, mese: '2026-11'}]}, {...{" + base + "[]}, fornitore: ''},"
+        " {fornitore: 'Z', totale: 100, aliquota_iva: 0, modo: 'sal', anticipo_pct: 60, anticipo_mese: '2026-10',"
+        " ritenuta_pct: 50, svincolo_mese: '2027-01', sal_modo: 'n', sal_n: 1, sal_da: '2026-11', sal_passo: 1, quote: []}])"
+        " { try { F.pagamentiDaContratto(c, " + ORIZ_JS + "); r.push('nessun errore'); } catch (e) { r.push(e.message); } }"
+        " return JSON.stringify(r); })()"
+    )
+    out = json.loads(esegui_node_formato(tmp_path, html, espr))
+    assert out[0] == {"2026-11": 3000000, "2027-02": 4000000, "2027-05": 3000000}
+    assert "30%" in out[1] and "100%" in out[1]
+    assert "fornitore" in out[2]
+    assert "anticipo" in out[3] and "ritenuta" in out[3]
+
+
+def test_js_contratto_ricostruito_dai_pagamenti_rigenera_gli_stessi(tmp_path):
+    """Dai pagamenti AMCN già nel seme la pagina ricostruisce il contratto; «Genera» rifà gli stessi importi."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    pag = json.dumps(AMCN_PAGAMENTI)
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        f"(() => {{ const c = F.contrattoDaPagamenti({pag}, 'AMCN', {ORIZ_JS});"
+        f" return JSON.stringify([c, F.pagamentiDaContratto(c, {ORIZ_JS})]); }})()",
+    )
+    c, rigenerati = json.loads(out)
+    assert c["totale"] == 48200000 and c["anticipo_pct"] == 15 and c["ritenuta_pct"] == 10
+    assert c["sal_n"] == 5 and c["sal_da"] == "2026-11" and c["svincolo_mese"] == "2027-05"
+    assert [g["mesi"] for g in rigenerati] == [g["mesi"] for g in AMCN_PAGAMENTI]
+
+
 # ── andata e ritorno: documento costruito come lo esporta la pagina → scenario_from_json ──
 
 
