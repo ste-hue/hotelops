@@ -79,12 +79,15 @@ ESOLVER_CC_MAP = {
     ("ORTI", "1"): "INTESA",
     ("ORTI", "2"): "MPS",
     ("ORTI", "3"): "MPS_KROSS",  # MPS CC 000001205058
+    ("ORTI", "4"): "UNICREDIT",  # c/c 000107433941
+    ("ORTI", "5"): "REVOLUT",  # banche estere, attivo (Stefano 2026-10-30)
     # INTUR
     ("INTUR", "1"): "SELLA",
     ("INTUR", "2"): "MPS",
     ("INTUR", "3"): "INTESA",
     ("INTUR", "4"): "BCP",
 }
+PARTITARI_BANCA = {p for _, p in ESOLVER_CC_MAP}
 
 
 # ── Parsing helpers ───────────────────────────────────────────────────────────
@@ -369,7 +372,7 @@ def is_multibank(filepath: Path) -> bool:
         if parse_date(fields[0]) is None:
             continue
         p = _normalize_partitario(fields[7])
-        if p in ("1", "2", "3", "4"):
+        if p in PARTITARI_BANCA:
             distinct_partitari.add(p)
         if len(distinct_partitari) >= 2:
             return True
@@ -418,7 +421,7 @@ def _repair_dropped_cell(fields: list) -> list:
     """
     if len(fields) < 11 or not isinstance(fields[7], str):
         return fields
-    if _normalize_partitario(fields[6]) not in ("1", "2", "3", "4"):
+    if _normalize_partitario(fields[6]) not in PARTITARI_BANCA:
         return fields
     dare_val, avere_val = fields[9], fields[10]
     if avere_val is not None and dare_val is None:
@@ -454,7 +457,7 @@ def parse_mastrino_multibank(
         if d is None:
             continue  # header / "Riporto saldi" total row / blanks
         partitario = _normalize_partitario(fields[7])
-        if partitario not in ("1", "2", "3", "4"):
+        if partitario not in PARTITARI_BANCA:
             continue
         banca_id = ESOLVER_CC_MAP.get((societa_id, partitario))
         if banca_id is None:
