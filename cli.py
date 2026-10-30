@@ -561,11 +561,52 @@ def cmd_promote(args):
 
 
 def cmd_cdg(args):
-    """CdG: scenario salva/lista (lineage), cassa (pagina HTML)."""
+    """CdG: scenario salva/lista (lineage), cassa (pagina HTML), tabelle (CSV per Excel)."""
     if args.cdg_cmd == "cassa":
         from verticals.condges.build_cassa_artifact import DEFAULT_OUT, run
 
         run(Path(args.out) if args.out else DEFAULT_OUT, args.aggiorna, args.push)
+        return
+
+    if args.cdg_cmd == "tabelle":
+        import json as _json
+
+        from verticals.condges.build_cassa_artifact import DEFAULT_OUT
+        from verticals.condges.cassa_tabelle import (
+            confronto_con_la_pagina,
+            payload_da_file,
+            scrivi_csv,
+            tabelle,
+        )
+
+        sorgente = Path(args.sorgente) if args.sorgente else DEFAULT_OUT
+        if not sorgente.exists():
+            print(
+                f"{sorgente}: non c\'e\'. Genera la pagina con `hotelops cdg cassa`, "
+                "oppure passa il JSON scaricato da cdg.panorama-host.com/cassa/data.json"
+            )
+            sys.exit(1)
+        payload = payload_da_file(sorgente)
+        documento = (
+            _json.loads(Path(args.scenario).read_text(encoding="utf-8"))
+            if args.scenario
+            else None
+        )
+        tab = tabelle(payload, documento)
+        scritti = scrivi_csv(tab, Path(args.out))
+        print(
+            f"Da {sorgente} | pagina del {payload.get('generato_il', '?')} | "
+            f"fonti del {payload.get('acquisito_il', '?')}"
+        )
+        for p_csv in scritti:
+            print(f"  {p_csv}: {len(tab[p_csv.stem][1])} righe")
+        fuori = confronto_con_la_pagina(payload)
+        if fuori:
+            print("ATTENZIONE, il ricalcolo in Python non torna con i saldi della pagina:")
+            for riga in fuori[:10]:
+                print(f"  {riga}")
+            sys.exit(3)
+        print("Saldi del solo PF: ricalcolati in Python, identici a quelli della pagina.")
         return
 
     if args.scenario_cmd == "salva":
@@ -1415,6 +1456,27 @@ def main():
     p_cc.add_argument("--aggiorna", action="store_true", help="Rilegge BigQuery e salva lo snapshot (senza: latest.json)")
     p_cc.add_argument("--push", action="store_true", help="Pubblica HTML e dati nel KV del Worker cdg")
     p_cc.add_argument("--out", default=None, help="File HTML (default docs/reports/artifacts/cassa.html)")
+    p_ct = cdg_sub.add_parser(
+        "tabelle",
+        help="Tabelle piatte della pagina Cassa in CSV (separatore «;», virgola decimale: Excel li apre)",
+    )
+    p_ct.add_argument(
+        "sorgente",
+        nargs="?",
+        default=None,
+        help="Pagina .html o payload .json (default docs/reports/artifacts/cassa.html; "
+        "va bene anche il file scaricato da /cassa/data.json)",
+    )
+    p_ct.add_argument(
+        "--out",
+        default="docs/reports/artifacts/cassa_tabelle",
+        help="Cartella dei CSV",
+    )
+    p_ct.add_argument(
+        "--scenario",
+        default=None,
+        help="Documento scenario esportato dalla pagina (default: il seme dentro la pagina)",
+    )
 
     p_intake = sub.add_parser(
         "intake",
