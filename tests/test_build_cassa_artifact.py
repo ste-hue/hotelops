@@ -818,3 +818,27 @@ def test_documento_esportato_dalla_pagina_rientra_in_python(tmp_path: Path):
     # il giro completo: il documento riletto e riserializzato è identico nel contenuto
     doc2 = _json.loads(doc)
     assert doc2["schema"] == SCHEMA and set(doc2["scenario"]) >= {"progetti", "finanziamenti", "canone", "soglia", "manuali"}
+
+
+# ── fluidità: barra fissa dei minimi, battito sul numero cambiato, trascinamento con soglia ──
+# Il comportamento vive nel browser (verificato a mano con Playwright, 30/10/2026); qui si
+# pinnano i pezzi di template che lo rendono possibile, così una regressione non passa in silenzio.
+
+
+def test_template_porta_barra_fissa_battito_e_preferenze_di_movimento():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert 'id="barra-minimi"' in html and "IntersectionObserver" in html
+    assert "scroll-padding-top" in html, "la barra fissa non deve coprire la destinazione di uno scroll"
+    assert "@keyframes battito" in html and 'classList.add("cambiato")' in html
+    assert "prefers-reduced-motion" in html and "prefers-reduced-transparency" in html
+    assert "backdrop-filter" in html, "la barra è un materiale traslucido, il contenuto scorre sotto"
+
+
+def test_template_trascina_con_soglia_presa_e_volo():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert "touch-action:pan-y" in html, "lo scorrimento verticale resta al browser"
+    assert "SOGLIA_PRESA" in html and "Math.hypot(dx, dy) < SOGLIA_PRESA" in html
+    assert "presaX" in html and "transformOrigin" in html, "il fantasma rispetta il punto di presa"
+    assert "f.animate([" in html and "in-volo" in html, "la rata vola fino alla cella, non si teletrasporta"
+    assert "min-height:24px" in html, "bersaglio tattile minimo delle pillole"
+    assert "touch-action:none" not in html

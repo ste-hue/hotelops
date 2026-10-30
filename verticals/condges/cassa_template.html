@@ -139,14 +139,29 @@ table.cal tr.tot td{font-weight:600;font-variant-numeric:tabular-nums}
 table.cal tr.tot.primo td{border-top:2px solid var(--line)}
 table.cal td.min{color:var(--bad);font-weight:700}
 table.cal tr.spento{opacity:.45}
-.chip{display:inline-block;min-width:46px;padding:3px 7px;border-radius:999px;border:0;font-size:12px;font-variant-numeric:tabular-nums;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--ink);background:color-mix(in srgb,var(--accent) var(--a),var(--card))}
+.chip{display:inline-block;box-sizing:border-box;min-width:46px;min-height:24px;line-height:18px;padding:3px 7px;border-radius:999px;border:0;font-size:12px;font-variant-numeric:tabular-nums;cursor:grab;touch-action:pan-y;user-select:none;-webkit-user-select:none;color:var(--ink);background:color-mix(in srgb,var(--accent) var(--a),var(--card))}
 .chip.entrata{background:color-mix(in srgb,var(--ok) var(--a),var(--card))}
 .chip.fisso{cursor:default;background:var(--soft)}
 .chip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .chip.preso{opacity:.3}
 td.bersaglio{box-shadow:inset 0 0 0 2px var(--accent);border-radius:8px}
 td.puo{background:color-mix(in srgb,var(--accent) 6%,transparent)}
-.fantasma{position:fixed;pointer-events:none;z-index:50;transform:translate(-50%,-60%) scale(1.12);box-shadow:0 6px 18px rgba(0,0,0,.22)}
+.fantasma{position:fixed;left:0;top:0;margin:0;pointer-events:none;z-index:50;will-change:transform;box-shadow:0 6px 18px rgba(0,0,0,.22)}
+.chip.in-volo{visibility:hidden}
+.minimi .saldo.cambiato,.barra-minimi .num.cambiato{animation:battito .7s ease-out}
+@keyframes battito{0%{background:color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px}100%{background:transparent}}
+.barra-minimi{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;gap:0;padding:0 max(8px,env(safe-area-inset-left)) 0 max(8px,env(safe-area-inset-right));background:color-mix(in srgb,var(--bg) 80%,transparent);-webkit-backdrop-filter:blur(14px) saturate(160%);backdrop-filter:blur(14px) saturate(160%);border-bottom:1px solid var(--line);box-shadow:0 1px 0 rgba(255,255,255,.35) inset}
+.barra-minimi[hidden]{display:none}
+.barra-minimi button{flex:1;min-width:0;display:flex;gap:6px;align-items:baseline;justify-content:center;flex-wrap:nowrap;white-space:nowrap;overflow:hidden;padding:7px 8px;border:0;border-radius:0;background:transparent;color:var(--ink);font-size:13px;line-height:1.2;cursor:pointer}
+.barra-minimi button:active{background:color-mix(in srgb,var(--ink) 8%,transparent)}
+.barra-minimi .num{font-weight:650;font-size:15px}
+.barra-minimi .num.neg{color:var(--bad)}
+.barra-minimi .quando{color:var(--muted)}
+.barra-minimi .delta{color:var(--muted);font-size:12px}
+@media (max-width:560px){.barra-minimi .delta,.barra-minimi .quando{display:none}.barra-minimi .num{font-size:14px}}
+html{scroll-padding-top:44px}
+@media (prefers-reduced-transparency: reduce){.barra-minimi{background:var(--bg);-webkit-backdrop-filter:none;backdrop-filter:none}}
+@media (prefers-reduced-motion: reduce){.minimi .saldo.cambiato,.barra-minimi .num.cambiato{animation:none;background:color-mix(in srgb,var(--accent) 18%,transparent);border-radius:6px}}
 .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:12px;font-size:13px;z-index:60;max-width:92vw;display:flex;gap:12px;align-items:center;box-shadow:0 6px 20px rgba(0,0,0,.25)}
 .toast[hidden]{display:none}
 .toast button{background:transparent;color:var(--bg);border-color:var(--bg);font-size:12px;padding:2px 8px}
@@ -173,6 +188,7 @@ details.blocco .card{border:0;padding:4px 2px}
 <div id="errore" class="errore" hidden></div>
 
 <section class="minimi" id="minimi"></section>
+<div id="barra-minimi" class="barra-minimi" hidden aria-label="Minimi di cassa, sempre visibili"></div>
 
 <div class="blocchi-cmd"><button class="mini" id="apri-tutto">apri tutto</button><button class="mini" id="chiudi-tutto">chiudi tutto</button></div>
 <details class="blocco" data-blocco="canone"><summary><span class="b-t">Canone ORTI → INTUR</span><span class="b-s" id="som-canone"></span></summary>
@@ -669,6 +685,10 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const copia = (o) => JSON.parse(JSON.stringify(o));
   const el = (id) => document.getElementById(id);
+  // Prima di SOGLIA_PRESA px di movimento un tocco su una rata non è un trascinamento: può essere
+  // uno scorrimento della pagina. Chi ha chiesto movimento ridotto non vede voli né battiti animati.
+  const SOGLIA_PRESA = 8;
+  const ridotto = () => !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const etichetta = (v) => v.replace(/^(ENTRATE|USCITE)_/, "").toLowerCase().replace(/_/g, " ");
   const oraDi = (iso) => (iso ? String(iso).replace("T", " ").slice(0, 16) : "");
   const segno = (v, conCent = true) => (v > 0 ? "+" : "") + fmt(v, conCent);
@@ -1004,6 +1024,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   }
 
   // ── minimi ──
+  let minimiPrima = null;
   function renderMinimi() {
     const box = el("minimi");
     box.innerHTML = "";
@@ -1014,7 +1035,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       const sotto = m.sotto_soglia.length ? `<div class="piccolo">${stato.scenario.soglia ? `sotto la soglia di ${fmt(stato.scenario.soglia, false)}` : "sotto zero"}: ${m.sotto_soglia.map(meseIt).join(", ")}</div>` : "";
       const eff = IPO.size ? effettoOltrePF(soc) : 0;
       const oltre = IPO.size ? `<div class="oltre">oltre ${meseIt(ULTIMO_PF)}, senza PF: ${eff ? `leve ${segno(eff)} entro ${meseIt(ULTIMO)}` : "nessuna leva"}</div>` : "";
-      box.insertAdjacentHTML("beforeend", `<div class="card">
+      box.insertAdjacentHTML("beforeend", `<div class="card" data-soc="${soc}">
         <div><strong>${soc}</strong> · minimo a ${meseIt(m.mese)} <span class="badge ${a.attestato ? "ok" : "warn"}" title="vedi Fonti e versioni">ancora ${a.attestato ? "attestata" : "dichiarata"}</span></div>
         <div class="saldo num ${m.saldo < 0 ? "neg" : ""}">${fmt(m.saldo)} €</div>
         <div class="delta num">${delta === 0 ? "come con il solo PF" : `${segno(delta)} rispetto al solo PF`} · solo PF: minimo ${fmt(b.saldo)} a ${meseIt(b.mese)}</div>
@@ -1023,6 +1044,31 @@ if (typeof module !== "undefined") module.exports = FORMATO;
         ${oltre}
       </div>`);
     }
+    // Il numero che è appena cambiato lo dice con un battito: un salto silenzioso da +61k a −293k
+    // non lega l'azione al risultato. Il primo disegno non è un cambiamento.
+    if (minimiPrima) {
+      for (const soc of SOC) {
+        if (ris.minimi[soc].saldo !== minimiPrima[soc]) box.querySelector(`.card[data-soc="${soc}"] .saldo`).classList.add("cambiato");
+      }
+    }
+    renderBarra(minimiPrima);
+    minimiPrima = Object.fromEntries(SOC.map((s) => [s, ris.minimi[s].saldo]));
+  }
+
+  // La barra fissa: i due minimi in una riga sola quando la card è uscita dallo schermo, così
+  // l'oggetto d'interesse resta visibile mentre si muove la leva che lo muove. Un tocco riporta
+  // alla card. Compare e scompare la decide l'osservatore in fondo al file, non lo scroll.
+  function renderBarra(prima) {
+    const barra = el("barra-minimi");
+    if (!barra) return;
+    barra.innerHTML = SOC.map((soc) => {
+      const m = ris.minimi[soc], d = m.saldo - D.baseline.minimi[soc].saldo;
+      const cambiato = prima && prima[soc] !== m.saldo ? " cambiato" : "";
+      return `<button type="button" data-soc="${soc}" title="torna ai minimi"><strong>${soc}</strong><span class="num${m.saldo < 0 ? " neg" : ""}${cambiato}">${fmt(m.saldo)} €</span><span class="quando">${meseIt(m.mese)}</span><span class="delta num">${d === 0 ? "come il solo PF" : `${segno(d, false)} vs solo PF`}</span></button>`;
+    }).join("");
+    barra.querySelectorAll("button").forEach((b) => {
+      b.onclick = () => el("minimi").scrollIntoView({ behavior: ridotto() ? "auto" : "smooth", block: "start" });
+    });
   }
 
   // ── grafico SVG: linee nei mesi PF, barre dell'effetto leve nei mesi senza PF ──
@@ -1462,30 +1508,72 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       };
       chip.onpointerdown = (e) => {
         if (e.button !== undefined && e.button !== 0) return;
-        e.preventDefault();
-        try { chip.setPointerCapture(e.pointerId); } catch (err) { /* senza cattura il trascinamento funziona lo stesso */ }
-        const fantasma = chip.cloneNode(true);
-        fantasma.classList.add("fantasma");
-        document.body.appendChild(fantasma);
-        chip.classList.add("preso");
-        const celle = [...box.querySelectorAll(`td[data-r="${riga.id}"]`)];
-        celle.forEach((td) => td.classList.add("puo"));
-        let bersaglio = null;
-        const sposta = (ev) => {
-          fantasma.style.left = `${ev.clientX}px`;
-          fantasma.style.top = `${ev.clientY}px`;
+        // Niente cattura e niente preventDefault qui: finché il dito non si è mosso di SOGLIA_PRESA px
+        // non si sa se vuole trascinare la rata o scorrere la pagina. touch-action: pan-y lascia lo
+        // scorrimento verticale al browser, che in quel caso manda pointercancel e noi puliamo.
+        const x0 = e.clientX, y0 = e.clientY, id = e.pointerId;
+        const r0 = chip.getBoundingClientRect();
+        const presaX = x0 - r0.left, presaY = y0 - r0.top;   // dove l'ha presa: la pillola resta lì sotto il dito
+        let fantasma = null, bersaglio = null, celle = [];
+        const posiziona = (x, y) => { fantasma.style.transform = `translate(${x - presaX}px, ${y - presaY}px) scale(1.08)`; };
+        const inizia = () => {
+          try { chip.setPointerCapture(id); } catch (err) { /* senza cattura il trascinamento funziona lo stesso */ }
+          fantasma = chip.cloneNode(true);
+          fantasma.classList.remove("preso", "in-volo");
+          fantasma.classList.add("fantasma");
+          fantasma.style.width = `${r0.width}px`;
+          fantasma.style.transformOrigin = `${presaX}px ${presaY}px`;
+          document.body.appendChild(fantasma);
+          chip.classList.add("preso");
+          celle = [...box.querySelectorAll(`td[data-r="${riga.id}"]`)];
+          celle.forEach((td) => td.classList.add("puo"));
+        };
+        const pulisci = () => {
+          chip.onpointermove = chip.onpointerup = chip.onpointercancel = null;
+          chip.classList.remove("preso");
+          celle.forEach((td) => td.classList.remove("puo", "bersaglio"));
+        };
+        // Il fantasma vola da dove lo lasci alla cella dove atterra, o torna da dove è partito:
+        // breve, smorzato, senza rimbalzo, così l'occhio segue la rata invece di perderla.
+        const vola = (f, aRect, dopo) => {
+          if (ridotto() || !f.animate) { f.remove(); if (dopo) dopo(); return; }
+          const fr = f.getBoundingClientRect();
+          f.style.transformOrigin = "0 0";
+          const da = `translate(${fr.left}px, ${fr.top}px) scale(${fr.width / r0.width})`;
+          const a = `translate(${aRect.left}px, ${aRect.top}px) scale(1)`;
+          f.style.transform = da;
+          const anim = f.animate([{ transform: da }, { transform: a }], { duration: 240, easing: "cubic-bezier(.2,.8,.2,1)", fill: "forwards" });
+          anim.onfinish = anim.oncancel = () => { f.remove(); if (dopo) dopo(); };
+        };
+        chip.onpointermove = (ev) => {
+          if (!fantasma) {
+            const dx = ev.clientX - x0, dy = ev.clientY - y0;
+            if (Math.hypot(dx, dy) < SOGLIA_PRESA) return;
+            if (Math.abs(dy) > Math.abs(dx)) { pulisci(); return; }   // voleva scorrere, non trascinare
+            inizia();
+          }
+          ev.preventDefault();
+          posiziona(ev.clientX, ev.clientY);
           const sotto = document.elementFromPoint(ev.clientX, ev.clientY);
           const td = sotto && sotto.closest(`td[data-r="${riga.id}"]`);
           if (td !== bersaglio) { if (bersaglio) bersaglio.classList.remove("bersaglio"); bersaglio = td; if (td) td.classList.add("bersaglio"); }
         };
-        sposta(e);
-        chip.onpointermove = sposta;
-        chip.onpointerup = chip.onpointercancel = (ev) => {
-          chip.onpointermove = chip.onpointerup = chip.onpointercancel = null;
-          fantasma.remove();
-          chip.classList.remove("preso");
-          celle.forEach((td) => td.classList.remove("puo", "bersaglio"));
-          if (ev.type === "pointerup" && bersaglio && bersaglio.dataset.m !== da) muovi(riga, da, bersaglio.dataset.m);
+        chip.onpointercancel = () => { pulisci(); if (fantasma) fantasma.remove(); };
+        chip.onpointerup = () => {
+          const f = fantasma, dest = bersaglio;
+          pulisci();
+          if (!f) return;                                   // un tocco, non un trascinamento
+          if (dest && dest.dataset.m !== da) {
+            const a = dest.dataset.m;
+            muovi(riga, da, a);                             // ridisegna: la rata nuova è già nella cella di arrivo
+            const nuovo = el("calendario").querySelector(`.chip[data-r="${riga.id}"][data-m="${a}"]`);
+            if (!nuovo) { f.remove(); return; }
+            nuovo.scrollIntoView({ block: "nearest", inline: "nearest" });
+            nuovo.classList.add("in-volo");
+            vola(f, nuovo.getBoundingClientRect(), () => nuovo.classList.remove("in-volo"));
+          } else {
+            vola(f, chip.getBoundingClientRect());          // niente bersaglio: torna da dove è partita
+          }
         };
       };
     });
@@ -1540,6 +1628,12 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   renderScenario();
   collegaBlocchi();
   ricalcola();
+  // La barra dei minimi compare solo quando la card è uscita dallo schermo verso l'alto.
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver(([e]) => {
+      el("barra-minimi").hidden = e.isIntersecting || e.boundingClientRect.top > 0;
+    }, { threshold: 0 }).observe(el("minimi"));
+  }
 })();
 </script>
 </body>
