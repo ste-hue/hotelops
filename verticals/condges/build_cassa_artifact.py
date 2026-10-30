@@ -16,6 +16,7 @@ senza, usa ``latest.json``. ``--push`` pubblica HTML e dati nel KV del Worker
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
@@ -243,47 +244,81 @@ def _eur(cent: int) -> str:
     return f"{segno}{e:,}".replace(",", ".") + f",{c:02d} €"
 
 
+_MESI_IT = ("gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic")
+_BANCHE_IT = {"MPS_KROSS": "MPS Kross", "INTESA": "Intesa", "SELLA": "Sella", "UNICREDIT": "Unicredit", "REVOLUT": "Revolut"}
+
+
+def _mese_it(m: str) -> str:
+    return f"{_MESI_IT[int(m[5:7]) - 1]} {m[2:4]}"
+
+
+def _data_it(d: str) -> str:
+    return f"{d[8:10]}/{d[5:7]}/{d[:4]}"
+
+
+def _motivo_it(motivo: str) -> str:
+    """Il motivo tecnico di un saldo non attestato (cassa_fonti), detto in parole semplici."""
+    m = re.fullmatch(r"nessuna chiusura al (\S+) \(ultima (\S+)\)", motivo)
+    if m:
+        return f"nessun saldo al {_data_it(m[1])}, l'ultimo è del {_data_it(m[2])}"
+    if motivo == "nessuna chiusura precedente":
+        return "manca il saldo del mese prima"
+    m = re.fullmatch(r"nessun movimento dopo il (\S+)", motivo)
+    if m:
+        return f"nessun movimento caricato dopo il {_data_it(m[1])}"
+    m = re.fullmatch(r"movimenti fino al (\S+)", motivo)
+    if m:
+        return f"movimenti caricati fino al {_data_it(m[1])}"
+    m = re.fullmatch(r"scostamento (\S+)", motivo)
+    if m:
+        return f"la somma dei movimenti non torna di {m[1]} €"
+    return motivo
+
+
 def _limiti(snapshot: dict, seme: Scenario, baseline: dict) -> list[str]:
     out = []
     for soc, a in snapshot["ancore"].items():
-        for banca, c in a["conti"].items():
-            if not c["attestato"]:
-                out.append(
-                    f"{soc} · {banca}: saldo dichiarato al {a['data']}, non attestato ({c['motivo']})."
-                )
+        ok = [_BANCHE_IT.get(b, b) for b, c in a["conti"].items() if c["attestato"]]
+        no = [
+            f"{_BANCHE_IT.get(b, b)} ({_motivo_it(c['motivo'])})"
+            for b, c in a["conti"].items()
+            if not c["attestato"]
+        ]
+        if no:
+            verificati = f"Verificati con i movimenti: {', '.join(ok)}." if ok else "Nessuno verificato con i movimenti."
+            out.append(
+                f"{soc} · saldi di fine mese al {_data_it(str(a['data']))}. {verificati} "
+                f"Da verificare: {', '.join(no)}."
+            )
     coda = snapshot["mesi_ipotetici"]
     if coda:
-        pf_fine = [m for m in snapshot["mesi"] if m not in coda]
         out.append(
-            f"Mesi da {coda[0]} a {coda[-1]} senza PF (il PF finisce a "
-            f"{pf_fine[-1] if pf_fine else '-'}): nessun saldo previsto; la pagina mostra "
-            "solo l'effetto cumulato delle leve dello scenario, non un saldo di cassa."
+            f"Da {_mese_it(coda[0])} a {_mese_it(coda[-1])} il PF non c'è: nessun saldo, la pagina "
+            "mostra solo quanto le leve dello scenario spostano la cassa."
         )
     out.append(
-        "I pagamenti di progetto sono netti: l'IVA si applica per aliquota (0/10/22%) "
-        "nel mese del pagamento, con arrotondamento al centesimo."
+        "I pagamenti dei progetti si scrivono netti: la pagina aggiunge l'IVA (0, 10 o 22%) "
+        "nel mese del pagamento."
     )
-    senza_rate = [f for f in seme.finanziamenti if f.erogazioni and not f.rate]
-    if senza_rate:
+    for f in seme.finanziamenti:
+        cosa = []
+        if f.stato == "da verificare":
+            cosa.append("da verificare, non ancora deliberato")
+        if f.erogazioni and not f.rate:
+            cosa.append("senza rate di rimborso: entra solo il denaro erogato")
+        if cosa:
+            out.append(f"{f.nome}: {'; '.join(cosa)}.")
+    if seme.finanziamenti:
         out.append(
-            "Rate dei nuovi finanziamenti assenti: "
-            + ", ".join(f.nome for f in senza_rate)
-            + " entrano come erogazioni senza rimborso nell'orizzonte."
-        )
-    da_verificare = [f for f in seme.finanziamenti if f.stato == "da verificare"]
-    if da_verificare:
-        out.append(
-            "Finanziamenti da verificare: "
-            + ", ".join(f.nome for f in da_verificare)
-            + " — erogazioni ipotizzate, non deliberate; sostituiscono le righe PF "
-            "ENTRATE_FINANZIAMENTI della società."
+            "Con i finanziamenti nello scenario, le entrate da finanziamenti del PF di quella "
+            "società non contano: niente doppio conteggio."
         )
     n = len(baseline["non_riconciliati"])
     if n:
         tot = sum(f["importo"] for f in baseline["non_riconciliati"])
         out.append(
-            f"Fatti non riconciliati: {n} pagamenti ({_eur(tot)}) senza un pagamento "
-            "di progetto dello stesso fornitore nello scenario; contano comunque come uscita."
+            f"{n} pagamenti già fatti ({_eur(tot)}) non trovano un pagamento di progetto dello "
+            "stesso fornitore nello scenario: contano lo stesso come uscita."
         )
     return out
 
@@ -301,22 +336,20 @@ def _limiti_canone(c: dict, mesi: list[str] = (), mesi_ipotetici: set[str] = fro
                 continue
             lordo = (netto * k + 50) // 100
             if pf.get(m, 0) != lordo:
+                nel_pf = f"il PF ne ha {_eur(pf[m])}" if pf.get(m) else "nel PF non c'è"
                 out.append(
-                    f"Contratto art. 3: rata del canone il 30/{m[5:7]}/{m[:4]} = {_eur(lordo)} lordo; "
-                    f"il PF ne ha {_eur(pf.get(m, 0))}: ORTI e INTUR differiscono dal contratto di "
-                    f"{_eur(lordo - pf.get(m, 0))} da quel mese (lo slider usa il calendario del contratto)."
+                    f"Canone, contratto art. 3: rata di {_eur(lordo)} lordo il 30/{m[5:7]}/{m[:4]}, "
+                    f"{nel_pf}. Lo slider segue il contratto."
                 )
     if c["dichiarato"]:
-        rate = ", ".join(f"{m} {_eur(v)}" for m, v in sorted(c["rate_pf"].items())) or "nessuna"
+        rate = ", ".join(f"{_mese_it(m)} {_eur(v)}" for m, v in sorted(c["rate_pf"].items())) or "nessuna"
         return out + [
-            f"Canone Fitto Hotel: annuo dichiarato {_eur(c['netto_annuo'])} netto "
-            f"({_eur(c['lordo_annuo'])} lordo, IVA {c['aliquota_iva']}%), dichiarato il "
-            f"{c['dichiarato_il'] or '-'}; il PF ne mostra queste rate: {rate}. "
-            "Lo slider scala le rate del PF nell'orizzonte in proporzione all'annuo; "
-            "le rate fuori orizzonte non entrano in cassa qui."
+            f"Canone: {_eur(c['netto_annuo'])} netto l'anno ({_eur(c['lordo_annuo'])} lordo, IVA "
+            f"{c['aliquota_iva']}%), dichiarato il {_data_it(c['dichiarato_il']) if c['dichiarato_il'] else '-'}. "
+            f"Rate nel PF: {rate}. Lo slider le scala in proporzione; quelle fuori orizzonte qui non contano."
         ]
     return [
-        f"Canone Fitto Hotel: nessun annuo dichiarato; lo slider parte da {_eur(c['netto_annuo'])} "
+        f"Canone: nessun annuo dichiarato; lo slider parte da {_eur(c['netto_annuo'])} "
         "netto = somma delle rate PF nell'orizzonte, che NON è l'annuo."
     ]
 
