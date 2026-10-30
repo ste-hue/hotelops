@@ -77,6 +77,9 @@ input.nome{width:100%}
 .pag .mesi label{font-size:11px;color:var(--muted);display:flex;flex-direction:column}
 .pag .mesi input{width:92px;text-align:right;font-size:12px;padding:3px 5px}
 .nota{font-size:12px;color:var(--muted);font-style:italic;margin-top:4px}
+.come{margin-top:8px;padding:6px 8px;border-left:3px solid var(--accent);background:var(--card)}
+.come .frase{font-size:13px;margin-bottom:4px}
+.come .errore-r{color:var(--bad);font-size:12px;font-style:normal}
 .limiti{margin-top:18px;padding:10px 14px;border-radius:8px;background:var(--warn-bg);color:var(--ink)}
 .limiti h2{margin:0 0 6px;color:var(--warn)}
 .limiti ul{margin:0;padding-left:18px;font-size:13px}
@@ -420,7 +423,82 @@ const FORMATO = (() => {
   }
   // Annuo lordo implicito: lordi dello scenario / lordi di riferimento × annuo lordo di riferimento.
   const annuoDaLordi = (lordiScenario, lordiBase, lordoRif) => (lordiBase ? mulDiv(lordiScenario, lordoRif, lordiBase) : lordiScenario);
-  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi };
+  const MESI_IT = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
+  const meseIt = (m) => `${MESI_IT[parseInt(m.slice(5), 10) - 1]} ${m.slice(2, 4)}`;
+  const ordinati = (mesi) => Object.keys(mesi).sort();
+
+  // Rateizza `totale` in n rate, una ogni `passo` mesi a partire da `da`, dentro l'orizzonte `orizzonte`.
+  // Stessa regola di MOTORE.distribuisci: quote uguali, il resto dei centesimi sull'ultima.
+  function spalma(totale, da, n, passo, orizzonte) {
+    if (!(n >= 1)) throw new Error(`numero di rate non valido: ${n}`);
+    if (!(passo >= 1)) throw new Error(`cadenza non valida: ${passo}`);
+    const i = orizzonte.indexOf(da);
+    if (i < 0) throw new Error(`mese di partenza fuori dall'orizzonte: ${da}`);
+    const j = i + (n - 1) * passo;
+    if (j >= orizzonte.length) {
+      const [a, m] = orizzonte[i].split("-").map(Number);
+      const t = (m - 1) + (n - 1) * passo;
+      const cade = `${a + Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`;
+      throw new Error(`l'ultima rata cadrebbe a ${meseIt(cade)}, oltre l'orizzonte che finisce a ${meseIt(orizzonte[orizzonte.length - 1])}`);
+    }
+    const quota = Math.floor(totale / n);
+    const out = {};
+    for (let k = 0; k < n; k++) out[orizzonte[i + k * passo]] = k === n - 1 ? totale - quota * (n - 1) : quota;
+    return out;
+  }
+  // Sposta tutte le rate di `delta` mesi, importi e totale invariati.
+  function sposta(mesi, delta, orizzonte) {
+    const out = {};
+    for (const m of ordinati(mesi)) {
+      const i = orizzonte.indexOf(m) + delta;
+      if (orizzonte.indexOf(m) < 0 || i < 0 || i >= orizzonte.length) throw new Error(`non si sposta: ${meseIt(m)} uscirebbe dall'orizzonte`);
+      out[orizzonte[i]] = mesi[m];
+    }
+    return out;
+  }
+  // Come si paga: numero di rate, prima e ultima, cadenza se costante, quota se uguale (resto sull'ultima).
+  function formaRate(mesi, orizzonte) {
+    const ch = ordinati(mesi);
+    const totale = ch.reduce((t, m) => t + mesi[m], 0);
+    if (!ch.length) return { n: 0, primo: null, ultimo: null, passo: null, quota: null, totale };
+    const idx = ch.map((m) => orizzonte.indexOf(m));
+    const salti = idx.slice(1).map((v, k) => v - idx[k]);
+    const passo = idx.every((v) => v >= 0) && salti.every((d) => d === (salti[0] || 1)) ? salti[0] || 1 : null;
+    const q = mesi[ch[0]];
+    const quota = ch.slice(0, -1).every((m) => mesi[m] === q) && mesi[ch[ch.length - 1]] - q >= 0 && mesi[ch[ch.length - 1]] - q < ch.length ? q : null;
+    return { n: ch.length, primo: ch[0], ultimo: ch[ch.length - 1], passo, quota, totale };
+  }
+  // Legge un documento esportato dalla pagina (o da `hotelops cdg scenario`): {nome, base, scenario} o {errore}.
+  function leggiDocumento(testo, schema) {
+    let doc;
+    try { doc = JSON.parse(testo); } catch (e) { return { errore: "il file non è JSON leggibile" }; }
+    if (!doc || doc.schema !== schema) return { errore: `schema ${doc && doc.schema !== undefined ? doc.schema : "assente"} diverso da ${schema}` };
+    const sc = doc.scenario;
+    if (!sc || !Array.isArray(sc.progetti) || !Array.isArray(sc.finanziamenti)) return { errore: "manca lo scenario (progetti e finanziamenti)" };
+    const mesiOk = (o, dove) => {
+      for (const [m, v] of Object.entries(o || {})) {
+        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)) return `${dove}: mese ${m} non valido (serve AAAA-MM)`;
+        if (!Number.isInteger(v)) return `${dove}: importo di ${m} non in centesimi interi`;
+      }
+      return null;
+    };
+    for (const p of sc.progetti) {
+      if (!p.id || !p.nome) return { errore: "un progetto non ha id o nome" };
+      const nomi = new Set();
+      for (const g of p.pagamenti || []) {
+        if (nomi.has(g.nome)) return { errore: `${p.nome}: pagamento «${g.nome}» duplicato` };
+        nomi.add(g.nome);
+        const e = mesiOk(g.mesi, `${p.nome} · ${g.nome}`);
+        if (e) return { errore: e };
+      }
+    }
+    for (const f of sc.finanziamenti) {
+      const e = mesiOk(f.erogazioni, `${f.nome} · erogazioni`) || mesiOk(f.rate, `${f.nome} · rate`);
+      if (e) return { errore: e };
+    }
+    return { nome: doc.nome || sc.nome || "importato", base: doc.base || {}, scenario: sc, salvato_il: doc.salvato_il || null };
+  }
+  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento };
 })();
 if (typeof module !== "undefined") module.exports = FORMATO;
 </script>
@@ -433,13 +511,12 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   const MESI_PF = D.mesi.filter((m) => !IPO.has(m));
   const ULTIMO_PF = MESI_PF[MESI_PF.length - 1];
   const ULTIMO = D.mesi[D.mesi.length - 1];
-  const MESI_IT = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
   const { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi } = FORMATO;
   // Legge un campo euro: null = non valido (campo marcato, stato invariato).
   const euroDa = (inp) => { const v = parseEuro(inp.value); inp.classList.toggle("invalid", v === null); return v; };
   // Nome del PF senza il prefisso del file temporaneo del promote (solo a video: `base` resta com'è).
   const nomeFile = (s) => String(s).replace(/^hotelops_raw_.*?(?=[A-Z]{2,}_)/, "");
-  const meseIt = (m) => `${MESI_IT[parseInt(m.slice(5), 10) - 1]} ${m.slice(2, 4)}`;
+  const meseIt = FORMATO.meseIt;
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const copia = (o) => JSON.parse(JSON.stringify(o));
   const el = (id) => document.getElementById(id);
@@ -453,7 +530,8 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   const dataIt = (iso) => (/^\d{4}-\d{2}-\d{2}/.test(String(iso)) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : esc(iso));
 
   // ── stato ──
-  let stato = { nome: D.seme.nome, scenario: copia(D.seme.scenario) };
+  // origine = lo scenario com'era quando è stato aperto: se cambia, uscendo resta nel menu come bozza.
+  let stato = { nome: D.seme.nome, scenario: copia(D.seme.scenario), origine: JSON.stringify(D.seme.scenario) };
   let ris = null;
   const aperti = new Set();   // righe della tabella aperte (società|mese)
   const aperte = new Set();   // tendine aperte: "canone", "p:<id>", "f:<id>"
@@ -507,12 +585,13 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   function renderScenario() {
     const sel = document.createElement("select");
     const tutti = [{ ...D.seme, _k: "seme", _e: `${D.seme.nome} · seme` }, { ...vuoto(), compatibile: true, _k: "vuoto", _e: "Solo PF, nessuna leva" },
-      ...D.scenari.map((s, i) => ({ ...s, _k: String(i), _e: `${s.nome} · salvato ${oraDi(s.salvato_il)}` }))];
+      ...D.scenari.map((s, i) => ({ ...s, _k: String(i), _e: s._etichetta || `${s.nome} · salvato ${oraDi(s.salvato_il)}` }))];
     el("scenario").innerHTML = `<div class="strumenti" style="margin-top:0"><label class="piccolo">Scenario <select id="sel-scenari"></select></label>
       <input type="text" id="nome-scenario" class="nome" style="width:180px" placeholder="nome scenario">
       <label class="piccolo">Soglia € <input type="text" class="eur" id="soglia"></label>
       <button id="esporta" class="primario">Esporta scenario</button>
-      <button id="nessuna">Spegni tutte le leve</button></div>`;
+      <button id="importa">Importa scenario</button><input type="file" id="importa-file" accept=".json,application/json" hidden>
+      <button id="nessuna" title="le modifiche restano nel menu come bozza">Vedi solo PF</button></div>`;
     const s0 = el("sel-scenari");
     for (const s of tutti) {
       const o = document.createElement("option");
@@ -520,20 +599,38 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       o.textContent = s._e + (s.compatibile ? "" : " · base diversa");
       s0.appendChild(o);
     }
-    s0.onchange = () => {
-      const s = s0.value === "seme" ? D.seme : s0.value === "vuoto" ? vuoto() : D.scenari[parseInt(s0.value, 10)];
-      stato = { nome: s.nome, scenario: copia(s.scenario) };
-      aperti.clear();
-      el("nome-scenario").value = stato.nome;
-      el("soglia").value = fmt(stato.scenario.soglia || 0, false);
-      ricalcola();
-    };
+    s0.value = stato.chiave || "seme";
+    s0.onchange = () => apriScenario(s0.value);
     el("nome-scenario").value = stato.nome;
     el("nome-scenario").oninput = (e) => { stato.nome = e.target.value; stato.scenario.nome = e.target.value; };
     el("soglia").value = fmt(stato.scenario.soglia || 0, false);
     el("soglia").onchange = (e) => { const v = euroDa(e.target); if (v === null) return; stato.scenario.soglia = v; ricalcola(); };
     el("esporta").onclick = esporta;
-    el("nessuna").onclick = () => { s0.value = "vuoto"; s0.onchange(); };
+    el("nessuna").onclick = () => apriScenario("vuoto");
+    el("importa").onclick = () => el("importa-file").click();
+    el("importa-file").onchange = async (e) => {
+      const file = e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      const r = FORMATO.leggiDocumento(await file.text(), D.schema);
+      if (r.errore) { mostraErrore(`Importa «${file.name}»: ${r.errore}`); return; }
+      const compatibile = SOC.every((x) => ((r.base[x] || {}).raw_object_id || null) === ((D.base[x] || {}).raw_object_id || null));
+      D.scenari.push({ nome: r.nome, salvato_il: r.salvato_il, scenario: r.scenario, compatibile, _etichetta: `${r.nome} · importato da ${file.name}` });
+      apriScenario(String(D.scenari.length - 1));
+    };
+  }
+
+  // Apre uno scenario del menu. Se quello corrente è stato modificato, resta nel menu come bozza.
+  function apriScenario(chiave) {
+    const s = chiave === "seme" ? D.seme : chiave === "vuoto" ? vuoto() : D.scenari[parseInt(chiave, 10)];
+    if (JSON.stringify(stato.scenario) !== stato.origine) {
+      D.scenari.push({ nome: stato.nome, salvato_il: new Date().toISOString(), scenario: copia(stato.scenario), compatibile: true,
+        _etichetta: `${stato.nome} · bozza delle ${new Date().toTimeString().slice(0, 5)}, non esportata` });
+    }
+    stato = { nome: s.nome, scenario: copia(s.scenario), origine: JSON.stringify(s.scenario), chiave };
+    aperti.clear();
+    renderScenario();
+    ricalcola();
   }
 
   function esporta() {
@@ -645,7 +742,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
         <div class="riga"><label class="piccolo" style="flex:1">oppure calendario libero (mese=netto; vince sulle rate per quell'anno)<br>
           <input type="text" class="nome" id="canone-cal" placeholder="2027-03=200.000,00; 2027-06=300.000,00" value="${esc(calendarioTesto(c.calendario))}"></label></div>
         <div class="nota">Il canone è lordo in cassa: esce da ORTI ed entra in INTUR nello stesso mese. Negli anni coperti dalla scaletta sostituisce le righe «Fitto Hotel» del PF.</div>`
-      : `<div class="nota">Canone come nel PF: rate nell'orizzonte ${RATE_ORIZ.length ? RATE_ORIZ.map((r) => `${meseIt(r.mese)} ${fmt(r.lordo, false)} lordo`).join(", ") : "nessuna"}. ${CONTR ? ` Il contratto prevede ${Object.keys(CONTR.rate_mese).sort().map((mm) => `30/${mm}`).join(", ")}: <button data-canone-contratto class="mini">applica il calendario del contratto</button>.` : ""} Muovi lo slider, oppure <button data-canone-attiva class="mini">apri la scaletta</button> per anni, rate e calendario.</div>`;
+      : `<div class="nota">Canone come nel PF: rate nell'orizzonte ${RATE_ORIZ.length ? RATE_ORIZ.map((r) => `${meseIt(r.mese)} ${fmt(r.lordo, false)} lordo`).join(", ") : "nessuna"}. ${CONTR ? ` Il contratto prevede ${Object.keys(CONTR.rate_mese).sort().map((mm) => `30/${mm}`).join(", ")}: <button data-canone-contratto class="mini">applica il calendario del contratto</button>.` : ""} Muovi lo slider, oppure <button data-canone-attiva class="mini">apri la scaletta</button> per anni, rate e calendario.${stato.canoneParcheggiato ? ' <button data-canone-ripristina class="mini">riprendi la scaletta di prima</button>' : ""}</div>`;
     el("canone").innerHTML = `<div class="testa"><div><strong>Canone Fitto Hotel</strong> <span class="piccolo">ORTI → INTUR · lordo annuo IVA inclusa${CR.dichiarato ? " (dichiarato)" : " (dalle rate PF nell'orizzonte)"}</span></div>
         <div class="grande num" id="canone-val"></div></div>
       <div class="slider"><input type="range" id="canone-slider" min="0" max="${MAX_LORDO}" step="100000" value="${Math.min(Math.max(lordo, 0), MAX_LORDO)}" aria-label="Canone lordo annuo IVA inclusa">
@@ -659,6 +756,8 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     const box = el("canone");
     const contr = box.querySelector("button[data-canone-contratto]");
     if (contr) contr.onclick = () => { impostaCanone(CR.lordo_annuo); ricalcola(); };
+    const rip = box.querySelector("button[data-canone-ripristina]");
+    if (rip) rip.onclick = () => { stato.scenario.canone = stato.canoneParcheggiato; stato.canoneParcheggiato = null; ricalcola(); };
     const att = box.querySelector("button[data-canone-attiva]");
     if (att) att.onclick = () => { if (!stato.scenario.canone) impostaCanone(CR.lordo_annuo); el("canone-dett").open = true; ricalcola(); };
     if (c) {
@@ -680,7 +779,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
         c.calendario = Object.keys(cal).length ? cal : null;
         ricalcola();
       };
-      box.querySelector("button[data-canone-pf]").onclick = () => { stato.scenario.canone = null; ricalcola(); };
+      box.querySelector("button[data-canone-pf]").onclick = () => { stato.canoneParcheggiato = stato.scenario.canone; stato.scenario.canone = null; ricalcola(); };
     }
     aggiornaCanoneInfo();
   }
@@ -866,6 +965,48 @@ if (typeof module !== "undefined") module.exports = FORMATO;
 
   // ── leve: progetti e finanziamenti a tendina ──
   const selMesi = (val, cls = "") => `<select class="${cls}">${D.mesi.map((m) => `<option value="${m}" ${m === val ? "selected" : ""}>${meseIt(m)}</option>`).join("")}</select>`;
+  const PASSI = [[1, "ogni mese"], [2, "ogni 2 mesi"], [3, "ogni 3 mesi"], [4, "ogni 4 mesi"], [6, "ogni 6 mesi"], [12, "ogni anno"]];
+  // La frase «come si paga»: quante rate, ogni quanto, la prima e l'ultima, e quante cadono senza PF.
+  function comeSiPaga(mesi, aliquota) {
+    const f = FORMATO.formaRate(mesi, D.mesi);
+    if (!f.n) return "nessuna rata. Scrivi il totale, in quante rate, ogni quanto e la prima rata, poi «Rateizza».";
+    const passo = f.passo ? (PASSI.find(([x]) => x === f.passo) || [0, `ogni ${f.passo} mesi`])[1] : "a mesi liberi";
+    const conIva = aliquota !== null && aliquota > 0;
+    const quota = f.n > 1 && f.quota !== null ? ` da ${fmt(f.quota, false)}${conIva ? ` netto (${fmt(MOTORE.iva(f.quota, aliquota), false)} lordo)` : ""}` : "";
+    const quando = f.n === 1 ? `una rata a ${meseIt(f.primo)}` : `${f.n} rate${quota} ${passo}, la prima a ${meseIt(f.primo)}, l'ultima a ${meseIt(f.ultimo)}`;
+    const lordo = conIva ? Object.values(mesi).reduce((a, b) => a + MOTORE.iva(b, aliquota), 0) : f.totale;
+    const tot = conIva ? `totale ${fmt(f.totale, false)} netto, ${fmt(lordo, false)} lordo in cassa` : `totale ${fmt(f.totale, false)}${aliquota === 0 ? " (IVA 0%)" : ""}`;
+    const oltre = Object.keys(mesi).filter((m) => IPO.has(m)).length;
+    return `${quando} · ${tot}${oltre ? ` · ${oltre === 1 ? "una rata cade" : `${oltre} rate cadono`} dopo ${meseIt(ULTIMO_PF)}, nei mesi senza PF` : ""}`;
+  }
+  function bloccoRate(mesi, aliquota) {
+    const f = FORMATO.formaRate(mesi, D.mesi);
+    return `<div class="come"><div class="frase"><strong>Come si paga:</strong> ${esc(comeSiPaga(mesi, aliquota))}</div>
+      <div class="riga"><label class="piccolo">totale <input type="text" class="eur" data-spalma-tot value="${fmt(f.totale)}"></label>
+        ${aliquota ? '<select data-spalma-base><option value="netto">netto</option><option value="lordo">lordo IVA inclusa</option></select>' : ""}
+        <label class="piccolo">in <input type="text" class="n" data-spalma-n value="${Math.max(1, f.n)}"> rate</label>
+        <select data-spalma-passo>${PASSI.map(([x, e]) => `<option value="${x}" ${x === (f.passo || 1) ? "selected" : ""}>${e}</option>`).join("")}</select>
+        <label class="piccolo">prima rata ${selMesi(f.primo || D.mesi[0], "sel-spalma-da")}</label>
+        <button data-spalma>Rateizza</button></div>
+      <div class="riga"><button class="mini" data-sposta="-1" ${f.n ? "" : "disabled"}>◀ tutto un mese prima</button>
+        <button class="mini" data-sposta="1" ${f.n ? "" : "disabled"}>tutto un mese dopo ▶</button>
+        <span class="errore-r" data-errore-spalma></span></div>
+      <div class="piccolo">mese per mese (puoi correggere ogni importo)</div></div>`;
+  }
+  function collegaRate(root, leggi, scrivi, aliquota) {
+    const err = root.querySelector("[data-errore-spalma]");
+    const prova = (fn) => { try { scrivi(fn()); ricalcola(); } catch (e) { err.textContent = e.message; } };
+    root.querySelector("button[data-spalma]").onclick = () => {
+      const t = euroDa(root.querySelector("input[data-spalma-tot]"));
+      if (t === null) return;
+      const base = root.querySelector("select[data-spalma-base]");
+      const tot = base && base.value === "lordo" ? FORMATO.nettoDaLordo(t, aliquota) : t;
+      const n = parseInt(root.querySelector("input[data-spalma-n]").value, 10);
+      const passo = parseInt(root.querySelector("select[data-spalma-passo]").value, 10);
+      prova(() => FORMATO.spalma(tot, root.querySelector("select.sel-spalma-da").value, n, passo, D.mesi));
+    };
+    root.querySelectorAll("button[data-sposta]").forEach((b) => { b.onclick = () => prova(() => FORMATO.sposta(leggi(), parseInt(b.dataset.sposta, 10), D.mesi)); });
+  }
   const selSoc = (val) => `<select data-campo="societa">${SOC.map((s) => `<option ${s === val ? "selected" : ""}>${s}</option>`).join("")}</select>`;
   // L'aliquota del pagamento entra tra le opzioni se non è tra le tre standard: la select non mente mai.
   const selIva = (val) => `<select data-campo="aliquota_iva">${([0, 10, 22].includes(val) ? [0, 10, 22] : [0, 10, 22, val].sort((a, b) => a - b)).map((a) => `<option value="${a}" ${a === val ? "selected" : ""}>IVA ${a}%</option>`).join("")}</select>`;
@@ -913,9 +1054,8 @@ if (typeof module !== "undefined") module.exports = FORMATO;
             <input type="text" class="n" style="width:90px" data-campo="stato" value="${esc(g.stato)}" title="stato">
             <input type="text" class="n" style="width:90px" data-campo="fornitore_id" value="${esc(g.fornitore_id || "")}" placeholder="fornitore" title="fornitore_id (riconcilia i fatti)">
             <button data-elimina-g title="elimina pagamento">×</button></div>
-          <div class="piccolo num">netto ${fmt(somma(g.mesi))} · lordo ${fmt(Object.values(g.mesi).reduce((a, b) => a + MOTORE.iva(b, g.aliquota_iva), 0))}</div>
+          ${bloccoRate(g.mesi, g.aliquota_iva)}
           ${grigliaMesi(g.mesi, "mese")}
-          <div class="riga"><span class="piccolo">spalma</span> <input type="text" class="eur" data-spalma-tot placeholder="totale netto €"> <span class="piccolo">da</span> ${selMesi(Object.keys(g.mesi).sort()[0] || D.mesi[0], "sel-spalma-da")} <span class="piccolo">in</span> <input type="text" class="n" data-spalma-n value="${Math.max(1, Object.keys(g.mesi).length)}"> <button data-spalma>Spalma</button> <span class="nota" data-errore-spalma></span></div>
           ${p.acceso ? "" : '<div class="nota">non conta finché il progetto è spento</div>'}
         </div>`).join("")}
         <div class="riga"><button data-aggiungi-g>+ pagamento</button></div>
@@ -936,7 +1076,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
           <input type="text" class="n" style="width:110px" data-campo="stato" value="${esc(f.stato)}" title="stato">
           <button data-elimina-f title="elimina">× elimina</button></div>
         <div class="piccolo">erogazioni</div>${grigliaMesi(f.erogazioni, "erog")}
-        <div class="piccolo">rate</div>${grigliaMesi(f.rate, "rata")}
+        <div class="piccolo"><strong>rate di rimborso</strong></div><div class="rate-f">${bloccoRate(f.rate, null)}</div>${grigliaMesi(f.rate, "rata")}
         <div class="nota">le erogazioni dello scenario sostituiscono le righe PF «finanziamenti» di ${esc(f.societa)}</div>
       </div></details>`;
     }).join("");
@@ -978,15 +1118,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
         });
         pg.querySelector("button[data-elimina-g]").onclick = () => { p.pagamenti.splice(p.pagamenti.indexOf(g), 1); ricalcola(); };
         leggiMesi(pg, "mese", g.mesi);
-        pg.querySelector("button[data-spalma]").onclick = () => {
-          const campoTot = pg.querySelector("input[data-spalma-tot]");
-          const letto = euroDa(campoTot);
-          if (letto === null) return;
-          const tot = letto || somma(g.mesi);
-          const da = pg.querySelector("select.sel-spalma-da").value;
-          const n = parseInt(pg.querySelector("input[data-spalma-n]").value, 10) || 1;
-          try { g.mesi = MOTORE.distribuisci(tot, da, n, D.mesi); ricalcola(); } catch (e) { pg.querySelector("[data-errore-spalma]").textContent = e.message; }
-        };
+        collegaRate(pg.querySelector(".come"), () => g.mesi, (m) => { g.mesi = m; }, g.aliquota_iva);
       });
     });
     el("aggiungi-p").onclick = () => { const id = `P${Date.now().toString(36)}`; sc.progetti.push({ id, nome: "Nuovo progetto", societa: "INTUR", acceso: true, stato: "ipotesi", pagamenti: [{ nome: "Pagamento", mesi: {}, aliquota_iva: 22, stato: "ipotesi", fornitore_id: null }] }); aperte.add(`p:${id}`); ricalcola(); };
@@ -998,6 +1130,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       div.querySelector("button[data-elimina-f]").onclick = () => { sc.finanziamenti.splice(i, 1); ricalcola(); };
       leggiMesi(div, "erog", f.erogazioni);
       leggiMesi(div, "rata", f.rate);
+      collegaRate(div.querySelector(".rate-f .come"), () => f.rate, (m) => { f.rate = m; }, 0);
     });
     el("aggiungi-f").onclick = () => { const id = `F${Date.now().toString(36)}`; sc.finanziamenti.push({ id, nome: "Nuovo finanziamento", societa: "INTUR", erogazioni: {}, rate: {}, stato: "da verificare" }); aperte.add(`f:${id}`); ricalcola(); };
   }
