@@ -1191,7 +1191,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     const passo = f.passo ? (PASSI.find(([x]) => x === f.passo) || [0, `ogni ${f.passo} mesi`])[1] : "a mesi liberi";
     const conIva = aliquota !== null && aliquota > 0;
     const quota = f.n > 1 && f.quota !== null ? ` da ${fmt(f.quota, false)}${conIva ? ` netto (${fmt(MOTORE.iva(f.quota, aliquota), false)} lordo)` : ""}` : "";
-    const quando = f.n === 1 ? `una rata a ${meseIt(f.primo)}` : `${f.n} rate${quota} ${passo}, la prima a ${meseIt(f.primo)}, l'ultima a ${meseIt(f.ultimo)}`;
+    const quando = f.n === 1 ? `una tantum a ${meseIt(f.primo)}` : `${f.n} rate${quota} ${passo}, la prima a ${meseIt(f.primo)}, l'ultima a ${meseIt(f.ultimo)}`;
     const lordo = conIva ? Object.values(mesi).reduce((a, b) => a + MOTORE.iva(b, aliquota), 0) : f.totale;
     const tot = conIva ? `totale ${fmt(f.totale, false)} netto, ${fmt(lordo, false)} lordo in cassa` : `totale ${fmt(f.totale, false)}${aliquota === 0 ? " (IVA 0%)" : ""}`;
     const oltre = Object.keys(mesi).filter((m) => IPO.has(m)).length;
@@ -1203,8 +1203,8 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       <div class="riga"><label class="piccolo">totale <input type="text" class="eur" data-spalma-tot value="${fmt(f.totale)}"></label>
         ${aliquota ? '<select data-spalma-base><option value="netto">netto</option><option value="lordo">lordo IVA inclusa</option></select>' : ""}
         <label class="piccolo">in <input type="text" class="n" data-spalma-n value="${Math.max(1, f.n)}"> rate</label>
-        <select data-spalma-passo>${PASSI.map(([x, e]) => `<option value="${x}" ${x === (f.passo || 1) ? "selected" : ""}>${e}</option>`).join("")}</select>
-        <label class="piccolo">prima rata ${selMesi(f.primo || D.mesi[0], "sel-spalma-da")}</label>
+        <select data-spalma-passo ${f.n <= 1 ? "hidden" : ""}>${PASSI.map(([x, e]) => `<option value="${x}" ${x === (f.passo || 1) ? "selected" : ""}>${e}</option>`).join("")}</select>
+        <label class="piccolo"><span data-spalma-quando>${f.n <= 1 ? "mese" : "prima rata"}</span> ${selMesi(f.primo || D.mesi[0], "sel-spalma-da")}</label>
         <button data-spalma>Rateizza</button></div>
       <div class="riga"><button class="mini" data-sposta="-1" ${f.n ? "" : "disabled"}>◀ tutto un mese prima</button>
         <button class="mini" data-sposta="1" ${f.n ? "" : "disabled"}>tutto un mese dopo ▶</button>
@@ -1282,6 +1282,10 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   function collegaRate(root, leggi, scrivi, aliquota) {
     const err = root.querySelector("[data-errore-spalma]");
     const prova = (fn) => { try { scrivi(fn()); ricalcola(); } catch (e) { err.textContent = e.message; } };
+    // Una rata sola è una tantum: la cadenza non ha senso e non si mostra; «prima rata» diventa «mese».
+    const nIn = root.querySelector("input[data-spalma-n]"), passoSel = root.querySelector("select[data-spalma-passo]"), quando = root.querySelector("[data-spalma-quando]");
+    const aggiornaCadenza = () => { const uno = !(parseInt(nIn.value, 10) > 1); passoSel.hidden = uno; if (quando) quando.textContent = uno ? "mese" : "prima rata"; };
+    nIn.oninput = aggiornaCadenza;
     root.querySelector("button[data-spalma]").onclick = () => {
       const t = euroDa(root.querySelector("input[data-spalma-tot]"));
       if (t === null) return;
