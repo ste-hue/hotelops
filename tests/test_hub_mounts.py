@@ -2,7 +2,7 @@
 
 
 def test_reviews_render_importabile():
-    from verticals.reviews.app import render, main
+    from verticals.reviews.app import main, render
 
     assert callable(render)
     assert callable(main)
@@ -108,3 +108,64 @@ def test_spiaggia_upload_gated_per_utente():
 
     sig = inspect.signature(render)
     assert sig.parameters["can_upload"].default is False
+
+
+# ── Home come lista (30/10/2026): HTML puro da registry + pagine, testabile senza Streamlit ──
+
+
+class _PaginaFinta:
+    def __init__(self, url_path):
+        self.url_path = url_path
+
+
+def test_home_lista_una_riga_per_app_con_un_bottone_solo():
+    from verticals.hub.home import lista_html
+    from verticals.hub.registry import HubApp
+
+    groups = {
+        "Finanza": [
+            HubApp(
+                "cashflow",
+                "Cashflow",
+                "💸",
+                "Finanza",
+                "page",
+                lambda: None,
+                "PF & <cassa>",
+            ),
+            HubApp(
+                "banche",
+                "Banche",
+                "🏛",
+                "Finanza",
+                "bind",
+                "https://looker.example/x?a=1&b=2",
+                "Looker",
+            ),
+            HubApp("domani", "Domani", "🔜", "Finanza", "soon", None, ""),
+        ],
+        "Operations": [],
+    }
+    out = lista_html(groups, {"cashflow": _PaginaFinta("cashflow")})
+    assert out.count('<li class="pg-riga">') == 3
+    assert out.count('<section class="pg-gruppo">') == 1, (
+        "un gruppo vuoto non si disegna"
+    )
+    assert 'href="/cashflow">Apri</a>' in out
+    assert (
+        'href="https://looker.example/x?a=1&amp;b=2" target="_blank" rel="noopener">Apri ↗</a>'
+        in out
+    )
+    assert '<span class="pg-apri pg-presto">presto</span>' in out
+    assert "PF &amp; &lt;cassa&gt;" in out, "il sottotitolo si scappa"
+    # un bottone per riga, non uno di piu'
+    assert out.count("pg-apri") == 3
+
+
+def test_home_lista_pagina_non_montata_diventa_presto():
+    from verticals.hub.home import lista_html
+    from verticals.hub.registry import HubApp
+
+    groups = {"Finanza": [HubApp("x", "X", "✳", "Finanza", "page", lambda: None, "")]}
+    out = lista_html(groups, {})
+    assert "pg-presto" in out and "href=" not in out

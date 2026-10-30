@@ -141,6 +141,45 @@ h1 {{ font-weight: 600; letter-spacing: 0.04em; }}
 /* Link / underline cyan */
 a {{ color: var(--pg-azure); text-decoration-color: var(--pg-sky); }}
 
+/* ── Home come lista: un gruppo, le sue righe, un bottone per riga ──────── */
+.pg-gruppo {{ margin: 1.4rem 0 0.2rem; }}
+.pg-gruppo .pg-eyebrow {{ margin: 0 0 0.5rem 0.2rem; }}
+.pg-lista {{ list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }}
+.pg-riga {{
+  display: flex; align-items: center; gap: 14px;
+  background: #ffffff; border: 1px solid var(--pg-sand); border-radius: 14px;
+  padding: 10px 12px 10px 10px; box-shadow: var(--pg-shadow-sm);
+  transition: box-shadow .15s ease, transform .15s ease;
+}}
+.pg-riga:hover {{ box-shadow: var(--pg-shadow-navy); transform: translateY(-1px); }}
+.pg-badge {{
+  flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--pg-sand); font-size: 1.15rem; line-height: 1;
+}}
+.pg-testo {{ flex: 1 1 auto; min-width: 0; }}
+.pg-nome {{ font-family: var(--pg-font-sans); font-weight: 500; font-size: 1.02rem; color: var(--pg-navy); letter-spacing: 0.01em; }}
+.pg-sotto {{ font-family: var(--pg-font-sans); font-weight: 300; font-size: 0.86rem; color: var(--pg-slate); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+.pg-apri {{
+  flex: 0 0 auto; font-family: var(--pg-font-sans); font-size: 0.74rem; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.1em; text-decoration: none !important;
+  color: var(--pg-navy) !important; border: 1px solid var(--pg-navy); border-radius: 999px;
+  padding: 6px 14px; min-height: 30px; display: inline-flex; align-items: center;
+  transition: background .12s ease, color .12s ease;
+}}
+.pg-apri:hover {{ background: var(--pg-navy); color: #fff !important; }}
+.pg-apri:active {{ transform: scale(0.97); }}
+.pg-apri:focus-visible {{ outline: 2px solid var(--pg-azure); outline-offset: 2px; }}
+.pg-presto {{ color: var(--pg-slate); border-color: var(--pg-sand); background: var(--pg-sand); cursor: default; }}
+@media (max-width: 640px) {{
+  .pg-sotto {{ white-space: normal; }}
+  .pg-apri {{ padding: 6px 11px; }}
+}}
+@media (prefers-reduced-motion: reduce) {{
+  .pg-riga, .pg-apri {{ transition: none; }}
+  .pg-riga:hover {{ transform: none; }}
+}}
+
 /* ── Mobile (<= 640px) ──────────────────────────────────────────────────
    Streamlit non impila le colonne da solo: si schiacciano. Qui: meno padding,
    colonne che vanno a capo (KPI card 2×2), wordmark/heading rimpiccioliti. */
