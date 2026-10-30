@@ -213,3 +213,33 @@ def test_importo_non_intero_in_ogni_campo(path):
     d[path[-1]] = 1.5
     with pytest.raises(ValueError, match="centesimi"):
         scenario_from_json(json.dumps(doc))
+
+
+CONTRATTO_AMCN = {
+    "fornitore": "AMCN",
+    "totale": to_cent(482_000),
+    "aliquota_iva": 0,
+    "anticipo_pct": 15,
+    "anticipo_mese": "2026-10",
+    "ritenuta_pct": 10,
+    "svincolo_mese": "2027-05",
+    "sal_modo": "n",
+    "sal_n": 5,
+    "sal_ogni": 0,
+    "sal_da": "2026-11",
+    "sal_passo": 1,
+}
+
+
+def test_contratti_del_progetto_sopravvivono_a_json_e_righe():
+    """I parametri del contratto (da cui la pagina genera i pagamenti) non si perdono né
+    nel file esportato né nel salvataggio su BigQuery; il calcolo non li usa."""
+    sc, base = scenario_sintetico()
+    p = replace(sc.progetti[0], contratti=[CONTRATTO_AMCN])
+    sc = replace(sc, progetti=[p])
+    raw = scenario_to_json(sc, base, nome="t")
+    sc2, _, _ = scenario_from_json(raw)
+    assert sc2.progetti[0].contratti == [CONTRATTO_AMCN]
+    ((sc3, _, _),) = scenario_da_righe(*righe_p(raw, "rid", datetime(2026, 10, 29), "stefano"))
+    assert sc3.progetti[0].contratti == [CONTRATTO_AMCN]
+    assert to_dict(calcola(inp_minimo(sc3))) == to_dict(calcola(inp_minimo(scenario_sintetico()[0])))

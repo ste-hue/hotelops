@@ -106,6 +106,7 @@ def scenario_to_json(
                         }
                         for g in p.pagamenti
                     ],
+                    "contratti": p.contratti,
                 }
                 for p in sc.progetti
             ],
@@ -163,6 +164,7 @@ def scenario_from_json(raw: str | bytes) -> tuple[Scenario, Base, dict]:
                 )
                 for g in p["pagamenti"]
             ],
+            contratti=p.get("contratti", []),
         )
         for p in s["progetti"]
     ]
@@ -228,7 +230,13 @@ def righe_p(
         "canone": _scaletta_to_dict(sc.canone),
         "soglia": sc.soglia,
         "progetti": [
-            {"id": p.id, "nome": p.nome, "societa": p.societa, "stato": p.stato}
+            {
+                "id": p.id,
+                "nome": p.nome,
+                "societa": p.societa,
+                "stato": p.stato,
+                "contratti": p.contratti,
+            }
             for p in sc.progetti
         ],
         "finanziamenti": [
@@ -338,6 +346,7 @@ def scenario_da_righe(
                     acceso=pm["id"] in s["progetti_accesi"],
                     stato=pm["stato"],
                     pagamenti=list(pagam.values()),
+                    contratti=pm.get("contratti", []),
                 )
             )
 

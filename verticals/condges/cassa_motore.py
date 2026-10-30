@@ -103,6 +103,9 @@ class Progetto:
     acceso: bool
     stato: str
     pagamenti: list[Pagamento]
+    # Parametri dei contratti da cui la pagina genera i pagamenti (anticipo, SAL, ritenuta):
+    # memoria dell'interfaccia, il calcolo legge solo `pagamenti`.
+    contratti: list[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
