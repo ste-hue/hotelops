@@ -126,6 +126,30 @@ details.leva .corpo{padding:4px 0 6px 18px}
 .fonti ul{margin:6px 0 0;padding-left:18px}
 .fonti li{margin-top:3px}
 td.vuoto{color:var(--muted)}
+.cal-testa{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;justify-content:space-between}
+.cal-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:8px}
+table.cal{border-collapse:separate;border-spacing:0;font-size:12px;width:100%}
+table.cal th,table.cal td{padding:4px 3px;text-align:center;border-bottom:1px solid var(--line);white-space:nowrap;min-width:58px}
+table.cal th{font-weight:500;color:var(--muted)}
+table.cal .voce{position:sticky;left:0;z-index:1;background:var(--card);text-align:left;min-width:0;max-width:170px;overflow:hidden;text-overflow:ellipsis;padding-right:8px}
+table.cal .voce small{display:block;color:var(--muted);font-size:11px}
+table.cal .ipo{background:var(--ipo)}
+table.cal tr.gruppo td{background:var(--soft);font-weight:600;text-align:left;position:static}
+table.cal tr.tot td{font-weight:600;font-variant-numeric:tabular-nums}
+table.cal tr.tot.primo td{border-top:2px solid var(--line)}
+table.cal td.min{color:var(--bad);font-weight:700}
+table.cal tr.spento{opacity:.45}
+.chip{display:inline-block;min-width:46px;padding:3px 7px;border-radius:999px;border:0;font-size:12px;font-variant-numeric:tabular-nums;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--ink);background:color-mix(in srgb,var(--accent) var(--a),var(--card))}
+.chip.entrata{background:color-mix(in srgb,var(--ok) var(--a),var(--card))}
+.chip.fisso{cursor:default;background:var(--soft)}
+.chip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.chip.preso{opacity:.3}
+td.bersaglio{box-shadow:inset 0 0 0 2px var(--accent);border-radius:8px}
+td.puo{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.fantasma{position:fixed;pointer-events:none;z-index:50;transform:translate(-50%,-60%) scale(1.12);box-shadow:0 6px 18px rgba(0,0,0,.22)}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:12px;font-size:13px;z-index:60;max-width:92vw;display:flex;gap:12px;align-items:center;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.toast button{background:transparent;color:var(--bg);border-color:var(--bg);font-size:12px;padding:2px 8px}
+@media (max-width:600px){table.cal .voce{max-width:104px;font-size:11px;padding-right:4px}table.cal th,table.cal td{min-width:50px;padding:4px 2px}.chip{min-width:40px;padding:3px 5px}}
 .leg i.eff{width:12px;height:10px;border:0;background:var(--accent);opacity:.35;border-radius:2px}
 </style>
 </head>
@@ -140,6 +164,9 @@ td.vuoto{color:var(--muted)}
 <section class="minimi" id="minimi"></section>
 
 <section class="card canone" id="canone"></section>
+
+<section class="card" id="calendario" style="margin-top:14px"></section>
+<div id="toast" class="toast" hidden></div>
 
 <div class="griglia">
   <div>
@@ -544,6 +571,15 @@ const FORMATO = (() => {
     }
     return out;
   }
+  // Calendario: la rata del mese `da` va nel mese `a` (si somma se lì c'è già una rata). Totale invariato.
+  function spostaRata(mesi, da, a) {
+    if (!(da in mesi) || da === a) return { ...mesi };
+    const out = { ...mesi };
+    const v = out[da];
+    delete out[da];
+    out[a] = (out[a] || 0) + v;
+    return out;
+  }
   // Come si paga: numero di rate, prima e ultima, cadenza se costante, quota se uguale (resto sull'ultima).
   function formaRate(mesi, orizzonte) {
     const ch = ordinati(mesi);
@@ -586,7 +622,7 @@ const FORMATO = (() => {
     }
     return { nome: doc.nome || sc.nome || "importato", base: doc.base || {}, scenario: sc, salvato_il: doc.salvato_il || null };
   }
-  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti };
+  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata };
 })();
 if (typeof module !== "undefined") module.exports = FORMATO;
 </script>
@@ -1314,6 +1350,122 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     el("limiti").innerHTML = `<h2>Limiti di questa pagina</h2><ul>${D.limiti.concat(extra).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`;
   }
 
+  // ── calendario dei pagamenti: una riga per leva, una colonna per mese; le rate si trascinano ──
+  const breve = (v) => { const e = Math.abs(v) / 100; return (v < 0 ? "−" : "") + (e >= 1e6 ? `${pctIt(Math.round(e / 1e5) / 10)}M` : e >= 1000 ? `${Math.round(e / 1000)}k` : `${Math.round(e)}`); };
+  // Le righe del calendario: per ogni riga, dove stanno i mesi (in netto) e come si leggono in cassa.
+  function righeCalendario() {
+    const sc = stato.scenario, out = [];
+    sc.progetti.forEach((p, pi) => p.pagamenti.forEach((g, gi) => out.push({
+      id: `p:${pi}:${gi}`, gruppo: `${p.nome} · ${p.societa}`, nome: g.nome, spento: !p.acceso, tipo: "uscita",
+      mesi: () => g.mesi, scrivi: (m) => { g.mesi = m; }, lordo: (v) => MOTORE.iva(v, g.aliquota_iva), soc: p.societa,
+    })));
+    sc.finanziamenti.forEach((f, fi) => {
+      out.push({ id: `e:${fi}`, gruppo: `Finanziamenti · ${f.societa}`, nome: `${f.nome} · erogazioni`, tipo: "entrata",
+        mesi: () => f.erogazioni, scrivi: (m) => { f.erogazioni = m; }, lordo: (v) => v, soc: f.societa });
+      out.push({ id: `r:${fi}`, gruppo: `Finanziamenti · ${f.societa}`, nome: `${f.nome} · rate`, tipo: "uscita",
+        mesi: () => f.rate, scrivi: (m) => { f.rate = m; }, lordo: (v) => v, soc: f.societa });
+    });
+    return out;
+  }
+  function renderCalendario() {
+    const righe = righeCalendario();
+    const canone = {};
+    const flCan = stato.scenario.canone ? (() => { try { return MOTORE.flussiCanone(stato.scenario.canone, D.mesi); } catch (e) { return []; } })()
+      : D.intercompany.filter((f) => f.nome.startsWith("Fitto Hotel") && f.stato === "pf");
+    for (const f of flCan) canone[f.mese] = (canone[f.mese] || 0) + f.importo;
+    const max = Math.max(1, ...righe.flatMap((r) => Object.values(r.mesi()).map((v) => r.lordo(v))));
+    const intens = (v) => `${Math.round(14 + 56 * Math.sqrt(Math.min(1, v / max)))}%`;
+    const testa = `<tr><th class="voce"></th>${D.mesi.map((m) => `<th class="${IPO.has(m) ? "ipo" : ""}">${meseIt(m)}</th>`).join("")}</tr>`;
+    let gruppo = "";
+    const corpo = righe.map((r) => {
+      const g = r.gruppo !== gruppo ? `<tr class="gruppo"><td class="voce" colspan="${D.mesi.length + 1}">${esc(r.gruppo)}</td></tr>` : "";
+      gruppo = r.gruppo;
+      const mesi = r.mesi();
+      const celle = D.mesi.map((m) => {
+        const v = mesi[m];
+        const chip = v ? `<button type="button" class="chip ${r.tipo === "entrata" ? "entrata" : ""}" style="--a:${intens(r.lordo(v))}" data-r="${r.id}" data-m="${m}"
+          title="${esc(r.nome)} · ${meseIt(m)} · ${fmt(r.lordo(v))} € ${r.tipo === "entrata" ? "in entrata" : "in uscita"}. Trascina in un altro mese, oppure frecce ← →" aria-label="${esc(r.nome)}, ${meseIt(m)}, ${fmt(r.lordo(v), false)} euro">${breve(r.lordo(v))}</button>` : "";
+        return `<td class="${IPO.has(m) ? "ipo" : ""}" data-r="${r.id}" data-m="${m}">${chip}</td>`;
+      }).join("");
+      return `${g}<tr class="${r.spento ? "spento" : ""}"><td class="voce" title="${esc(r.nome)}">${esc(r.nome)}</td>${celle}</tr>`;
+    }).join("");
+    const rigaCanone = `<tr class="gruppo"><td class="voce" colspan="${D.mesi.length + 1}">Canone Fitto Hotel · ORTI → INTUR</td></tr>
+      <tr><td class="voce">${stato.scenario.canone ? "scaletta dello scenario" : "come nel PF"}<small>si cambia dal riquadro del canone</small></td>${D.mesi.map((m) => `<td class="${IPO.has(m) ? "ipo" : ""}">${canone[m] ? `<span class="chip fisso" title="${fmt(canone[m])} € lordo">${breve(canone[m])}</span>` : ""}</td>`).join("")}</tr>`;
+    const piede = SOC.map((soc, k) => {
+      const usc = D.mesi.map((m) => righe.filter((r) => r.soc === soc && r.tipo === "uscita" && !r.spento).reduce((t, r) => t + (r.mesi()[m] ? r.lordo(r.mesi()[m]) : 0), 0));
+      const fin = D.mesi.map((m) => (ris.righe.find((x) => x.societa === soc && x.mese === m) || {}).fin);
+      const mm = ris.minimi[soc].mese;
+      return `<tr class="tot ${k === 0 ? "primo" : ""}"><td class="voce">${soc} · leve in uscita</td>${usc.map((v, i) => `<td class="${IPO.has(D.mesi[i]) ? "ipo" : ""}">${v ? breve(v) : ""}</td>`).join("")}</tr>
+        <tr class="tot"><td class="voce">${soc} · saldo di fine mese</td>${fin.map((v, i) => { const m = D.mesi[i]; return IPO.has(m) ? `<td class="ipo" title="senza PF: non è un saldo">—</td>` : `<td class="${m === mm ? "min" : ""}" title="${fmt(v)} €${m === mm ? " · minimo" : ""}">${breve(v)}</td>`; }).join("")}</tr>`;
+    }).join("");
+    el("calendario").innerHTML = `<div class="cal-testa"><div><strong>Calendario dei pagamenti</strong> <span class="piccolo">lordo in cassa · trascina una rata in un altro mese (o frecce ← →): i saldi qui sotto e i minimi in alto si aggiornano</span></div></div>
+      <div class="cal-wrap"><table class="cal"><thead>${testa}</thead><tbody>${corpo || `<tr><td class="voce" colspan="${D.mesi.length + 1}">nessuna leva nello scenario</td></tr>`}${rigaCanone}${piede}</tbody></table></div>`;
+    collegaCalendario(righe);
+  }
+  let toastTimer = null;
+  function avvisa(testo, annulla) {
+    const t = el("toast");
+    t.innerHTML = `<span>${esc(testo)}</span>${annulla ? '<button type="button">annulla</button>' : ""}`;
+    t.hidden = false;
+    if (annulla) t.querySelector("button").onclick = () => { annulla(); t.hidden = true; };
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.hidden = true; }, 6000);
+  }
+  function muovi(riga, da, a) {
+    if (da === a) return;
+    const prima = { ...riga.mesi() };
+    const minPrima = Object.fromEntries(SOC.map((x) => [x, ris.minimi[x].saldo]));
+    const v = riga.lordo(prima[da]);
+    riga.scrivi(FORMATO.spostaRata(prima, da, a));
+    ricalcola();
+    const eff = SOC.map((x) => { const d = ris.minimi[x].saldo - minPrima[x]; return d ? `minimo ${x} ${segno(d, false)}` : ""; }).filter(Boolean).join(" · ") || "minimi invariati";
+    avvisa(`${riga.nome}: ${fmt(v, false)} € da ${meseIt(da)} a ${meseIt(a)} · ${eff}`, () => { riga.scrivi(prima); ricalcola(); });
+  }
+  function collegaCalendario(righe) {
+    const perId = Object.fromEntries(righe.map((r) => [r.id, r]));
+    const box = el("calendario");
+    box.querySelectorAll(".chip[data-r]").forEach((chip) => {
+      const riga = perId[chip.dataset.r], da = chip.dataset.m;
+      chip.onkeydown = (e) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        e.preventDefault();
+        const i = D.mesi.indexOf(da) + (e.key === "ArrowLeft" ? -1 : 1);
+        if (i < 0 || i >= D.mesi.length) return;
+        muovi(riga, da, D.mesi[i]);
+        const nuovo = el("calendario").querySelector(`.chip[data-r="${riga.id}"][data-m="${D.mesi[i]}"]`);
+        if (nuovo) nuovo.focus();
+      };
+      chip.onpointerdown = (e) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        e.preventDefault();
+        try { chip.setPointerCapture(e.pointerId); } catch (err) { /* senza cattura il trascinamento funziona lo stesso */ }
+        const fantasma = chip.cloneNode(true);
+        fantasma.classList.add("fantasma");
+        document.body.appendChild(fantasma);
+        chip.classList.add("preso");
+        const celle = [...box.querySelectorAll(`td[data-r="${riga.id}"]`)];
+        celle.forEach((td) => td.classList.add("puo"));
+        let bersaglio = null;
+        const sposta = (ev) => {
+          fantasma.style.left = `${ev.clientX}px`;
+          fantasma.style.top = `${ev.clientY}px`;
+          const sotto = document.elementFromPoint(ev.clientX, ev.clientY);
+          const td = sotto && sotto.closest(`td[data-r="${riga.id}"]`);
+          if (td !== bersaglio) { if (bersaglio) bersaglio.classList.remove("bersaglio"); bersaglio = td; if (td) td.classList.add("bersaglio"); }
+        };
+        sposta(e);
+        chip.onpointermove = sposta;
+        chip.onpointerup = chip.onpointercancel = (ev) => {
+          chip.onpointermove = chip.onpointerup = chip.onpointercancel = null;
+          fantasma.remove();
+          chip.classList.remove("preso");
+          celle.forEach((td) => td.classList.remove("puo", "bersaglio"));
+          if (ev.type === "pointerup" && bersaglio && bersaglio.dataset.m !== da) muovi(riga, da, bersaglio.dataset.m);
+        };
+      };
+    });
+  }
+
   function render(opts = {}) {
     sincronizzaAperte();
     renderMinimi();
@@ -1321,6 +1473,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     renderTabelle();
     renderConsolidato();
     renderLeve();
+    renderCalendario();
     renderLimiti();
     if (opts.canoneLeggero) aggiornaCanoneInfo(); else renderCanone();
   }
