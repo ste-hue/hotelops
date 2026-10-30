@@ -1671,6 +1671,49 @@ sources:
       filters: "mese pieno"
       format: xlsx
 
+  # ── Moolty log cancellazioni bar spiaggia — RAW_ONLY ──────────────────────
+  MOOLTY_CANCELLAZIONI_INTUR_APPEND:
+    system: MOOLTY
+    dataset: CANCELLAZIONI
+    dataset_label: "Log cancellazioni/rimozioni prodotto bar spiaggia (Moolty, per riga d'ordine, senza importi)"
+    societa: INTUR
+    business_unit: LIDO
+    lifecycle: APPEND
+    canonical_table: f_spiaggia_fb_cancellazioni   # nome TARGET — parser non scritto
+    parser_module: ingest.flussi.ingest_spiaggia_fb_cancellazioni   # nome TARGET
+    hash_basis: hash_riga
+    loop_targets: []
+    promotion_policy: RAW_ONLY
+    detector_category: moolty_cancellazioni
+    raw_storage:
+      backend: gcs
+      bucket: hotelops-raw
+      path_template: "moolty/cancellazioni/INTUR"
+    notes: |
+      Report Moolty diverso dal report di cassa: colonne Data, Utente,
+      Tipologia ("Cancellazione prodotto" / "Rimozione prodotto"), Ordine
+      ("# NNN/DD.MM"), Valore (solo per le rimozioni: "da 6 a 4"), Descrizione
+      (prodotto). Nessun importo → non tocca la quadratura POS↔corrispettivi;
+      utile come segnale di controllo (cancellazioni ripetute sullo stesso
+      ordine). Righe identiche ripetute sono eventi distinti (stesso prodotto
+      cancellato più volte), quindi la futura chiave non può essere la sola
+      tripla data/ordine/prodotto. Primo file 2026-10-28 (01/01→28/10/2026,
+      eventi 03/06→30/08, 114 righe), registrato per errore sotto
+      MOOLTY_FBSPIAGGIA_INTUR_APPEND: il guardiano di ingest_spiaggia_fb ora lo
+      rifiuta.
+    freshness:
+      tier: M
+      cadence: adhoc
+      grain: snapshot
+      basis: raw
+    acquisition:
+      mode: MANUAL
+      owner: Stefano
+      location: "Moolty"
+      report: "Report cancellazioni"
+      filters: "da inizio anno"
+      format: xlsx
+
 
   # ── SDI / Agenzia Entrate — export massivo FatturaPA — RAW_ONLY ───────────
   # Esito delle "richieste massive" del portale Fatture e Corrispettivi: un

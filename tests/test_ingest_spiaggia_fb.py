@@ -2,6 +2,7 @@
 from datetime import date, datetime, timezone
 
 import openpyxl
+import pytest
 
 from ingest.flussi.ingest_spiaggia_fb import (
     build_fb_rows,
@@ -212,6 +213,24 @@ def test_ingest_file_dry_run(tmp_path):
     p, wb, ws = _make_moolty_report(tmp_path)
     counts = ingest_file(p, raw_object_id=None, dry_run=True)
     assert counts == {"fb_ordini": 2}
+
+
+def test_ingest_file_rifiuta_log_cancellazioni(tmp_path):
+    # caso 2026-10-28: il log cancellazioni Moolty ha foglio e testa simili ma
+    # colonne diverse — il parser posizionale lo mapperebbe in silenzio
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Report"
+    ws.cell(row=1, column=1, value="Report dal 01/01/2026 00:00:00 al 28/10/2026 23:59:59")
+    for col, h in enumerate(["Data", "Utente", "Tipologia", "Ordine", "Valore", "Descrizione"], 1):
+        ws.cell(row=2, column=col, value=h)
+    for col, v in enumerate(["03/06/2026 14:24", "-", "Cancellazione prodotto",
+                             "# 001/03.06", None, "ESTATHE ZERO"], 1):
+        ws.cell(row=3, column=col, value=v)
+    p = tmp_path / "cancellazioni.xlsx"
+    wb.save(p)
+    with pytest.raises(ValueError, match="Moolty"):
+        ingest_file(p, raw_object_id=None, dry_run=True)
 
 
 # ── Registry loads MOOLTY_FBSPIAGGIA_INTUR_APPEND ────────────────────────────

@@ -226,6 +226,11 @@ def build_fb_rows(
 def ingest_file(
     path: Path, raw_object_id: Optional[str] = None, dry_run: bool = False
 ) -> dict[str, int]:
+    # stesso guardiano del drop in app: il promote non deve accettare layout
+    # che il parser posizionale mapperebbe in silenzio (es. log cancellazioni)
+    ok, motivo = valida_export_moolty(path)
+    if not ok:
+        raise ValueError(f"{path.name}: {motivo}")
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     ws = wb["Report"] if "Report" in wb.sheetnames else wb.active
     now = datetime.now(timezone.utc)
