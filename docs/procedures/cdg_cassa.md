@@ -51,6 +51,9 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
 4. Il **seme** (scenario di partenza, `.hotelops_state/cdg_cassa/base_scenario.json`) è un file
    locale: dopo averlo cambiato va ri-salvato con il punto 2. Un salvato con lo **stesso nome**
    del seme non entra nel menu (il seme è la versione viva) ed è dichiarato in «Fonti e versioni».
+   Il seme può anche **ritirare** dei nomi dal menu: `"scenari_ritirati": ["Base 29/10", "Base 30/10"]`
+   nel file. Le righe su BigQuery restano (lineage append-only); la pagina li elenca in «Fonti e
+   versioni» con l'ora e il motivo «ritirato nel seme». Per rimetterli nel menu basta togliere il nome.
 
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 

@@ -277,12 +277,37 @@ def test_salvato_con_il_nome_del_seme_resta_fuori_dal_menu():
     meta = {"nome": sc.nome, "salvato_il": "2026-10-29T13:47"}
     p = build_payload(snapshot_sintetico(), [(sc, base, meta)], seme=(sc, base))
     assert p["scenari"] == []
-    assert p["scenari_sostituiti"] == [{"nome": sc.nome, "salvato_il": "2026-10-29T13:47"}]
+    assert p["scenari_sostituiti"] == [
+        {"nome": sc.nome, "salvato_il": "2026-10-29T13:47", "motivo": "stesso nome del seme"}
+    ]
     # senza seme (o con nome diverso) il salvato resta nel menu
     assert build_payload(snapshot_sintetico(), [(sc, base, meta)])["scenari"][0]["nome"] == sc.nome
     altro = {"nome": "altro", "salvato_il": "2026-10-29T13:47"}
     p2 = build_payload(snapshot_sintetico(), [(sc, base, altro)], seme=(sc, base))
     assert [s["nome"] for s in p2["scenari"]] == ["altro"] and p2["scenari_sostituiti"] == []
+
+
+def test_il_seme_ritira_dei_nomi_dal_menu_senza_toccare_bigquery():
+    sc, base = _scenario_base()
+    vecchi = [
+        (sc, base, {"nome": "Base 29/10", "salvato_il": "2026-10-29T13:47"}),
+        (sc, base, {"nome": "Base 30/10", "salvato_il": "2026-10-30T16:39"}),
+        (sc, base, {"nome": "Base 30/10", "salvato_il": "2026-10-30T19:00"}),
+        (sc, base, {"nome": "Fotografia 31/10", "salvato_il": "2026-10-31T13:30"}),
+    ]
+    p = build_payload(
+        snapshot_sintetico(), vecchi, seme=(sc, base), scenari_ritirati=["Base 29/10", "Base 30/10"]
+    )
+    # nel menu resta solo chi non è ritirato; i ritirati sono dichiarati, con il motivo e l'ora
+    assert [s["nome"] for s in p["scenari"]] == ["Fotografia 31/10"]
+    assert [(s["nome"], s["motivo"]) for s in p["scenari_sostituiti"]] == [
+        ("Base 29/10", "ritirato nel seme"),
+        ("Base 30/10", "ritirato nel seme"),
+        ("Base 30/10", "ritirato nel seme"),
+    ]
+    assert [s["salvato_il"] for s in p["scenari_sostituiti"]][1:] == ["2026-10-30T16:39", "2026-10-30T19:00"]
+    # senza la lista nel seme, nulla cambia rispetto a prima
+    assert len(build_payload(snapshot_sintetico(), vecchi, seme=(sc, base))["scenari"]) == 4
 
 
 def test_canone_riferimento_dichiarato_o_dalle_rate_pf():
