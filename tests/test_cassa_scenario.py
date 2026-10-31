@@ -243,3 +243,28 @@ def test_contratti_del_progetto_sopravvivono_a_json_e_righe():
     ((sc3, _, _),) = scenario_da_righe(*righe_p(raw, "rid", datetime(2026, 10, 29), "stefano"))
     assert sc3.progetti[0].contratti == [CONTRATTO_AMCN]
     assert to_dict(calcola(inp_minimo(sc3))) == to_dict(calcola(inp_minimo(scenario_sintetico()[0])))
+
+
+def test_sostituzione_sopravvive_al_documento_e_alle_tabelle_p():
+    """«sostituzione» è la seconda origine legale di una manuale: resta tale nel JSON della pagina
+    e nelle righe p_*; ogni altra origine torna «manuale» come prima."""
+    sc, base = scenario_sintetico()
+    sc = replace(
+        sc,
+        manuali=[
+            Riga("ORTI", "USCITE_TASSE", "2026-11", 7_000_000, "U", "sostituzione"),
+            Riga("ORTI", "x", "2026-12", 123, "U", "manuale"),
+            Riga("ORTI", "y", "2026-12", 5, "U", "pf"),
+        ],
+    )
+    doc = scenario_to_json(sc, base, "t")
+    sc_doc, _, _ = scenario_from_json(doc)
+    assert sorted((r.voce_id, r.origine) for r in sc_doc.manuali) == [
+        ("USCITE_TASSE", "sostituzione"), ("x", "manuale"), ("y", "manuale"),
+    ]
+    rows = _righe(sc, base)
+    assert {r["origine"] for r in rows[1] if r["voce_id"] == "USCITE_TASSE"} == {"sostituzione"}
+    ((sc2, _, _),) = scenario_da_righe(*rows)
+    assert sorted((r.voce_id, r.origine, r.importo) for r in sc2.manuali) == [
+        ("USCITE_TASSE", "sostituzione", 7_000_000), ("x", "manuale", 123), ("y", "manuale", 5),
+    ]

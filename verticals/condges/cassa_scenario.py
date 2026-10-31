@@ -28,6 +28,13 @@ from verticals.condges.cassa_motore import (
 )
 
 SCHEMA = "cdg-cassa-scenario/1"
+ORIGINI_MANUALI = ("manuale", "sostituzione")
+
+
+def _origine_manuale(origine: str) -> str:
+    return origine if origine in ORIGINI_MANUALI else "manuale"
+
+
 Base = dict[str, dict]
 
 
@@ -191,7 +198,7 @@ def scenario_from_json(raw: str | bytes) -> tuple[Scenario, Base, dict]:
             r["mese"],
             _cent(r["importo_cent"]),
             r["direzione"],
-            r["origine"],
+            _origine_manuale(r.get("origine", "manuale")),
         )
         for r in s["manuali"]
     ]
@@ -283,7 +290,16 @@ def righe_p(
         for m, v in f.rate.items():
             flusso(f.societa, m, f.id, v, "U", "finanziamento")
     for r in sc.manuali:
-        flusso(r.societa, r.mese, r.voce_id, r.importo, r.direzione, "manuale")
+        # due origini legali per una riga manuale: «manuale» (si aggiunge) e «sostituzione»
+        # (prende il posto della voce PF di quel mese); tutto il resto torna «manuale»
+        flusso(
+            r.societa,
+            r.mese,
+            r.voce_id,
+            r.importo,
+            r.direzione,
+            _origine_manuale(r.origine),
+        )
 
     pagamenti = [
         {
@@ -380,7 +396,7 @@ def scenario_da_righe(
                 r["origine"],
             )
             for r in fl
-            if r["origine"] == "manuale"
+            if r["origine"] in ORIGINI_MANUALI
         ]
         sc = Scenario(
             nome=par["scenario_nome"],

@@ -842,3 +842,27 @@ def test_template_trascina_con_soglia_presa_e_volo():
     assert "f.animate([" in html and "in-volo" in html, "la rata vola fino alla cella, non si teletrasporta"
     assert "min-height:24px" in html, "bersaglio tattile minimo delle pillole"
     assert "touch-action:none" not in html
+
+
+def test_js_sostituzione_uguale_a_python(tmp_path):
+    """La sostituzione nel motore JS fa esattamente quello che fa in Python."""
+    from dataclasses import replace as _replace
+
+    sc, base = _scenario_base()
+    sc = _replace(
+        sc,
+        manuali=[
+            Riga("ORTI", "USCITE_TASSE", "2026-12", 9_000_000, "U", "sostituzione"),
+            Riga("INTUR", "USCITE_TASSE", "2027-01", 1_000, "U", "sostituzione"),
+        ],
+    )
+    snap = snapshot_sintetico()
+    payload = build_payload(snap, [], seme=(sc, base))
+    html = render_html(payload)
+    doc = scenario_to_json(sc, base, "t")
+    js = esegui_node(tmp_path, html, payload, doc)
+    py = calcola(input_da_snapshot(snap, sc))
+    for r_js, r_py in zip(js["righe"], py.righe, strict=True):
+        assert r_js["fin"] == r_py.fin, (r_js["mese"], r_js["societa"])
+        assert r_js["uscite"]["pf"] == r_py.uscite["pf"]
+    assert js["minimi"]["ORTI"]["saldo"] == py.minimi["ORTI"].saldo
