@@ -366,6 +366,7 @@ def build_payload(
     seme: tuple[Scenario, Base] | None = None,
     seme_salvato_il: str | None = None,
     canone_dichiarato: dict | None = None,
+    scenari_ritirati: list[str] | None = None,
 ) -> dict:
     snapshot = senza_coda(snapshot)
     base = snapshot["base"]
@@ -377,13 +378,23 @@ def build_payload(
     )
     seme_doc["compatibile"] = base_uguale(base_seme, base)
     salvati, sostituiti = [], []
+    ritirati = set(scenari_ritirati or [])
     for sc, b, meta in scenari:
         doc = _scenario_doc(sc, b, meta)
         doc["compatibile"] = base_uguale(b, base)
         # Il seme locale è la versione viva: un salvato con lo stesso nome è una
         # sua copia (o una versione superata) e non entra nel menu, ma resta dichiarato.
+        # Il seme può anche ritirare dei nomi (`scenari_ritirati` nel file): le righe su
+        # BigQuery restano (lineage append-only), il menu no.
+        motivo = None
         if seme and doc["nome"] == seme_doc["nome"]:
-            sostituiti.append({"nome": doc["nome"], "salvato_il": doc.get("salvato_il")})
+            motivo = "stesso nome del seme"
+        elif doc["nome"] in ritirati:
+            motivo = "ritirato nel seme"
+        if motivo:
+            sostituiti.append(
+                {"nome": doc["nome"], "salvato_il": doc.get("salvato_il"), "motivo": motivo}
+            )
             continue
         salvati.append(doc)
     return {
@@ -465,9 +476,9 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
     else:
         snapshot = cf.carica_snapshot()
     seme = carica_seme(SEME_PATH) if SEME_PATH.exists() else None
-    seme_salvato_il = (
-        json.loads(SEME_PATH.read_text(encoding="utf-8")).get("salvato_il") if seme else None
-    )
+    seme_file = json.loads(SEME_PATH.read_text(encoding="utf-8")) if seme else {}
+    seme_salvato_il = seme_file.get("salvato_il")
+    scenari_ritirati = list(seme_file.get("scenari_ritirati") or [])
     canone_dichiarato = (
         json.loads(CANONE_PATH.read_text(encoding="utf-8")) if CANONE_PATH.exists() else None
     )
@@ -477,6 +488,7 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
         seme=seme,
         seme_salvato_il=seme_salvato_il,
         canone_dichiarato=canone_dichiarato,
+        scenari_ritirati=scenari_ritirati,
     )
     html = render_html(payload)
     out = Path(out)
@@ -496,7 +508,7 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
     for s in payload["scenari"]:
         print(f"  scenario salvato: {s['nome']} compatibile={s['compatibile']}")
     for s in payload["scenari_sostituiti"]:
-        print(f"  scenario salvato nascosto (stesso nome del seme): {s['nome']} {s['salvato_il']}")
+        print(f"  scenario salvato nascosto ({s['motivo']}): {s['nome']} {s['salvato_il']}")
     c = payload["canone_rif"]
     print(
         f"  canone di riferimento: {_eur(c['lordo_annuo'])} lordo/anno IVA inclusa ({_eur(c['netto_annuo'])} netto) "

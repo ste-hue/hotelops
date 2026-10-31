@@ -843,7 +843,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       const conti = Object.entries(a.conti).map(([banca, c]) => `<li>${esc(banca)} <span class="num">${fmt(c.saldo)}</span> <span class="badge ${c.attestato ? "ok" : "warn"}">${c.attestato ? "quadra con i movimenti" : "solo dichiarato"}</span> ${esc(c.motivo)}</li>`).join("");
       return `<li>Ancora ${s} al ${dataIt(a.data)}: <span class="num">${fmt(a.saldo)}</span> <span class="badge ${a.attestato ? "ok" : "warn"}">${a.attestato ? "quadra con i movimenti" : "solo dichiarato"}</span><ul>${conti}</ul></li>`;
     }).join("");
-    const nascosti = D.scenari_sostituiti.length ? ` Nascosti perché hanno lo stesso nome del seme: ${D.scenari_sostituiti.map((s) => `${esc(s.nome)} (${oraDi(s.salvato_il)})`).join(", ")}.` : "";
+    const nascosti = D.scenari_sostituiti.length ? ` Non nel menu: ${D.scenari_sostituiti.map((s) => `${esc(s.nome)} (${oraDi(s.salvato_il)}, ${esc(s.motivo || "stesso nome del seme")})`).join(", ")}.` : "";
     el("fonti").innerHTML = `<summary>Fonti e versioni</summary><ul>${basi}${ancore}
       <li>Fonti lette da BigQuery il ${oraDi(D.acquisito_il) || "—"} · pagina generata il ${oraDi(D.generato_il)}</li>
       <li>Seme «${esc(D.seme.nome)}» dal file locale, salvato il ${oraDi(D.seme.salvato_il)}${D.seme.compatibile ? "" : " (base PF diversa)"}</li>
