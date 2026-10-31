@@ -873,6 +873,14 @@ def test_template_porta_barra_fissa_battito_e_preferenze_di_movimento():
     assert "backdrop-filter" in html, "la barra è un materiale traslucido, il contenuto scorre sotto"
 
 
+def test_template_porta_la_scelta_dello_scenario_in_alto():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    # una pillola per scenario sotto il titolo, prima dei minimi; stessa chiave del menu
+    assert html.index('id="scelta-scenario"') < html.index('id="minimi"')
+    assert "data-scelta=" in html and 'aria-pressed="${(stato.chiave || "seme") === s._k}"' in html
+    assert ".scelta button[aria-pressed=\"true\"]" in html
+
+
 def test_template_trascina_con_soglia_presa_e_volo():
     html = render_html(build_payload(snapshot_sintetico(), []))
     assert "touch-action:pan-y" in html, "lo scorrimento verticale resta al browser"
