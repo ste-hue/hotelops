@@ -96,6 +96,10 @@ details.sotto>summary{font-size:12px;color:var(--accent)}
 .limiti h2{margin:0 0 6px;color:var(--warn)}
 .limiti ul{margin:0;padding-left:18px;font-size:13px}
 .piccolo{font-size:12px;color:var(--muted)}
+.scelta{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 12px}
+.scelta button{border-radius:999px;padding:6px 12px;min-height:32px;background:var(--card);color:var(--ink);font-size:13px}
+.scelta button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:600}
+.scelta button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 details summary{cursor:pointer;color:var(--muted);font-size:13px}
 .canone{margin-top:14px;border-color:var(--accent)}
 .canone .testa{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;justify-content:space-between}
@@ -202,6 +206,7 @@ details.blocco .card{border:0;padding:4px 2px}
 </header>
 <div id="errore" class="errore" hidden></div>
 
+<nav class="scelta" id="scelta-scenario" aria-label="Scegli lo scenario"></nav>
 <section class="minimi" id="minimi"></section>
 <div id="barra-minimi" class="barra-minimi" hidden aria-label="Minimi di cassa, sempre visibili"></div>
 
@@ -792,6 +797,13 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     }
     s0.value = stato.chiave || "seme";
     s0.onchange = () => apriScenario(s0.value);
+    // La stessa scelta, in alto e a vista: una pillola per scenario, quella attiva piena.
+    const etichetta = (s) => s._k === "vuoto" ? "Solo PF" : (s._e || "").includes("bozza") ? `${s.nome} · bozza` : (s._e || "").includes("importato") ? `${s.nome} · importato` : s.nome;
+    const ordine = [...tutti.filter((s) => s._k === "seme"), ...tutti.filter((s) => s._k !== "seme" && s._k !== "vuoto"), ...tutti.filter((s) => s._k === "vuoto")];
+    el("scelta-scenario").innerHTML = ordine.map((s) => `<button type="button" data-scelta="${esc(s._k)}" aria-pressed="${(stato.chiave || "seme") === s._k}">${esc(etichetta(s))}${s.compatibile ? "" : " · base diversa"}</button>`).join("");
+    el("scelta-scenario").querySelectorAll("[data-scelta]").forEach((b) => {
+      b.onclick = () => { if ((stato.chiave || "seme") !== b.dataset.scelta) apriScenario(b.dataset.scelta); };
+    });
     el("nome-scenario").value = stato.nome;
     el("nome-scenario").oninput = (e) => { stato.nome = e.target.value; stato.scenario.nome = e.target.value; };
     el("soglia").value = fmt(stato.scenario.soglia || 0, false);
