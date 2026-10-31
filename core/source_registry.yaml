@@ -577,7 +577,7 @@ sources:
     lifecycle: SNAPSHOT
     canonical_table: f_piano_finanziario_input
     parser_module: ingest.flussi.ingest_piano_finanziario_xlsx
-    natural_key: [societa_id, voce_id, anno, mese, fonte]
+    natural_key: [societa_id, fonte]  # istantanea per versione (PR #169, Stefano 29/10/2026): il file nuovo sostituisce il piano intero della società
     loop_targets: [cash_control, budget_canonical]
     promotion_policy: AUTO
     detector_category: piano_finanziario
@@ -614,7 +614,7 @@ sources:
     lifecycle: SNAPSHOT
     canonical_table: f_piano_finanziario_input
     parser_module: ingest.flussi.ingest_piano_finanziario_xlsx
-    natural_key: [societa_id, voce_id, anno, mese, fonte]
+    natural_key: [societa_id, fonte]  # istantanea per versione (PR #169, Stefano 29/10/2026): il file nuovo sostituisce il piano intero della società
     loop_targets: [cash_control, budget_canonical]
     promotion_policy: AUTO
     detector_category: piano_finanziario
