@@ -840,8 +840,8 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     const ancore = SOC.map((s) => {
       const a = D.ancore[s];
       if (!a) return "";
-      const conti = Object.entries(a.conti).map(([banca, c]) => `<li>${esc(banca)} <span class="num">${fmt(c.saldo)}</span> <span class="badge ${c.attestato ? "ok" : "warn"}">${c.attestato ? "attestato" : "dichiarato"}</span> ${esc(c.motivo)}</li>`).join("");
-      return `<li>Ancora ${s} al ${dataIt(a.data)}: <span class="num">${fmt(a.saldo)}</span> <span class="badge ${a.attestato ? "ok" : "warn"}">${a.attestato ? "attestata" : "dichiarata"}</span><ul>${conti}</ul></li>`;
+      const conti = Object.entries(a.conti).map(([banca, c]) => `<li>${esc(banca)} <span class="num">${fmt(c.saldo)}</span> <span class="badge ${c.attestato ? "ok" : "warn"}">${c.attestato ? "quadra con i movimenti" : "solo dichiarato"}</span> ${esc(c.motivo)}</li>`).join("");
+      return `<li>Ancora ${s} al ${dataIt(a.data)}: <span class="num">${fmt(a.saldo)}</span> <span class="badge ${a.attestato ? "ok" : "warn"}">${a.attestato ? "quadra con i movimenti" : "solo dichiarato"}</span><ul>${conti}</ul></li>`;
     }).join("");
     const nascosti = D.scenari_sostituiti.length ? ` Nascosti perché hanno lo stesso nome del seme: ${D.scenari_sostituiti.map((s) => `${esc(s.nome)} (${oraDi(s.salvato_il)})`).join(", ")}.` : "";
     el("fonti").innerHTML = `<summary>Fonti e versioni</summary><ul>${basi}${ancore}
@@ -1086,7 +1086,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
         <div class="delta num">${delta === 0 ? "come con il solo PF" : `${segno(delta, false)} rispetto al solo PF`}</div>
         ${sotto}
         <details class="dettagli" data-k="${kd}" ${aperte.has(kd) ? "open" : ""}><summary>dettagli</summary>
-          <div class="piccolo">solo PF: minimo ${fmt(b.saldo)} a ${meseIt(b.mese)} · ancora al ${dataIt(a.data)} <span class="badge ${a.attestato ? "ok" : "warn"}" title="vedi Fonti e versioni">${a.attestato ? "quadra coi movimenti" : "dichiarata"}</span></div>
+          <div class="piccolo">solo PF: minimo ${fmt(b.saldo)} a ${meseIt(b.mese)} · ancora al ${dataIt(a.data)} <span class="badge ${a.attestato ? "ok" : "warn"}" title="vedi Fonti e versioni">${a.attestato ? "quadra con i movimenti" : "solo dichiarato"}</span></div>
           <div class="piccolo" style="margin-top:4px">pesano a ${meseIt(m.mese)}:</div>
           <ul>${usc.map(([n, v]) => `<li>${esc(n)} <span class="num">${fmt(v, false)}</span></li>`).join("") || "<li>nessuna uscita nel mese</li>"}</ul>
           ${oltre}

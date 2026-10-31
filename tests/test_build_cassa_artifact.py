@@ -377,6 +377,14 @@ def test_render_html_incapsula_dati_e_motore():
     assert "attestato" in html and "dichiarato" in html
 
 
+def test_badge_dei_saldi_dice_cosa_vuol_dire():
+    """«attestato» resta per quando c'è l'estratto conto: il badge dice quadra / solo dichiarato."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert '? "quadra con i movimenti" : "solo dichiarato"' in html
+    assert '"attestato" : "dichiarato"' not in html and '"attestata" : "dichiarata"' not in html
+    assert '"quadra coi movimenti" : "dichiarata"' not in html
+
+
 # ── parità JS/Python: interi, nessun round ──
 
 
