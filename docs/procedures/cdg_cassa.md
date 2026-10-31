@@ -94,6 +94,12 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
    dello scenario sono campi facoltativi (`documenti` sul pagamento, `drive_url` sul progetto), nelle
    tabelle BigQuery viaggiano dentro `parametri`; l'Excel li porta nel foglio Progetti.
 
+10. **Pagamento e «come paghi un fornitore».** Il *pagamento* è la riga con i suoi mesi: è l'unica cosa
+    che il calcolo legge. «Come paghi un fornitore» (nel documento: `contratti` del progetto) sono i patti
+    con quel fornitore, anticipo, SAL, ritenuta, o quote in percentuale: «Genera i pagamenti» li traduce
+    in righe di pagamento verso quel fornitore, sostituendo le sue e lasciando le altre, e la pagina
+    controlla che i pagamenti reali li seguano ancora. In pagina non si chiama più «contratto».
+
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 
 1. Intake + promote del file (policy AUTO):
