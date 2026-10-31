@@ -96,6 +96,8 @@ class Pagamento:
     aliquota_iva: int = 22
     stato: str = "ipotesi"
     fornitore_id: str | None = None
+    # Riferimenti (preventivo, contratto, fattura): [{"titolo", "url"}], memoria dell'interfaccia.
+    documenti: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -109,6 +111,8 @@ class Progetto:
     # Parametri dei contratti da cui la pagina genera i pagamenti (anticipo, SAL, ritenuta):
     # memoria dell'interfaccia, il calcolo legge solo `pagamenti`.
     contratti: list[dict] = field(default_factory=list)
+    # La cartella Drive del progetto (preventivi, fatture): memoria dell'interfaccia.
+    drive_url: str | None = None
 
 
 @dataclass(frozen=True)

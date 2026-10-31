@@ -86,6 +86,14 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
    appare e sparisce in dissolvenza. Stesso DOM della pagina, una classe sul body: motore e formato
    non cambiano.
 
+9. **Grossolano, poi fine.** Una rata si **divide** (÷: metà resta nel suo mese, metà va al mese dopo,
+   sommandosi se c'è già una rata; il resto dei centesimi resta dov'era) e si **unisce** (⇥: con la
+   rata successiva di quel pagamento). La somma non cambia mai; poi la rata si trascina nel calendario.
+   Ogni pagamento può portare i suoi **documenti** (titolo + link Drive: preventivo, contratto,
+   fattura), mostrati come chip accanto al nome; ogni progetto la sua **cartella Drive**. Nel documento
+   dello scenario sono campi facoltativi (`documenti` sul pagamento, `drive_url` sul progetto), nelle
+   tabelle BigQuery viaggiano dentro `parametri`; l'Excel li porta nel foglio Progetti.
+
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 
 1. Intake + promote del file (policy AUTO):

@@ -247,6 +247,35 @@ def test_importo_del_finanziamento_sopravvive_a_json_e_righe():
     assert scenario_from_json(scenario_to_json(sc, base))[0].finanziamenti[0].importo is None
 
 
+def test_documenti_e_cartella_drive_sopravvivono_a_json_e_righe():
+    # Un pagamento può portare i suoi riferimenti (preventivo, fattura: link Drive); un progetto la sua cartella.
+    sc, base = scenario_sintetico()
+    p = sc.progetti[0]
+    docs = [{"titolo": "preventivo 0066/26", "url": "https://drive.google.com/file/d/abc/view"}]
+    con = replace(
+        sc,
+        progetti=[
+            replace(
+                p,
+                drive_url="https://drive.google.com/drive/folders/xyz",
+                pagamenti=[replace(p.pagamenti[0], documenti=docs), p.pagamenti[1]],
+            )
+        ],
+    )
+    doc = scenario_to_json(con, base)
+    j = json.loads(doc)["scenario"]["progetti"][0]
+    assert j["drive_url"].endswith("/xyz") and j["pagamenti"][0]["documenti"] == docs
+    assert "documenti" not in j["pagamenti"][1]
+    sc2, _, _ = scenario_from_json(doc)
+    assert sc2 == con
+    s, f, pg = righe_p(doc, "rid", datetime(2026, 10, 31, tzinfo=UTC), "stefano")
+    ((sc3, _, _),) = scenario_da_righe(s, f, pg)
+    assert sc3 == con
+    # senza riferimenti il documento non cambia forma
+    j0 = json.loads(scenario_to_json(sc, base))["scenario"]["progetti"][0]
+    assert "drive_url" not in j0 and all("documenti" not in g for g in j0["pagamenti"])
+
+
 def test_contratti_del_progetto_sopravvivono_a_json_e_righe():
     """I parametri del contratto (da cui la pagina genera i pagamenti) non si perdono né
     nel file esportato né nel salvataggio su BigQuery; il calcolo non li usa."""

@@ -955,6 +955,17 @@ def test_template_vista_scenario_a_tutto_schermo():
     assert 'location.hash.startsWith("#leve")' in html and "`#leve/${seg}`" in html
 
 
+def test_template_dividi_unisci_e_documenti_drive():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    # dividi: metà resta, metà al mese dopo; unisci: con la rata successiva; la somma non cambia
+    assert "function dividiRata(mesi, m)" in html and "function unisciRata(mesi, m)" in html
+    assert "data-${pref}-dividi=" in html and "data-${pref}-unisci=" in html
+    assert "mesi[m] = v - meta;" in html and "mesi[dopo] = (mesi[dopo] || 0) + meta;" in html
+    # documenti sul pagamento (link Drive) e cartella Drive sul progetto, anche nell'Excel
+    assert "data-aggiungi-doc" in html and 'data-campo="drive_url"' in html and 'class="doc"' in html
+    assert '"documenti", "cartella Drive"]' in html
+
+
 def test_template_trascina_con_soglia_presa_e_volo():
     html = render_html(build_payload(snapshot_sintetico(), []))
     assert "touch-action:pan-y" in html, "lo scorrimento verticale resta al browser"
