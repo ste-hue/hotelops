@@ -114,7 +114,7 @@ VOCE_MAP: dict[str, str] = {
     "Deposito Fitto": "USCITE_DEPOSITO_FITTO",
     # INTUR-specific voci
     "Fitto Hotel": "ENTRATE_AFFITTI_INTUR",  # canone ORTI→INTUR (conto 53.xx)
-    "Fitto AR": "ENTRATE_AFFITTI_INTUR",  # affitto ramo d'azienda (same 53.xx)
+    "Fitto AR": "ENTRATE_AFFITTI_ANGELINA",  # fitto Angelina (65.01.05.91 / 53.01.33): gamba propria, intercompany
     "Entrate Farmacia": "ENTRATE_AFFITTI_MINORI",  # affitto farmacia (47.95.xx)
     "Ribaltamento Costi a Orti": "ENTRATE_RIBALTAMENTO_ORTI",  # intercompany INTUR→ORTI, blocco ENTRATE (28/10/2026)
     "Entrate Spiaggia": "ENTRATE_SPIAGGIA",
@@ -283,6 +283,12 @@ def _detect_year_and_month_block(ws) -> list[tuple[int, int, int]]:
 # un negativo inventato. Vale per il PF vivo e per l'archivio (stesso parser).
 INTERCOMPANY_DETTAGLIO: dict[str, list[tuple[str, tuple[str, ...], str, str]]] = {
     # societa: [(foglio, needles nell'etichetta normalizzata, voce di partenza, voce di arrivo)]
+    # Il PF principale somma; il foglio di dettaglio tiene le gambe separate. Stesso meccanismo
+    # del ribaltamento (28/10): si sposta solo se il totale del mese lo contiene, mai un negativo.
+    # I tre fitti del foglio Godimento sono tre caselle (Stefano, 31/10/2026: «deve avere una casella
+    # sua... anche CVM ha un fitto suo, solo l'hotel è 737»): il canone del ramo d'azienda
+    # (USCITE_CANONE_PASSIVO, ORTI→INTUR), il fitto Angelina (USCITE_FITTO_ANGELINA, ORTI→INTUR) e il
+    # fitto CVM (USCITE_FITTO_CVM, a terzi). Quello che resta in godimento è altro.
     "ORTI": [
         ("Utenze", ("(intur)",), "USCITE_UTENZE", "USCITE_RIBALTAMENTO_INTUR"),
         # Canone ORTI→INTUR: "Fitto Ramo d' Azienda" (a volte "Fitto Hotel ...") dentro Godimento
@@ -292,6 +298,22 @@ INTERCOMPANY_DETTAGLIO: dict[str, list[tuple[str, tuple[str, ...], str, str]]] =
             ("fittohotel", "ramodazienda"),
             "USCITE_GODIMENTO_BENI",
             "USCITE_CANONE_PASSIVO",
+        ),
+        # Fitto Angelina ORTI→INTUR: riga «651101 Fitto AR» dello stesso foglio. Intercompany,
+        # non terzi: 120.000/anno in due rate da 60.000, a INTUR finché non va al proprietario
+        # (Stefano, 30/10/2026: "2027 o 2028" — data non decisa).
+        (
+            "Godimento Beni di Terzi",
+            ("fittoar",),
+            "USCITE_GODIMENTO_BENI",
+            "USCITE_FITTO_ANGELINA",
+        ),
+        # Fitto CVM: a terzi, non intercompany. Casella propria perché non si confonda col canone.
+        (
+            "Godimento Beni di Terzi",
+            ("fittocvm",),
+            "USCITE_GODIMENTO_BENI",
+            "USCITE_FITTO_CVM",
         ),
     ],
 }
