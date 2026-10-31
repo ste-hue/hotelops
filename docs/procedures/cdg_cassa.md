@@ -100,6 +100,13 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
     in righe di pagamento verso quel fornitore, sostituendo le sue e lasciando le altre, e la pagina
     controlla che i pagamenti reali li seguano ancora. In pagina non si chiama più «contratto».
 
+11. **La bozza nel browser.** Ogni pubblicazione rigenera la pagina dal seme: quello che si scrive a mano
+    senza «Salva scenario» sparirebbe al ricaricamento. Il browser ricorda da solo l'ultima bozza modificata
+    (`localStorage`, solo in quel browser) e al ricaricamento la propone: «Riprendi» la mette nel menu e la
+    apre, «Scarta» la toglie. «Salva scenario (.json)» la marca come salvata. Se la base PF è cambiata la
+    riga lo dice. Senza memoria del browser (navigazione privata) la pagina avvisa prima di chiudere.
+    Non è un salvataggio condiviso: per fissare una bozza nel seme serve ancora il file .json e il Mac.
+
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 
 1. Intake + promote del file (policy AUTO):

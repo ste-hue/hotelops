@@ -979,6 +979,18 @@ def test_template_i_patti_col_fornitore_non_si_chiamano_contratto():
     assert "body.vista-leve .strumenti button[data-apri],body.vista-leve .strumenti button[data-chiudi]{display:none}" in html
 
 
+def test_template_ricorda_la_bozza_nel_browser():
+    # Brief UI punto 9: la pagina rigenerata dal seme non deve cancellare il lavoro fatto a mano nel browser.
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert 'id="bozza-avviso"' in html and 'const CHIAVE_BOZZA = "cdg-cassa-bozza"' in html
+    assert "function ricordaBozza()" in html and "function proponiBozza()" in html and "ricordaBozza();" in html
+    # si ricorda solo se è cambiata; al ricaricamento propone «Riprendi» o «Scarta»; «Salva» la marca salvata
+    assert "if (!modificato()) return;" in html and 'id="bozza-riprendi"' in html and 'id="bozza-scarta"' in html
+    assert "b.salvata = true" in html
+    # l'avviso prima di chiudere c'è solo se il browser non ha memoria
+    assert "if (modificato() && !memoriaOk)" in html
+
+
 def test_template_trascina_con_soglia_presa_e_volo():
     html = render_html(build_payload(snapshot_sintetico(), []))
     assert "touch-action:pan-y" in html, "lo scorrimento verticale resta al browser"
