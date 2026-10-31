@@ -155,7 +155,9 @@ def test_la_coppia_sta_nel_catalogo_e_nel_parser():
 # ── Canone ORTI→INTUR isolato nel dettaglio "Godimento Beni di Terzi" ────────
 
 
-def _pf_godimento(tmp_path: Path, totale: dict[int, float], righe: dict[str, dict[int, float]]) -> Path:
+def _pf_godimento(
+    tmp_path: Path, totale: dict[int, float], righe: dict[str, dict[int, float]]
+) -> Path:
     """PF ORTI con la riga Godimento Beni di Terzi (riga 20) e il foglio dettaglio omonimo."""
     wb = Workbook()
     pf = wb.active
@@ -176,35 +178,51 @@ def _pf_godimento(tmp_path: Path, totale: dict[int, float], righe: dict[str, dic
 
 
 @pytest.mark.parametrize(
-    "etichetta", ["Fitto Hotel ramo d'azienda", "Fitto Ramo d' Azienda", "Fitto Ramo d’Azienda"]
+    "etichetta",
+    ["Fitto Hotel ramo d'azienda", "Fitto Ramo d' Azienda", "Fitto Ramo d’Azienda"],
 )
 def test_canone_passa_a_canone_passivo(tmp_path, log, etichetta):
     p = _pf_godimento(
         tmp_path,
         {COL_GEN: 294_000.0, COL_FEB: 50_000.0},
-        {etichetta: {COL_GEN: 244_000.0}, "Fitto CVM": {COL_GEN: 50_000.0, COL_FEB: 50_000.0}},
+        {
+            etichetta: {COL_GEN: 244_000.0},
+            "Fitto CVM": {COL_GEN: 50_000.0, COL_FEB: 50_000.0},
+        },
     )
     v = _per_voce(parse_piano_finanziario(p, None, log))
     assert v[("USCITE_CANONE_PASSIVO", 1)] == pytest.approx(244_000.0)
-    assert v[("USCITE_GODIMENTO_BENI", 1)] == pytest.approx(50_000.0)
-    assert v[("USCITE_GODIMENTO_BENI", 2)] == pytest.approx(50_000.0)
-    assert ("USCITE_CANONE_PASSIVO", 2) not in v
+    assert v[("USCITE_FITTO_CVM", 1)] == pytest.approx(50_000.0)
+    assert v[("USCITE_FITTO_CVM", 2)] == pytest.approx(50_000.0)
+    assert ("USCITE_GODIMENTO_BENI", 1) not in v and (
+        "USCITE_CANONE_PASSIVO",
+        2,
+    ) not in v
 
 
-def test_fitto_ar_va_su_angelina_e_solo_cvm_resta_godimento(tmp_path, log):
-    """Cambio di convenzione del 30/10/2026: «Fitto AR» è il fitto Angelina, intercompany,
-    e prende una gamba propria. Prima stava in godimento col CVM (test del 29/10, sostituito).
-    Il CVM resta godimento: quello va a terzi."""
+def test_fitto_ar_e_fitto_cvm_hanno_ciascuno_la_sua_casella(tmp_path, log):
+    """Convenzione del 30–31/10/2026 (Stefano): «Fitto AR» è il fitto Angelina, intercompany;
+    «Fitto CVM» è un fitto a terzi; ognuno in una casella sua. Prima stavano entrambi in godimento
+    (test del 29/10, sostituito). Il godimento resta per quello che non è uno dei tre fitti."""
     p = _pf_godimento(
-        tmp_path, {COL_GEN: 90_000.0}, {"Fitto AR": {COL_GEN: 40_000.0}, "Fitto CVM": {COL_GEN: 50_000.0}}
+        tmp_path,
+        {COL_GEN: 100_000.0},
+        {
+            "Fitto AR": {COL_GEN: 40_000.0},
+            "Fitto CVM": {COL_GEN: 50_000.0},
+            "Noleggio lavatrici": {COL_GEN: 10_000.0},
+        },
     )
     v = _per_voce(parse_piano_finanziario(p, None, log))
     assert v[("USCITE_FITTO_ANGELINA", 1)] == pytest.approx(40_000.0)
-    assert v[("USCITE_GODIMENTO_BENI", 1)] == pytest.approx(50_000.0)
+    assert v[("USCITE_FITTO_CVM", 1)] == pytest.approx(50_000.0)
+    assert v[("USCITE_GODIMENTO_BENI", 1)] == pytest.approx(10_000.0)
 
 
 def test_canone_non_contenuto_nel_totale_non_sposta_e_avvisa(tmp_path, log, caplog):
-    p = _pf_godimento(tmp_path, {COL_GEN: 100_000.0}, {"Fitto Ramo d' Azienda": {COL_GEN: 244_000.0}})
+    p = _pf_godimento(
+        tmp_path, {COL_GEN: 100_000.0}, {"Fitto Ramo d' Azienda": {COL_GEN: 244_000.0}}
+    )
     with caplog.at_level(logging.WARNING):
         v = _per_voce(parse_piano_finanziario(p, None, log))
     assert v == {("USCITE_GODIMENTO_BENI", 1): pytest.approx(100_000.0)}
@@ -219,8 +237,8 @@ def test_canone_non_contenuto_nel_totale_non_sposta_e_avvisa(tmp_path, log, capl
 
 def test_le_tre_gambe_del_foglio_godimento_giugno_2027(tmp_path, log):
     """Caso reale ORTI: Godimento 379.000 = 244.000 ramo + 120.000 Angelina + 15.000 CVM.
-    Le due regole lavorano sullo stesso foglio e sullo stesso record di partenza: la seconda
-    sottrae da quello che la prima ha lasciato, e il totale del mese resta quello del PF."""
+    Le tre regole lavorano sullo stesso foglio e sullo stesso record di partenza: ognuna
+    sottrae da quello che la precedente ha lasciato, e il totale del mese resta quello del PF."""
     p = _pf_godimento(
         tmp_path,
         {COL_GEN: 379_000.0},
@@ -233,7 +251,10 @@ def test_le_tre_gambe_del_foglio_godimento_giugno_2027(tmp_path, log):
     v = _per_voce(parse_piano_finanziario(p, None, log))
     assert v[("USCITE_CANONE_PASSIVO", 1)] == pytest.approx(244_000.0)
     assert v[("USCITE_FITTO_ANGELINA", 1)] == pytest.approx(120_000.0)
-    assert v[("USCITE_GODIMENTO_BENI", 1)] == pytest.approx(15_000.0)
+    assert v[("USCITE_FITTO_CVM", 1)] == pytest.approx(15_000.0)
+    assert ("USCITE_GODIMENTO_BENI", 1) not in v, (
+        "le tre gambe esauriscono il godimento del mese"
+    )
     assert sum(v.values()) == pytest.approx(379_000.0)
 
 
@@ -298,10 +319,22 @@ def test_la_coppia_angelina_sta_nel_catalogo_senza_pattern_esolver():
         "MANUALE",
         "",
     )
-    assert (uscita["sezione"], uscita["societa_id"], uscita["fonte"], uscita["cod_conto_pattern"]) == (
+    assert (
+        uscita["sezione"],
+        uscita["societa_id"],
+        uscita["fonte"],
+        uscita["cod_conto_pattern"],
+    ) == (
         "USCITE",
         "ORTI",
         "MANUALE",
         "",
     )
     assert VOCE_MAP["Fitto AR"] == "ENTRATE_AFFITTI_ANGELINA"
+    cvm = voci["USCITE_FITTO_CVM"]
+    assert (
+        cvm["sezione"],
+        cvm["societa_id"],
+        cvm["fonte"],
+        cvm["cod_conto_pattern"],
+    ) == ("USCITE", "ORTI", "MANUALE", "")

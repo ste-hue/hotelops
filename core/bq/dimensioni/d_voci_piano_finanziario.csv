@@ -32,3 +32,4 @@ USCITE_VARIE,Varie ed Eventuali,USCITE,Varie,,ESOLVER,6301,63059,640503,,320,,Co
 USCITE_VARIE_EXT,Varie ed Eventuali,USCITE,Varie,,ESOLVER,5711,5903,71019,,321,,Costi Produttivi,V
 ENTRATE_AFFITTI_ANGELINA,Fitto Angelina (ORTI→INTUR: INTUR incassa),ENTRATE,Affitti,INTUR,MANUALE,,,,,11,,Ricavi,IP
 USCITE_FITTO_ANGELINA,Fitto Angelina (ORTI→INTUR: ORTI paga),USCITE,Godimento Beni,ORTI,MANUALE,,,,,291,,Costi Produttivi,F
+USCITE_FITTO_CVM,Fitto CVM (ORTI paga a terzi),USCITE,Godimento Beni,ORTI,MANUALE,,,,,292,,Costi Produttivi,F

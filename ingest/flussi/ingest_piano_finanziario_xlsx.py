@@ -285,9 +285,10 @@ INTERCOMPANY_DETTAGLIO: dict[str, list[tuple[str, tuple[str, ...], str, str]]] =
     # societa: [(foglio, needles nell'etichetta normalizzata, voce di partenza, voce di arrivo)]
     # Il PF principale somma; il foglio di dettaglio tiene le gambe separate. Stesso meccanismo
     # del ribaltamento (28/10): si sposta solo se il totale del mese lo contiene, mai un negativo.
-    # Le due righe intercompany del foglio Godimento sono una famiglia sola, con due destinazioni:
-    # il canone del ramo d'azienda (USCITE_CANONE_PASSIVO, 29/10) e il fitto Angelina
-    # (USCITE_FITTO_ANGELINA, 30/10). Fitto CVM resta godimento: va a terzi.
+    # I tre fitti del foglio Godimento sono tre caselle (Stefano, 31/10/2026: «deve avere una casella
+    # sua... anche CVM ha un fitto suo, solo l'hotel è 737»): il canone del ramo d'azienda
+    # (USCITE_CANONE_PASSIVO, ORTI→INTUR), il fitto Angelina (USCITE_FITTO_ANGELINA, ORTI→INTUR) e il
+    # fitto CVM (USCITE_FITTO_CVM, a terzi). Quello che resta in godimento è altro.
     "ORTI": [
         ("Utenze", ("(intur)",), "USCITE_UTENZE", "USCITE_RIBALTAMENTO_INTUR"),
         # Canone ORTI→INTUR: "Fitto Ramo d' Azienda" (a volte "Fitto Hotel ...") dentro Godimento
@@ -306,6 +307,13 @@ INTERCOMPANY_DETTAGLIO: dict[str, list[tuple[str, tuple[str, ...], str, str]]] =
             ("fittoar",),
             "USCITE_GODIMENTO_BENI",
             "USCITE_FITTO_ANGELINA",
+        ),
+        # Fitto CVM: a terzi, non intercompany. Casella propria perché non si confonda col canone.
+        (
+            "Godimento Beni di Terzi",
+            ("fittocvm",),
+            "USCITE_GODIMENTO_BENI",
+            "USCITE_FITTO_CVM",
         ),
     ],
 }
