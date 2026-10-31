@@ -61,6 +61,21 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
    Voci PF corrette, PF (la base di Rosa nell'orizzonte), Fonti. È scritto dal browser senza librerie
    (`<script id="excel">`, zip di SpreadsheetML); `hotelops cdg tabelle` resta l'export da riga di comando.
 
+6. **Vocabolario di stato** (brief UI del 31/10, §A). Ogni numero in pagina porta una di quattro parole,
+   come attributo `data-stato` sul chip `.stato`: **attestato** (documento di terzi: estratto, atto,
+   delibera) · **dichiarato** (dai nostri libri o da una persona, nessun documento) · **da verificare**
+   (atteso, non riscontrato) · **non registrato** (vuoto perché nessuno l'ha scritto, che non è «0 €» e si
+   disegna tratteggiato). La card del minimo elenca le sue condizioni con questi chip (saldo di partenza,
+   finanziamenti non attestati che entrano prima del minimo, assenza di mesi PF); la barra fissa li
+   ripete come puntini. Lo stato di un finanziamento nasce dalla parola libera del documento (`stato`):
+   «deliberato», «contratto», «firmato» → attestato; «da verificare», «ipotesi» → da verificare; altro →
+   dichiarato. I colori sono provvisori fino al passaggio dataviz (§E).
+7. **Finanziamenti**: due riquadri, «Quando la banca ti dà i soldi · tranche» e «Quando li restituisci ·
+   rate del mutuo». Il documento può portare `importo` (centesimi, facoltativo) = quanto la banca ha
+   promesso: la pagina mostra «erogato X di Y» e il generatore delle tranche ha tre forme: tutto insieme,
+   metà a metà lavori e metà a fine lavori, a cadenza. Senza rate di rimborso la pagina lo dice nel
+   riquadro: entra solo il denaro erogato, il minimo è ottimista.
+
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 
 1. Intake + promote del file (policy AUTO):

@@ -40,6 +40,19 @@ h3{font-size:14px;font-weight:620;margin:12px 0 6px}
 .badge.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent}
 .badge.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}
 .badge.bad{background:var(--bad-bg);color:var(--bad);border-color:transparent}
+/* Vocabolario di stato (brief UI §A): quattro parole, un attributo, una classe. I colori sono provvisori (dataviz §E);
+   «non registrato» NON è un colore più pallido: è un riquadro tratteggiato, vuoto perché nessuno l'ha scritto. */
+.stato{display:inline-block;white-space:nowrap;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);background:var(--soft);color:var(--muted);vertical-align:middle;margin-left:4px}
+.stato[data-stato="attestato"]{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+.stato[data-stato="dichiarato"]{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+.stato[data-stato="da-verificare"]{background:var(--bad-bg);color:var(--bad);border-color:transparent}
+.stato[data-stato="non-registrato"]{background:transparent;color:var(--muted);border:1px dashed var(--muted);font-style:italic}
+.stato.punto{width:8px;height:8px;padding:0;border-radius:50%;margin-left:3px;font-size:0;line-height:0;vertical-align:middle}
+.minimi .condizioni{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}
+.minimi .condizioni .stato{margin-left:0}
+.riquadro{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-top:8px}
+.riquadro .avviso-r{font-size:12px;color:var(--bad);margin:4px 0}
+.scelta .scarta{border-radius:999px;padding:0 9px;min-height:32px;margin-left:-4px;color:var(--muted)}
 .conti{margin:8px 0 0;font-size:12px;color:var(--muted)}
 .conti div{margin-top:2px}
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -74,6 +87,7 @@ input.nome{width:100%}
 .leva .riga{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;margin-top:6px;font-size:13px}
 .pag{margin:8px 0 0 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
 .pag-testa{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.pag-testa .mini{margin-left:auto}
 .pag-nome{font-weight:600;flex:1 1 160px}
 .pag-tot{font-weight:600;white-space:nowrap}
 .frase{font-size:13px;line-height:1.45;margin-top:3px}
@@ -804,12 +818,31 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   const somma = (o) => Object.values(o).reduce((a, b) => a + b, 0);
   const periodoDi = (mesi) => { const k = Object.keys(mesi).sort(); return k.length ? (k.length === 1 ? meseIt(k[0]) : `${meseIt(k[0])} – ${meseIt(k[k.length - 1])}`) : "nessun mese"; };
   const badgeStato = (s) => (/contratto|tua/.test(s) ? "ok" : /verificare|decidere/.test(s) ? "warn" : /fuori/.test(s) ? "bad" : "");
+  // ── vocabolario di stato (brief UI §A): quattro parole, usate ovunque appaia un numero ──
+  // attestato = documento di terzi (estratto, atto, delibera) · dichiarato = dai nostri libri o da una persona ·
+  // da verificare = atteso, non riscontrato · non registrato = vuoto perché nessuno l'ha scritto (≠ 0 €).
+  const STATI = { attestato: "attestato", dichiarato: "dichiarato", da_verificare: "da verificare", non_registrato: "non registrato" };
+  const chipStato = (stato, titolo = "", testo = null, punto = false) => `<${punto ? "i" : "span"} class="stato${punto ? " punto" : ""}" data-stato="${stato.replace(/_/g, "-")}"${titolo || punto ? ` title="${esc(titolo || (testo === null ? STATI[stato] : testo))}"` : ""}${punto ? ` aria-label="${esc(testo === null ? STATI[stato] : testo)}"` : ""}>${punto ? "" : esc(testo === null ? STATI[stato] : testo)}</${punto ? "i" : "span"}>`;
+  // La parola libera scritta nel documento del finanziamento, ridotta alle quattro.
+  const statoFin = (s) => (/deliberat|contratto|attestat|erogat|firmat/.test(String(s)) ? "attestato" : /verific|ipotesi|decidere|attes/.test(String(s)) ? "da_verificare" : "dichiarato");
+  const statoAncora = (a) => (a.saldo === null || a.saldo === undefined ? "non_registrato" : a.attestato ? "attestato" : "dichiarato");
   const statoIt = (s) => esc(String(s).replace(/_/g, " "));
   const dataIt = (iso) => (/^\d{4}-\d{2}-\d{2}/.test(String(iso)) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : esc(iso));
 
   // ── stato ──
   // origine = lo scenario com'era quando è stato aperto: se cambia, uscendo resta nel menu come bozza.
-  let stato = { nome: D.seme.nome, scenario: copia(D.seme.scenario), origine: JSON.stringify(D.seme.scenario) };
+  // Il documento «completo»: le liste vuote che i render aggiungono (manuali, contratti, rate…) ci sono già
+  // all'apertura, così «è cambiato?» confronta due documenti della stessa forma e non nascono bozze finte.
+  function completa(scenario) {
+    const s = copia(scenario);
+    s.manuali = s.manuali || [];
+    s.progetti = (s.progetti || []).map((p) => ({ ...p, contratti: p.contratti || [] }));
+    s.finanziamenti = (s.finanziamenti || []).map((f) => ({ ...f, erogazioni: f.erogazioni || {}, rate: f.rate || {} }));
+    s.canone = s.canone || null;
+    s.soglia = s.soglia || 0;
+    return s;
+  }
+  let stato = { nome: D.seme.nome, scenario: completa(D.seme.scenario), origine: JSON.stringify(completa(D.seme.scenario)) };
   let ris = null;
   const aperti = new Set();   // righe della tabella aperte (società|mese)
   const aperte = new Set();   // tendine aperte: "canone", "p:<id>", "f:<id>"
@@ -868,10 +901,9 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     el("scenario").innerHTML = `<div class="strumenti" style="margin-top:0"><label class="piccolo">Scenario <select id="sel-scenari"></select></label>
       <input type="text" id="nome-scenario" class="nome" style="width:180px" placeholder="nome scenario">
       <label class="piccolo">Soglia € <input type="text" class="eur" id="soglia"></label>
-      <button id="esporta" class="primario">Esporta scenario</button>
-      <button id="esporta-excel" title="tutti i fogli dello scenario in vista: minimi, saldi mese per mese, calendario, canone, progetti, finanziamenti, voci corrette, PF, fonti">Esporta Excel</button>
-      <button id="importa">Importa scenario</button><input type="file" id="importa-file" accept=".json,application/json" hidden>
-      <button id="nessuna" title="le modifiche restano nel menu come bozza">Vedi solo PF</button></div>`;
+      <button id="esporta" class="primario" title="il file .json dello scenario: si riapre con «Apri scenario»">Salva scenario (.json)</button>
+      <button id="esporta-excel" title="un file con nove fogli dello scenario in vista: minimi, saldi mese per mese, calendario, canone, progetti, finanziamenti, voci corrette, PF, fonti">Excel (.xlsx)</button>
+      <button id="importa">Apri scenario (.json)</button><input type="file" id="importa-file" accept=".json,application/json" hidden></div>`;
     const s0 = el("sel-scenari");
     for (const s of tutti) {
       const o = document.createElement("option");
@@ -884,9 +916,20 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     // La stessa scelta, in alto e a vista: una pillola per scenario, quella attiva piena.
     const etichetta = (s) => s._k === "vuoto" ? "Solo PF" : (s._e || "").includes("bozza") ? `${s.nome} · bozza` : (s._e || "").includes("importato") ? `${s.nome} · importato` : s.nome;
     const ordine = [...tutti.filter((s) => s._k === "seme"), ...tutti.filter((s) => s._k !== "seme" && s._k !== "vuoto"), ...tutti.filter((s) => s._k === "vuoto")];
-    el("scelta-scenario").innerHTML = ordine.map((s) => `<button type="button" data-scelta="${esc(s._k)}" aria-pressed="${(stato.chiave || "seme") === s._k}">${esc(etichetta(s))}${s.compatibile ? "" : " · base diversa"}</button>`).join("");
+    el("scelta-scenario").innerHTML = ordine.map((s) => `<button type="button" data-scelta="${esc(s._k)}" aria-pressed="${(stato.chiave || "seme") === s._k}">${esc(etichetta(s))}${s.compatibile ? "" : " · base diversa"}</button>${(s._e || "").includes("bozza") ? `<button type="button" class="scarta" data-scarta="${esc(s._k)}" title="scarta la bozza" aria-label="scarta la bozza ${esc(s.nome)}">×</button>` : ""}`).join("");
     el("scelta-scenario").querySelectorAll("[data-scelta]").forEach((b) => {
       b.onclick = () => { if ((stato.chiave || "seme") !== b.dataset.scelta) apriScenario(b.dataset.scelta); };
+    });
+    // Una bozza si scarta dalla pillola: via dal menu; se era quella aperta, si torna al seme senza lasciarne un'altra.
+    el("scelta-scenario").querySelectorAll("[data-scarta]").forEach((b) => {
+      b.onclick = () => {
+        const i = parseInt(b.dataset.scarta, 10);
+        D.scenari.splice(i, 1);
+        const k = stato.chiave;
+        if (k === String(i)) { stato.origine = JSON.stringify(stato.scenario); apriScenario("seme"); return; }
+        if (/^\d+$/.test(k || "") && parseInt(k, 10) > i) stato.chiave = String(parseInt(k, 10) - 1);
+        renderScenario();
+      };
     });
     el("nome-scenario").value = stato.nome;
     el("nome-scenario").oninput = (e) => { stato.nome = e.target.value; stato.scenario.nome = e.target.value; };
@@ -894,14 +937,13 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     el("soglia").onchange = (e) => { const v = euroDa(e.target); if (v === null) return; stato.scenario.soglia = v; ricalcola(); };
     el("esporta").onclick = esporta;
     el("esporta-excel").onclick = esportaExcel;
-    el("nessuna").onclick = () => apriScenario("vuoto");
     el("importa").onclick = () => el("importa-file").click();
     el("importa-file").onchange = async (e) => {
       const file = e.target.files[0];
       e.target.value = "";
       if (!file) return;
       const r = FORMATO.leggiDocumento(await file.text(), D.schema);
-      if (r.errore) { mostraErrore(`Importa «${file.name}»: ${r.errore}`); return; }
+      if (r.errore) { mostraErrore(`Apri «${file.name}»: ${r.errore}`); return; }
       const compatibile = SOC.every((x) => ((r.base[x] || {}).raw_object_id || null) === ((D.base[x] || {}).raw_object_id || null));
       D.scenari.push({ nome: r.nome, salvato_il: r.salvato_il, scenario: r.scenario, compatibile, _etichetta: `${r.nome} · importato da ${file.name}` });
       apriScenario(String(D.scenari.length - 1));
@@ -911,11 +953,15 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   // Apre uno scenario del menu. Se quello corrente è stato modificato, resta nel menu come bozza.
   function apriScenario(chiave) {
     const s = chiave === "seme" ? D.seme : chiave === "vuoto" ? vuoto() : D.scenari[parseInt(chiave, 10)];
-    if (JSON.stringify(stato.scenario) !== stato.origine) {
-      D.scenari.push({ nome: stato.nome, salvato_il: new Date().toISOString(), scenario: copia(stato.scenario), compatibile: true,
-        _etichetta: `${stato.nome} · bozza delle ${new Date().toTimeString().slice(0, 5)}, non esportata` });
+    const corrente = JSON.stringify(stato.scenario);
+    if (corrente !== stato.origine) {
+      // Una bozza solo se è davvero diversa da tutto ciò che il menu ha già.
+      const gia = corrente === JSON.stringify(completa(D.seme.scenario)) || D.scenari.some((x) => JSON.stringify(completa(x.scenario)) === corrente);
+      if (!gia) D.scenari.push({ nome: stato.nome, salvato_il: new Date().toISOString(), scenario: copia(stato.scenario), compatibile: true,
+        _etichetta: `${stato.nome} · bozza delle ${new Date().toTimeString().slice(0, 5)}, non salvata` });
     }
-    stato = { nome: s.nome, scenario: copia(s.scenario), origine: JSON.stringify(s.scenario), chiave };
+    const nuovo = completa(s.scenario);
+    stato = { nome: s.nome, scenario: nuovo, origine: JSON.stringify(nuovo), chiave };
     aperti.clear();
     renderScenario();
     ricalcola();
@@ -974,8 +1020,8 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const fonti = [["pagina generata il", D.generato_il], ["fonti lette da BigQuery il", D.acquisito_il || ""], ["scenario", nomeSc], ["esportato il", new Date().toISOString()]];
     for (const s of SOC) {
       const a = D.ancore[s];
-      fonti.push([`saldo ${s} al ${a.data}`, `${fmt(a.saldo)} € · ${a.attestato ? "quadra con i movimenti" : "solo dichiarato"}`]);
-      for (const [b, c] of Object.entries(a.conti)) fonti.push([`  ${s} · ${b}`, `${fmt(c.saldo)} € · ${c.attestato ? "quadra con i movimenti" : "solo dichiarato"} · ${c.motivo}`]);
+      fonti.push([`saldo ${s} al ${a.data}`, `${fmt(a.saldo)} € · ${STATI[statoAncora(a)]}`]);
+      for (const [b, c] of Object.entries(a.conti)) fonti.push([`  ${s} · ${b}`, `${c.saldo === null || c.saldo === undefined ? STATI.non_registrato : `${fmt(c.saldo)} € · ${STATI[statoAncora(c)]}`} · ${c.motivo}`]);
       const base = D.base[s] || {};
       fonti.push([`PF ${s}`, `${base.file_sorgente || "—"} · caricato il ${base.data_caricamento || "—"}`]);
     }
@@ -1009,8 +1055,8 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const ancore = SOC.map((s) => {
       const a = D.ancore[s];
       if (!a) return "";
-      const conti = Object.entries(a.conti).map(([banca, c]) => `<li>${esc(banca)} <span class="num">${fmt(c.saldo)}</span> <span class="badge ${c.attestato ? "ok" : "warn"}">${c.attestato ? "quadra con i movimenti" : "solo dichiarato"}</span> ${esc(c.motivo)}</li>`).join("");
-      return `<li>Ancora ${s} al ${dataIt(a.data)}: <span class="num">${fmt(a.saldo)}</span> <span class="badge ${a.attestato ? "ok" : "warn"}">${a.attestato ? "quadra con i movimenti" : "solo dichiarato"}</span><ul>${conti}</ul></li>`;
+      const conti = Object.entries(a.conti).map(([banca, c]) => `<li>${esc(banca)} ${c.saldo === null || c.saldo === undefined ? chipStato("non_registrato", "nessun saldo scritto per questo conto") : `<span class="num">${fmt(c.saldo)}</span> ${chipStato(statoAncora(c), c.motivo)}`} <span class="piccolo">${esc(c.motivo)}</span></li>`).join("");
+      return `<li>Saldo di partenza ${s} al ${dataIt(a.data)}: <span class="num">${fmt(a.saldo)}</span> ${chipStato(statoAncora(a), a.attestato ? "quadra con i movimenti in banca" : "dal foglio dei saldi, non riscontrato coi movimenti")}<ul>${conti}</ul></li>`;
     }).join("");
     const nascosti = D.scenari_sostituiti.length ? ` Non nel menu: ${D.scenari_sostituiti.map((s) => `${esc(s.nome)} (${oraDi(s.salvato_il)}, ${esc(s.motivo || "stesso nome del seme")})`).join(", ")}.` : "";
     el("fonti").innerHTML = `<summary>Fonti e versioni</summary><ul>${basi}${ancore}
@@ -1237,6 +1283,18 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     return consecutivi ? `da ${meseIt(mesi[0])} a ${meseIt(mesi[mesi.length - 1])}` : mesi.map(meseIt).join(", ");
   }
   let minimiPrima = null;
+  // Su cosa regge il minimo. Non una stringa cucita sotto il numero: condizioni con uno stato, riusate
+  // dalla card e dalla barra. Il saldo di partenza porta il suo stato; i finanziamenti non attestati che
+  // entrano prima del minimo lo reggono; senza mesi con PF il «sotto zero» vuoto non vuol dire niente.
+  function condizioni(soc, m) {
+    const a = D.ancore[soc];
+    const out = [{ stato: statoAncora(a), testo: `partenza ${STATI[statoAncora(a)]}`,
+      titolo: a.attestato ? `saldo di partenza al ${dataIt(a.data)}: quadra con i movimenti in banca` : `saldo di partenza al ${dataIt(a.data)}: dal foglio dei saldi, non riscontrato coi movimenti` }];
+    const fin = (stato.scenario.finanziamenti || []).filter((f) => f.societa === soc && statoFin(f.stato) === "da_verificare" && Object.keys(f.erogazioni || {}).some((x) => x <= m.mese));
+    if (fin.length) out.push({ stato: "da_verificare", testo: `regge su ${fin.length === 1 ? "un finanziamento" : `${fin.length} finanziamenti`} da verificare`, titolo: fin.map((f) => f.nome).join(" · ") });
+    if (!MESI_PF.length) out.push({ stato: "non_registrato", testo: "nessun mese con PF", titolo: "senza PF il «sotto zero» non può dire niente" });
+    return out;
+  }
   function renderMinimi() {
     const box = el("minimi");
     box.innerHTML = "";
@@ -1251,13 +1309,15 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       // segnale rosso se va sotto zero. Tutto il resto (ancora, solo PF, cosa pesa nel mese, le leve
       // oltre il PF) sta in «dettagli», chiuso: c'è per chi vuole saperlo, non in faccia a tutti.
       const kd = `dett-${soc}`;
+      const cond = condizioni(soc, m);
       box.insertAdjacentHTML("beforeend", `<div class="card" data-soc="${soc}">
         <div><strong>${soc}</strong> · minimo a ${meseIt(m.mese)}</div>
         <div class="saldo num ${m.saldo < 0 ? "neg" : ""}">${fmt(m.saldo)} €</div>
         <div class="delta num">${delta === 0 ? "come con il solo PF" : `${segno(delta, false)} rispetto al solo PF`}</div>
         ${sotto}
+        <div class="condizioni">${cond.map((c) => chipStato(c.stato, c.titolo, c.testo)).join("")}</div>
         <details class="dettagli" data-k="${kd}" ${aperte.has(kd) ? "open" : ""}><summary>dettagli</summary>
-          <div class="piccolo">solo PF: minimo ${fmt(b.saldo)} a ${meseIt(b.mese)} · ancora al ${dataIt(a.data)} <span class="badge ${a.attestato ? "ok" : "warn"}" title="vedi Fonti e versioni">${a.attestato ? "quadra con i movimenti" : "solo dichiarato"}</span></div>
+          <div class="piccolo">solo PF: minimo ${fmt(b.saldo)} a ${meseIt(b.mese)} · ancora al ${dataIt(a.data)} ${chipStato(statoAncora(a), a.attestato ? "quadra con i movimenti in banca" : "dal foglio dei saldi, non riscontrato coi movimenti")}</div>
           <div class="piccolo" style="margin-top:4px">pesano a ${meseIt(m.mese)}:</div>
           <ul>${usc.map(([n, v]) => `<li>${esc(n)} <span class="num">${fmt(v, false)}</span></li>`).join("") || "<li>nessuna uscita nel mese</li>"}</ul>
           ${oltre}
@@ -1284,7 +1344,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     barra.innerHTML = SOC.map((soc) => {
       const m = ris.minimi[soc], d = m.saldo - D.baseline.minimi[soc].saldo;
       const cambiato = prima && prima[soc] !== m.saldo ? " cambiato" : "";
-      return `<button type="button" data-soc="${soc}" title="torna ai minimi"><strong>${soc}</strong><span class="num${m.saldo < 0 ? " neg" : ""}${cambiato}">${fmt(m.saldo)} €</span><span class="quando">${meseIt(m.mese)}</span><span class="delta num">${d === 0 ? "come il solo PF" : `${segno(d, false)} vs solo PF`}</span></button>`;
+      return `<button type="button" data-soc="${soc}" title="torna ai minimi"><strong>${soc}</strong><span class="num${m.saldo < 0 ? " neg" : ""}${cambiato}">${fmt(m.saldo)} €</span><span class="quando">${meseIt(m.mese)}</span><span class="delta num">${d === 0 ? "come il solo PF" : `${segno(d, false)} vs solo PF`}</span>${condizioni(soc, m).map((c) => chipStato(c.stato, c.titolo, c.testo, true)).join("")}</button>`;
     }).join("");
     barra.querySelectorAll("button").forEach((b) => {
       b.onclick = () => el("minimi").scrollIntoView({ behavior: ridotto() ? "auto" : "smooth", block: "start" });
@@ -1384,7 +1444,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   // La frase «come si paga»: quante rate, ogni quanto, la prima e l'ultima, e quante cadono senza PF.
   function comeSiPaga(mesi, aliquota) {
     const f = FORMATO.formaRate(mesi, D.mesi);
-    if (!f.n) return "nessuna rata. Scrivi il totale, in quante rate, ogni quanto e la prima rata, poi «Rateizza».";
+    if (!f.n) return "nessuna rata. Scrivi il totale, in quante rate, ogni quanto e la prima rata, poi «Genera le rate».";
     const passo = f.passo ? (PASSI.find(([x]) => x === f.passo) || [0, `ogni ${f.passo} mesi`])[1] : "a mesi liberi";
     const conIva = aliquota !== null && aliquota > 0;
     const quota = f.n > 1 && f.quota !== null ? ` da ${fmt(f.quota, false)}${conIva ? ` netto (${fmt(MOTORE.iva(f.quota, aliquota), false)} lordo)` : ""}` : "";
@@ -1394,6 +1454,73 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const oltre = Object.keys(mesi).filter((m) => IPO.has(m)).length;
     return `${quando} · ${tot}${oltre ? ` · ${oltre === 1 ? "una rata cade" : `${oltre} rate cadono`} dopo ${meseIt(ULTIMO_PF)}, nei mesi senza PF` : ""}`;
   }
+  // Le tranche: quanto la banca ha promesso (importo del finanziamento) e quanto lo scenario fa entrare.
+  function fraseTranche(f) {
+    const erogato = somma(f.erogazioni || {});
+    const n = Object.keys(f.erogazioni || {}).length;
+    const quando = n ? `${n === 1 ? "una tranche" : `${n} tranche`} · ${periodoDi(f.erogazioni)}` : "nessuna tranche";
+    if (f.importo === undefined || f.importo === null) return `${quando} · erogato ${fmt(erogato, false)} · importo del finanziamento ${chipStato("non_registrato", "scrivi l'importo del finanziamento per il controllo «erogato X di Y»")}`;
+    const d = erogato - f.importo;
+    const controllo = d === 0 ? chipStato("attestato", "le tranche coprono esattamente l'importo", "quadra")
+      : d < 0 ? chipStato("da_verificare", "le tranche non coprono l'importo", `mancano ${fmt(-d, false)}`)
+      : chipStato("da_verificare", "le tranche superano l'importo", `${fmt(d, false)} oltre l'importo`);
+    return `${quando} · erogato ${fmt(erogato, false)} di ${fmt(f.importo, false)} ${controllo}`;
+  }
+  // Due forme reali (Stefano, 31/10): «tutto insieme» (il MCC) e «metà alla perizia del geometra a metà lavori,
+  // metà a fine lavori» (il mutuo edile); la terza, a cadenza, per tutto il resto.
+  const FORME_TRANCHE = [["una", "tutto insieme"], ["meta", "metà a metà lavori, metà a fine lavori"], ["n", "in più tranche, a cadenza"]];
+  function bloccoTranche(f) {
+    const k = Object.keys(f.erogazioni || {}).sort();
+    const forma = k.length === 2 ? "meta" : k.length > 2 ? "n" : "una";
+    return `<div class="come">
+      <div class="riga"><label class="piccolo">importo del finanziamento <input type="text" class="eur" data-tranche-importo value="${f.importo === undefined || f.importo === null ? "" : fmt(f.importo)}" placeholder="0,00"></label>
+        <select data-tranche-forma>${FORME_TRANCHE.map(([v, e]) => `<option value="${v}" ${v === forma ? "selected" : ""}>${e}</option>`).join("")}</select></div>
+      <div class="riga">
+        <label class="piccolo" data-tf="una meta n"><span data-tranche-quando>${forma === "meta" ? "metà lavori" : forma === "n" ? "prima tranche" : "mese"}</span> ${selMesi(k[0] || D.mesi[0], "sel-tranche-1")}</label>
+        <label class="piccolo" data-tf="meta">fine lavori ${selMesi(k[1] || k[0] || D.mesi[0], "sel-tranche-2")}</label>
+        <label class="piccolo" data-tf="n">in <input type="text" class="n" data-tranche-n value="${Math.max(2, k.length)}"> tranche</label>
+        <select data-tranche-passo data-tf="n">${PASSI.map(([x, e]) => `<option value="${x}">${e}</option>`).join("")}</select>
+        <button data-genera-tranche>Genera le tranche</button><span class="errore-r" data-errore-tranche></span></div>
+      <div class="piccolo">mese per mese (puoi correggere ogni importo)</div></div>`;
+  }
+  function collegaTranche(box, f) {
+    const formaSel = box.querySelector("select[data-tranche-forma]");
+    const quando = box.querySelector("[data-tranche-quando]");
+    const aggiorna = () => {
+      const v = formaSel.value;
+      box.querySelectorAll("[data-tf]").forEach((x) => { x.hidden = !x.dataset.tf.split(" ").includes(v); });
+      quando.textContent = v === "meta" ? "metà lavori" : v === "n" ? "prima tranche" : "mese";
+    };
+    formaSel.onchange = aggiorna;
+    aggiorna();
+    const impIn = box.querySelector("input[data-tranche-importo]");
+    impIn.onchange = () => {
+      if (impIn.value.trim() === "") { delete f.importo; impIn.classList.remove("invalid"); ricalcola(); return; }
+      const v = euroDa(impIn);
+      if (v === null) return;
+      f.importo = v;
+      ricalcola();
+    };
+    box.querySelector("button[data-genera-tranche]").onclick = () => {
+      const err = box.querySelector("[data-errore-tranche]");
+      const imp = impIn.value.trim() === "" ? null : euroDa(impIn);
+      if (imp === null || imp <= 0) { err.textContent = "scrivi prima l'importo del finanziamento"; return; }
+      const m1 = box.querySelector("select.sel-tranche-1").value, m2 = box.querySelector("select.sel-tranche-2").value;
+      try {
+        let er;
+        if (formaSel.value === "una") er = { [m1]: imp };
+        else if (formaSel.value === "meta") {
+          if (m2 <= m1) throw new Error("la fine lavori deve venire dopo la metà lavori");
+          const meta = Math.floor(imp / 2);
+          er = { [m1]: meta, [m2]: imp - meta };
+        } else er = FORMATO.spalma(imp, m1, parseInt(box.querySelector("input[data-tranche-n]").value, 10), parseInt(box.querySelector("select[data-tranche-passo]").value, 10), D.mesi);
+        f.importo = imp;
+        f.erogazioni = er;
+        err.textContent = "";
+        ricalcola();
+      } catch (e) { err.textContent = e.message; }
+    };
+  }
   function bloccoRate(mesi, aliquota) {
     const f = FORMATO.formaRate(mesi, D.mesi);
     return `<div class="come">
@@ -1402,7 +1529,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         <label class="piccolo">in <input type="text" class="n" data-spalma-n value="${Math.max(1, f.n)}"> rate</label>
         <select data-spalma-passo ${f.n <= 1 ? "hidden" : ""}>${PASSI.map(([x, e]) => `<option value="${x}" ${x === (f.passo || 1) ? "selected" : ""}>${e}</option>`).join("")}</select>
         <label class="piccolo"><span data-spalma-quando>${f.n <= 1 ? "mese" : "prima rata"}</span> ${selMesi(f.primo || D.mesi[0], "sel-spalma-da")}</label>
-        <button data-spalma>Rateizza</button></div>
+        <button data-spalma>Genera le rate</button></div>
       <div class="riga"><button class="mini" data-sposta="-1" ${f.n ? "" : "disabled"}>◀ tutto un mese prima</button>
         <button class="mini" data-sposta="1" ${f.n ? "" : "disabled"}>tutto un mese dopo ▶</button>
         <span class="errore-r" data-errore-spalma></span></div>
@@ -1539,13 +1666,13 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         ${(p.contratti || []).map((c, ci) => bloccoContratto(p, c, ci)).join("")}
         ${p.pagamenti.map((g, j) => { const kg = `g:${p.id}:${j}`; return `<div class="pag" data-g="${j}">
           <div class="pag-testa"><span class="pag-nome">${esc(g.nome)}</span>${g.fornitore_id ? `<span class="badge">${esc(g.fornitore_id)}</span>` : ""}
-            <span class="num pag-tot">${fmt(Object.values(g.mesi).reduce((a, b) => a + MOTORE.iva(b, g.aliquota_iva), 0), false)} €</span></div>
+            <span class="num pag-tot">${fmt(Object.values(g.mesi).reduce((a, b) => a + MOTORE.iva(b, g.aliquota_iva), 0), false)} €</span>
+            <button class="mini" data-elimina-g title="elimina questo pagamento dal progetto" aria-label="elimina il pagamento ${esc(g.nome)}">× elimina</button></div>
           <div class="frase">${esc(comeSiPaga(g.mesi, g.aliquota_iva))}</div>
           <details class="sotto" data-k="${kg}" ${aperte.has(kg) ? "open" : ""}><summary>modifica nome, IVA e rate</summary>
             <div class="riga"><input type="text" class="nome" style="flex:1 1 140px" data-campo="nome" value="${esc(g.nome)}"> ${selIva(g.aliquota_iva)}
               <input type="text" class="n" style="width:90px" data-campo="stato" value="${esc(g.stato)}" title="stato">
-              <input type="text" class="n" style="width:90px" data-campo="fornitore_id" value="${esc(g.fornitore_id || "")}" placeholder="fornitore" title="fornitore_id (riconcilia i fatti)">
-              <button data-elimina-g title="elimina pagamento">× elimina</button></div>
+              <input type="text" class="n" style="width:90px" data-campo="fornitore_id" value="${esc(g.fornitore_id || "")}" placeholder="fornitore" title="fornitore_id (riconcilia i fatti)"></div>
             ${bloccoRate(g.mesi, g.aliquota_iva)}
             ${grigliaMesi(g.mesi, "mese")}
           </details>
@@ -1561,15 +1688,20 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       const k = `f:${f.id}`;
       const variante = copia(sc); variante.finanziamenti.splice(i, 1);
       return `<details class="leva" data-k="${k}" data-f="${i}" ${aperte.has(k) ? "open" : ""}>
-      <summary><span class="nome">${esc(f.nome)}</span><span class="badge">${esc(f.societa)}</span><span class="badge ${badgeStato(f.stato)}">${statoIt(f.stato)}</span>
-        <span class="num tot">${fmt(somma(f.erogazioni), false)} €</span><span class="piccolo num">erogato ${periodoDi(f.erogazioni)} · rate ${Object.keys(f.rate).length ? `${fmt(somma(f.rate), false)} (${periodoDi(f.rate)})` : "nessuna nell'orizzonte"}</span>
+      <summary><span class="nome">${esc(f.nome)}</span><span class="badge">${esc(f.societa)}</span>${chipStato(statoFin(f.stato), `stato scritto nel documento: ${f.stato}`)}
+        <span class="num tot">${fmt(somma(f.erogazioni), false)} €</span><span class="piccolo num">tranche ${periodoDi(f.erogazioni)} · rate ${Object.keys(f.rate).length ? `${fmt(somma(f.rate), false)} (${periodoDi(f.rate)})` : "nessuna nell'orizzonte"}</span>
         ${peso(variante, f.societa, true)}</summary>
       <div class="corpo">
         <div class="riga"><input type="text" class="nome" style="flex:1 1 140px;font-weight:600" data-campo="nome" value="${esc(f.nome)}"> ${selSoc(f.societa)}
           <input type="text" class="n" style="width:110px" data-campo="stato" value="${esc(f.stato)}" title="stato">
           <button data-elimina-f title="elimina">× elimina</button></div>
-        <div class="piccolo">erogazioni</div>${grigliaMesi(f.erogazioni, "erog")}
-        <div class="piccolo"><strong>rate di rimborso</strong></div><div class="frase">${esc(comeSiPaga(f.rate, null))}</div><div class="rate-f">${bloccoRate(f.rate, null)}</div>${grigliaMesi(f.rate, "rata")}
+        <div class="riquadro tranche"><div class="piccolo"><strong>Quando la banca ti dà i soldi</strong> · tranche</div>
+          <div class="frase">${fraseTranche(f)}</div>
+          ${bloccoTranche(f)}
+          ${grigliaMesi(f.erogazioni, "erog")}</div>
+        <div class="riquadro rate"><div class="piccolo"><strong>Quando li restituisci</strong> · rate del mutuo</div>
+          ${Object.keys(f.rate).length ? "" : `<div class="avviso-r">${chipStato("non_registrato", "nessuna rata di rimborso scritta nello scenario", "rate non registrate")} entra solo il denaro erogato: il minimo è ottimista</div>`}
+          <div class="frase">${esc(comeSiPaga(f.rate, null))}</div><div class="rate-f">${bloccoRate(f.rate, null)}</div>${grigliaMesi(f.rate, "rata")}</div>
         <div class="nota">al posto delle righe «finanziamenti» del PF di ${esc(f.societa)}</div>
       </div></details>`;
     }).join("");
@@ -1651,7 +1783,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
               svincolo_mese: D.mesi[D.mesi.length - 1], sal_modo: "n", sal_n: 1, sal_ogni: 0, sal_da: D.mesi[0], sal_passo: 1, quote: [] });
         renderLeve();
       };
-      div.querySelector("button[data-aggiungi-g]").onclick = () => { p.pagamenti.push({ nome: "Nuovo pagamento", mesi: {}, aliquota_iva: 22, stato: "ipotesi", fornitore_id: null }); renderLeve(); };
+      div.querySelector("button[data-aggiungi-g]").onclick = () => { p.pagamenti.push({ nome: "Nuovo pagamento", mesi: {}, aliquota_iva: 22, stato: "ipotesi", fornitore_id: null }); aperte.add(`g:${p.id}:${p.pagamenti.length - 1}`); renderLeve(); };
       div.querySelectorAll(".pag").forEach((pg) => {
         const g = p.pagamenti[parseInt(pg.dataset.g, 10)];
         pg.querySelectorAll(".sotto > .riga [data-campo]").forEach((inp) => {
@@ -1675,6 +1807,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       div.querySelector("button[data-elimina-f]").onclick = () => { sc.finanziamenti.splice(i, 1); ricalcola(); };
       leggiMesi(div, "erog", f.erogazioni);
       leggiMesi(div, "rata", f.rate);
+      collegaTranche(div.querySelector(".riquadro.tranche"), f);
       collegaRate(div.querySelector(".rate-f .come"), () => f.rate, (m) => { f.rate = m; }, 0);
     });
     el("aggiungi-f").onclick = () => { const id = `F${Date.now().toString(36)}`; sc.finanziamenti.push({ id, nome: "Nuovo finanziamento", societa: "INTUR", erogazioni: {}, rate: {}, stato: "da verificare" }); aperte.add(`f:${id}`); ricalcola(); };
