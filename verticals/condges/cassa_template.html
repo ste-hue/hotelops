@@ -209,6 +209,52 @@ details.blocco>summary .b-s{color:var(--muted);font-size:13px;flex:1 1 220px}
 details.blocco>.dentro{padding:0 12px 12px}
 details.blocco .card{border:0;padding:4px 2px}
 .blocchi-cmd{display:flex;gap:6px;margin-top:10px}
+details.blocco[data-blocco="leve"]>summary #apri-leve{margin-left:auto}
+/* ── Vista «Scenario a tutto schermo» (brief UI, punto 5): la lista delle leve, un solo editor aperto (foglio dal
+   basso al telefono, pannello a destra al desktop), i minimi sempre in alto. Stesso DOM, una classe sul body. ── */
+.leve-top{position:fixed;top:0;left:0;right:0;z-index:45;background:color-mix(in srgb,var(--bg) 80%,transparent);-webkit-backdrop-filter:blur(14px) saturate(160%);backdrop-filter:blur(14px) saturate(160%);border-bottom:1px solid var(--line)}
+.leve-top[hidden],.leve-seg[hidden],.leve-scrim[hidden]{display:none}
+.leve-top .riga1{display:flex;align-items:center;gap:8px;padding:calc(8px + env(safe-area-inset-top,0px)) 10px 8px;min-height:44px;box-sizing:border-box}
+.leve-top .indietro,.leve-top .azione{border:0;background:transparent;color:var(--accent);font-size:15px;padding:6px 6px;min-height:32px}
+.leve-top .indietro{margin-left:-6px}
+.leve-top .titolo{flex:1;text-align:center;font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.leve-seg{position:fixed;left:0;right:0;z-index:44;display:flex;gap:2px;margin:0;padding:6px 10px 8px;background:var(--bg);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.leve-seg::-webkit-scrollbar{display:none}
+.leve-seg button{flex:1 0 auto;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:12px;padding:6px 10px;min-height:32px;white-space:nowrap}
+.leve-seg button[aria-pressed="true"]{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+body.vista-leve main{padding-top:calc(var(--leve-top-h,124px) + 10px)}
+body.vista-leve header,body.vista-leve #scelta-scenario,body.vista-leve #minimi,body.vista-leve .blocchi-cmd,body.vista-leve details.blocco:not([data-blocco="leve"]):not([data-blocco="calendario"]),body.vista-leve .griglia>div:first-child,body.vista-leve #errore[hidden]{display:none}
+body.vista-leve .griglia{display:block}
+body.vista-leve .barra-minimi[hidden]{display:flex}
+body.vista-leve .barra-minimi{top:var(--leve-h1,44px);z-index:46}
+body.vista-leve details.blocco[data-blocco="leve"],body.vista-leve details.blocco[data-blocco="calendario"]{border:0;background:transparent;margin-top:0}
+body.vista-leve details.blocco[data-blocco="leve"]>summary,body.vista-leve details.blocco[data-blocco="calendario"]>summary,body.vista-leve .dentro>h2{display:none}
+body.vista-leve details.blocco[data-blocco="leve"]>.dentro,body.vista-leve details.blocco[data-blocco="calendario"]>.dentro{padding:0}
+body.vista-leve details.blocco[data-blocco="leve"] .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:2px 12px}
+body.vista-leve #scenario,body.vista-leve #progetti,body.vista-leve #finanziamenti,body.vista-leve #correzioni,body.vista-leve details.blocco[data-blocco="calendario"]{display:none}
+body.vista-leve[data-seg="progetti"] #progetti,body.vista-leve[data-seg="finanziamenti"] #finanziamenti,body.vista-leve[data-seg="correzioni"] #correzioni,body.vista-leve[data-seg="scenario"] #scenario{display:block}
+body.vista-leve[data-seg="calendario"] details.blocco[data-blocco="calendario"]{display:block}
+/* la lista: una riga per leva, il corpo chiuso; il riepilogo è già la riga */
+body.vista-leve details.leva>summary{padding:10px 0 10px 18px;min-height:44px;box-sizing:border-box;cursor:pointer}
+body.vista-leve details.leva>summary::before{transform:rotate(-45deg);right:4px;left:auto;top:18px}
+body.vista-leve details.leva>.corpo{display:none}
+/* il foglio: l'unico editor aperto */
+body.vista-leve details.leva.aperta{position:fixed;left:0;right:0;bottom:0;z-index:60;max-height:min(78vh,calc(100vh - var(--leve-top-h,124px)));overflow:auto;overscroll-behavior:contain;background:var(--card);border-top:0;border-radius:18px 18px 0 0;box-shadow:0 -12px 40px rgba(0,0,0,.25);padding:0 14px calc(14px + env(safe-area-inset-bottom,0px));will-change:transform}
+body.vista-leve details.leva.aperta>summary{position:sticky;top:0;z-index:1;background:var(--card);padding:18px 36px 10px 0;cursor:grab;touch-action:pan-x}
+body.vista-leve details.leva.aperta>summary::before{display:none}
+body.vista-leve details.leva.aperta>summary::after{content:"";position:absolute;top:6px;left:50%;width:38px;height:5px;margin-left:-19px;border-radius:3px;background:color-mix(in srgb,var(--muted) 45%,transparent)}
+body.vista-leve details.leva.aperta>.corpo{display:block;padding-left:0}
+.chiudi-foglio{position:absolute;right:0;top:14px;width:30px;height:30px;border-radius:50%;border:0;background:var(--soft);color:var(--muted);font-size:14px;line-height:30px;padding:0;text-align:center}
+.leve-scrim{position:fixed;inset:0;z-index:55;background:rgba(0,0,0,.22)}
+@media (min-width:900px){
+  body.vista-leve details.leva.aperta{left:auto;right:0;top:var(--leve-top-h,124px);bottom:0;width:min(560px,50vw);max-height:none;border-radius:14px 0 0 0;border-left:1px solid var(--line);box-shadow:-10px 0 30px rgba(0,0,0,.12)}
+  body.vista-leve details.leva.aperta>summary{cursor:default;touch-action:auto;padding-top:14px}
+  body.vista-leve details.leva.aperta>summary::after{display:none}
+  body.vista-leve .leve-scrim{display:none}
+  body.vista-leve details.blocco[data-blocco="leve"] .card{margin-right:min(580px,calc(50vw + 20px))}
+  body.vista-leve[data-seg="calendario"] details.blocco[data-blocco="calendario"]{margin-right:0}
+}
+@media (prefers-reduced-transparency: reduce){.leve-top{background:var(--bg);backdrop-filter:none;-webkit-backdrop-filter:none}}
 .leg i.eff{width:12px;height:10px;border:0;background:var(--accent);opacity:.35;border-radius:2px}
 </style>
 </head>
@@ -223,6 +269,13 @@ details.blocco .card{border:0;padding:4px 2px}
 <nav class="scelta" id="scelta-scenario" aria-label="Scegli lo scenario"></nav>
 <section class="minimi" id="minimi"></section>
 <div id="barra-minimi" class="barra-minimi" hidden aria-label="Minimi di cassa, sempre visibili"></div>
+<div id="leve-top" class="leve-top" hidden>
+  <div class="riga1"><button type="button" id="esci-leve" class="indietro" aria-label="torna alla pagina Cassa">‹ Cassa</button><span class="titolo" id="leve-titolo"></span><button type="button" id="leve-salva" class="azione" title="il file .json dello scenario">Salva</button></div>
+</div>
+<nav id="leve-seg" class="leve-seg" hidden aria-label="Sezioni dello scenario">
+  <button type="button" data-seg="progetti" aria-pressed="true">Progetti</button><button type="button" data-seg="finanziamenti" aria-pressed="false">Finanziamenti</button><button type="button" data-seg="correzioni" aria-pressed="false">Voci corrette</button><button type="button" data-seg="calendario" aria-pressed="false">Calendario</button><button type="button" data-seg="scenario" aria-pressed="false">Strumenti</button>
+</nav>
+<div id="leve-scrim" class="leve-scrim" hidden></div>
 
 <div class="blocchi-cmd"><button class="mini" id="apri-tutto">apri tutto</button><button class="mini" id="chiudi-tutto">chiudi tutto</button></div>
 <details class="blocco" data-blocco="canone"><summary><span class="b-t">Canone ORTI → INTUR</span><span class="b-s" id="som-canone"></span></summary>
@@ -240,7 +293,7 @@ details.blocco .card{border:0;padding:4px 2px}
 </details>
   </div>
   <aside>
-<details class="blocco" data-blocco="leve"><summary><span class="b-t">Scenario e leve</span><span class="b-s" id="som-leve"></span></summary>
+<details class="blocco" data-blocco="leve"><summary><span class="b-t">Scenario e leve</span><span class="b-s" id="som-leve"></span><button type="button" class="mini" id="apri-leve" title="la sezione da sola, a tutto schermo">a tutto schermo</button></summary>
 <div class="dentro"><div class="card" id="scenario"></div>
     <h2>Progetti</h2>
     <div class="card" id="progetti"></div>
@@ -2016,7 +2069,170 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     renderLimiti();
     if (opts.canoneLeggero) aggiornaCanoneInfo(); else renderCanone();
     riassunti();
+    applicaVista();
   }
+
+  // ── Vista «Scenario a tutto schermo» ──
+  // Uno stato, una classe sul body, lo stesso DOM. La lista mostra cosa c'è; una leva aperta alla volta è il
+  // foglio (telefono) o il pannello a destra (desktop). Il foglio entra dal basso ed esce dal basso; si chiude
+  // tirandolo giù — decide la velocità, non la posizione — toccando lo sfondo, o con ✕.
+  const vista = { attiva: false, seg: "progetti", apertaK: null, blocchiPrima: null, scroll: 0 };
+  const SEGMENTI = ["progetti", "finanziamenti", "correzioni", "calendario", "scenario"];
+  const largo = () => window.matchMedia("(min-width: 900px)").matches;
+  function misuraVista() {
+    const h1 = el("leve-top").getBoundingClientRect().height;
+    const barra = el("barra-minimi");
+    const h2 = barra.hidden && !vista.attiva ? 0 : barra.getBoundingClientRect().height;
+    const seg = el("leve-seg");
+    seg.style.top = `${h1 + h2}px`;
+    const h3 = seg.getBoundingClientRect().height;
+    document.documentElement.style.setProperty("--leve-h1", `${h1}px`);
+    document.documentElement.style.setProperty("--leve-top-h", `${h1 + h2 + h3}px`);
+  }
+  function entraVista(seg) {
+    if (!vista.attiva) {
+      vista.blocchiPrima = blocchi().map((d) => [d.dataset.blocco, d.open]);
+      vista.attiva = true;
+      document.body.classList.add("vista-leve");
+      el("leve-top").hidden = false;
+      el("leve-seg").hidden = false;
+      blocchi().forEach((d) => { if (d.dataset.blocco === "leve" || d.dataset.blocco === "calendario") d.open = true; });
+      window.scrollTo(0, 0);
+    }
+    scegliSegmento(SEGMENTI.includes(seg) ? seg : vista.seg, false);
+    misuraVista();
+    applicaVista();
+  }
+  function esciVista() {
+    if (!vista.attiva) return;
+    chiudiFoglio(false);
+    vista.attiva = false;
+    document.body.classList.remove("vista-leve");
+    document.body.removeAttribute("data-seg");
+    el("leve-top").hidden = true;
+    el("leve-seg").hidden = true;
+    (vista.blocchiPrima || []).forEach(([k, open]) => { const d = document.querySelector(`details.blocco[data-blocco="${k}"]`); if (d) d.open = open; });
+    salvaBlocchi();
+    if (location.hash.startsWith("#leve")) history.replaceState(null, "", location.pathname + location.search);
+    el("minimi").scrollIntoView({ behavior: "auto", block: "start" });
+  }
+  function scegliSegmento(seg, chiudi = true) {
+    vista.seg = seg;
+    document.body.dataset.seg = seg;
+    el("leve-seg").querySelectorAll("button[data-seg]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.seg === seg)));
+    if (chiudi) chiudiFoglio(false);
+    history.replaceState(null, "", `#leve/${seg}`);
+    window.scrollTo(0, 0);
+  }
+  // Il foglio: una leva sola. Dopo ogni render si riapplica, perché la lista è ridisegnata da capo.
+  function apriFoglio(d, anima = true) {
+    const k = d.dataset.k;
+    document.querySelectorAll("details.leva.aperta").forEach((x) => { if (x !== d) { x.classList.remove("aperta"); x.open = false; aperte.delete(x.dataset.k); x.querySelector(".chiudi-foglio")?.remove(); } });
+    vista.apertaK = k;
+    d.open = true;
+    aperte.add(k);
+    d.classList.add("aperta");
+    const s = d.querySelector(":scope > summary");
+    if (s && !s.querySelector(".chiudi-foglio")) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "chiudi-foglio"; b.textContent = "✕"; b.setAttribute("aria-label", "chiudi");
+      b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); chiudiFoglio(true); };
+      s.appendChild(b);
+    }
+    el("leve-scrim").hidden = false;
+    if (anima && !ridotto() && !largo() && d.animate) d.animate([{ transform: "translateY(100%)" }, { transform: "translateY(0)" }], { duration: 280, easing: "cubic-bezier(.2,.8,.2,1)" });
+    else if (anima && ridotto() && d.animate) d.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease" });
+  }
+  function chiudiFoglio(anima = true, daY = 0) {
+    const d = document.querySelector("details.leva.aperta");
+    vista.apertaK = null;
+    el("leve-scrim").hidden = true;
+    if (!d) return;
+    const fine = () => { d.classList.remove("aperta"); d.open = false; aperte.delete(d.dataset.k); d.querySelector(".chiudi-foglio")?.remove(); d.style.transform = ""; };
+    if (anima && !ridotto() && !largo() && d.animate) {
+      const h = d.getBoundingClientRect().height || 400;
+      const a = d.animate([{ transform: `translateY(${daY}px)` }, { transform: `translateY(${h}px)` }], { duration: Math.max(120, 240 * (1 - daY / h)), easing: "cubic-bezier(.4,0,1,1)" });
+      a.onfinish = fine; a.oncancel = fine;
+    } else if (anima && ridotto() && d.animate) {
+      const a = d.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease" });
+      a.onfinish = fine; a.oncancel = fine;
+    } else fine();
+  }
+  // Tirare giù il foglio: 1:1 col dito, resistenza verso l'alto, rilascio deciso dalla velocità.
+  function collegaTrascinaFoglio(s, d) {
+    if (s.dataset.trascina) return;
+    s.dataset.trascina = "1";
+    let p0 = null, y0 = 0, storia = [], preso = false;
+    s.addEventListener("pointerdown", (e) => {
+      if (largo() || e.target.closest("button, input, select, a")) return;
+      p0 = e.pointerId; y0 = e.clientY; storia = [[e.clientY, performance.now()]]; preso = false;
+    });
+    s.addEventListener("pointermove", (e) => {
+      if (p0 !== e.pointerId) return;
+      const dy = e.clientY - y0;
+      if (!preso) { if (Math.abs(dy) < SOGLIA_PRESA) return; preso = true; s.setPointerCapture(p0); }
+      storia.push([e.clientY, performance.now()]); if (storia.length > 6) storia.shift();
+      const y = dy >= 0 ? dy : -(Math.abs(dy) * 60) / (60 + Math.abs(dy));  // sotto 1:1, sopra elastico
+      d.style.transform = `translateY(${y}px)`;
+      e.preventDefault();
+    });
+    const fine = (e) => {
+      if (p0 !== e.pointerId) return;
+      const dy = e.clientY - y0;
+      p0 = null;
+      if (!preso) return;
+      const [[ya, ta]] = storia, [yb, tb] = storia[storia.length - 1];
+      const v = tb > ta ? ((yb - ya) / (tb - ta)) * 1000 : 0;  // px/s
+      const h = d.getBoundingClientRect().height || 400;
+      if (v > 500 || (dy > h * 0.35 && v > -200)) { chiudiFoglio(true, Math.max(0, dy)); return; }
+      if (!ridotto() && d.animate) { const a = d.animate([{ transform: `translateY(${Math.max(0, dy)}px)` }, { transform: "translateY(0)" }], { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" }); a.onfinish = () => { d.style.transform = ""; }; }
+      else d.style.transform = "";
+    };
+    s.addEventListener("pointerup", fine);
+    s.addEventListener("pointercancel", fine);
+  }
+  function applicaVista() {
+    const titolo = el("leve-titolo");
+    if (titolo) titolo.textContent = stato.nome || "Scenario";
+    if (!vista.attiva) return;
+    document.querySelectorAll("#progetti details.leva, #finanziamenti details.leva, #correzioni details.leva").forEach((d) => {
+      const s = d.querySelector(":scope > summary");
+      if (!s || s.dataset.vista) return;
+      s.dataset.vista = "1";
+      // In vista il riepilogo non apre/chiude la tendina: apre il foglio. Il click dopo un trascinamento non conta.
+      s.addEventListener("click", (e) => {
+        if (!vista.attiva) return;
+        if (e.target.closest("input, select, button, label, a")) return;
+        e.preventDefault();
+        if (d.classList.contains("aperta")) return;
+        apriFoglio(d, true);
+      });
+      collegaTrascinaFoglio(s, d);
+    });
+    if (vista.apertaK) {
+      const d = document.querySelector(`details.leva[data-k="${vista.apertaK}"]`);
+      if (d && !d.classList.contains("aperta")) { const sc = vista.scroll; apriFoglio(d, false); d.scrollTop = sc; }
+      else if (!d) chiudiFoglio(false);
+    }
+    misuraVista();
+  }
+  // Dentro una leva, un pagamento aperto alla volta: aprirne uno chiude gli altri.
+  document.addEventListener("toggle", (e) => {
+    const d = e.target;
+    if (!(d instanceof HTMLDetailsElement) || !d.classList.contains("sotto") || !d.open) return;
+    const leva = d.closest("details.leva");
+    if (!leva) return;
+    leva.querySelectorAll("details.sotto[open]").forEach((x) => { if (x !== d) { x.open = false; aperte.delete(x.dataset.k); } });
+  }, true);
+  document.addEventListener("scroll", () => { const d = document.querySelector("details.leva.aperta"); if (d) vista.scroll = d.scrollTop; }, true);
+  el("apri-leve").onclick = (e) => { e.preventDefault(); e.stopPropagation(); entraVista(vista.seg); };
+  el("esci-leve").onclick = esciVista;
+  el("leve-salva").onclick = () => esporta();
+  el("leve-seg").querySelectorAll("button[data-seg]").forEach((b) => { b.onclick = () => scegliSegmento(b.dataset.seg); });
+  el("leve-scrim").onclick = () => chiudiFoglio(true);
+  window.addEventListener("resize", () => { if (vista.attiva) misuraVista(); });
+  window.addEventListener("keydown", (e) => { if (e.key === "Escape" && vista.attiva && document.querySelector("details.leva.aperta")) chiudiFoglio(true); });
+  if (location.hash.startsWith("#leve")) setTimeout(() => entraVista(location.hash.split("/")[1]), 0);
 
   // Blocchi apribili: chiusi danno il quadro (titolo + una riga), aperti il dettaglio.
   // Quali sono aperti è una comodità di chi guarda: resta nel suo browser, se il browser lo permette.
