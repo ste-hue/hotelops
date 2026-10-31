@@ -441,3 +441,56 @@ def test_fatto_parziale_con_iva_22_differisce_al_piu_di_un_centesimo():
     ott = _riga(calcola(inp9(progetti=[p], fatti=[f])), "INTUR", "2026-10")
     # Il netto residuo e' ricavato dal lordo con arrotondamento half-up: scarto <= 1 cent.
     assert abs(ott.uscite["fatto"] + ott.uscite["progetto"] - iva(100_001, 22)) <= 1
+
+
+# ── sostituzione: una riga manuale che prende il posto della voce PF di quel mese ──────────
+# Stefano, 31/10/2026: «le imposte secondo Rosa non sono un progetto: sono proprio imposte che
+# vanno messe al posto della voce imposte che avevo prima».
+
+
+def test_sostituzione_prende_il_posto_della_voce_pf_solo_in_quel_mese():
+    from verticals.condges.cassa_motore import SOSTITUZIONE
+
+    base = calcola(inp_base())
+    # ORTI «costi» vale 20.000 ogni mese nel PF di prova; a dicembre Rosa dice 35.000
+    inp = inp_base(
+        manuali=[Riga("ORTI", "costi", "2026-12", eur(35_000), "U", SOSTITUZIONE)]
+    )
+    r = calcola(inp)
+    dic = next(x for x in r.righe if x.societa == "ORTI" and x.mese == "2026-12")
+    nov = next(x for x in r.righe if x.societa == "ORTI" and x.mese == "2026-11")
+    assert dic.uscite["pf"] == eur(35_000), "conta nel secchio del PF, non in «manuale»"
+    assert dic.uscite["manuale"] == 0
+    assert nov.uscite["pf"] == eur(20_000), "gli altri mesi non si toccano"
+    # effetto sul saldo: +20.000 tolti, 35.000 messi → −15.000 rispetto alla base, da dicembre in poi
+    b_dic = next(x for x in base.righe if x.societa == "ORTI" and x.mese == "2026-12")
+    assert dic.fin - b_dic.fin == -eur(15_000)
+    intur = next(x for x in r.righe if x.societa == "INTUR" and x.mese == "2026-12")
+    assert intur.uscite["pf"] == eur(10_000), "l'altra società non è toccata"
+
+
+def test_sostituzione_di_una_voce_che_il_pf_non_ha_si_aggiunge_e_basta():
+    from verticals.condges.cassa_motore import SOSTITUZIONE
+
+    base = calcola(inp_base())
+    r = calcola(
+        inp_base(
+            manuali=[Riga("ORTI", "imposte", "2026-12", eur(5_000), "U", SOSTITUZIONE)]
+        )
+    )
+    dic = next(x for x in r.righe if x.societa == "ORTI" and x.mese == "2026-12")
+    b_dic = next(x for x in base.righe if x.societa == "ORTI" and x.mese == "2026-12")
+    assert dic.fin - b_dic.fin == -eur(5_000)
+
+
+def test_manuale_normale_si_aggiunge_al_pf_come_prima():
+    base = calcola(inp_base())
+    r = calcola(
+        inp_base(
+            manuali=[Riga("ORTI", "costi", "2026-12", eur(35_000), "U", "manuale")]
+        )
+    )
+    dic = next(x for x in r.righe if x.societa == "ORTI" and x.mese == "2026-12")
+    b_dic = next(x for x in base.righe if x.societa == "ORTI" and x.mese == "2026-12")
+    assert dic.uscite["pf"] == eur(20_000) and dic.uscite["manuale"] == eur(35_000)
+    assert dic.fin - b_dic.fin == -eur(35_000)

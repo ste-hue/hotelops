@@ -219,7 +219,9 @@ details.blocco .card{border:0;padding:4px 2px}
     <h2>Progetti</h2>
     <div class="card" id="progetti"></div>
     <h2>Finanziamenti</h2>
-    <div class="card" id="finanziamenti"></div></div>
+    <div class="card" id="finanziamenti"></div>
+    <h2>Voci del PF corrette</h2>
+    <div class="card" id="correzioni"></div></div>
 </details>
   </aside>
 </div>
@@ -245,6 +247,7 @@ details.blocco .card{border:0;padding:4px 2px}
 // Porting di verticals/condges/cassa_motore.py: stessa sequenza di `calcola`,
 // interi (centesimi) ovunque. Nessun formato, nessun round.
 const MOTORE = (() => {
+  const SOSTITUZIONE = "sostituzione";   // origine speciale delle manuali: al posto della voce PF di quel mese
   const ORIGINI = ["pf", "canone", "finanziamento", "progetto", "manuale", "fatto"];
   const SOCIETA = ["ORTI", "INTUR"];
 
@@ -331,7 +334,7 @@ const MOTORE = (() => {
     const ent = zero(), usc = zero();
     const sc = inp.scenario;
     const add = (r) => {
-      if (r.societa === societa && r.mese === mese) (r.direzione === "E" ? ent : usc)[r.origine] += r.importo;
+      if (r.societa === societa && r.mese === mese) (r.direzione === "E" ? ent : usc)[r.origine === SOSTITUZIONE ? "pf" : r.origine] += r.importo;
     };
     for (const r of inp.pf) add(r);
     for (const r of sc.manuali) add(r);
@@ -373,7 +376,7 @@ const MOTORE = (() => {
     sc.manuali = (sc.manuali || []).map((r) => ({
       societa: r.societa, voce_id: r.voce_id, mese: r.mese,
       importo: r.importo_cent !== undefined ? r.importo_cent : r.importo,
-      direzione: r.direzione, origine: r.origine,
+      direzione: r.direzione, origine: r.origine === SOSTITUZIONE ? SOSTITUZIONE : "manuale",
     }));
     return sc;
   }
@@ -381,7 +384,10 @@ const MOTORE = (() => {
   function calcola(payload, scenario) {
     const sc = normalizza(scenario);
     const conFin = new Set(sc.finanziamenti.map((f) => f.societa));
-    const pf = payload.pf.filter((r) => !(r.voce_id === "ENTRATE_FINANZIAMENTI" && conFin.has(r.societa)));
+    let pf = payload.pf.filter((r) => !(r.voce_id === "ENTRATE_FINANZIAMENTI" && conFin.has(r.societa)));
+    // Una riga manuale con origine «sostituzione» prende il posto della voce PF di quel mese.
+    const sost = new Set(sc.manuali.filter((r) => r.origine === SOSTITUZIONE).map((r) => `${r.societa}|${r.voce_id}|${r.mese}`));
+    if (sost.size) pf = pf.filter((r) => !sost.has(`${r.societa}|${r.voce_id}|${r.mese}`));
     let interc = payload.intercompany;
     if (sc.canone) {
       const nuovi = flussiCanone(sc.canone, payload.mesi);
@@ -432,7 +438,7 @@ const MOTORE = (() => {
     return { righe, minimi, consolidato, non_riconciliati: nonRic };
   }
 
-  return { ORIGINI, SOCIETA, calcola, distribuisci, iva, flussiCanone, riconcilia, normalizza };
+  return { ORIGINI, SOCIETA, SOSTITUZIONE, calcola, distribuisci, iva, flussiCanone, riconcilia, normalizza };
 })();
 if (typeof module !== "undefined") module.exports = MOTORE;
 </script>
@@ -1016,7 +1022,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       if (f.a === soc) add("E", f.nome + tag, f.importo);
       if (f.da === soc) add("U", f.nome + tag, f.importo);
     }
-    for (const r of (sc.manuali || [])) if (r.societa === soc && r.mese === mese) add(r.direzione, `${etichetta(r.voce_id)} (manuale)`, r.importo_cent !== undefined ? r.importo_cent : r.importo);
+    for (const r of (sc.manuali || [])) if (r.societa === soc && r.mese === mese) add(r.direzione, `${etichetta(r.voce_id)} (${r.origine === MOTORE.SOSTITUZIONE ? "corretta nello scenario" : "manuale"})`, r.importo_cent !== undefined ? r.importo_cent : r.importo);
     for (const f of sc.finanziamenti) {
       if (f.societa !== soc) continue;
       add("E", `${f.nome} · erogazione`, f.erogazioni[mese] || 0);
@@ -1378,8 +1384,50 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     }).join("");
     el("finanziamenti").innerHTML = `${finanz || '<div class="nota">nessun finanziamento nello scenario</div>'}
       <div class="strumenti"><button id="aggiungi-f">+ finanziamento</button><button class="mini" data-apri="f">apri tutto</button><button class="mini" data-chiudi="f">chiudi tutto</button></div>`;
+
+    // Voci del PF corrette: «questa voce, in quel mese, secondo Rosa vale X». Una riga manuale con
+    // origine «sostituzione» per (società, voce, mese); qui si raggruppano per società e voce.
+    // Non sono progetti e non si aggiungono al PF: prendono il posto della voce PF di quel mese.
+    const gruppi = gruppiCorrezioni(sc);
+    const corr = gruppi.map((g, i) => {
+      const k = `c:${g.societa}:${g.voce_id}`;
+      const variante = copia(sc); variante.manuali = variante.manuali.filter((r) => !(r.origine === MOTORE.SOSTITUZIONE && r.societa === g.societa && r.voce_id === g.voce_id));
+      const totale = g.righe.reduce((s, r) => s + importoDi(r), 0);
+      const nelPf = g.righe.reduce((s, r) => s + pfDi(g.societa, g.voce_id, r.mese), 0);
+      return `<details class="leva" data-k="${k}" data-c="${i}" ${aperte.has(k) ? "open" : ""}>
+      <summary><span class="nome">${esc(etichetta(g.voce_id))}</span><span class="badge">${esc(g.societa)}</span><span class="badge warn">secondo lo scenario</span>
+        <span class="num tot">${fmt(totale, false)} €</span><span class="piccolo num">al posto di ${fmt(nelPf, false)} nel PF · ${g.righe.length === 1 ? "un mese" : `${g.righe.length} mesi`} · ${periodoDi(Object.fromEntries(g.righe.map((r) => [r.mese, 1])))}</span>
+        ${peso(variante, g.societa, true)}</summary>
+      <div class="corpo">
+        ${g.righe.map((r, j) => `<div class="riga" data-cr="${j}"><label class="piccolo">mese ${selMesi(r.mese, "sel-corr-mese")}</label>
+          <label class="piccolo">vale <input type="text" class="eur" data-corr-importo value="${fmt(importoDi(r))}"></label>
+          <span class="piccolo num">nel PF: ${fmt(pfDi(g.societa, g.voce_id, r.mese), false)}</span>
+          <button class="mini" data-elimina-cr title="togli questo mese">×</button></div>`).join("")}
+        <div class="riga"><button data-aggiungi-cr>+ mese</button><button data-elimina-c title="togli la correzione">× togli tutta la correzione</button></div>
+        <div class="nota">in questi mesi la voce «${esc(etichetta(g.voce_id))}» del PF di ${esc(g.societa)} non conta: conta quello che scrivi qui.</div>
+      </div></details>`;
+    }).join("");
+    const vociPf = [...new Set(D.pf.map((r) => `${r.societa}|${r.voce_id}|${r.direzione}`))].sort();
+    el("correzioni").innerHTML = `${corr || '<div class="nota">nessuna voce corretta: il PF vale così com\'è</div>'}
+      <div class="strumenti"><label class="piccolo">voce del PF <select id="corr-voce">${vociPf.map((v) => { const [s, voce, dir] = v.split("|"); return `<option value="${esc(v)}">${esc(s)} · ${esc(etichetta(voce))} (${dir === "E" ? "entrata" : "uscita"})</option>`; }).join("")}</select></label>
+        <button id="aggiungi-c">+ correzione</button></div>`;
     collegaLeve();
   }
+
+  // Le sostituzioni dello scenario raggruppate per (società, voce), nell'ordine dei mesi.
+  function gruppiCorrezioni(sc) {
+    const per = new Map();
+    for (const r of sc.manuali || []) {
+      if (r.origine !== MOTORE.SOSTITUZIONE) continue;
+      const k = `${r.societa}|${r.voce_id}`;
+      if (!per.has(k)) per.set(k, { societa: r.societa, voce_id: r.voce_id, direzione: r.direzione, righe: [] });
+      per.get(k).righe.push(r);
+    }
+    for (const g of per.values()) g.righe.sort((a, b) => a.mese.localeCompare(b.mese));
+    return [...per.values()].sort((a, b) => `${a.societa}${a.voce_id}`.localeCompare(`${b.societa}${b.voce_id}`));
+  }
+  const importoDi = (r) => (r.importo_cent !== undefined ? r.importo_cent : r.importo);
+  const pfDi = (soc, voce, mese) => D.pf.filter((r) => r.societa === soc && r.voce_id === voce && r.mese === mese).reduce((s, r) => s + r.importo, 0);
 
   function leggiMesi(root, pref, mesi) {
     root.querySelectorAll(`input[data-${pref}]`).forEach((inp) => {
@@ -1439,6 +1487,33 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       collegaRate(div.querySelector(".rate-f .come"), () => f.rate, (m) => { f.rate = m; }, 0);
     });
     el("aggiungi-f").onclick = () => { const id = `F${Date.now().toString(36)}`; sc.finanziamenti.push({ id, nome: "Nuovo finanziamento", societa: "INTUR", erogazioni: {}, rate: {}, stato: "da verificare" }); aperte.add(`f:${id}`); ricalcola(); };
+    // voci del PF corrette
+    const gruppi = gruppiCorrezioni(sc);
+    const scrivi = (r, campo, v) => { r[campo] = v; if (campo === "importo") delete r.importo_cent; };
+    el("correzioni").querySelectorAll("details.leva[data-c]").forEach((div) => {
+      const g = gruppi[parseInt(div.dataset.c, 10)];
+      div.querySelectorAll(".corpo > .riga[data-cr]").forEach((riga) => {
+        const r = g.righe[parseInt(riga.dataset.cr, 10)];
+        riga.querySelector("select.sel-corr-mese").onchange = (e) => { scrivi(r, "mese", e.target.value); ricalcola(); };
+        riga.querySelector("input[data-corr-importo]").onchange = (e) => { const v = euroDa(e.target); if (v === null) return; scrivi(r, "importo", v); ricalcola(); };
+        riga.querySelector("button[data-elimina-cr]").onclick = () => { sc.manuali.splice(sc.manuali.indexOf(r), 1); ricalcola(); };
+      });
+      div.querySelector("button[data-aggiungi-cr]").onclick = () => {
+        const usati = new Set(g.righe.map((r) => r.mese));
+        const mese = D.mesi.find((m) => !usati.has(m)) || D.mesi[D.mesi.length - 1];
+        sc.manuali.push({ societa: g.societa, voce_id: g.voce_id, mese, importo: pfDi(g.societa, g.voce_id, mese), direzione: g.direzione, origine: MOTORE.SOSTITUZIONE });
+        ricalcola();
+      };
+      div.querySelector("button[data-elimina-c]").onclick = () => { sc.manuali = sc.manuali.filter((r) => !g.righe.includes(r)); ricalcola(); };
+    });
+    el("aggiungi-c").onclick = () => {
+      const [socScelta, voce, dir] = el("corr-voce").value.split("|");
+      const mese = D.mesi.find((m) => pfDi(socScelta, voce, m) > 0) || D.mesi[0];
+      sc.manuali = sc.manuali || [];
+      sc.manuali.push({ societa: socScelta, voce_id: voce, mese, importo: pfDi(socScelta, voce, mese), direzione: dir, origine: MOTORE.SOSTITUZIONE });
+      aperte.add(`c:${socScelta}:${voce}`);
+      ricalcola();
+    };
   }
 
   function renderLimiti() {
@@ -1641,7 +1716,8 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     som("calendario", `${righe.length} righe da trascinare, ${meseIt(D.mesi[0])} – ${meseIt(D.mesi[D.mesi.length - 1])}`);
     som("saldo", `${SOC.join(" e ")}, scenario contro solo PF`);
     const accesi = sc.progetti.filter((p) => p.acceso).length;
-    som("leve", `«${stato.nome}» · ${accesi} progetti accesi su ${sc.progetti.length} · ${sc.finanziamenti.length} finanziamenti`);
+    const nCorr = gruppiCorrezioni(sc).length;
+    som("leve", `«${stato.nome}» · ${accesi} progetti accesi su ${sc.progetti.length} · ${sc.finanziamenti.length} finanziamenti${nCorr ? ` · ${nCorr === 1 ? "una voce del PF corretta" : `${nCorr} voci del PF corrette`}` : ""}`);
     som("tabelle", `${SOC.join(" e ")}: entrate, uscite e leve per mese`);
     som("consolidato", "le due società insieme, intercompany tolto");
     const fb = document.querySelector('details.blocco[data-blocco="fatti"]');

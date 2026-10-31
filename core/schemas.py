@@ -1680,6 +1680,9 @@ def make_hash(*parts: str) -> str:
 
 # Origini delle righe della pagina Cassa (motore verticals/condges/cassa_motore.py)
 ORIGINI_CASSA = ("pf", "canone", "finanziamento", "progetto", "manuale", "fatto")
+# In p_scenario_flussi una riga manuale può anche essere una «sostituzione»: prende il posto della
+# voce PF di quel mese e in cassa conta nel secchio «pf». Non è un secchio: non entra in ORIGINI_CASSA.
+ORIGINI_FLUSSO = ORIGINI_CASSA + ("sostituzione",)
 
 
 # ── hotelops_previsioni.p_* (scenari di cassa salvati, importi in centesimi) ──
@@ -1728,8 +1731,8 @@ class ScenarioFlussoRow(BaseModel):
     @field_validator("origine")
     @classmethod
     def _origine(cls, v: str) -> str:
-        if v not in ORIGINI_CASSA:
-            raise ValueError(f"origine '{v}' non in {ORIGINI_CASSA}")
+        if v not in ORIGINI_FLUSSO:
+            raise ValueError(f"origine '{v}' non in {ORIGINI_FLUSSO}")
         return v
 
 

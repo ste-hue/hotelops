@@ -14,6 +14,9 @@ from typing import Literal
 
 from core.schemas import ORIGINI_CASSA as ORIGINI
 
+# Origine speciale delle righe manuali: «sostituzione» = al posto della voce PF di quel mese.
+SOSTITUZIONE = "sostituzione"
+
 __all__ = [
     "ORIGINI",
     "Ancora",
@@ -202,7 +205,9 @@ def _movimenti(
 
     def add(riga: Riga) -> None:
         if riga.societa == societa and riga.mese == mese:
-            (ent if riga.direzione == "E" else usc)[riga.origine] += riga.importo
+            # la sostituzione conta nel secchio del PF: è il PF, corretto
+            chiave = "pf" if riga.origine == SOSTITUZIONE else riga.origine
+            (ent if riga.direzione == "E" else usc)[chiave] += riga.importo
 
     for r in inp.pf:
         add(r)
@@ -302,6 +307,14 @@ def calcola(inp: Input) -> Risultato:
         for r in pf
         if not (r.voce_id == "ENTRATE_FINANZIAMENTI" and r.societa in con_fin)
     ]
+    # Una riga manuale con origine «sostituzione» prende il posto della voce PF di quel mese
+    # (società, voce, mese): il PF esce, la riga entra, e in cassa conta come PF. È la leva
+    # «questa voce del PF, secondo Rosa, vale X»: non un progetto, non un'aggiunta.
+    sost = {
+        (r.societa, r.voce_id, r.mese) for r in sc.manuali if r.origine == SOSTITUZIONE
+    }
+    if sost:
+        pf = [r for r in pf if (r.societa, r.voce_id, r.mese) not in sost]
     interc = inp.intercompany
     if sc.canone:
         nuovi = flussi_canone(sc.canone, inp.mesi)
