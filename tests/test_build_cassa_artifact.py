@@ -966,6 +966,17 @@ def test_template_dividi_unisci_e_documenti_drive():
     assert '"documenti", "cartella Drive"]' in html
 
 
+def test_template_i_patti_col_fornitore_non_si_chiamano_contratto():
+    # «contratto» sembrava un documento; è «come paghi questo fornitore», e genera i pagamenti che il calcolo legge
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert "+ come paghi un fornitore" in html and ">+ contratto<" not in html
+    assert "<strong>Come paghi ${esc(F ||" in html and "<strong>Contratto ${esc(F ||" not in html
+    assert "togli i patti" in html and "togli il contratto" not in html
+    assert "il calcolo legge solo quelle" in html
+    # nella vista a tutto schermo ogni riga ha un tasto «apri ›» esplicito, oltre al tocco sulla riga
+    assert html.count("data-apri-foglio aria-label=\"apri\"") == 3 and 'e.target.closest("button[data-apri-foglio]")' in html
+
+
 def test_template_trascina_con_soglia_presa_e_volo():
     html = render_html(build_payload(snapshot_sintetico(), []))
     assert "touch-action:pan-y" in html, "lo scorrimento verticale resta al browser"
