@@ -593,13 +593,19 @@ def cmd_cdg(args):
             else None
         )
         tab = tabelle(payload, documento)
-        scritti = scrivi_csv(tab, Path(args.out))
+        if args.json:
+            from verticals.condges.cassa_tabelle import scrivi_json
+
+            scritti = scrivi_json(tab, Path(args.out), payload, sorgente=str(sorgente))
+        else:
+            scritti = scrivi_csv(tab, Path(args.out))
         print(
             f"Da {sorgente} | pagina del {payload.get('generato_il', '?')} | "
             f"fonti del {payload.get('acquisito_il', '?')}"
         )
         for p_csv in scritti:
-            print(f"  {p_csv}: {len(tab[p_csv.stem][1])} righe")
+            n = len(tab[p_csv.stem][1]) if p_csv.stem in tab else len(tab)
+            print(f"  {p_csv}: {n} {'tabelle' if p_csv.stem == 'manifest' else 'righe'}")
         fuori = confronto_con_la_pagina(payload)
         if fuori:
             print("ATTENZIONE, il ricalcolo in Python non torna con i saldi della pagina:")
@@ -1476,6 +1482,11 @@ def main():
         "--scenario",
         default=None,
         help="Documento scenario esportato dalla pagina (default: il seme dentro la pagina)",
+    )
+    p_ct.add_argument(
+        "--json",
+        action="store_true",
+        help="JSON modulari per agenti (un file per tabella + manifest.json, centesimi interi) al posto dei CSV",
     )
 
     p_intake = sub.add_parser(

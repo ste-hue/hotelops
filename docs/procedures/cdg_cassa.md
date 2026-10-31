@@ -125,6 +125,13 @@ come testo. Gli importi sono in euro; dentro il JSON restano centesimi interi.
 | `limiti.csv` | le cose che la pagina dichiara di non sapere, una per riga |
 | `versioni.csv` | quando è stata generata, da quali file PF, il canone dichiarato |
 
+**Per un agente, non per Excel:** `python -m cli cdg tabelle SORGENTE --json --out cartella` scrive le stesse
+tabelle come JSON modulari, un file per tabella (`{"schema","tabella","colonne","unita","righe":[{campo: valore}]}`)
+con gli importi in **centesimi interi** e le date ISO, più `manifest.json` che le elenca con colonne, numero di
+righe e sha256, la data della pagina, lo scenario e i file PF di base. Un agente legge il manifesto e prende solo
+quello che gli serve. Sono dati riservati: restano dentro il perimetro Access o sul disco, mai nel repository, che
+è pubblico.
+
 I saldi dello scenario sono **ricalcolati dal motore Python**, non copiati dalla pagina. Il comando
 confronta il solo-PF ricalcolato con quello scritto nel payload e, se divergono, stampa i mesi e
 esce con codice 3: una divergenza fra il JavaScript della pagina e il Python è un difetto, non un
