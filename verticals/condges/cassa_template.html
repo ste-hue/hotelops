@@ -242,6 +242,8 @@ body.vista-leve[data-seg="calendario"] details.blocco[data-blocco="calendario"]{
 body.vista-leve details.leva>summary{padding:10px 0 10px 18px;min-height:44px;box-sizing:border-box;cursor:pointer}
 body.vista-leve details.leva>summary::before{display:none}
 .apri-leva{display:none}
+/* nella vista c'è un editor alla volta: «apri tutto / chiudi tutto» non hanno un significato, e non si vedono */
+body.vista-leve .strumenti button[data-apri],body.vista-leve .strumenti button[data-chiudi]{display:none}
 body.vista-leve details.leva:not(.aperta)>summary .apri-leva{display:inline-block;margin-left:auto;min-height:32px;padding:4px 10px;border-radius:999px;color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
 body.vista-leve details.leva>.corpo{display:none}
 /* il foglio: l'unico editor aperto */

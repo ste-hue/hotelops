@@ -975,6 +975,8 @@ def test_template_i_patti_col_fornitore_non_si_chiamano_contratto():
     assert "il calcolo legge solo quelle" in html
     # nella vista a tutto schermo ogni riga ha un tasto «apri ›» esplicito, oltre al tocco sulla riga
     assert html.count("data-apri-foglio aria-label=\"apri\"") == 3 and 'e.target.closest("button[data-apri-foglio]")' in html
+    # a tutto schermo c'è un editor alla volta: «apri tutto / chiudi tutto» spariscono (aprivano tendine che la vista non mostra)
+    assert "body.vista-leve .strumenti button[data-apri],body.vista-leve .strumenti button[data-chiudi]{display:none}" in html
 
 
 def test_template_trascina_con_soglia_presa_e_volo():
