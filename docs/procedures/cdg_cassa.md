@@ -76,6 +76,16 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
    metà a metà lavori e metà a fine lavori, a cadenza. Senza rate di rimborso la pagina lo dice nel
    riquadro: entra solo il denaro erogato, il minimo è ottimista.
 
+8. **Scenario a tutto schermo** (brief UI, punto 5). Dal riepilogo di «Scenario e leve» il bottone
+   «a tutto schermo» (o l'indirizzo `#leve`, `#leve/finanziamenti`…) apre la vista: barra alta
+   traslucida con «‹ Cassa», il nome dello scenario e «Salva»; i due minimi sempre sotto; cinque
+   segmenti (Progetti, Finanziamenti, Voci corrette, Calendario, Strumenti). La lista è una riga per
+   leva; toccandola si apre **un solo editor**: un foglio dal basso al telefono (si chiude tirandolo
+   giù, toccando lo sfondo, con ✕ o Esc; la velocità del rilascio decide), un pannello a destra dai
+   900 px. Dentro una leva resta aperto un pagamento alla volta. Con «riduci movimento» il foglio
+   appare e sparisce in dissolvenza. Stesso DOM della pagina, una classe sul body: motore e formato
+   non cambiano.
+
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 
 1. Intake + promote del file (policy AUTO):

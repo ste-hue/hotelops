@@ -938,6 +938,23 @@ def test_template_brief_ui_1_3_parole_stati_e_finanziamenti():
     assert "aperte.add(`g:${p.id}:${p.pagamenti.length - 1}`)" in html
 
 
+def test_template_vista_scenario_a_tutto_schermo():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    # ingresso, barra alta, segmenti, scrim; una classe sul body, stesso DOM
+    for pezzo in ('id="apri-leve"', 'id="leve-top"', 'id="esci-leve"', 'id="leve-seg"', 'id="leve-scrim"', "function entraVista(", "function esciVista("):
+        assert pezzo in html, pezzo
+    # un editor alla volta: il foglio è l'unica leva aperta (fixed al telefono, pannello a destra dai 900 px)
+    assert "body.vista-leve details.leva.aperta{position:fixed" in html and "function apriFoglio(d, anima = true)" in html
+    assert "@media (min-width:900px){\n  body.vista-leve details.leva.aperta{left:auto;right:0" in html
+    # dentro una leva, un pagamento aperto alla volta
+    assert 'd.classList.contains("sotto") || !d.open' in html
+    # entra dal basso ed esce dal basso; la velocità decide; «riduci movimento» = dissolvenza
+    assert 'transform: "translateY(100%)" }, { transform: "translateY(0)" }' in html and "if (v > 500 || (dy > h * 0.35" in html
+    assert 'ridotto() && d.animate) d.animate([{ opacity: 0 }, { opacity: 1 }]' in html
+    # il riepilogo apre il foglio, non la tendina; l'indirizzo ricorda la vista
+    assert 'location.hash.startsWith("#leve")' in html and "`#leve/${seg}`" in html
+
+
 def test_template_trascina_con_soglia_presa_e_volo():
     html = render_html(build_payload(snapshot_sintetico(), []))
     assert "touch-action:pan-y" in html, "lo scorrimento verticale resta al browser"
