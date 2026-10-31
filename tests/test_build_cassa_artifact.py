@@ -881,6 +881,41 @@ def test_template_porta_la_scelta_dello_scenario_in_alto():
     assert ".scelta button[aria-pressed=\"true\"]" in html
 
 
+def test_template_porta_il_bottone_esporta_excel_e_il_writer_puro():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert '<script id="excel">' in html and 'id="esporta-excel"' in html
+    assert "EXCEL.costruisci(fogliExcel())" in html
+    # i fogli promessi dal bottone sono quelli costruiti
+    for nome in ("Minimi", "Saldi mese per mese", "Calendario", "Canone", "Progetti", "Finanziamenti", "Voci PF corrette", "PF", "Fonti"):
+        assert f'nome: "{nome}"' in html, nome
+
+
+def test_excel_scritto_dal_browser_si_riapre_con_openpyxl(tmp_path):
+    # Il writer è puro (stesso codice in pagina e qui): node lo esegue, openpyxl rilegge.
+    if NODE is None:
+        pytest.skip("node non installato")
+    openpyxl = pytest.importorskip("openpyxl")
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    js = re.search(r'<script id="excel">(.*?)</script>', html, re.S).group(1)
+    (tmp_path / "excel.js").write_text(js, encoding="utf-8")
+    (tmp_path / "run.js").write_text(
+        'const E=require("./excel.js");const fs=require("fs");'
+        'const fogli=[{nome:"Minimi",colonne:["scenario","società","saldo €"],euro:[2],righe:[["Prova","INTUR",-1234.56],["Prova","ORTI",987654.3]]},'
+        '{nome:"Fonti/versioni:[sì]?",colonne:["cosa","valore"],righe:[["a","b & c <d>"]]},{nome:"Minimi",colonne:["x"],righe:[[true]]}];'
+        'fs.writeFileSync("prova.xlsx",Buffer.from(E.costruisci(fogli,new Date(2026,9,31,15,0,0))));',
+        encoding="utf-8",
+    )
+    r = subprocess.run([NODE, "run.js"], cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    wb = openpyxl.load_workbook(tmp_path / "prova.xlsx")
+    # nomi puliti dai caratteri vietati, doppioni numerati, prima riga in grassetto, euro con due decimali
+    assert wb.sheetnames == ["Minimi", "Fonti versioni  sì", "Minimi 2"]
+    ws = wb["Minimi"]
+    assert [c.value for c in ws[1]] == ["scenario", "società", "saldo €"] and ws["A1"].font.b
+    assert ws["C2"].value == -1234.56 and ws["C2"].number_format == "#,##0.00" and ws["C3"].value == 987654.3
+    assert wb["Fonti versioni  sì"]["B2"].value == "b & c <d>" and wb["Minimi 2"]["A2"].value is True
+
+
 def test_template_trascina_con_soglia_presa_e_volo():
     html = render_html(build_payload(snapshot_sintetico(), []))
     assert "touch-action:pan-y" in html, "lo scorrimento verticale resta al browser"

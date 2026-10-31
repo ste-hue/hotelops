@@ -55,6 +55,12 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
    nel file. Le righe su BigQuery restano (lineage append-only); la pagina li elenca in «Fonti e
    versioni» con l'ora e il motivo «ritirato nel seme». Per rimetterli nel menu basta togliere il nome.
 
+5. **Esporta Excel** (bottone accanto a «Esporta scenario») scarica un solo `.xlsx` con nove fogli per
+   lo scenario in vista, in euro: Minimi, Saldi mese per mese, Calendario (una riga per rata, lordo in
+   cassa, più il canone), Canone (scenario contro PF), Progetti, Finanziamenti (erogazioni e rate),
+   Voci PF corrette, PF (la base di Rosa nell'orizzonte), Fonti. È scritto dal browser senza librerie
+   (`<script id="excel">`, zip di SpreadsheetML); `hotelops cdg tabelle` resta l'export da riga di comando.
+
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 
 1. Intake + promote del file (policy AUTO):

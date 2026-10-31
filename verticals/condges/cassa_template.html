@@ -694,6 +694,89 @@ const FORMATO = (() => {
 if (typeof module !== "undefined") module.exports = FORMATO;
 </script>
 
+<script id="excel">
+// Un file .xlsx senza librerie: uno zip «stored» di XML SpreadsheetML. Puro: stesse funzioni in pagina e nei test (node).
+// EXCEL.costruisci([{ nome, colonne: [...], righe: [[...]], euro: [indici colonne in euro] }]) -> Uint8Array
+const EXCEL = (() => {
+  const enc = new TextEncoder();
+  const CRC = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; CRC[n] = c >>> 0; }
+  function crc32(buf) { let c = 0xffffffff; for (let i = 0; i < buf.length; i++) c = CRC[(c ^ buf[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+  const xml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  function colonna(i) { let s = ""; i += 1; while (i > 0) { const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = Math.floor((i - 1) / 26); } return s; }
+  function nomeFoglio(nome, usati) {
+    let n = String(nome).replace(/[\\/*?:\[\]]/g, " ").trim().slice(0, 31) || "Foglio";
+    let k = 2; const base = n;
+    while (usati.has(n.toLowerCase())) n = `${base.slice(0, 28)} ${k++}`;
+    usati.add(n.toLowerCase());
+    return n;
+  }
+  function foglioXml(f) {
+    const euro = new Set(f.euro || []);
+    const righe = [f.colonne, ...f.righe];
+    const corpo = righe.map((r, ri) => {
+      const celle = r.map((v, ci) => {
+        if (v === null || v === undefined || v === "") return "";
+        const ref = `${colonna(ci)}${ri + 1}`;
+        if (ri === 0) return `<c r="${ref}" s="2" t="inlineStr"><is><t>${xml(v)}</t></is></c>`;
+        if (typeof v === "number") return `<c r="${ref}"${euro.has(ci) ? ' s="1"' : ""}><v>${v}</v></c>`;
+        if (typeof v === "boolean") return `<c r="${ref}" t="b"><v>${v ? 1 : 0}</v></c>`;
+        return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xml(v)}</t></is></c>`;
+      }).join("");
+      return `<row r="${ri + 1}">${celle}</row>`;
+    }).join("");
+    const larghezze = f.colonne.map((c, ci) => {
+      const max = Math.max(String(c).length, ...f.righe.map((r) => String(r[ci] ?? "").length));
+      return `<col min="${ci + 1}" max="${ci + 1}" width="${Math.min(60, Math.max(8, max + 2))}" customWidth="1"/>`;
+    }).join("");
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${larghezze}</cols><sheetData>${corpo}</sheetData></worksheet>`;
+  }
+  const STILI = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" applyFont="1"/></cellXfs></styleSheet>`;
+  function zip(files, quando) {
+    const d = quando || new Date();
+    const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    const parti = [], centrale = [];
+    let offset = 0;
+    const u16 = (v) => [v & 0xff, (v >>> 8) & 0xff];
+    const u32 = (v) => [v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff];
+    for (const [nome, testo] of files) {
+      const n = enc.encode(nome), b = enc.encode(testo), crc = crc32(b);
+      const testa = new Uint8Array([...u32(0x04034b50), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(dosTime), ...u16(dosDate), ...u32(crc), ...u32(b.length), ...u32(b.length), ...u16(n.length), ...u16(0), ...n]);
+      parti.push(testa, b);
+      centrale.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(dosTime), ...u16(dosDate), ...u32(crc), ...u32(b.length), ...u32(b.length), ...u16(n.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset), ...n]));
+      offset += testa.length + b.length;
+    }
+    const cdLen = centrale.reduce((s, c) => s + c.length, 0);
+    const fine = new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(cdLen), ...u32(offset), ...u16(0)]);
+    const tot = offset + cdLen + fine.length, out = new Uint8Array(tot);
+    let p = 0;
+    for (const x of [...parti, ...centrale, fine]) { out.set(x, p); p += x.length; }
+    return out;
+  }
+  function costruisci(fogli, quando) {
+    const usati = new Set();
+    const nomi = fogli.map((f) => nomeFoglio(f.nome, usati));
+    const files = [
+      ["[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${fogli.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}</Types>`],
+      ["_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+      ["xl/workbook.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${nomi.map((n, i) => `<sheet name="${xml(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets></workbook>`],
+      ["xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${fogli.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${fogli.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+      ["xl/styles.xml", STILI],
+      ...fogli.map((f, i) => [`xl/worksheets/sheet${i + 1}.xml`, foglioXml(f)]),
+    ];
+    return zip(files, quando);
+  }
+  return { costruisci, crc32, nomeFoglio, colonna };
+})();
+if (typeof module !== "undefined") module.exports = EXCEL;
+</script>
 <script id="app">
 (() => {
   const D = JSON.parse(document.getElementById("dati").textContent);
@@ -786,6 +869,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       <input type="text" id="nome-scenario" class="nome" style="width:180px" placeholder="nome scenario">
       <label class="piccolo">Soglia € <input type="text" class="eur" id="soglia"></label>
       <button id="esporta" class="primario">Esporta scenario</button>
+      <button id="esporta-excel" title="tutti i fogli dello scenario in vista: minimi, saldi mese per mese, calendario, canone, progetti, finanziamenti, voci corrette, PF, fonti">Esporta Excel</button>
       <button id="importa">Importa scenario</button><input type="file" id="importa-file" accept=".json,application/json" hidden>
       <button id="nessuna" title="le modifiche restano nel menu come bozza">Vedi solo PF</button></div>`;
     const s0 = el("sel-scenari");
@@ -809,6 +893,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     el("soglia").value = fmt(stato.scenario.soglia || 0, false);
     el("soglia").onchange = (e) => { const v = euroDa(e.target); if (v === null) return; stato.scenario.soglia = v; ricalcola(); };
     el("esporta").onclick = esporta;
+    el("esporta-excel").onclick = esportaExcel;
     el("nessuna").onclick = () => apriScenario("vuoto");
     el("importa").onclick = () => el("importa-file").click();
     el("importa-file").onchange = async (e) => {
@@ -836,6 +921,78 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     ricalcola();
   }
 
+  // Un file, più fogli: quello che la pagina mostra per lo scenario in vista, in euro (non centesimi), per Excel.
+  function fogliExcel() {
+    const E = (c) => Math.round(c) / 100;
+    const soc = (x) => x;
+    const fogli = [];
+    const nomeSc = stato.nome || "scenario";
+    // Minimi
+    fogli.push({ nome: "Minimi", colonne: ["scenario", "società", "mese del minimo", "saldo minimo €", "mesi sotto soglia", "soglia €"], euro: [3, 5],
+      righe: SOC.map((s) => [nomeSc, s, ris.minimi[s].mese, E(ris.minimi[s].saldo), ris.minimi[s].sotto_soglia.join(" "), E(stato.scenario.soglia || 0)])
+        .concat(SOC.map((s) => ["solo PF", s, D.baseline.minimi[s].mese, E(D.baseline.minimi[s].saldo), "", 0])) });
+    // Saldi mese per mese
+    const origini = Object.keys(ris.righe[0].entrate);
+    fogli.push({ nome: "Saldi mese per mese", colonne: ["scenario", "mese", "società", "senza PF", "saldo iniziale €", ...origini.map((o) => `entrate ${o} €`), "entrate totali €", ...origini.map((o) => `uscite ${o} €`), "uscite totali €", "saldo finale €"],
+      euro: [4, ...origini.map((_, i) => 5 + i), 5 + origini.length, ...origini.map((_, i) => 6 + origini.length + i), 6 + 2 * origini.length, 7 + 2 * origini.length],
+      righe: ris.righe.map((r) => { const te = origini.reduce((s, o) => s + r.entrate[o], 0), tu = origini.reduce((s, o) => s + r.uscite[o], 0);
+        return [nomeSc, r.mese, r.societa, IPO.has(r.mese) ? "sì" : "no", E(r.ini), ...origini.map((o) => E(r.entrate[o])), E(te), ...origini.map((o) => E(r.uscite[o])), E(tu), E(r.fin)]; }) });
+    // Calendario (lordo in cassa, una riga per rata) + canone
+    const cal = [];
+    for (const r of righeCalendario()) for (const [m, v] of Object.entries(r.mesi()).sort()) if (v) cal.push([r.gruppo, r.nome, r.soc, r.tipo, r.spento ? "no" : "sì", m, E(r.lordo(v))]);
+    const flCan = stato.scenario.canone ? MOTORE.flussiCanone(stato.scenario.canone, D.mesi) : D.intercompany.filter((f) => f.nome.startsWith("Fitto Hotel") && f.stato === "pf");
+    const canone = {}; for (const f of flCan) canone[f.mese] = (canone[f.mese] || 0) + f.importo;
+    for (const m of Object.keys(canone).sort()) cal.push(["Canone Fitto Hotel · ORTI → INTUR", stato.scenario.canone ? "scaletta dello scenario" : "come nel PF", "ORTI → INTUR", "esce da ORTI, entra in INTUR", "sì", m, E(canone[m])]);
+    fogli.push({ nome: "Calendario", colonne: ["gruppo", "voce", "società", "tipo", "acceso", "mese", "importo lordo €"], euro: [6], righe: cal });
+    // Canone: scenario contro PF
+    const pfCan = {}; for (const f of D.intercompany.filter((f) => f.nome.startsWith("Fitto Hotel") && f.stato === "pf")) pfCan[f.mese] = (pfCan[f.mese] || 0) + f.importo;
+    const mesiCan = [...new Set([...Object.keys(canone), ...Object.keys(pfCan)])].sort();
+    fogli.push({ nome: "Canone", colonne: ["mese", "lordo nello scenario €", "lordo nel PF €", "differenza €"], euro: [1, 2, 3],
+      righe: mesiCan.map((m) => [m, E(canone[m] || 0), E(pfCan[m] || 0), E((canone[m] || 0) - (pfCan[m] || 0))]) });
+    // Progetti e pagamenti
+    const prog = [];
+    for (const p of stato.scenario.progetti) for (const g of p.pagamenti) for (const [m, v] of Object.entries(g.mesi).sort()) if (v) prog.push([p.id, p.nome, p.societa, p.acceso ? "sì" : "no", p.stato, g.nome, g.fornitore_id || "", g.stato, g.aliquota_iva, m, E(v), E(MOTORE.iva(v, g.aliquota_iva))]);
+    fogli.push({ nome: "Progetti", colonne: ["progetto", "nome", "società", "acceso", "stato", "pagamento", "fornitore", "stato pagamento", "IVA %", "mese", "netto €", "lordo €"], euro: [10, 11], righe: prog });
+    // Finanziamenti
+    const fin = [];
+    for (const f of stato.scenario.finanziamenti) {
+      for (const [m, v] of Object.entries(f.erogazioni || {}).sort()) fin.push([f.id, f.nome, f.societa, f.stato, "erogazione (entra)", m, E(v)]);
+      for (const [m, v] of Object.entries(f.rate || {}).sort()) fin.push([f.id, f.nome, f.societa, f.stato, "rata di rimborso (esce)", m, E(v)]);
+    }
+    fogli.push({ nome: "Finanziamenti", colonne: ["id", "nome", "società", "stato", "tipo", "mese", "importo €"], euro: [6], righe: fin });
+    // Voci del PF corrette (sostituzioni e manuali)
+    const corr = (stato.scenario.manuali || []).map((r) => {
+      const imp = r.importo_cent !== undefined ? r.importo_cent : r.importo;
+      const pf = D.pf.filter((x) => x.societa === r.societa && x.voce_id === r.voce_id && x.mese === r.mese).reduce((s, x) => s + x.importo, 0);
+      return [r.societa, etichetta(r.voce_id), r.mese, r.direzione === "E" ? "entrata" : "uscita", r.origine || "manuale", E(imp), E(pf), E(imp - pf)];
+    });
+    fogli.push({ nome: "Voci PF corrette", colonne: ["società", "voce", "mese", "direzione", "origine", "nello scenario €", "nel PF €", "differenza €"], euro: [5, 6, 7], righe: corr });
+    // PF così com'è (la base di Rosa nell'orizzonte)
+    fogli.push({ nome: "PF", colonne: ["società", "voce", "mese", "direzione", "importo €"], euro: [4],
+      righe: D.pf.map((r) => [r.societa, etichetta(r.voce_id), r.mese, r.direzione === "E" ? "entrata" : "uscita", E(r.importo)]) });
+    // Fonti e versioni
+    const fonti = [["pagina generata il", D.generato_il], ["fonti lette da BigQuery il", D.acquisito_il || ""], ["scenario", nomeSc], ["esportato il", new Date().toISOString()]];
+    for (const s of SOC) {
+      const a = D.ancore[s];
+      fonti.push([`saldo ${s} al ${a.data}`, `${fmt(a.saldo)} € · ${a.attestato ? "quadra con i movimenti" : "solo dichiarato"}`]);
+      for (const [b, c] of Object.entries(a.conti)) fonti.push([`  ${s} · ${b}`, `${fmt(c.saldo)} € · ${c.attestato ? "quadra con i movimenti" : "solo dichiarato"} · ${c.motivo}`]);
+      const base = D.base[s] || {};
+      fonti.push([`PF ${s}`, `${base.file_sorgente || "—"} · caricato il ${base.data_caricamento || "—"}`]);
+    }
+    for (const l of D.limiti || []) fonti.push(["limite", l]);
+    fogli.push({ nome: "Fonti", colonne: ["cosa", "valore"], righe: fonti });
+    return fogli;
+  }
+  function esportaExcel() {
+    const bytes = EXCEL.costruisci(fogliExcel());
+    const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `cassa-${(stato.nome || "scenario").replace(/[^\w.-]+/g, "_")}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
   function esporta() {
     const doc = { schema: D.schema, nome: stato.nome, salvato_il: new Date().toISOString(), base: D.base, scenario: { ...stato.scenario, nome: stato.nome } };
     const blob = new Blob([JSON.stringify(doc, null, 1)], { type: "application/json" });
