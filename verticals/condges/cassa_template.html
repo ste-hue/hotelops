@@ -128,7 +128,14 @@ details.leva .corpo{padding:4px 0 6px 18px}
 .minimi details.dettagli>summary::before{content:"▸";transition:transform .15s}
 .minimi details.dettagli[open]>summary::before{transform:rotate(90deg)}
 .minimi details.dettagli>summary:hover{color:var(--ink)}
-@media (prefers-reduced-motion: reduce){.minimi details.dettagli>summary::before{transition:none}}
+.canone details.dettagli{margin-top:6px}
+.canone details.dettagli>summary{font-size:12px;color:var(--muted);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:4px}
+.canone details.dettagli>summary::-webkit-details-marker{display:none}
+.canone details.dettagli>summary::before{content:"▸";transition:transform .15s}
+.canone details.dettagli[open]>summary::before{transform:rotate(90deg)}
+.canone details.dettagli>summary:hover{color:var(--ink)}
+.canone details.dettagli ul{margin:6px 0 0;padding-left:16px;line-height:1.5}
+@media (prefers-reduced-motion: reduce){.minimi details.dettagli>summary::before,.canone details.dettagli>summary::before{transition:none}}
 .fonti{margin-top:16px;font-size:13px;color:var(--muted)}
 .fonti summary{font-weight:600;color:var(--ink)}
 .fonti ul{margin:6px 0 0;padding-left:18px}
@@ -762,7 +769,8 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   function renderTesta() {
     const basi = SOC.map((s) => `${s}: ${D.base[s] ? nomeFile(D.base[s].file_sorgente) : "—"}`).join(" · ");
     const anc = Object.values(D.ancore)[0];
-    el("sub").textContent = `Ancora al ${anc ? dataIt(anc.data) : "—"} · PF ${basi} · fonti del ${oraDi(D.acquisito_il) || "—"} · pagina del ${oraDi(D.generato_il)}`;
+    // Corta: chi vuole i file e le ore li trova in «Fonti e versioni».
+    el("sub").textContent = `saldi al ${anc ? dataIt(anc.data) : "—"} · pagina del ${oraDi(D.generato_il)}`;
   }
 
   function renderScenario() {
@@ -972,15 +980,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     const lordo = lordoSlider();
     const netto = nettoDaLordo(lordo, aliquotaSlider());
     el("canone-val").textContent = `${fmt(lordo, lordo % 100 !== 0)} €`;
-    const parti = [`netto annuo ${fmt(netto, false)} € (IVA ${aliquotaSlider()}%)`];
-    if (CR.dichiarato) parti.push(`annuo dichiarato ${fmt(CR.netto_annuo, false)} netto (${fmt(CR.lordo_annuo, false)} lordo) il ${CR.dichiarato_il || "—"}`);
-    else parti.push("nessun annuo dichiarato: la base è la somma delle rate PF nell'orizzonte");
-    const ratePf = Object.entries(CR.rate_pf || {}).sort().map(([m, v]) => `${meseIt(m)} ${fmt(v, false)}`).join(", ");
-    if (CONTR) parti.push(`contratto: rate il ${Object.keys(CONTR.rate_mese).sort().map((mm) => `30/${mm}`).join(", ")} da ${fmt(Object.values(CONTR.rate_mese)[0], false)} netto`);
-    if (ratePf) parti.push(`rate nel PF: ${ratePf}`);
-    if (c) parti.push(`IVA ${c.aliquota_iva}%`); else parti.push("come nel PF");
-    // Il canone mese per mese: esce da ORTI ed entra in INTUR nello stesso mese. Si dice sempre,
-    // perché il minimo di ORTI può stare in un mese diverso e non muoversi anche se il canone cambia.
+    // Il canone mese per mese: esce da ORTI ed entra in INTUR nello stesso mese.
     const pfFl = D.intercompany.filter((f) => f.nome.startsWith("Fitto Hotel") && f.stato === "pf");
     const fuori = Object.keys(CR.rate_pf || {}).filter((m) => !D.mesi.includes(m));
     const scFl = c ? MOTORE.flussiCanone(c, D.mesi) : pfFl;
@@ -989,11 +989,31 @@ if (typeof module !== "undefined") module.exports = FORMATO;
     const pfPerMese = {};
     for (const f of pfFl) pfPerMese[f.mese] = (pfPerMese[f.mese] || 0) + f.importo;
     const mesiCan = Object.keys(perMese).sort();
-    const esce = mesiCan.length ? mesiCan.map((m) => `${meseIt(m)} ${fmt(perMese[m], false)}`).join(", ") : "nessun mese nell'orizzonte";
     const diffMesi = [...new Set([...Object.keys(perMese), ...Object.keys(pfPerMese)])].sort().filter((m) => (perMese[m] || 0) !== (pfPerMese[m] || 0));
-    const vsPF = diffMesi.length ? `<br>rispetto al PF: ${diffMesi.map((m) => `${meseIt(m)} ORTI ${segno(-((perMese[m] || 0) - (pfPerMese[m] || 0)), false)} · INTUR ${segno((perMese[m] || 0) - (pfPerMese[m] || 0), false)}`).join(", ")}` : "";
-    const eff = SOC.map((s) => `${s} ${segno(ris.minimi[s].saldo - D.baseline.minimi[s].saldo, false)}`).join(" · ");
-    el("canone-info").innerHTML = `${parti.join(" · ")}<br>esce da ORTI ed entra in INTUR nell'orizzonte (lordo): ${esce}${fuori.length ? ` · fuori orizzonte: ${fuori.map(meseIt).join(", ")}` : ""}${vsPF}<br>effetto di tutte le leve sui minimi: ${eff}`;
+    const totDiff = diffMesi.reduce((s, m) => s + ((perMese[m] || 0) - (pfPerMese[m] || 0)), 0);
+    // La frase: quante rate, quanto, quando, e in una cifra per società quanto cambia rispetto al PF.
+    const importi = [...new Set(mesiCan.map((m) => perMese[m]))];
+    const rate = mesiCan.length === 0 ? "nessuna rata nell'orizzonte"
+      : `${mesiCan.length === 1 ? "una rata" : `${mesiCan.length} rate`}${importi.length === 1 ? ` da ${fmt(importi[0], false)} lorde` : ""}: ${mesiCan.map(meseIt).join(", ")}`;
+    const vsPf = diffMesi.length ? `rispetto al PF: ORTI ${segno(-totDiff, false)} · INTUR ${segno(totDiff, false)}` : "come nel PF";
+    const frase = `${fmt(netto, false)} netto l'anno · ${rate} · ${vsPf}`;
+    // I dettagli: tutto quello che prima stava in vista. Niente si perde, ma non è in faccia a tutti.
+    const parti = [];
+    if (CR.dichiarato) parti.push(`annuo dichiarato ${fmt(CR.netto_annuo, false)} netto (${fmt(CR.lordo_annuo, false)} lordo) il ${CR.dichiarato_il || "—"}`);
+    else parti.push("nessun annuo dichiarato: la base è la somma delle rate PF nell'orizzonte");
+    if (CONTR) parti.push(`contratto: rate il ${Object.keys(CONTR.rate_mese).sort().map((mm) => `30/${mm}`).join(", ")} da ${fmt(Object.values(CONTR.rate_mese)[0], false)} netto`);
+    const ratePf = Object.entries(CR.rate_pf || {}).sort().map(([m, v]) => `${meseIt(m)} ${fmt(v, false)}`).join(", ");
+    if (ratePf) parti.push(`rate nel PF: ${ratePf}`);
+    parti.push(c ? `IVA ${c.aliquota_iva}%` : "calendario come nel PF");
+    const esce = mesiCan.length ? mesiCan.map((m) => `${meseIt(m)} ${fmt(perMese[m], false)}`).join(", ") : "nessun mese nell'orizzonte";
+    const vsMese = diffMesi.length ? `<li>rispetto al PF, mese per mese: ${diffMesi.map((m) => `${meseIt(m)} ORTI ${segno(-((perMese[m] || 0) - (pfPerMese[m] || 0)), false)} · INTUR ${segno((perMese[m] || 0) - (pfPerMese[m] || 0), false)}`).join(", ")}</li>` : "";
+    const prima = el("canone-info").querySelector("details.dettagli");
+    const aperto = prima ? prima.open : aperte.has("canone-info");
+    el("canone-info").innerHTML = `<div class="frase">${frase}</div>
+      <details class="dettagli" data-k="canone-info" ${aperto ? "open" : ""}><summary>dettagli</summary><ul class="piccolo">
+        ${parti.map((p) => `<li>${p}</li>`).join("")}
+        <li>esce da ORTI ed entra in INTUR nell'orizzonte (lordo): ${esce}${fuori.length ? ` · fuori orizzonte: ${fuori.map(meseIt).join(", ")}` : ""}</li>
+        ${vsMese}</ul></details>`;
   }
 
   // ── voci di un mese (dettaglio e "tre voci più grandi") ──
@@ -1379,7 +1399,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
           <button data-elimina-f title="elimina">× elimina</button></div>
         <div class="piccolo">erogazioni</div>${grigliaMesi(f.erogazioni, "erog")}
         <div class="piccolo"><strong>rate di rimborso</strong></div><div class="frase">${esc(comeSiPaga(f.rate, null))}</div><div class="rate-f">${bloccoRate(f.rate, null)}</div>${grigliaMesi(f.rate, "rata")}
-        <div class="nota">le erogazioni dello scenario sostituiscono le righe PF «finanziamenti» di ${esc(f.societa)}</div>
+        <div class="nota">al posto delle righe «finanziamenti» del PF di ${esc(f.societa)}</div>
       </div></details>`;
     }).join("");
     el("finanziamenti").innerHTML = `${finanz || '<div class="nota">nessun finanziamento nello scenario</div>'}
@@ -1404,7 +1424,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
           <span class="piccolo num">nel PF: ${fmt(pfDi(g.societa, g.voce_id, r.mese), false)}</span>
           <button class="mini" data-elimina-cr title="togli questo mese">×</button></div>`).join("")}
         <div class="riga"><button data-aggiungi-cr>+ mese</button><button data-elimina-c title="togli la correzione">× togli tutta la correzione</button></div>
-        <div class="nota">in questi mesi la voce «${esc(etichetta(g.voce_id))}» del PF di ${esc(g.societa)} non conta: conta quello che scrivi qui.</div>
+        <div class="nota">al posto della voce del PF in questi mesi</div>
       </div></details>`;
     }).join("");
     const vociPf = [...new Set(D.pf.map((r) => `${r.societa}|${r.voce_id}|${r.direzione}`))].sort();
@@ -1571,7 +1591,7 @@ if (typeof module !== "undefined") module.exports = FORMATO;
       return `<tr class="tot ${k === 0 ? "primo" : ""}"><td class="voce">${soc} · leve in uscita</td>${usc.map((v, i) => `<td class="${IPO.has(D.mesi[i]) ? "ipo" : ""}">${v ? breve(v) : ""}</td>`).join("")}</tr>
         <tr class="tot"><td class="voce">${soc} · saldo di fine mese</td>${fin.map((v, i) => { const m = D.mesi[i]; return IPO.has(m) ? `<td class="ipo" title="senza PF: non è un saldo">—</td>` : `<td class="${m === mm ? "min" : ""}" title="${fmt(v)} €${m === mm ? " · minimo" : ""}">${breve(v)}</td>`; }).join("")}</tr>`;
     }).join("");
-    el("calendario").innerHTML = `<div class="cal-testa"><div><strong>Calendario dei pagamenti</strong> <span class="piccolo">lordo in cassa · trascina una rata in un altro mese (o frecce ← →): i saldi qui sotto e i minimi in alto si aggiornano</span></div></div>
+    el("calendario").innerHTML = `<div class="cal-testa"><div><strong>Calendario dei pagamenti</strong> <span class="piccolo">lordo in cassa · trascina una rata in un altro mese, o usa le frecce</span></div></div>
       <div class="cal-wrap"><table class="cal"><thead>${testa}</thead><tbody>${corpo || `<tr><td class="voce" colspan="${D.mesi.length + 1}">nessuna leva nello scenario</td></tr>`}${rigaCanone}${piede}</tbody></table></div>`;
     collegaCalendario(righe);
   }
