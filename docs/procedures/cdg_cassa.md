@@ -92,3 +92,40 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
 - Provisioning iniziale: `scripts/provision_cdg.sh` stampa i comandi per Stefano (KV, Worker,
   custom domain, app Access, AUD). Il Worker sta in `panorama_apps/cdg` (repo sul Mac; copia in
   `~/.local/share/hotelops/cdg-cassa-handoff/panorama_apps_cdg` su tong).
+
+## Tabelle per Excel (`hotelops cdg tabelle`)
+
+La pagina esporta lo **scenario** (le leve). Per avere **tutto quello che la pagina sa** in una
+forma che Excel apre senza conversioni:
+
+    python -m cli cdg tabelle                                  # dalla pagina appena generata
+    python -m cli cdg tabelle dati.json --out cartella         # dal payload scaricato
+    python -m cli cdg tabelle cassa.html --scenario mio.json   # con uno scenario esportato
+
+Sorgente: la pagina `.html` (legge il blocco `<script id="dati">`), oppure il payload `.json`,
+che è anche quello che il Worker serve su `/cassa/data.json`. Nessuna lettura di BigQuery, quindi
+gira anche dove le credenziali non ci sono.
+
+Tredici CSV con separatore `;`, virgola decimale e BOM: Excel italiano li apre con un doppio clic,
+senza procedura di importazione. Niente separatore delle migliaia, altrimenti Excel legge i numeri
+come testo. Gli importi sono in euro; dentro il JSON restano centesimi interi.
+
+| file | cosa c'è |
+|---|---|
+| `saldi_mensili.csv` | mese per mese e società per società, saldo iniziale, entrate e uscite per origine, saldo finale, due volte: `solo PF` e lo scenario |
+| `minimi.csv` | mese critico e saldo minimo, per scenario e società |
+| `pf_voci.csv` | il PF voce per voce |
+| `flussi_fra_societa.csv` | canone e godimento, con lo stato (`pf`, `una_gamba`, `scenario`) |
+| `ancore_per_conto.csv` | i saldi di partenza conto per conto, se quadrano coi movimenti e perché no |
+| `canone_rate.csv` | le rate nel PF accanto a quelle del contratto, con la colonna che dice quale rata il PF non ha |
+| `canone_rate_fuori_orizzonte.csv` | le rate prima del primo mese della pagina: senza queste l'annuo non torna |
+| `progetti.csv`, `pagamenti.csv` | progetti con totale netto; ogni pagamento con mese, netto, imposta e lordo |
+| `finanziamenti.csv` | erogazioni e rate di rimborso, una riga per mese |
+| `fatti.csv` | i pagamenti registrati davvero |
+| `limiti.csv` | le cose che la pagina dichiara di non sapere, una per riga |
+| `versioni.csv` | quando è stata generata, da quali file PF, il canone dichiarato |
+
+I saldi dello scenario sono **ricalcolati dal motore Python**, non copiati dalla pagina. Il comando
+confronta il solo-PF ricalcolato con quello scritto nel payload e, se divergono, stampa i mesi e
+esce con codice 3: una divergenza fra il JavaScript della pagina e il Python è un difetto, non un
+dettaglio di export.
