@@ -305,10 +305,16 @@ def test_canone_riferimento_dichiarato_o_dalle_rate_pf():
     dich["calendario_contratto"] = {"06": to_cent(200_000), "09": to_cent(200_000), "12": to_cent(200_000)}
     dich["contratto_fonte"] = "art. 3"
     p3 = build_payload(snapshot_sintetico(), [], canone_dichiarato=dich)
-    assert p3["canone_rif"]["contratto"] == {"rate_mese": {"06": to_cent(200_000), "09": to_cent(200_000), "12": to_cent(200_000)}, "fonte": "art. 3"}
+    assert p3["canone_rif"]["contratto"] == {"rate_mese": {"06": to_cent(200_000), "09": to_cent(200_000), "12": to_cent(200_000)}, "fonte": "art. 3", "anni_pagati": {}}
     lim = [x for x in p3["limiti"] if x.startswith("Canone, contratto art. 3")]
     # orizzonte PF ott 26–mar 27: il contratto ha dic 26; il PF sintetico ha 244.000 a nov 26 e niente a dic
     assert len(lim) == 1 and "30/12/2026" in lim[0] and "244.000,00 €" in lim[0] and "nel PF non c'è" in lim[0]
+    # anno già pagato in banca: le rate del contratto di quell'anno non sono dovute e non sono limiti
+    dich["anni_pagati"] = {"2026": "3 × 244.000 il 13/07, 31/07, 21/09/2026"}
+    p4 = build_payload(snapshot_sintetico(), [], canone_dichiarato=dich)
+    assert p4["canone_rif"]["contratto"]["anni_pagati"] == {"2026": "3 × 244.000 il 13/07, 31/07, 21/09/2026"}
+    assert not [x for x in p4["limiti"] if x.startswith("Canone, contratto art. 3")]
+    assert "Canone 2026 già pagato: 3 × 244.000 il 13/07, 31/07, 21/09/2026." in p4["limiti"]
     # IVA scorporata half-up anche con lordo non divisibile
     snap = snapshot_sintetico()
     snap["intercompany"].append({"nome": "Fitto Hotel (canone)", "da": "ORTI", "a": "INTUR", "mese": "2026-12", "importo": 1, "stato": "pf"})

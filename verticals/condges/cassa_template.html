@@ -864,7 +864,9 @@ if (typeof module !== "undefined") module.exports = FORMATO;
   const rateLordeContratto = () => {
     const cal = {};
     if (!CONTR) return cal;
+    const pagati = CONTR.anni_pagati || {};
     for (const m of D.mesi) {
+      if (m.slice(0, 4) in pagati) continue;   // anno già pagato in banca: nessuna rata dovuta
       const q = CONTR.rate_mese[m.slice(5, 7)];
       if (q !== undefined) cal[m] = MOTORE.iva(q, CR.aliquota_iva);
     }

@@ -206,6 +206,8 @@ def canone_riferimento(intercompany: list[dict], dichiarato: dict | None = None)
         contratto = {
             "rate_mese": {str(m).zfill(2): int(v) for m, v in dichiarato["calendario_contratto"].items()},
             "fonte": dichiarato.get("contratto_fonte", ""),
+            # anno -> come risulta pagato in banca: le rate del contratto di quegli anni non sono dovute
+            "anni_pagati": {str(a): str(t) for a, t in (dichiarato.get("anni_pagati") or {}).items()},
         }
     if dichiarato and dichiarato.get("netto_annuo"):
         netto_annuo = int(dichiarato["netto_annuo"])
@@ -328,8 +330,11 @@ def _limiti_canone(c: dict, mesi: list[str] = (), mesi_ipotetici: set[str] = fro
     if c.get("contratto"):
         k = 100 + c["aliquota_iva"]
         pf = {r["mese"]: r["lordo"] for r in c["rate_orizzonte"]}
+        pagati = c["contratto"].get("anni_pagati", {})
+        for anno, come in sorted(pagati.items()):
+            out.append(f"Canone {anno} già pagato: {come}.")
         for m in mesi:
-            if m in mesi_ipotetici:
+            if m in mesi_ipotetici or m[:4] in pagati:
                 continue
             netto = c["contratto"]["rate_mese"].get(m[5:7])
             if netto is None:
