@@ -1,6 +1,6 @@
 import json
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -229,6 +229,22 @@ CONTRATTO_AMCN = {
     "sal_da": "2026-11",
     "sal_passo": 1,
 }
+
+
+def test_importo_del_finanziamento_sopravvive_a_json_e_righe():
+    # L'importo promesso dalla banca è un campo facoltativo: la pagina lo usa per «erogato X di Y».
+    sc, base = scenario_sintetico()
+    con = replace(sc, finanziamenti=[replace(sc.finanziamenti[0], importo=to_cent(1_100_000))])
+    doc = scenario_to_json(con, base)
+    assert json.loads(doc)["scenario"]["finanziamenti"][0]["importo"] == to_cent(1_100_000)
+    sc2, _, _ = scenario_from_json(doc)
+    assert sc2.finanziamenti[0].importo == to_cent(1_100_000)
+    s, f, p = righe_p(doc, "rid", datetime(2026, 10, 31, tzinfo=UTC), "stefano")
+    ((sc3, _, _),) = scenario_da_righe(s, f, p)
+    assert sc3.finanziamenti[0].importo == to_cent(1_100_000) and sc3 == con
+    # senza importo il documento resta com'era (nessuna chiave nuova): i vecchi hash non cambiano
+    assert "importo" not in json.loads(scenario_to_json(sc, base))["scenario"]["finanziamenti"][0]
+    assert scenario_from_json(scenario_to_json(sc, base))[0].finanziamenti[0].importo is None
 
 
 def test_contratti_del_progetto_sopravvivono_a_json_e_righe():

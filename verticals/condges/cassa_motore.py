@@ -119,6 +119,9 @@ class Finanziamento:
     erogazioni: dict[str, int]
     rate: dict[str, int]
     stato: str
+    # Quanto la banca ha promesso, in centesimi: serve al controllo «erogato X di Y» della pagina.
+    # Il calcolo legge solo `erogazioni` e `rate`; None = non registrato.
+    importo: int | None = None
 
 
 @dataclass(frozen=True)

@@ -403,17 +403,18 @@ def test_input_da_dict_con_scenario_dentro():
 def test_render_html_incapsula_dati_e_motore():
     html = render_html(build_payload(snapshot_sintetico(), []))
     assert "__DATA__" not in html and '<script id="motore">' in html
-    assert "Esporta scenario" in html and "prefers-color-scheme" in html
+    assert "Salva scenario (.json)" in html and "prefers-color-scheme" in html
     assert "non conta finché il progetto è spento" in html
     assert "attestato" in html and "dichiarato" in html
 
 
 def test_badge_dei_saldi_dice_cosa_vuol_dire():
-    """«attestato» resta per quando c'è l'estratto conto: il badge dice quadra / solo dichiarato."""
+    """Il chip dice CHE COS'È il saldo (una delle quattro parole §A); il perché sta nel title (brief UI §B)."""
     html = render_html(build_payload(snapshot_sintetico(), []))
-    assert '? "quadra con i movimenti" : "solo dichiarato"' in html
-    assert '"attestato" : "dichiarato"' not in html and '"attestata" : "dichiarata"' not in html
-    assert '"quadra coi movimenti" : "dichiarata"' not in html
+    assert "chipStato(statoAncora(a)," in html and "chipStato(statoAncora(c), c.motivo)" in html
+    assert "quadra con i movimenti in banca" in html  # la provenienza, nel title, non nell'etichetta
+    assert '"attestata" : "dichiarata"' not in html and '"quadra coi movimenti" : "dichiarata"' not in html
+    assert "solo dichiarato" not in html and '"quadra con i movimenti"' not in html
 
 
 # ── parità JS/Python: interi, nessun round ──
@@ -914,6 +915,27 @@ def test_excel_scritto_dal_browser_si_riapre_con_openpyxl(tmp_path):
     assert [c.value for c in ws[1]] == ["scenario", "società", "saldo €"] and ws["A1"].font.b
     assert ws["C2"].value == -1234.56 and ws["C2"].number_format == "#,##0.00" and ws["C3"].value == 987654.3
     assert wb["Fonti versioni  sì"]["B2"].value == "b & c <d>" and wb["Minimi 2"]["A2"].value is True
+
+
+def test_template_brief_ui_1_3_parole_stati_e_finanziamenti():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    # 1. il bottone dice il risultato; nessuna parola con due significati; via il doppione della pillola
+    assert "Salva scenario (.json)" in html and "Excel (.xlsx)" in html and "Apri scenario (.json)" in html
+    assert "Esporta scenario" not in html and "Esporta Excel" not in html and 'id="nessuna"' not in html
+    assert ">Genera le rate<" in html and ">Rateizza<" not in html
+    # 2. finanziamenti: due riquadri nelle parole di Stefano, generatore delle tranche, controllo «erogato X di Y»
+    assert "Quando la banca ti dà i soldi" in html and "Quando li restituisci" in html
+    assert "data-genera-tranche" in html and "erogato ${fmt(erogato, false)} di ${fmt(f.importo, false)}" in html
+    assert "metà a metà lavori, metà a fine lavori" in html
+    # 3. vocabolario di stato: attributo del dato + classe CSS, riusato da card, barra, fonti, finanziamenti
+    assert 'class="stato' in html and 'data-stato="' in html and ".stato[data-stato=\"non-registrato\"]" in html
+    assert "const STATI = { attestato:" in html and "function condizioni(soc, m)" in html
+    assert "quadra con i movimenti</span>" not in html and "solo dichiarato" not in html
+    # bozze finte: il documento si completa all'apertura e una bozza nasce solo se è diversa da tutto il menu
+    assert "function completa(scenario)" in html and "data-scarta=" in html
+    # il «× elimina» di un pagamento sta in testa alla riga, non dentro la tendina; il nuovo nasce aperto
+    assert html.index('<span class="num pag-tot">') < html.index("data-elimina-g") < html.index('<details class="sotto" data-k="${kg}"')
+    assert "aperte.add(`g:${p.id}:${p.pagamenti.length - 1}`)" in html
 
 
 def test_template_trascina_con_soglia_presa_e_volo():
