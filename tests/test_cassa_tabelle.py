@@ -8,11 +8,13 @@ import pytest
 from tests.test_build_cassa_artifact import _scenario_base, snapshot_sintetico
 from verticals.condges.build_cassa_artifact import build_payload, render_html
 from verticals.condges.cassa_tabelle import (
+    SCHEMA_TABELLE,
     _euro,
     confronto_con_la_pagina,
     formatta,
     payload_da_file,
     scrivi_csv,
+    scrivi_json,
     tabelle,
 )
 
@@ -190,3 +192,41 @@ def test_i_progetti_portano_il_totale_dei_loro_pagamenti(payload_con_seme):
         )
     for r in progetti:
         assert r[cp.index("totale_netto")] == tot.get(r[cp.index("progetto_id")], 0)
+
+
+def test_i_json_portano_record_con_centesimi_interi_e_un_manifesto_che_li_elenca(
+    tmp_path, payload_con_seme
+):
+    import hashlib
+
+    tab = tabelle(payload_con_seme)
+    scritti = scrivi_json(tab, tmp_path, payload_con_seme, sorgente="prova.json")
+    nomi = {p.name for p in scritti}
+    assert (
+        "manifest.json" in nomi
+        and "saldi_mensili.json" in nomi
+        and "pagamenti.json" in nomi
+    )
+    saldi = json.loads((tmp_path / "saldi_mensili.json").read_text(encoding="utf-8"))
+    assert saldi["schema"] == SCHEMA_TABELLE and saldi["tabella"] == "saldi_mensili"
+    assert saldi["unita"]["importi"] == "centesimi interi"
+    riga = saldi["righe"][0]
+    assert set(riga) == set(saldi["colonne"])
+    assert isinstance(riga["saldo_finale"], int), (
+        "centesimi interi, non euro formattati"
+    )
+    assert (
+        riga["saldo_iniziale"] + riga["entrate_totali"] - riga["uscite_totali"]
+        == riga["saldo_finale"]
+    )
+    man = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert man["schema"] == SCHEMA_TABELLE and man["sorgente"] == "prova.json"
+    assert man["scenario"] == payload_con_seme["seme"]["nome"]
+    assert {v["tabella"] for v in man["tabelle"]} == set(tab)
+    for v in man["tabelle"]:
+        testo = (tmp_path / v["file"]).read_text(encoding="utf-8")
+        assert hashlib.sha256(testo.encode("utf-8")).hexdigest() == v["sha256"], v[
+            "file"
+        ]
+        assert v["righe"] == len(json.loads(testo)["righe"])
+    assert "riservati" in man["nota"].lower()

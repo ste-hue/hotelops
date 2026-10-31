@@ -19,6 +19,7 @@ pagina e il Python divergessero, il confronto `--verifica` lo dice invece di nas
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import re
 from collections.abc import Iterable
@@ -396,6 +397,72 @@ def scrivi_csv(tab: dict[str, Tabella], cartella: Path) -> list[Path]:
             for r in righe:
                 w.writerow(formatta(colonne, r))
         scritti.append(p)
+    return scritti
+
+
+SCHEMA_TABELLE = "cdg-cassa-tabelle/1"
+
+
+def scrivi_json(
+    tab: dict[str, Tabella], cartella: Path, payload: dict, sorgente: str = ""
+) -> list[Path]:
+    """Le stesse tabelle, per un agente: un file JSON per tabella (record con i campi nominati,
+    importi in **centesimi interi**, date ISO) e un `manifest.json` che le elenca con colonne,
+    righe e hash, così chi legge prende solo quello che gli serve e sa da dove viene.
+    Niente euro formattati: la virgola è per Excel, l'intero è per il codice."""
+    cartella = Path(cartella)
+    cartella.mkdir(parents=True, exist_ok=True)
+    scritti: list[Path] = []
+    voci = []
+    for nome, (colonne, righe) in sorted(tab.items()):
+        record = [dict(zip(colonne, r, strict=True)) for r in righe]
+        doc = {
+            "schema": SCHEMA_TABELLE,
+            "tabella": nome,
+            "colonne": colonne,
+            "unita": {
+                "importi": "centesimi interi",
+                "mesi": "YYYY-MM",
+                "date": "YYYY-MM-DD",
+            },
+            "righe": record,
+        }
+        testo = json.dumps(doc, ensure_ascii=False, indent=1)
+        f = cartella / f"{nome}.json"
+        f.write_text(testo, encoding="utf-8")
+        scritti.append(f)
+        voci.append(
+            {
+                "tabella": nome,
+                "file": f.name,
+                "colonne": colonne,
+                "righe": len(record),
+                "sha256": hashlib.sha256(testo.encode("utf-8")).hexdigest(),
+            }
+        )
+    manifesto = {
+        "schema": SCHEMA_TABELLE,
+        "pagina_generata_il": payload.get("generato_il"),
+        "fonti_lette_il": payload.get("acquisito_il"),
+        "sorgente": sorgente,
+        "scenario": (payload.get("seme") or {}).get("nome"),
+        "base_pf": {
+            s_: (b or {}).get("file_sorgente")
+            for s_, b in (payload.get("base") or {}).items()
+        },
+        "mesi": payload.get("mesi"),
+        "mesi_senza_pf": payload.get("mesi_ipotetici"),
+        "unita": {
+            "importi": "centesimi interi",
+            "mesi": "YYYY-MM",
+            "date": "YYYY-MM-DD",
+        },
+        "nota": "Dati riservati (saldi, PF, progetti): non pubblicare fuori dal perimetro Access.",
+        "tabelle": voci,
+    }
+    m = cartella / "manifest.json"
+    m.write_text(json.dumps(manifesto, ensure_ascii=False, indent=1), encoding="utf-8")
+    scritti.append(m)
     return scritti
 
 
