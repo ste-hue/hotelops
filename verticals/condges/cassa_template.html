@@ -102,6 +102,10 @@ details.sotto>summary{font-size:12px;color:var(--accent)}
 .warn-t{color:var(--warn)}
 .pag .mesi{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 .pag .mesi label{font-size:11px;color:var(--muted);display:flex;flex-direction:column}
+.mesi .cella{display:flex;gap:2px;align-items:center}
+.mesi .op{padding:0 6px;min-height:24px;min-width:24px;font-size:12px;line-height:22px;color:var(--muted)}
+.doc{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--accent);text-decoration:none;margin-left:4px;max-width:220px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;white-space:nowrap}
+.documenti{margin-top:6px}
 .pag .mesi input{width:92px;text-align:right;font-size:12px;padding:3px 5px}
 .nota{font-size:12px;color:var(--muted);font-style:italic;margin-top:4px}
 .come{margin-top:6px}
@@ -1050,8 +1054,8 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       righe: mesiCan.map((m) => [m, E(canone[m] || 0), E(pfCan[m] || 0), E((canone[m] || 0) - (pfCan[m] || 0))]) });
     // Progetti e pagamenti
     const prog = [];
-    for (const p of stato.scenario.progetti) for (const g of p.pagamenti) for (const [m, v] of Object.entries(g.mesi).sort()) if (v) prog.push([p.id, p.nome, p.societa, p.acceso ? "sì" : "no", p.stato, g.nome, g.fornitore_id || "", g.stato, g.aliquota_iva, m, E(v), E(MOTORE.iva(v, g.aliquota_iva))]);
-    fogli.push({ nome: "Progetti", colonne: ["progetto", "nome", "società", "acceso", "stato", "pagamento", "fornitore", "stato pagamento", "IVA %", "mese", "netto €", "lordo €"], euro: [10, 11], righe: prog });
+    for (const p of stato.scenario.progetti) for (const g of p.pagamenti) for (const [m, v] of Object.entries(g.mesi).sort()) if (v) prog.push([p.id, p.nome, p.societa, p.acceso ? "sì" : "no", p.stato, g.nome, g.fornitore_id || "", g.stato, g.aliquota_iva, m, E(v), E(MOTORE.iva(v, g.aliquota_iva)), (g.documenti || []).map((d) => `${d.titolo || ""} ${d.url || ""}`.trim()).join(" | "), p.drive_url || ""]);
+    fogli.push({ nome: "Progetti", colonne: ["progetto", "nome", "società", "acceso", "stato", "pagamento", "fornitore", "stato pagamento", "IVA %", "mese", "netto €", "lordo €", "documenti", "cartella Drive"], euro: [10, 11], righe: prog });
     // Finanziamenti
     const fin = [];
     for (const f of stato.scenario.finanziamenti) {
@@ -1681,7 +1685,8 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   function grigliaMesi(mesi, pref) {
     const chiavi = Object.keys(mesi).sort();
     const liberi = D.mesi.filter((m) => !(m in mesi));
-    return `<div class="mesi">${chiavi.map((m) => `<label>${meseIt(m)}${IPO.has(m) ? " ·" : ""}<input type="text" class="eur" data-${pref}="${m}" value="${fmt(mesi[m], true)}"></label>`).join("")}
+    // Ogni rata si può dividere (metà resta, metà va al mese dopo) o unire con la rata successiva: la somma non cambia mai.
+    return `<div class="mesi">${chiavi.map((m, i) => `<label>${meseIt(m)}${IPO.has(m) ? " ·" : ""}<span class="cella"><input type="text" class="eur" data-${pref}="${m}" value="${fmt(mesi[m], true)}">${D.mesi.indexOf(m) < D.mesi.length - 1 ? `<button type="button" class="mini op" data-${pref}-dividi="${m}" title="dividi: metà resta a ${meseIt(m)}, metà va al mese dopo" aria-label="dividi la rata di ${meseIt(m)}">÷</button>` : ""}${i < chiavi.length - 1 ? `<button type="button" class="mini op" data-${pref}-unisci="${m}" title="unisci con la rata di ${meseIt(chiavi[i + 1])}" aria-label="unisci la rata di ${meseIt(m)} con quella di ${meseIt(chiavi[i + 1])}">⇥</button>` : ""}</span></label>`).join("")}
       ${liberi.length ? `<label>+ mese<select data-${pref}-nuovo><option value="">…</option>${liberi.map((m) => `<option value="${m}">${meseIt(m)}${IPO.has(m) ? " (senza PF)" : ""}</option>`).join("")}</select></label>` : ""}</div>`;
   }
 
@@ -1716,9 +1721,10 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         <div class="riga"><input type="text" class="nome" style="flex:1 1 140px;font-weight:600" data-campo="nome" value="${esc(p.nome)}">
           ${selSoc(p.societa)} <input type="text" class="n" style="width:110px" data-campo="stato" value="${esc(p.stato)}" title="stato">
           <button data-elimina-p title="elimina progetto">× elimina</button></div>
+        <div class="riga"><label class="piccolo" style="flex:1 1 220px;display:flex;gap:6px;align-items:center">cartella Drive <input type="url" class="nome" style="flex:1 1 160px" data-campo="drive_url" value="${esc(p.drive_url || "")}" placeholder="https://drive.google.com/…"></label>${p.drive_url ? `<a class="doc" href="${esc(p.drive_url)}" target="_blank" rel="noopener">apri la cartella</a>` : ""}</div>
         ${(p.contratti || []).map((c, ci) => bloccoContratto(p, c, ci)).join("")}
         ${p.pagamenti.map((g, j) => { const kg = `g:${p.id}:${j}`; return `<div class="pag" data-g="${j}">
-          <div class="pag-testa"><span class="pag-nome">${esc(g.nome)}</span>${g.fornitore_id ? `<span class="badge">${esc(g.fornitore_id)}</span>` : ""}
+          <div class="pag-testa"><span class="pag-nome">${esc(g.nome)}</span>${g.fornitore_id ? `<span class="badge">${esc(g.fornitore_id)}</span>` : ""}${(g.documenti || []).filter((d) => d.url).map((d) => `<a class="doc" href="${esc(d.url)}" target="_blank" rel="noopener" title="${esc(d.url)}">📄 ${esc(d.titolo || "documento")}</a>`).join("")}
             <span class="num pag-tot">${fmt(Object.values(g.mesi).reduce((a, b) => a + MOTORE.iva(b, g.aliquota_iva), 0), false)} €</span>
             <button class="mini" data-elimina-g title="elimina questo pagamento dal progetto" aria-label="elimina il pagamento ${esc(g.nome)}">× elimina</button></div>
           <div class="frase">${esc(comeSiPaga(g.mesi, g.aliquota_iva))}</div>
@@ -1728,6 +1734,9 @@ if (typeof module !== "undefined") module.exports = EXCEL;
               <input type="text" class="n" style="width:90px" data-campo="fornitore_id" value="${esc(g.fornitore_id || "")}" placeholder="fornitore" title="fornitore_id (riconcilia i fatti)"></div>
             ${bloccoRate(g.mesi, g.aliquota_iva)}
             ${grigliaMesi(g.mesi, "mese")}
+            <div class="documenti"><div class="piccolo">documenti (preventivo, contratto, fattura: link Drive)</div>
+              ${(g.documenti || []).map((d, di) => `<div class="riga" data-doc="${di}"><input type="text" class="nome" style="flex:1 1 120px" data-doc-titolo value="${esc(d.titolo || "")}" placeholder="titolo, es. preventivo 0066/26"><input type="url" class="nome" style="flex:2 1 200px" data-doc-url value="${esc(d.url || "")}" placeholder="https://drive.google.com/…"><button type="button" class="mini" data-elimina-doc title="togli il documento" aria-label="togli il documento ${esc(d.titolo || "")}">×</button></div>`).join("")}
+              <div class="riga"><button type="button" class="mini" data-aggiungi-doc>+ documento</button></div></div>
           </details>
           ${p.acceso ? "" : '<div class="nota">non conta finché il progetto è spento</div>'}
         </div>`; }).join("")}
@@ -1805,10 +1814,32 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   const importoDi = (r) => (r.importo_cent !== undefined ? r.importo_cent : r.importo);
   const pfDi = (soc, voce, mese) => D.pf.filter((r) => r.societa === soc && r.voce_id === voce && r.mese === mese).reduce((s, r) => s + r.importo, 0);
 
+  // Dividi una rata: metà va al mese dopo (si somma se c'è già una rata), il resto dei centesimi resta dov'era.
+  function dividiRata(mesi, m) {
+    const v = mesi[m];
+    const dopo = D.mesi[D.mesi.indexOf(m) + 1];
+    if (!v || !dopo) return false;
+    const meta = Math.floor(v / 2);
+    mesi[m] = v - meta;
+    mesi[dopo] = (mesi[dopo] || 0) + meta;
+    return true;
+  }
+  // Unisci una rata con la successiva di questo pagamento: tutto nel mese più vicino.
+  function unisciRata(mesi, m) {
+    const chiavi = Object.keys(mesi).sort();
+    const dopo = chiavi[chiavi.indexOf(m) + 1];
+    if (!dopo) return false;
+    mesi[m] = (mesi[m] || 0) + (mesi[dopo] || 0);
+    delete mesi[dopo];
+    return true;
+  }
   function leggiMesi(root, pref, mesi) {
     root.querySelectorAll(`input[data-${pref}]`).forEach((inp) => {
       inp.onchange = () => { const v = euroDa(inp); if (v === null) return; if (v) mesi[inp.dataset[pref]] = v; else delete mesi[inp.dataset[pref]]; ricalcola(); };
     });
+    const camel = pref.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    root.querySelectorAll(`button[data-${pref}-dividi]`).forEach((b) => { b.onclick = (e) => { e.preventDefault(); if (dividiRata(mesi, b.dataset[`${camel}Dividi`])) ricalcola(); }; });
+    root.querySelectorAll(`button[data-${pref}-unisci]`).forEach((b) => { b.onclick = (e) => { e.preventDefault(); if (unisciRata(mesi, b.dataset[`${camel}Unisci`])) ricalcola(); }; });
     const nuovo = root.querySelector(`select[data-${pref}-nuovo]`);
     if (nuovo) nuovo.onchange = () => { if (nuovo.value) { mesi[nuovo.value] = 0; renderLeve(); } };
   }
@@ -1823,7 +1854,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       const p = sc.progetti[parseInt(div.dataset.p, 10)];
       div.querySelector("input[data-acceso]").onchange = (e) => { p.acceso = e.target.checked; ricalcola(); };
       div.querySelectorAll(".corpo > .riga [data-campo]").forEach((inp) => {
-        inp.onchange = () => { p[inp.dataset.campo] = inp.value; ricalcola(); };
+        inp.onchange = () => { const v = inp.value.trim(); if (inp.dataset.campo === "drive_url" && !v) delete p.drive_url; else p[inp.dataset.campo] = inp.dataset.campo === "drive_url" ? v : inp.value; ricalcola(); };
       });
       div.querySelector("button[data-elimina-p]").onclick = () => { sc.progetti.splice(sc.progetti.indexOf(p), 1); ricalcola(); };
       div.querySelectorAll(".contratto").forEach((box) => collegaContratto(box, p, p.contratti[+box.dataset.c]));
@@ -1849,6 +1880,13 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         pg.querySelector("button[data-elimina-g]").onclick = () => { p.pagamenti.splice(p.pagamenti.indexOf(g), 1); ricalcola(); };
         leggiMesi(pg, "mese", g.mesi);
         collegaRate(pg.querySelector(".come"), () => g.mesi, (m) => { g.mesi = m; }, g.aliquota_iva);
+        pg.querySelectorAll(".documenti .riga[data-doc]").forEach((r) => {
+          const d = g.documenti[parseInt(r.dataset.doc, 10)];
+          r.querySelector("input[data-doc-titolo]").onchange = (e) => { d.titolo = e.target.value.trim(); ricalcola(); };
+          r.querySelector("input[data-doc-url]").onchange = (e) => { d.url = e.target.value.trim(); ricalcola(); };
+          r.querySelector("button[data-elimina-doc]").onclick = () => { g.documenti.splice(g.documenti.indexOf(d), 1); if (!g.documenti.length) delete g.documenti; ricalcola(); };
+        });
+        pg.querySelector("button[data-aggiungi-doc]").onclick = () => { g.documenti = g.documenti || []; g.documenti.push({ titolo: "", url: "" }); aperte.add(`g:${p.id}:${pg.dataset.g}`); renderLeve(); };
       });
     });
     el("aggiungi-p").onclick = () => { const id = `P${Date.now().toString(36)}`; sc.progetti.push({ id, nome: "Nuovo progetto", societa: "INTUR", acceso: true, stato: "ipotesi", pagamenti: [{ nome: "Pagamento", mesi: {}, aliquota_iva: 22, stato: "ipotesi", fornitore_id: null }] }); aperte.add(`p:${id}`); ricalcola(); };

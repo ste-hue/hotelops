@@ -110,10 +110,12 @@ def scenario_to_json(
                             "aliquota_iva": g.aliquota_iva,
                             "stato": g.stato,
                             "fornitore_id": g.fornitore_id,
+                            **({"documenti": g.documenti} if g.documenti else {}),
                         }
                         for g in p.pagamenti
                     ],
                     "contratti": p.contratti,
+                    **({"drive_url": p.drive_url} if p.drive_url else {}),
                 }
                 for p in sc.progetti
             ],
@@ -169,10 +171,12 @@ def scenario_from_json(raw: str | bytes) -> tuple[Scenario, Base, dict]:
                     aliquota_iva=g["aliquota_iva"],
                     stato=g["stato"],
                     fornitore_id=g.get("fornitore_id"),
+                    documenti=list(g.get("documenti") or []),
                 )
                 for g in p["pagamenti"]
             ],
             contratti=p.get("contratti", []),
+            drive_url=p.get("drive_url") or None,
         )
         for p in s["progetti"]
     ]
@@ -245,6 +249,12 @@ def righe_p(
                 "societa": p.societa,
                 "stato": p.stato,
                 "contratti": p.contratti,
+                **({"drive_url": p.drive_url} if p.drive_url else {}),
+                **(
+                    {"documenti": {g.nome: g.documenti for g in p.pagamenti if g.documenti}}
+                    if any(g.documenti for g in p.pagamenti)
+                    else {}
+                ),
             }
             for p in sc.progetti
         ],
@@ -359,6 +369,7 @@ def scenario_da_righe(
                         aliquota_iva=r["aliquota_iva"],
                         stato=r["stato"],
                         fornitore_id=r["fornitore_id"],
+                        documenti=list((pm.get("documenti") or {}).get(r["pagamento"], [])),
                     ),
                 )
                 g.mesi[r["mese"]] = r["importo_netto_cent"]
@@ -371,6 +382,7 @@ def scenario_da_righe(
                     stato=pm["stato"],
                     pagamenti=list(pagam.values()),
                     contratti=pm.get("contratti", []),
+                    drive_url=pm.get("drive_url"),
                 )
             )
 
