@@ -96,6 +96,7 @@ def scenario_to_json(
             "nome": sc.nome,
             "soglia": sc.soglia,
             "canone": _scaletta_to_dict(sc.canone),
+            **({"fornitori": sc.fornitori} if sc.fornitori else {}),
             "progetti": [
                 {
                     "id": p.id,
@@ -215,6 +216,7 @@ def scenario_from_json(raw: str | bytes) -> tuple[Scenario, Base, dict]:
         canone=_scaletta_from_dict(s["canone"]),
         manuali=manuali,
         soglia=_cent(s["soglia"]),
+        fornitori=dict(s.get("fornitori") or {}),
     )
     meta = {k: doc.get(k) for k in ("nome", "salvato_il", "schema")}
     return sc, doc["base"], meta
@@ -242,6 +244,7 @@ def righe_p(
         "scenario_nome": sc.nome,
         "canone": _scaletta_to_dict(sc.canone),
         "soglia": sc.soglia,
+        **({"fornitori": sc.fornitori} if sc.fornitori else {}),
         "progetti": [
             {
                 "id": p.id,
@@ -426,6 +429,7 @@ def scenario_da_righe(
             canone=_scaletta_from_dict(par["canone"]),
             manuali=manuali,
             soglia=par["soglia"],
+            fornitori=dict(par.get("fornitori") or {}),
         )
         meta = {
             "nome": s["nome"],

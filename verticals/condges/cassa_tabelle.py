@@ -284,6 +284,52 @@ def tabelle(payload: dict, documento: dict | None = None) -> dict[str, Tabella]:
         ],
     )
 
+    # Il fornitore come oggetto: chi è scritto in «fornitore» dentro i pagamenti, più la mappa dello scenario.
+    usi: dict[str, dict] = {}
+    for p in sc.progetti:
+        for pg in p.pagamenti:
+            fid = (pg.fornitore_id or "").strip()
+            if not fid:
+                continue
+            u = usi.setdefault(
+                fid, {"n": 0, "lordo": 0, "mesi": [], "societa": set(), "progetti": []}
+            )
+            u["n"] += 1
+            u["lordo"] += sum(M.iva(v, pg.aliquota_iva) for v in pg.mesi.values())
+            u["mesi"] += list(pg.mesi)
+            u["societa"].add(p.societa)
+            if p.id not in u["progetti"]:
+                u["progetti"].append(p.id)
+    mappa = sc.fornitori or {}
+    t["fornitori"] = (
+        [
+            "fornitore_id",
+            "nome",
+            "codice_esolver",
+            "societa",
+            "n_pagamenti",
+            "totale_lordo",
+            "primo_mese",
+            "ultimo_mese",
+            "progetti",
+        ],
+        [
+            [
+                fid,
+                (mappa.get(fid) or {}).get("nome") or fid,
+                (mappa.get(fid) or {}).get("codice_esolver") or "",
+                (mappa.get(fid) or {}).get("societa")
+                or "/".join(sorted((usi.get(fid) or {}).get("societa", ()))),
+                (usi.get(fid) or {}).get("n", 0),
+                (usi.get(fid) or {}).get("lordo", 0),
+                min((usi.get(fid) or {}).get("mesi") or [""]),
+                max((usi.get(fid) or {}).get("mesi") or [""]),
+                " ".join((usi.get(fid) or {}).get("progetti", [])),
+            ]
+            for fid in sorted(set(mappa) | set(usi))
+        ],
+    )
+
     t["finanziamenti"] = (
         ["finanziamento_id", "nome", "societa", "stato", "mese", "tipo", "importo"],
         [
@@ -347,6 +393,7 @@ def tabelle(payload: dict, documento: dict | None = None) -> dict[str, Tabella]:
 # «aliquota_iva» (una percentuale) con «iva» (un importo).
 DENARO = {
     "saldo",
+    "totale_lordo",
     "saldo_iniziale",
     "saldo_finale",
     "saldo_minimo",

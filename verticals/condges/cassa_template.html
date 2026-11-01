@@ -36,7 +36,7 @@ h3{font-size:14px;font-weight:620;margin:12px 0 6px}
 .bozza-avviso[hidden]{display:none}
 .bozza-avviso .testo{flex:1 1 220px}
 .bozza-avviso button{min-height:32px}
-body.vista-leve .bozza-avviso{position:fixed;left:10px;right:10px;top:calc(var(--leve-top-h,124px) + 6px);z-index:47;margin:0;box-shadow:0 6px 20px rgba(0,0,0,.15)}
+body.vista-leve .bozza-avviso{margin:0 0 10px}
 .minimi{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
 @media (max-width:560px){.minimi{grid-template-columns:1fr}}
 .minimi .saldo{font-size:26px;font-weight:650;margin:2px 0}
@@ -241,8 +241,8 @@ body.vista-leve details.blocco[data-blocco="leve"],body.vista-leve details.blocc
 body.vista-leve details.blocco[data-blocco="leve"]>summary,body.vista-leve details.blocco[data-blocco="calendario"]>summary,body.vista-leve .dentro>h2{display:none}
 body.vista-leve details.blocco[data-blocco="leve"]>.dentro,body.vista-leve details.blocco[data-blocco="calendario"]>.dentro{padding:0}
 body.vista-leve details.blocco[data-blocco="leve"] .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:2px 12px}
-body.vista-leve #scenario,body.vista-leve #progetti,body.vista-leve #finanziamenti,body.vista-leve #correzioni,body.vista-leve details.blocco[data-blocco="calendario"]{display:none}
-body.vista-leve[data-seg="progetti"] #progetti,body.vista-leve[data-seg="finanziamenti"] #finanziamenti,body.vista-leve[data-seg="correzioni"] #correzioni,body.vista-leve[data-seg="scenario"] #scenario{display:block}
+body.vista-leve #scenario,body.vista-leve #progetti,body.vista-leve #finanziamenti,body.vista-leve #correzioni,body.vista-leve #fornitori,body.vista-leve details.blocco[data-blocco="calendario"]{display:none}
+body.vista-leve[data-seg="progetti"] #progetti,body.vista-leve[data-seg="finanziamenti"] #finanziamenti,body.vista-leve[data-seg="correzioni"] #correzioni,body.vista-leve[data-seg="fornitori"] #fornitori,body.vista-leve[data-seg="scenario"] #scenario{display:block}
 body.vista-leve[data-seg="calendario"] details.blocco[data-blocco="calendario"]{display:block}
 /* la lista: una riga per leva, il corpo chiuso; il riepilogo è già la riga */
 body.vista-leve details.leva>summary{padding:10px 0 10px 18px;min-height:44px;box-sizing:border-box;cursor:pointer}
@@ -288,7 +288,7 @@ body.vista-leve details.leva.aperta>.corpo{display:block;padding-left:0}
   <div class="riga1"><button type="button" id="esci-leve" class="indietro" aria-label="torna alla pagina Cassa">‹ Cassa</button><span class="titolo" id="leve-titolo"></span><button type="button" id="leve-salva" class="azione" title="il file .json dello scenario">Salva</button></div>
 </div>
 <nav id="leve-seg" class="leve-seg" hidden aria-label="Sezioni dello scenario">
-  <button type="button" data-seg="progetti" aria-pressed="true">Progetti</button><button type="button" data-seg="finanziamenti" aria-pressed="false">Finanziamenti</button><button type="button" data-seg="correzioni" aria-pressed="false">Voci corrette</button><button type="button" data-seg="calendario" aria-pressed="false">Calendario</button><button type="button" data-seg="scenario" aria-pressed="false">Strumenti</button>
+  <button type="button" data-seg="progetti" aria-pressed="true">Progetti</button><button type="button" data-seg="finanziamenti" aria-pressed="false">Finanziamenti</button><button type="button" data-seg="correzioni" aria-pressed="false">Voci corrette</button><button type="button" data-seg="fornitori" aria-pressed="false">Fornitori</button><button type="button" data-seg="calendario" aria-pressed="false">Calendario</button><button type="button" data-seg="scenario" aria-pressed="false">Strumenti</button>
 </nav>
 <div id="leve-scrim" class="leve-scrim" hidden></div>
 
@@ -315,7 +315,9 @@ body.vista-leve details.leva.aperta>.corpo{display:block;padding-left:0}
     <h2>Finanziamenti</h2>
     <div class="card" id="finanziamenti"></div>
     <h2>Voci del PF corrette</h2>
-    <div class="card" id="correzioni"></div></div>
+    <div class="card" id="correzioni"></div>
+    <h2>Fornitori</h2>
+    <div class="card" id="fornitori"></div></div>
 </details>
   </aside>
 </div>
@@ -908,6 +910,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     s.finanziamenti = (s.finanziamenti || []).map((f) => ({ ...f, erogazioni: f.erogazioni || {}, rate: f.rate || {} }));
     s.canone = s.canone || null;
     s.soglia = s.soglia || 0;
+    s.fornitori = s.fornitori || {};
     return s;
   }
   let stato = { nome: D.seme.nome, scenario: completa(D.seme.scenario), origine: JSON.stringify(completa(D.seme.scenario)) };
@@ -1103,6 +1106,9 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const prog = [];
     for (const p of stato.scenario.progetti) for (const g of p.pagamenti) for (const [m, v] of Object.entries(g.mesi).sort()) if (v) prog.push([p.id, p.nome, p.societa, p.acceso ? "sì" : "no", p.stato, g.nome, g.fornitore_id || "", g.stato, g.aliquota_iva, m, E(v), E(MOTORE.iva(v, g.aliquota_iva)), (g.documenti || []).map((d) => `${d.titolo || ""} ${d.url || ""}`.trim()).join(" | "), p.drive_url || ""]);
     fogli.push({ nome: "Progetti", colonne: ["progetto", "nome", "società", "acceso", "stato", "pagamento", "fornitore", "stato pagamento", "IVA %", "mese", "netto €", "lordo €", "documenti", "cartella Drive"], euro: [10, 11], righe: prog });
+    // Fornitori (stesse colonne della tabella «fornitori» di hotelops cdg tabelle)
+    fogli.push({ nome: "Fornitori", colonne: ["fornitore_id", "nome", "codice_esolver", "società", "n_pagamenti", "totale_lordo €", "primo_mese", "ultimo_mese", "progetti"], euro: [5],
+      righe: fornitoriDelloScenario(stato.scenario).map((f) => [f.id, f.nome, f.codice || "", f.societa, f.n, E(f.lordo), f.primo || "", f.ultimo || "", f.progetti.join(" · ")]) });
     // Finanziamenti
     const fin = [];
     for (const f of stato.scenario.finanziamenti) {
@@ -1780,7 +1786,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
           <details class="sotto" data-k="${kg}" ${aperte.has(kg) ? "open" : ""}><summary>modifica nome, IVA e rate</summary>
             <div class="riga"><input type="text" class="nome" style="flex:1 1 140px" data-campo="nome" value="${esc(g.nome)}"> ${selIva(g.aliquota_iva)}
               <input type="text" class="n" style="width:90px" data-campo="stato" value="${esc(g.stato)}" title="stato">
-              <input type="text" class="n" style="width:90px" data-campo="fornitore_id" value="${esc(g.fornitore_id || "")}" placeholder="fornitore" title="fornitore_id (riconcilia i fatti)"></div>
+              <input type="text" class="n" style="width:110px" data-campo="fornitore_id" value="${esc(g.fornitore_id || "")}" placeholder="fornitore" list="lista-fornitori-id" title="id del fornitore: lo stesso in ogni pagamento, lo trovi nella scheda Fornitori"></div>
             ${bloccoRate(g.mesi, g.aliquota_iva)}
             ${grigliaMesi(g.mesi, "mese")}
             <div class="documenti"><div class="piccolo">documenti (preventivo, contratto, fattura: link Drive)</div>
@@ -1845,7 +1851,73 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     el("correzioni").innerHTML = `${corr || '<div class="nota">nessuna voce corretta: il PF vale così com\'è</div>'}
       <div class="strumenti"><label class="piccolo">voce del PF <select id="corr-voce">${vociPf.map((v) => { const [s, voce, dir] = v.split("|"); return `<option value="${esc(v)}">${esc(s)} · ${esc(etichetta(voce))} (${dir === "E" ? "entrata" : "uscita"})</option>`; }).join("")}</select></label>
         <button id="aggiungi-c">+ correzione</button></div>`;
+    renderFornitori();
     collegaLeve();
+  }
+
+  // ── Il fornitore come oggetto (brief UI, punto 8) ──
+  // Un fornitore è un id scritto in «fornitore» dentro i pagamenti, più una scheda nella mappa dello scenario:
+  // nome, codice Esolver, società, cartella Drive. L'anagrafica Esolver (D.fornitori) serve a riconoscere
+  // il codice da un nome scritto a mano: proposta, mai imposta.
+  const normNome = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9àèéìòù ]+/g, " ").replace(/\b(srl|srls|spa|snc|sas|stp|di|e|the|ditta|societa|società|con|socio|unico|a)\b/g, " ").replace(/\s+/g, " ").trim();
+  function riconosci(nome) {
+    const n = normNome(nome);
+    if (n.length < 4) return null;
+    const ana = D.fornitori || [];
+    const esatti = ana.filter((f) => normNome(f.nome) === n);
+    if (esatti.length === 1) return esatti[0];
+    const parziali = ana.filter((f) => { const m = normNome(f.nome); return m.length >= 5 && (m.includes(n) || n.includes(m)); });
+    if (parziali.length === 1) return parziali[0];
+    // «AMCN» contro «A.M.C.N. COSTRUZIONI»: le sigle si confrontano sul nome grezzo, senza punti né spazi
+    const compat = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const c = compat(nome);
+    const sigle = c.length >= 4 ? ana.filter((f) => compat(f.nome).includes(c)) : [];
+    return sigle.length === 1 ? sigle[0] : null;
+  }
+  function fornitoriDelloScenario(sc) {
+    const mappa = sc.fornitori || {};
+    const usi = {};
+    const vuoto = () => ({ progetti: new Set(), societa: new Set(), lordo: 0, lordoAcceso: 0, n: 0, mesi: [], documenti: 0 });
+    sc.progetti.forEach((p) => p.pagamenti.forEach((g) => {
+      const id = (g.fornitore_id || "").trim();
+      if (!id) return;
+      const u = usi[id] = usi[id] || vuoto();
+      u.progetti.add(p.nome); u.societa.add(p.societa); u.n += 1; u.documenti += (g.documenti || []).length;
+      for (const [m, v] of Object.entries(g.mesi)) { const l = MOTORE.iva(v, g.aliquota_iva); u.lordo += l; if (p.acceso) u.lordoAcceso += l; u.mesi.push(m); }
+    }));
+    const ids = [...new Set([...Object.keys(mappa), ...Object.keys(usi)])].sort((a, b) => ((usi[b] || vuoto()).lordo - (usi[a] || vuoto()).lordo) || a.localeCompare(b));
+    return ids.map((id) => {
+      const f = mappa[id] || {}, u = usi[id] || vuoto(), mesi = u.mesi.sort();
+      return { id, nome: f.nome || id, codice: f.codice_esolver || null, societa: f.societa || [...u.societa].join("/") || "", drive_url: f.drive_url || "",
+        proposto: f.codice_esolver ? null : riconosci(f.nome || id), progetti: [...u.progetti], n: u.n, lordo: u.lordo, lordoAcceso: u.lordoAcceso,
+        primo: mesi[0] || null, ultimo: mesi[mesi.length - 1] || null, documenti: u.documenti };
+    });
+  }
+  const selSocV = (val) => `<select data-vf="societa"><option value="" ${val ? "" : "selected"}>società…</option>${SOC.map((s) => `<option ${s === val ? "selected" : ""}>${s}</option>`).join("")}</select>`;
+  function renderFornitori() {
+    const sc = stato.scenario;
+    sc.fornitori = sc.fornitori || {};
+    const righe = fornitoriDelloScenario(sc);
+    const html = righe.map((f) => { const k = `v:${f.id}`; return `<details class="leva" data-k="${k}" data-v="${esc(f.id)}" ${aperte.has(k) ? "open" : ""}>
+      <summary><span class="nome">${esc(f.nome)}</span>${f.codice ? `<span class="badge" title="codice Esolver">Esolver ${esc(f.codice)}</span>` : f.proposto ? chipStato("da_verificare", `in anagrafica Esolver: ${f.proposto.nome}`, `Esolver? ${f.proposto.codice}`) : chipStato("non_registrato", "nessun codice Esolver: scrivilo o scegli dall'anagrafica", "senza codice")}${f.societa ? `<span class="badge">${esc(f.societa)}</span>` : ""}
+        <span class="num tot">${fmt(f.lordo, false)} €</span><span class="piccolo num">${f.n ? `${f.n} ${f.n === 1 ? "pagamento" : "pagamenti"} in ${f.progetti.length} ${f.progetti.length === 1 ? "progetto" : "progetti"} · ${f.primo === f.ultimo ? meseIt(f.primo) : `${meseIt(f.primo)} – ${meseIt(f.ultimo)}`}${f.lordoAcceso !== f.lordo ? ` · ${fmt(f.lordoAcceso, false)} nei progetti accesi` : ""}` : "nessun pagamento nello scenario"}${f.documenti ? ` · ${f.documenti} doc.` : ""}</span>
+        ${f.drive_url ? `<a class="doc" href="${esc(f.drive_url)}" target="_blank" rel="noopener">Drive</a>` : ""}<button type="button" class="mini apri-leva" data-apri-foglio aria-label="apri">apri ›</button></summary>
+      <div class="corpo">
+        <div class="riga"><input type="text" class="nome" style="flex:1 1 160px" data-vf="nome" value="${esc(f.nome)}" placeholder="nome del fornitore">
+          <label class="piccolo">Esolver <input type="text" class="n" style="width:80px" data-vf="codice_esolver" value="${esc(f.codice || "")}" list="lista-esolver" placeholder="codice"></label>
+          ${f.proposto && !f.codice ? `<button type="button" class="mini" data-vf-usa="${esc(f.proposto.codice)}" title="${esc(f.proposto.nome)}">usa ${esc(f.proposto.codice)} · ${esc(f.proposto.nome)}</button>` : ""}
+          ${selSocV(f.societa)}</div>
+        <div class="riga"><label class="piccolo" style="flex:1 1 220px;display:flex;gap:6px;align-items:center">cartella Drive <input type="url" class="nome" style="flex:1 1 160px" data-vf="drive_url" value="${esc(f.drive_url)}" placeholder="https://drive.google.com/…"></label></div>
+        <div class="piccolo">${f.progetti.length ? `nei progetti: ${f.progetti.map(esc).join(" · ")}` : "non ancora in un pagamento: scrivi il suo id in «fornitore» dentro un pagamento"}</div>
+        <div class="nota">id nei pagamenti: <code>${esc(f.id)}</code> · patti abituali: prossimo passo</div>
+      </div></details>`; }).join("");
+    const ana = D.fornitori || [];
+    el("fornitori").innerHTML = `${html || '<div class="nota">nessun fornitore: compare qui chi è scritto in «fornitore» dentro un pagamento</div>'}
+      <datalist id="lista-esolver">${ana.map((f) => `<option value="${esc(f.codice)}">${esc(f.nome)}${f.societa ? ` · ${esc(f.societa)}` : ""}</option>`).join("")}</datalist>
+      <datalist id="lista-fornitori-id">${righe.map((f) => `<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join("")}</datalist>
+      <datalist id="lista-esolver-nomi">${ana.map((f) => `<option value="${esc(f.nome)}">${esc(f.codice)}${f.societa ? ` · ${esc(f.societa)}` : ""}</option>`).join("")}</datalist>
+      <div class="strumenti"><input type="text" id="nuovo-v" class="nome" style="width:220px" placeholder="nuovo fornitore: nome" list="lista-esolver-nomi"><button id="aggiungi-v">+ fornitore</button>
+        <span class="piccolo">${ana.length ? `anagrafica Esolver: ${ana.length} fornitori` : "anagrafica Esolver non caricata in questa pagina"}</span></div>`;
   }
 
   // Le sostituzioni dello scenario raggruppate per (società, voce), nell'ordine dei mesi.
@@ -1951,6 +2023,39 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       collegaRate(div.querySelector(".rate-f .come"), () => f.rate, (m) => { f.rate = m; }, 0);
     });
     el("aggiungi-f").onclick = () => { const id = `F${Date.now().toString(36)}`; sc.finanziamenti.push({ id, nome: "Nuovo finanziamento", societa: "INTUR", erogazioni: {}, rate: {}, stato: "da verificare" }); aperte.add(`f:${id}`); ricalcola(); };
+    // fornitori
+    el("fornitori").querySelectorAll("details.leva[data-v]").forEach((div) => {
+      const id = div.dataset.v;
+      sc.fornitori = sc.fornitori || {};
+      const f = () => (sc.fornitori[id] = sc.fornitori[id] || {});
+      div.querySelectorAll("[data-vf]").forEach((inp) => {
+        inp.onchange = () => {
+          const v = inp.value.trim(), campo = inp.dataset.vf;
+          if (v) f()[campo] = campo === "codice_esolver" && /^\d+$/.test(v) ? parseInt(v, 10) : v;
+          else { delete f()[campo]; if (!Object.keys(f()).length) delete sc.fornitori[id]; }
+          ricalcola();
+        };
+      });
+      const usa = div.querySelector("button[data-vf-usa]");
+      if (usa) usa.onclick = () => {
+        const c = parseInt(usa.dataset.vfUsa, 10), a = (D.fornitori || []).find((x) => x.codice === c);
+        f().codice_esolver = c;
+        if (a && !f().nome) f().nome = a.nome;
+        if (a && a.societa && !f().societa) f().societa = a.societa;
+        ricalcola();
+      };
+    });
+    el("aggiungi-v").onclick = () => {
+      const nome = el("nuovo-v").value.trim();
+      if (!nome) { el("nuovo-v").focus(); return; }
+      const id = nome.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 24) || `F${Date.now().toString(36)}`;
+      sc.fornitori = sc.fornitori || {};
+      sc.fornitori[id] = sc.fornitori[id] || { nome };
+      const r = riconosci(nome);
+      if (r && !sc.fornitori[id].codice_esolver) { sc.fornitori[id].codice_esolver = r.codice; if (r.societa) sc.fornitori[id].societa = sc.fornitori[id].societa || r.societa; }
+      aperte.add(`v:${id}`);
+      ricalcola();
+    };
     // voci del PF corrette
     const gruppi = gruppiCorrezioni(sc);
     const scrivi = (r, campo, v) => { r[campo] = v; if (campo === "importo") delete r.importo_cent; };
@@ -2164,7 +2269,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   // foglio (telefono) o il pannello a destra (desktop). Il foglio entra dal basso ed esce dal basso; si chiude
   // tirandolo giù — decide la velocità, non la posizione — toccando lo sfondo, o con ✕.
   const vista = { attiva: false, seg: "progetti", apertaK: null, blocchiPrima: null, scroll: 0 };
-  const SEGMENTI = ["progetti", "finanziamenti", "correzioni", "calendario", "scenario"];
+  const SEGMENTI = ["progetti", "finanziamenti", "correzioni", "fornitori", "calendario", "scenario"];
   const largo = () => window.matchMedia("(min-width: 900px)").matches;
   function misuraVista() {
     const h1 = el("leve-top").getBoundingClientRect().height;
@@ -2282,7 +2387,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const titolo = el("leve-titolo");
     if (titolo) titolo.textContent = stato.nome || "Scenario";
     if (!vista.attiva) return;
-    document.querySelectorAll("#progetti details.leva, #finanziamenti details.leva, #correzioni details.leva").forEach((d) => {
+    document.querySelectorAll("#progetti details.leva, #finanziamenti details.leva, #correzioni details.leva, #fornitori details.leva").forEach((d) => {
       const s = d.querySelector(":scope > summary");
       if (!s || s.dataset.vista) return;
       s.dataset.vista = "1";
