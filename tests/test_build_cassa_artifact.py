@@ -965,6 +965,9 @@ def test_template_dividi_unisci_e_documenti_drive():
     # documenti sul pagamento (link Drive) e cartella Drive sul progetto, anche nell'Excel
     assert "data-aggiungi-doc" in html and 'data-campo="drive_url"' in html and 'class="doc"' in html
     assert '"documenti", "cartella Drive"]' in html
+    # anche il finanziamento porta i suoi documenti (relazione notarile, delibera), nella tendina e nell'Excel
+    assert "relazione notarile 22/10/2026" in html and 'f.documenti.push({ titolo: "", url: "" })' in html
+    assert '"importo finanziamento €", "documenti"]' in html
 
 
 def test_template_i_patti_col_fornitore_non_si_chiamano_contratto():

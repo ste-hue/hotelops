@@ -1208,10 +1208,12 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     // Finanziamenti
     const fin = [];
     for (const f of stato.scenario.finanziamenti) {
-      for (const [m, v] of Object.entries(f.erogazioni || {}).sort()) fin.push([f.id, f.nome, f.societa, f.stato, "erogazione (entra)", m, E(v)]);
-      for (const [m, v] of Object.entries(f.rate || {}).sort()) fin.push([f.id, f.nome, f.societa, f.stato, "rata di rimborso (esce)", m, E(v)]);
+      const docs = (f.documenti || []).map((d) => `${d.titolo || ""} ${d.url || ""}`.trim()).join(" | ");
+      const imp = f.importo === undefined || f.importo === null ? "" : E(f.importo);
+      for (const [m, v] of Object.entries(f.erogazioni || {}).sort()) fin.push([f.id, f.nome, f.societa, f.stato, "erogazione (entra)", m, E(v), imp, docs]);
+      for (const [m, v] of Object.entries(f.rate || {}).sort()) fin.push([f.id, f.nome, f.societa, f.stato, "rata di rimborso (esce)", m, E(v), imp, docs]);
     }
-    fogli.push({ nome: "Finanziamenti", colonne: ["id", "nome", "società", "stato", "tipo", "mese", "importo €"], euro: [6], righe: fin });
+    fogli.push({ nome: "Finanziamenti", colonne: ["id", "nome", "società", "stato", "tipo", "mese", "importo €", "importo finanziamento €", "documenti"], euro: [6, 7], righe: fin });
     // Voci del PF corrette (sostituzioni e manuali)
     const corr = (stato.scenario.manuali || []).map((r) => {
       const imp = r.importo_cent !== undefined ? r.importo_cent : r.importo;
@@ -1915,7 +1917,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       const k = `f:${f.id}`;
       const variante = copia(sc); variante.finanziamenti.splice(i, 1);
       return `<details class="leva" data-k="${k}" data-f="${i}" ${aperte.has(k) ? "open" : ""}>
-      <summary><span class="nome">${esc(f.nome)}</span><span class="badge">${esc(f.societa)}</span>${chipStato(statoFin(f.stato), `stato scritto nel documento: ${f.stato}`)}
+      <summary><span class="nome">${esc(f.nome)}</span><span class="badge">${esc(f.societa)}</span>${chipStato(statoFin(f.stato), `stato scritto nel documento: ${f.stato}`)}${(f.documenti || []).filter((d) => d.url).map((d) => `<a class="doc" href="${esc(d.url)}" target="_blank" rel="noopener" title="${esc(d.url)}">📄 ${esc(d.titolo || "documento")}</a>`).join("")}
         <span class="num tot">${fmt(somma(f.erogazioni), false)} €</span><span class="piccolo num">tranche ${periodoDi(f.erogazioni)} · rate ${Object.keys(f.rate).length ? `${fmt(somma(f.rate), false)} (${periodoDi(f.rate)})` : "nessuna nell'orizzonte"}</span>
         ${peso(variante, f.societa, true)}<button type="button" class="mini apri-leva" data-apri-foglio aria-label="apri">apri ›</button></summary>
       <div class="corpo">
@@ -1929,6 +1931,9 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         <div class="riquadro rate"><div class="piccolo"><strong>Quando li restituisci</strong> · rate del mutuo</div>
           ${Object.keys(f.rate).length ? "" : `<div class="avviso-r">${chipStato("non_registrato", "nessuna rata di rimborso scritta nello scenario", "rate non registrate")} entra solo il denaro erogato: il minimo è ottimista</div>`}
           <div class="frase">${esc(comeSiPaga(f.rate, null))}</div><div class="rate-f">${bloccoRate(f.rate, null)}</div>${grigliaMesi(f.rate, "rata")}</div>
+        <div class="documenti"><div class="piccolo">documenti (relazione notarile, delibera, contratto di mutuo: link Drive)</div>
+          ${(f.documenti || []).map((d, di) => `<div class="riga" data-doc="${di}"><input type="text" class="nome" style="flex:1 1 120px" data-doc-titolo value="${esc(d.titolo || "")}" placeholder="titolo, es. relazione notarile 22/10/2026"><input type="url" class="nome" style="flex:2 1 200px" data-doc-url value="${esc(d.url || "")}" placeholder="https://drive.google.com/…"><button type="button" class="mini" data-elimina-doc title="togli il documento" aria-label="togli il documento ${esc(d.titolo || "")}">×</button></div>`).join("")}
+          <button type="button" class="mini" data-aggiungi-doc>+ documento</button></div>
         <div class="nota">al posto delle righe «finanziamenti» del PF di ${esc(f.societa)}</div>
       </div></details>`;
     }).join("");
@@ -2299,6 +2304,13 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       leggiMesi(div, "rata", f.rate);
       collegaTranche(div.querySelector(".riquadro.tranche"), f);
       collegaRate(div.querySelector(".rate-f .come"), () => f.rate, (m) => { f.rate = m; }, 0);
+      div.querySelectorAll(".documenti .riga[data-doc]").forEach((r) => {
+        const d = f.documenti[parseInt(r.dataset.doc, 10)];
+        r.querySelector("input[data-doc-titolo]").onchange = (e) => { d.titolo = e.target.value.trim(); ricalcola(); };
+        r.querySelector("input[data-doc-url]").onchange = (e) => { d.url = e.target.value.trim(); ricalcola(); };
+        r.querySelector("button[data-elimina-doc]").onclick = () => { f.documenti.splice(f.documenti.indexOf(d), 1); if (!f.documenti.length) delete f.documenti; ricalcola(); };
+      });
+      div.querySelector(".documenti button[data-aggiungi-doc]").onclick = () => { f.documenti = f.documenti || []; f.documenti.push({ titolo: "", url: "" }); aperte.add(`f:${f.id}`); renderLeve(); };
     });
     el("aggiungi-f").onclick = () => { const id = `F${Date.now().toString(36)}`; sc.finanziamenti.push({ id, nome: "Nuovo finanziamento", societa: "INTUR", erogazioni: {}, rate: {}, stato: "da verificare" }); aperte.add(`f:${id}`); ricalcola(); };
     // fornitori

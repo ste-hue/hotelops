@@ -91,8 +91,10 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
    rata successiva di quel pagamento). La somma non cambia mai; poi la rata si trascina nel calendario.
    Ogni pagamento può portare i suoi **documenti** (titolo + link Drive: preventivo, contratto,
    fattura), mostrati come chip accanto al nome; ogni progetto la sua **cartella Drive**. Nel documento
-   dello scenario sono campi facoltativi (`documenti` sul pagamento, `drive_url` sul progetto), nelle
-   tabelle BigQuery viaggiano dentro `parametri`; l'Excel li porta nel foglio Progetti.
+   dello scenario sono campi facoltativi (`documenti` sul pagamento e sul finanziamento, `drive_url`
+   sul progetto), nelle tabelle BigQuery viaggiano dentro `parametri`; l'Excel li porta nei fogli
+   Progetti e Finanziamenti. Sul finanziamento il documento tipico è la relazione notarile o la
+   delibera: attesta l'importo e la banca, non le date delle tranche, che restano dichiarate.
 
 10. **Pagamento e «come paghi un fornitore».** Il *pagamento* è la riga con i suoi mesi: è l'unica cosa
     che il calcolo legge. «Come paghi un fornitore» (nel documento: `contratti` del progetto) sono i patti

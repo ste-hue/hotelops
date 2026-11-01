@@ -126,6 +126,8 @@ class Finanziamento:
     # Quanto la banca ha promesso, in centesimi: serve al controllo «erogato X di Y» della pagina.
     # Il calcolo legge solo `erogazioni` e `rate`; None = non registrato.
     importo: int | None = None
+    # Riferimenti (relazione notarile, delibera, contratto di mutuo): [{"titolo", "url"}], memoria dell'interfaccia.
+    documenti: list[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
