@@ -130,6 +130,18 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
     ha la tabella `pf_correzioni` e l'Excel il foglio «PF corretto». Una correzione su un mese fuori dal PF
     non si applica e resta elencata. Si toglie dal file quando il PF di Rosa porta la cifra.
 
+14. **Importa budget** (brief UI, punto 8, ultimo passo). In «Strumenti», «Importa budget (.xlsx/.csv)»
+    legge il file nel browser (zip di SpreadsheetML letto dalla directory centrale, deflate del browser;
+    CSV con «;» o «,» e decimali italiani), sceglie il foglio con più importi, indovina le colonne dalle
+    parole della riga di testa (fornitore · area di intervento/opera · totale/importo · note, tutte
+    cambiabili) e mostra l'**anteprima** prima di applicare: per ogni riga il fornitore riconosciuto
+    (scheda già nello scenario → «scheda»; anagrafica Esolver → «Esolver? codice»; altrimenti «nuovo»; vuoto
+    o TBD → «senza fornitore»), l'importo netto e **come si paga** (dai patti abituali del fornitore se ci
+    sono, altrimenti una rata al mese scelto). Le righe di totale, imprevisti e IVA si saltano da sole; ogni
+    riga si accende o spegne. «Aggiungi N pagamenti» li mette nel progetto scelto (o in uno nuovo, spento)
+    con stato «ipotesi», crea le schede dei fornitori nuovi col codice se riconosciuto, e la bozza resta nel
+    browser come sempre. Il foglio di Drive «Budget interno terzo piano» (per opera) si importa così com'è.
+
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 
 1. Intake + promote del file (policy AUTO):

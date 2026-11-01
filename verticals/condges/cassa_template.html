@@ -112,6 +112,13 @@ details.sotto>summary{font-size:12px;color:var(--accent)}
 .mesi .op{padding:0 6px;min-height:24px;min-width:24px;font-size:12px;line-height:22px;color:var(--muted)}
 .doc{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--accent);text-decoration:none;margin-left:4px;max-width:220px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;white-space:nowrap}
 .documenti{margin-top:6px}
+.budget{margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.budget[hidden]{display:none}
+.budget table{font-size:12px}
+.budget td,.budget th{text-align:left;padding:4px 6px}
+.budget td.num,.budget th.num{text-align:right}
+.budget .salta td{color:var(--muted);text-decoration:line-through}
+.budget .wrap{overflow-x:auto;margin-top:6px}
 .pf-corretto{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:4px 0 10px;background:var(--soft)}
 .pf-corretto .riga .nome{font-weight:600}
 .pag .mesi input{width:92px;text-align:right;font-size:12px;padding:3px 5px}
@@ -859,7 +866,89 @@ const EXCEL = (() => {
     ];
     return zip(files, quando);
   }
-  return { costruisci, crc32, nomeFoglio, colonna };
+  // ── Lettura: un .xlsx (zip di SpreadsheetML) o un .csv diventano fogli di righe. Nessuna libreria:
+  //    lo zip si legge dalla directory centrale, il deflate lo fa DecompressionStream del browser. ──
+  const dec = new TextDecoder();
+  async function gonfia(bytes, metodo) {
+    if (metodo === 0) return bytes;
+    if (metodo !== 8) throw new Error(`zip: metodo di compressione ${metodo} non gestito`);
+    const ds = new DecompressionStream("deflate-raw");
+    return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer());
+  }
+  async function apriZip(buf) {
+    const b = new Uint8Array(buf), dv = new DataView(buf);
+    let eocd = -1;
+    for (let i = b.length - 22; i >= Math.max(0, b.length - 70000); i--) { if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; } }
+    if (eocd < 0) throw new Error("non è un file .xlsx (zip senza directory centrale)");
+    const n = dv.getUint16(eocd + 10, true), cd = dv.getUint32(eocd + 16, true);
+    const voci = {};
+    let p = cd;
+    for (let k = 0; k < n; k++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) throw new Error("zip: directory centrale corrotta");
+      const metodo = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), nlen = dv.getUint16(p + 28, true), elen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+      const nome = dec.decode(b.subarray(p + 46, p + 46 + nlen));
+      const lnlen = dv.getUint16(off + 26, true), lelen = dv.getUint16(off + 28, true), inizio = off + 30 + lnlen + lelen;
+      voci[nome] = { metodo, dati: b.subarray(inizio, inizio + csize) };
+      p += 46 + nlen + elen + clen;
+    }
+    return async (nome) => { const v = voci[nome]; if (!v) return null; return dec.decode(await gonfia(v.dati, v.metodo)); };
+  }
+  const xmlDoc = (s) => new DOMParser().parseFromString(s, "application/xml");
+  const colIndice = (ref) => { let n = 0; for (const ch of ref.replace(/[0-9]+$/, "")) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; };
+  async function leggiXlsx(buf) {
+    const file = await apriZip(buf);
+    const wb = xmlDoc(await file("xl/workbook.xml"));
+    const rels = xmlDoc((await file("xl/_rels/workbook.xml.rels")) || "<Relationships/>");
+    const target = {};
+    for (const r of rels.getElementsByTagName("Relationship")) target[r.getAttribute("Id")] = r.getAttribute("Target");
+    const ssXml = await file("xl/sharedStrings.xml");
+    const ss = [];
+    if (ssXml) for (const si of xmlDoc(ssXml).getElementsByTagName("si")) ss.push([...si.getElementsByTagName("t")].map((t) => t.textContent).join(""));
+    const fogli = [];
+    for (const sh of wb.getElementsByTagName("sheet")) {
+      const rid = sh.getAttribute("r:id") || sh.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id");
+      let t = target[rid] || ""; if (t.startsWith("/")) t = t.slice(1); else if (!t.startsWith("xl/")) t = "xl/" + t;
+      const xml = await file(t); if (!xml) continue;
+      const righe = [];
+      for (const row of xmlDoc(xml).getElementsByTagName("row")) {
+        const r = [];
+        for (const c of row.getElementsByTagName("c")) {
+          const ref = c.getAttribute("r") || "", tipo = c.getAttribute("t") || "", v = c.getElementsByTagName("v")[0], is = c.getElementsByTagName("is")[0];
+          let val = null;
+          if (tipo === "s" && v) val = ss[parseInt(v.textContent, 10)] ?? "";
+          else if (tipo === "inlineStr" && is) val = [...is.getElementsByTagName("t")].map((x) => x.textContent).join("");
+          else if (tipo === "b" && v) val = v.textContent === "1";
+          else if (v) { const num = Number(v.textContent); val = tipo === "str" || Number.isNaN(num) ? v.textContent : num; }
+          r[ref ? colIndice(ref) : r.length] = val;
+        }
+        righe.push(r);
+      }
+      fogli.push({ nome: sh.getAttribute("name") || t, righe });
+    }
+    return fogli;
+  }
+  // CSV: «;» o «,» come separatore (si guarda la prima riga), virgolette raddoppiate, decimali con la virgola.
+  function leggiCsv(testo) {
+    const sep = (testo.split(/\r?\n/)[0].match(/;/g) || []).length >= (testo.split(/\r?\n/)[0].match(/,/g) || []).length ? ";" : ",";
+    const righe = []; let riga = [], campo = "", dentro = false;
+    for (let i = 0; i < testo.length; i++) {
+      const ch = testo[i];
+      if (dentro) { if (ch === '"') { if (testo[i + 1] === '"') { campo += '"'; i++; } else dentro = false; } else campo += ch; }
+      else if (ch === '"') dentro = true;
+      else if (ch === sep) { riga.push(campo); campo = ""; }
+      else if (ch === "\n") { riga.push(campo); righe.push(riga); riga = []; campo = ""; }
+      else if (ch !== "\r") campo += ch;
+    }
+    if (campo !== "" || riga.length) { riga.push(campo); righe.push(riga); }
+    const num = (s) => { const t = String(s).trim(); if (!/^-?[\d.,]+$/.test(t)) return s; const k = t.includes(",") && (t.lastIndexOf(",") > t.lastIndexOf(".")) ? t.replace(/\./g, "").replace(",", ".") : t.replace(/,/g, ""); const n = Number(k); return Number.isNaN(n) ? s : n; };
+    return [{ nome: "CSV", righe: righe.map((r) => r.map(num)) }];
+  }
+  async function leggi(file) {
+    const nome = (file.name || "").toLowerCase();
+    if (nome.endsWith(".csv") || nome.endsWith(".txt")) return leggiCsv(await file.text());
+    return leggiXlsx(await file.arrayBuffer());
+  }
+  return { costruisci, crc32, nomeFoglio, colonna, leggi, leggiCsv, leggiXlsx, colIndice };
 })();
 if (typeof module !== "undefined") module.exports = EXCEL;
 </script>
@@ -1012,7 +1101,9 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       <label class="piccolo">Soglia € <input type="text" class="eur" id="soglia"></label>
       <button id="esporta" class="primario" title="il file .json dello scenario: si riapre con «Apri scenario»">Salva scenario (.json)</button>
       <button id="esporta-excel" title="un file con nove fogli dello scenario in vista: minimi, saldi mese per mese, calendario, canone, progetti, finanziamenti, voci corrette, PF, fonti">Excel (.xlsx)</button>
-      <button id="importa">Apri scenario (.json)</button><input type="file" id="importa-file" accept=".json,application/json" hidden></div>`;
+      <button id="importa">Apri scenario (.json)</button><input type="file" id="importa-file" accept=".json,application/json" hidden>
+      <button id="importa-budget" title="un foglio del budget (.xlsx o .csv) diventa pagamenti proposti, fornitore per fornitore, con i patti abituali">Importa budget (.xlsx/.csv)</button><input type="file" id="budget-file" accept=".xlsx,.csv,.txt" hidden></div>
+      <div id="budget-pannello" class="budget" hidden></div>`;
     const s0 = el("sel-scenari");
     for (const s of tutti) {
       const o = document.createElement("option");
@@ -1047,6 +1138,9 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     el("esporta").onclick = esporta;
     el("esporta-excel").onclick = esportaExcel;
     el("importa").onclick = () => el("importa-file").click();
+    el("importa-budget").onclick = () => el("budget-file").click();
+    el("budget-file").onchange = async (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) await apriBudget(f); };
+    if (budget.fogli) renderBudget();
     el("importa-file").onchange = async (e) => {
       const file = e.target.files[0];
       e.target.value = "";
@@ -1877,6 +1971,135 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     renderFornitori();
     collegaLeve();
     ricordaBozza();  // anche le modifiche ai patti (che ridisegnano senza ricalcolare) finiscono nella bozza
+  }
+
+  // ── Importa budget (brief UI, punto 8, ultimo passo): «ti metto il budget, tu riconosci i fornitori» ──
+  // Un foglio con una riga per opera (fornitore · area · totale) diventa pagamenti proposti in un progetto:
+  // il fornitore si riconosce (scheda esistente, anagrafica Esolver, o nuovo id), i mesi vengono dai patti
+  // abituali se ci sono, altrimenti una rata al mese scelto. Si vede tutto PRIMA di applicare; ogni riga si
+  // può spegnere; le righe di totale e IVA si saltano da sole. Stato «ipotesi»: è un budget, non un impegno.
+  const budget = { file: "", fogli: null, foglio: 0, testa: 0, colonne: {}, progetto: "", mese: null, iva: 22, righe: [] };
+  const PAROLE_SALTA = /^(totale|subtotale|imprevisti|iva\b|cuscinetto|media|controllo|camera tipo|lettura)/i;
+  const normTesta = (s) => String(s ?? "").toLowerCase().replace(/[^a-zà-ù0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  function indovinaColonne(righe) {
+    // la riga di testa è la prima con almeno tre celle di testo; le colonne si riconoscono dalle parole
+    let testa = 0;
+    for (let i = 0; i < Math.min(righe.length, 30); i++) { if ((righe[i] || []).filter((c) => typeof c === "string" && c.trim()).length >= 3) { testa = i; break; } }
+    const t = (righe[testa] || []).map(normTesta);
+    const trova = (...parole) => { for (const p of parole) { const i = t.findIndex((x) => x === p || x.includes(p)); if (i >= 0) return i; } return -1; };
+    return { testa, colonne: {
+      fornitore: trova("fornitore", "ditta", "impresa", "beneficiario"),
+      opera: trova("area di intervento", "opera", "lavorazione", "descrizione", "voce", "articolo", "oggetto"),
+      importo: trova("totale", "importo", "netto", "budget", "prezzo"),
+      note: trova("note", "nota"),
+    } };
+  }
+  async function apriBudget(file) {
+    try {
+      budget.fogli = await EXCEL.leggi(file);
+    } catch (e) { mostraErrore(`Importa budget «${file.name}»: ${e.message}`); return; }
+    budget.file = file.name;
+    // il foglio buono è quello con più righe che hanno un numero in una colonna «totale/importo»
+    let migliore = 0, punti = -1;
+    budget.fogli.forEach((f, i) => { const g = indovinaColonne(f.righe); const n = f.righe.filter((r) => typeof r[g.colonne.importo] === "number").length; if (g.colonne.importo >= 0 && n > punti) { punti = n; migliore = i; } });
+    scegliFoglioBudget(migliore);
+    budget.progetto = budget.progetto || (stato.scenario.progetti[0] || {}).id || "";
+    budget.mese = budget.mese || D.mesi[0];
+    renderBudget();
+    el("budget-pannello").scrollIntoView({ behavior: ridotto() ? "auto" : "smooth", block: "start" });
+  }
+  function scegliFoglioBudget(i) {
+    budget.foglio = i;
+    const g = indovinaColonne(budget.fogli[i].righe);
+    budget.testa = g.testa; budget.colonne = g.colonne;
+    preparaRigheBudget();
+  }
+  const slugId = (nome) => String(nome || "").toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 24);
+  function riconosciFornitoreBudget(nome) {
+    const n = String(nome || "").trim();
+    if (!n || /^(tbd|n\.?d\.?|da definire|-|—)$/i.test(n)) return { id: "", nome: n, stato: "non_registrato", perche: "fornitore non indicato nel budget" };
+    const mappa = stato.scenario.fornitori || {};
+    const cNome = n.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const gia = Object.entries(mappa).find(([id, f]) => id === slugId(n) || String(f.nome || "").toLowerCase().replace(/[^a-z0-9]+/g, "") === cNome);
+    if (gia) return { id: gia[0], nome: gia[1].nome || gia[0], stato: "attestato", perche: "scheda già nello scenario", patti: gia[1].patti || null };
+    const inUso = new Set(stato.scenario.progetti.flatMap((p) => p.pagamenti.map((g) => g.fornitore_id)).filter(Boolean));
+    if (inUso.has(slugId(n))) return { id: slugId(n), nome: n, stato: "dichiarato", perche: "id già usato nei pagamenti" };
+    const r = riconosci(n);
+    if (r) return { id: slugId(n), nome: n, stato: "da_verificare", perche: `in anagrafica Esolver: ${r.nome} (${r.codice})`, codice: r.codice, societa: r.societa };
+    return { id: slugId(n), nome: n, stato: "dichiarato", perche: "nuovo: nessuna corrispondenza in anagrafica" };
+  }
+  function preparaRigheBudget() {
+    const f = budget.fogli[budget.foglio]; const c = budget.colonne;
+    budget.righe = [];
+    f.righe.slice(budget.testa + 1).forEach((r, i) => {
+      const fornitore = c.fornitore >= 0 ? String(r[c.fornitore] ?? "").trim() : "";
+      const opera = c.opera >= 0 ? String(r[c.opera] ?? "").trim() : "";
+      const imp = c.importo >= 0 ? r[c.importo] : null;
+      const importo = typeof imp === "number" ? Math.round(imp * 100) : null;
+      const testo = `${fornitore} ${opera}`.trim();
+      const salta = !importo || !testo || PAROLE_SALTA.test(opera) || PAROLE_SALTA.test(fornitore) || (!fornitore && PAROLE_SALTA.test(opera));
+      budget.righe.push({ n: budget.testa + i + 2, fornitore, opera, importo, note: c.note >= 0 ? String(r[c.note] ?? "") : "", attiva: !salta, salta, ric: riconosciFornitoreBudget(fornitore) });
+    });
+  }
+  function pianoRigaBudget(riga) {
+    // i mesi: dai patti abituali del fornitore se ci sono; altrimenti una rata al mese scelto
+    const p = riga.ric.patti;
+    if (p) {
+      try { const c = contrattoDaPatti(p, budget.mese, riga.ric.id, riga.importo); const pag = FORMATO.pagamentiDaContratto(c, D.mesi); return { pagamenti: pag.map((g) => ({ ...g, nome: `${riga.opera || riga.fornitore} · ${g.nome.replace(/^[^·]+· /, "")}`.slice(0, 80), stato: "ipotesi" })), come: `patti abituali: ${riassuntoPatti(p)}` }; } catch (e) { /* patti non applicabili qui: cade sulla rata unica */ }
+    }
+    return { pagamenti: [{ nome: riga.opera || riga.fornitore, mesi: { [budget.mese]: riga.importo }, aliquota_iva: budget.iva, stato: "ipotesi", fornitore_id: riga.ric.id || null }], come: `una rata a ${meseIt(budget.mese)}` };
+  }
+  function renderBudget() {
+    const box = el("budget-pannello");
+    if (!budget.fogli) { box.hidden = true; return; }
+    box.hidden = false;
+    const f = budget.fogli[budget.foglio];
+    const testa = f.righe[budget.testa] || [];
+    const selCol = (chiave) => `<select data-bcol="${chiave}"><option value="-1">—</option>${testa.map((x, i) => `<option value="${i}" ${budget.colonne[chiave] === i ? "selected" : ""}>${esc(String(x ?? `colonna ${i + 1}`))}</option>`).join("")}</select>`;
+    const attive = budget.righe.filter((r) => r.attiva);
+    const totale = attive.reduce((s, r) => s + r.importo, 0);
+    const nPag = attive.reduce((s, r) => s + pianoRigaBudget(r).pagamenti.length, 0);
+    const prog = stato.scenario.progetti;
+    box.innerHTML = `<div class="riga"><strong>Importa budget</strong> <span class="piccolo">${esc(budget.file)}</span>
+        ${budget.fogli.length > 1 ? `<label class="piccolo">foglio <select id="budget-foglio">${budget.fogli.map((x, i) => `<option value="${i}" ${i === budget.foglio ? "selected" : ""}>${esc(x.nome)}</option>`).join("")}</select></label>` : ""}
+        <button type="button" class="mini" id="budget-chiudi">chiudi</button></div>
+      <div class="riga piccolo">colonne: fornitore ${selCol("fornitore")} opera ${selCol("opera")} importo netto ${selCol("importo")} note ${selCol("note")}</div>
+      <div class="riga piccolo">nel progetto <select id="budget-progetto">${prog.map((p) => `<option value="${esc(p.id)}" ${p.id === budget.progetto ? "selected" : ""}>${esc(p.nome)}</option>`).join("")}<option value="__nuovo" ${budget.progetto === "__nuovo" ? "selected" : ""}>nuovo progetto dal file</option></select>
+        inizio ${selMesi(budget.mese, "sel-budget-mese")} IVA <select id="budget-iva">${[0, 10, 22].map((a) => `<option value="${a}" ${a === budget.iva ? "selected" : ""}>${a}%</option>`).join("")}</select></div>
+      <div class="wrap"><table><thead><tr><th></th><th>riga</th><th>fornitore</th><th>riconosciuto</th><th>opera</th><th class="num">netto</th><th>come si paga</th></tr></thead><tbody>
+        ${budget.righe.map((r, i) => `<tr class="${r.attiva ? "" : "salta"}"><td><input type="checkbox" data-briga="${i}" ${r.attiva ? "checked" : ""} ${r.importo ? "" : "disabled"}></td><td class="piccolo">${r.n}</td><td>${esc(r.fornitore || "—")}</td>
+          <td>${r.ric.id ? `<code>${esc(r.ric.id)}</code> ` : ""}${chipStato(r.ric.stato, r.ric.perche, r.ric.stato === "attestato" ? "scheda" : r.ric.stato === "da_verificare" ? `Esolver? ${r.ric.codice}` : r.ric.stato === "non_registrato" ? "senza fornitore" : "nuovo")}</td>
+          <td>${esc(r.opera)}${r.note ? `<div class="piccolo">${esc(r.note)}</div>` : ""}</td><td class="num">${r.importo === null ? "—" : fmt(r.importo, false)}</td><td class="piccolo">${r.attiva ? esc(pianoRigaBudget(r).come) : "saltata"}</td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="riga"><button type="button" class="primario" id="budget-applica" ${attive.length ? "" : "disabled"}>Aggiungi ${attive.length} ${attive.length === 1 ? "riga" : "righe"} · ${nPag} ${nPag === 1 ? "pagamento" : "pagamenti"} · ${fmt(totale, false)} netto</button>
+        <span class="piccolo">stato «ipotesi»; i fornitori nuovi ricevono una scheda (col codice Esolver se riconosciuto); poi si raffina: dividi, patti, documenti</span></div>`;
+    box.querySelectorAll("select[data-bcol]").forEach((s) => { s.onchange = () => { budget.colonne[s.dataset.bcol] = parseInt(s.value, 10); preparaRigheBudget(); renderBudget(); }; });
+    const sf = el("budget-foglio"); if (sf) sf.onchange = () => { scegliFoglioBudget(parseInt(sf.value, 10)); renderBudget(); };
+    el("budget-progetto").onchange = (e) => { budget.progetto = e.target.value; };
+    box.querySelector("select.sel-budget-mese").onchange = (e) => { budget.mese = e.target.value; renderBudget(); };
+    el("budget-iva").onchange = (e) => { budget.iva = parseInt(e.target.value, 10); renderBudget(); };
+    box.querySelectorAll("input[data-briga]").forEach((cb) => { cb.onchange = () => { budget.righe[+cb.dataset.briga].attiva = cb.checked; renderBudget(); }; });
+    el("budget-chiudi").onclick = () => { budget.fogli = null; renderBudget(); };
+    el("budget-applica").onclick = applicaBudget;
+  }
+  function applicaBudget() {
+    const sc = stato.scenario;
+    sc.fornitori = sc.fornitori || {};
+    let p = sc.progetti.find((x) => x.id === budget.progetto);
+    if (!p) {
+      const id = `P${Date.now().toString(36)}`;
+      p = { id, nome: `Budget · ${budget.file.replace(/\.(xlsx|csv|txt)$/i, "")}`.slice(0, 60), societa: "INTUR", acceso: false, stato: "ipotesi", pagamenti: [], contratti: [] };
+      sc.progetti.push(p);
+      aperte.add(`p:${id}`);
+    }
+    let n = 0;
+    for (const r of budget.righe.filter((x) => x.attiva)) {
+      if (r.ric.id && !sc.fornitori[r.ric.id]) { sc.fornitori[r.ric.id] = { nome: r.ric.nome }; if (r.ric.codice) { sc.fornitori[r.ric.id].codice_esolver = r.ric.codice; if (r.ric.societa) sc.fornitori[r.ric.id].societa = r.ric.societa; } }
+      for (const g of pianoRigaBudget(r).pagamenti) { const riga = Object.assign({}, g, { documenti: [] }); p.pagamenti.push(riga); n += 1; }
+    }
+    avvisa(`${n} ${n === 1 ? "pagamento aggiunto" : "pagamenti aggiunti"} a «${p.nome}» dal budget ${budget.file}`);
+    budget.fogli = null;
+    ricalcola();
   }
 
   // ── Il fornitore come oggetto (brief UI, punto 8) ──

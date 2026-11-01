@@ -1044,6 +1044,38 @@ def test_template_mostra_il_pf_corretto_come_dichiarato():
     assert 'chipStato("dichiarato", `${c.dichiarato_da ? `dichiarato da ${c.dichiarato_da}`' in html
 
 
+def test_template_importa_budget_e_lettore_xlsx():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    # il lettore: zip dalla directory centrale, deflate del browser, shared strings, inlineStr, csv con «;» o «,»
+    for pezzo in ("async function leggiXlsx(buf)", "function leggiCsv(testo)", 'new DecompressionStream("deflate-raw")', "xl/sharedStrings.xml", "leggi, leggiCsv, leggiXlsx, colIndice"):
+        assert pezzo in html, pezzo
+    # l'import: bottone, pannello, colonne indovinate dalle parole, righe di totale saltate, anteprima prima di applicare
+    for pezzo in ('id="importa-budget"', 'id="budget-pannello"', "function indovinaColonne(righe)", "const PAROLE_SALTA", "function riconosciFornitoreBudget(nome)", "function pianoRigaBudget(riga)", 'id="budget-applica"'):
+        assert pezzo in html, pezzo
+    # i mesi dai patti abituali se ci sono, altrimenti una rata al mese scelto; stato «ipotesi»
+    assert "contrattoDaPatti(p, budget.mese, riga.ric.id, riga.importo)" in html and 'stato: "ipotesi", fornitore_id: riga.ric.id || null' in html
+
+
+def test_lettore_csv_e_colonne_xlsx_in_node(tmp_path):
+    # Le parti pure del lettore girano in node: csv con «;» e decimali italiani, indice di colonna da «AB7».
+    if NODE is None:
+        pytest.skip("node non installato")
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    js = re.search(r'<script id="excel">(.*?)</script>', html, re.DOTALL).group(1)
+    (tmp_path / "excel.js").write_text(js, encoding="utf-8")
+    (tmp_path / "run.js").write_text(
+        'const E=require("./excel.js");'
+        'const f=E.leggiCsv("Fornitore;Area;Totale\\nAMCN;Edile;\\"470.000,00\\"\\nSTE;Impianti;180000\\n");'
+        'console.log(JSON.stringify([f[0].righe, E.colIndice("A1"), E.colIndice("AB7")]));',
+        encoding="utf-8",
+    )
+    r = subprocess.run([NODE, "run.js"], cwd=tmp_path, capture_output=True, text=True, check=False)
+    assert r.returncode == 0, r.stderr
+    righe, a, ab = json.loads(r.stdout)
+    assert righe == [["Fornitore", "Area", "Totale"], ["AMCN", "Edile", 470000], ["STE", "Impianti", 180000]]
+    assert (a, ab) == (0, 27)
+
+
 def test_template_trascina_con_soglia_presa_e_volo():
     html = render_html(build_payload(snapshot_sintetico(), []))
     assert "touch-action:pan-y" in html, "lo scorrimento verticale resta al browser"
