@@ -256,3 +256,31 @@ def test_la_tabella_fornitori_aggrega_i_pagamenti_per_fornitore(payload_con_seme
         formatta(colonne, per_id["F0"])[5].endswith(",00")
         or "," in formatta(colonne, per_id["F0"])[5]
     )
+
+
+def test_i_patti_abituali_si_leggono_in_una_riga():
+    from verticals.condges.cassa_tabelle import _riassunto_patti
+
+    sal = {
+        "modo": "sal",
+        "aliquota_iva": 0,
+        "anticipo_pct": 15,
+        "anticipo_dopo": 0,
+        "sal_modo": "n",
+        "sal_n": 5,
+        "sal_passo": 1,
+        "sal_dopo": 1,
+        "ritenuta_pct": 10,
+        "svincolo_dopo": 7,
+    }
+    assert (
+        _riassunto_patti(sal)
+        == "anticipo 15% all'inizio · 5 SAL ogni mese · da 1 mese dopo l'inizio · ritenuta 10% svincolata 7 mesi dopo l'inizio · IVA 0%"
+    )
+    perc = {
+        "modo": "percentuali",
+        "aliquota_iva": 22,
+        "quote": [{"pct": 40, "dopo": 0}, {"pct": 60, "dopo": 2}],
+    }
+    assert _riassunto_patti(perc) == "40% all'inizio · 60% 2 mesi dopo l'inizio"
+    assert _riassunto_patti(None) == ""
