@@ -333,9 +333,29 @@ def tabelle(payload: dict, documento: dict | None = None) -> dict[str, Tabella]:
     )
 
     t["finanziamenti"] = (
-        ["finanziamento_id", "nome", "societa", "stato", "mese", "tipo", "importo"],
         [
-            [f.id, f.nome, f.societa, f.stato, mese, tipo, imp]
+            "finanziamento_id",
+            "nome",
+            "societa",
+            "stato",
+            "mese",
+            "tipo",
+            "importo",
+            "importo_finanziamento",
+            "documenti",
+        ],
+        [
+            [
+                f.id,
+                f.nome,
+                f.societa,
+                f.stato,
+                mese,
+                tipo,
+                imp,
+                f.importo,
+                _documenti(f.documenti),
+            ]
             for f in sc.finanziamenti
             for tipo, voci in (("erogazione", f.erogazioni), ("rata", f.rate))
             for mese, imp in sorted(voci.items())
@@ -441,7 +461,15 @@ DENARO = {
     "lordo_nel_pf",
     "netto_da_contratto",
     "lordo_da_contratto",
+    "importo_finanziamento",
 }
+
+
+def _documenti(docs: list[dict] | None) -> str:
+    """I riferimenti (titolo + link Drive) in una cella, separati da « | », come nel foglio Excel."""
+    return " | ".join(
+        f"{d.get('titolo') or ''} {d.get('url') or ''}".strip() for d in (docs or [])
+    )
 
 
 def _riassunto_patti(p: dict | None) -> str:

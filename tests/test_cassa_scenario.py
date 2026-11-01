@@ -276,6 +276,22 @@ def test_documenti_e_cartella_drive_sopravvivono_a_json_e_righe():
     assert "drive_url" not in j0 and all("documenti" not in g for g in j0["pagamenti"])
 
 
+def test_documenti_del_finanziamento_sopravvivono_a_json_e_righe():
+    # Il mutuo porta i suoi riferimenti (relazione notarile, delibera): stessa forma dei documenti del pagamento.
+    sc, base = scenario_sintetico()
+    docs = [{"titolo": "relazione notarile 22/10/2026", "url": "https://drive.google.com/file/d/abc/view"}]
+    con = replace(sc, finanziamenti=[replace(sc.finanziamenti[0], documenti=docs)])
+    doc = scenario_to_json(con, base)
+    assert json.loads(doc)["scenario"]["finanziamenti"][0]["documenti"] == docs
+    sc2, _, _ = scenario_from_json(doc)
+    assert sc2 == con
+    s, f, pg = righe_p(doc, "rid", datetime(2026, 10, 31, tzinfo=UTC), "stefano")
+    ((sc3, _, _),) = scenario_da_righe(s, f, pg)
+    assert sc3 == con
+    # senza riferimenti il documento non cambia forma
+    assert "documenti" not in json.loads(scenario_to_json(sc, base))["scenario"]["finanziamenti"][0]
+
+
 def test_la_mappa_fornitori_sopravvive_a_json_e_righe():
     sc, base = scenario_sintetico()
     forn = {"AMCN": {"nome": "A.M.C.N. Costruzioni", "codice_esolver": 1576, "societa": "INTUR", "drive_url": "https://drive.google.com/drive/folders/x"}}
