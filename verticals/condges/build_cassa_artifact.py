@@ -417,11 +417,12 @@ def _limiti_pf_corretto(correzioni: list[dict]) -> list[str]:
     if not fatte:
         return []
     chi = sorted({c["dichiarato_da"] for c in fatte if c["dichiarato_da"]})
-    return [
+    testo = (
         f"PF corretto: {len(fatte)} {'voce' if len(fatte) == 1 else 'voci'} del PF "
         f"{'dichiarate da ' + ', '.join(chi) if chi else 'dichiarate'} al posto del file di Rosa, "
         "per tutti gli scenari (anche Solo PF). Si tolgono dal file pf_corretto.json quando il PF le porta."
-    ]
+    )
+    return [testo]
 
 
 def build_payload(

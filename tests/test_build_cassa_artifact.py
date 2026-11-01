@@ -10,10 +10,10 @@ import pytest
 
 from tests.test_cassa_scenario import scenario_sintetico
 from verticals.condges.build_cassa_artifact import (
-    applica_pf_corretto,
     KV_DATA_KEY,
     KV_KEY,
     PUSH_ENV_VARS,
+    applica_pf_corretto,
     build_payload,
     input_da_dict,
     input_da_snapshot,
