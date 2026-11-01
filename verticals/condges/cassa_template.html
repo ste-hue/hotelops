@@ -31,6 +31,12 @@ h3{font-size:14px;font-weight:620;margin:12px 0 6px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0;overflow-x:auto}
 .invalid{border-color:var(--bad);background:var(--bad-bg)}
 .errore{margin-top:10px;padding:8px 12px;border-radius:8px;background:var(--bad-bg);color:var(--bad);font-size:13px}
+/* La bozza che il browser ha ricordato: una riga, due scelte. */
+.bozza-avviso{margin-top:10px;padding:8px 12px;border-radius:8px;background:var(--warn-bg);color:var(--ink);font-size:13px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.bozza-avviso[hidden]{display:none}
+.bozza-avviso .testo{flex:1 1 220px}
+.bozza-avviso button{min-height:32px}
+body.vista-leve .bozza-avviso{position:fixed;left:10px;right:10px;top:calc(var(--leve-top-h,124px) + 6px);z-index:47;margin:0;box-shadow:0 6px 20px rgba(0,0,0,.15)}
 .minimi{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
 @media (max-width:560px){.minimi{grid-template-columns:1fr}}
 .minimi .saldo{font-size:26px;font-weight:650;margin:2px 0}
@@ -273,6 +279,7 @@ body.vista-leve details.leva.aperta>.corpo{display:block;padding-left:0}
   <p class="sub" id="sub"></p>
 </header>
 <div id="errore" class="errore" hidden></div>
+<div id="bozza-avviso" class="bozza-avviso" hidden role="status"></div>
 
 <nav class="scelta" id="scelta-scenario" aria-label="Scegli lo scenario"></nav>
 <section class="minimi" id="minimi"></section>
@@ -927,7 +934,43 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     }
     mostraErrore("");
     render(opts);
+    ricordaBozza();
   }
+
+  // ── La bozza nel browser (brief UI, punto 9) ──
+  // Ogni pubblicazione rigenera la pagina dal seme: quello che si scrive a mano nel browser senza «Salva
+  // scenario» sparirebbe al ricaricamento. Qui il browser la ricorda da solo (solo in questo browser, solo
+  // per questa base PF) e al ricaricamento la ripropone: «Riprendi» o «Scarta». Un posto solo: l'ultima
+  // bozza modificata. Se il browser non ha memoria (navigazione privata), avvisa prima di chiudere.
+  const CHIAVE_BOZZA = "cdg-cassa-bozza";
+  const modificato = () => JSON.stringify(stato.scenario) !== stato.origine;
+  let memoriaOk = true;
+  function ricordaBozza() {
+    if (!modificato()) return;
+    const doc = { schema: D.schema, nome: stato.nome, salvato_il: new Date().toISOString(), base: D.base, scenario: { ...stato.scenario, nome: stato.nome }, chiave: stato.chiave || "seme", salvata: false };
+    try { localStorage.setItem(CHIAVE_BOZZA, JSON.stringify(doc)); memoriaOk = true; } catch (e) { memoriaOk = false; }
+  }
+  function bozzaRicordata() {
+    try { const raw = localStorage.getItem(CHIAVE_BOZZA); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+  }
+  function scartaBozza() { try { localStorage.removeItem(CHIAVE_BOZZA); } catch (e) { /* niente memoria, niente da togliere */ } el("bozza-avviso").hidden = true; }
+  function proponiBozza() {
+    const b = bozzaRicordata();
+    const box = el("bozza-avviso");
+    if (!b || !b.scenario) { box.hidden = true; return; }
+    const stessaBase = SOC.every((s) => ((b.base || {})[s] || {}).raw_object_id === ((D.base[s] || {}).raw_object_id || null));
+    const quando = b.salvato_il ? new Date(b.salvato_il).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+    box.innerHTML = `<span class="testo">Il browser ricorda una bozza${b.salvata ? " (già salvata in un file)" : " non salvata"} di «${esc(b.nome || "scenario")}»${quando ? ` delle ${esc(quando)}` : ""}${stessaBase ? "" : ", su una base PF diversa da questa"}.</span>
+      <button type="button" class="primario" id="bozza-riprendi">Riprendi</button><button type="button" id="bozza-scarta">Scarta</button>`;
+    box.hidden = false;
+    el("bozza-riprendi").onclick = () => {
+      D.scenari.push({ nome: b.nome, salvato_il: b.salvato_il, scenario: copia(b.scenario), compatibile: stessaBase, _etichetta: `${b.nome} · bozza ripresa${quando ? ` delle ${quando}` : ""}` });
+      box.hidden = true;
+      apriScenario(String(D.scenari.length - 1));
+    };
+    el("bozza-scarta").onclick = scartaBozza;
+  }
+  window.addEventListener("beforeunload", (e) => { if (modificato() && !memoriaOk) { e.preventDefault(); e.returnValue = ""; } });
 
   const vuoto = () => ({ nome: "Nessuna leva", scenario: { nome: "Nessuna leva", soglia: 0, canone: null, progetti: [], finanziamenti: [], manuali: [] } });
 
@@ -1102,6 +1145,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   }
   function esporta() {
     const doc = { schema: D.schema, nome: stato.nome, salvato_il: new Date().toISOString(), base: D.base, scenario: { ...stato.scenario, nome: stato.nome } };
+    try { const b = bozzaRicordata(); if (b && JSON.stringify(completa(b.scenario)) === JSON.stringify(completa(doc.scenario))) { b.salvata = true; localStorage.setItem(CHIAVE_BOZZA, JSON.stringify(b)); } } catch (e) { /* senza memoria va bene lo stesso */ }
     const blob = new Blob([JSON.stringify(doc, null, 1)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -2315,6 +2359,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   renderScenario();
   collegaBlocchi();
   ricalcola();
+  proponiBozza();
   // La barra dei minimi compare solo quando la card è uscita dallo schermo verso l'alto.
   if ("IntersectionObserver" in window) {
     new IntersectionObserver(([e]) => {
