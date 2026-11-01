@@ -1107,8 +1107,8 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     for (const p of stato.scenario.progetti) for (const g of p.pagamenti) for (const [m, v] of Object.entries(g.mesi).sort()) if (v) prog.push([p.id, p.nome, p.societa, p.acceso ? "sì" : "no", p.stato, g.nome, g.fornitore_id || "", g.stato, g.aliquota_iva, m, E(v), E(MOTORE.iva(v, g.aliquota_iva)), (g.documenti || []).map((d) => `${d.titolo || ""} ${d.url || ""}`.trim()).join(" | "), p.drive_url || ""]);
     fogli.push({ nome: "Progetti", colonne: ["progetto", "nome", "società", "acceso", "stato", "pagamento", "fornitore", "stato pagamento", "IVA %", "mese", "netto €", "lordo €", "documenti", "cartella Drive"], euro: [10, 11], righe: prog });
     // Fornitori (stesse colonne della tabella «fornitori» di hotelops cdg tabelle)
-    fogli.push({ nome: "Fornitori", colonne: ["fornitore_id", "nome", "codice_esolver", "società", "n_pagamenti", "totale_lordo €", "primo_mese", "ultimo_mese", "progetti"], euro: [5],
-      righe: fornitoriDelloScenario(stato.scenario).map((f) => [f.id, f.nome, f.codice || "", f.societa, f.n, E(f.lordo), f.primo || "", f.ultimo || "", f.progetti.join(" · ")]) });
+    fogli.push({ nome: "Fornitori", colonne: ["fornitore_id", "nome", "codice_esolver", "società", "n_pagamenti", "totale_lordo €", "primo_mese", "ultimo_mese", "progetti", "patti_abituali"], euro: [5],
+      righe: fornitoriDelloScenario(stato.scenario).map((f) => [f.id, f.nome, f.codice || "", f.societa, f.n, E(f.lordo), f.primo || "", f.ultimo || "", f.progetti.join(" · "), riassuntoPatti(f.patti)]) });
     // Finanziamenti
     const fin = [];
     for (const f of stato.scenario.finanziamenti) {
@@ -1688,11 +1688,21 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       ${patti}
       <div class="riga"><button class="primario" data-genera>Genera i pagamenti</button> ${verifica} <span class="errore-r" data-errore-c></span></div>
       <div class="riga"><span class="nota">«Genera i pagamenti» sostituisce i pagamenti di questo progetto verso ${esc(F || "il fornitore")}; gli altri restano.</span> <button class="mini" data-togli-c>togli i patti</button></div>
+      ${F ? `<div class="riga"><button type="button" class="mini" data-ricorda-patti title="la forma di questi patti, senza mesi né totale, nella scheda del fornitore">ricorda come patti abituali di ${esc(F)}</button>${pattiDi(F) ? `<button type="button" class="mini" data-usa-patti title="${esc(riassuntoPatti(pattiDi(F)))}">usa i patti abituali di ${esc(F)}</button><span class="piccolo">${esc(riassuntoPatti(pattiDi(F)))}</span>` : ""}</div>` : ""}
     </div>`;
   }
   function collegaContratto(root, p, c) {
     const sc = p.contratti;
-    root.querySelectorAll("[data-cc]").forEach((x) => { x.onchange = () => { c[x.dataset.cc] = x.value; renderLeve(); }; });
+    root.querySelectorAll("[data-cc]").forEach((x) => { x.onchange = () => {
+      c[x.dataset.cc] = x.value;
+      // un contratto ancora vuoto eredita i patti abituali del fornitore appena scritto; uno già scritto no
+      if (x.dataset.cc === "fornitore" && pattiDi(x.value) && contrattoVuoto(c)) Object.assign(c, contrattoDaPatti(pattiDi(x.value), c.anticipo_mese || c.sal_da || D.mesi[0], String(x.value).trim(), c.totale));
+      renderLeve();
+    }; });
+    const ric = root.querySelector("[data-ricorda-patti]");
+    if (ric) ric.onclick = () => { const F = String(c.fornitore || "").trim(); const sc0 = stato.scenario; sc0.fornitori = sc0.fornitori || {}; sc0.fornitori[F] = sc0.fornitori[F] || { nome: F }; sc0.fornitori[F].patti = pattiDaContratto(c); avvisa(`patti abituali di ${F} ricordati: ${riassuntoPatti(sc0.fornitori[F].patti)}`); ricalcola(); };
+    const usaP = root.querySelector("[data-usa-patti]");
+    if (usaP) usaP.onclick = () => { const F = String(c.fornitore || "").trim(); Object.assign(c, contrattoDaPatti(pattiDi(F), c.anticipo_mese || c.sal_da || ((c.quote || [])[0] || {}).mese || D.mesi[0], F, c.totale)); renderLeve(); };
     root.querySelectorAll("[data-cc-int]").forEach((x) => { x.onchange = () => { c[x.dataset.ccInt] = parseInt(x.value, 10) || 0; renderLeve(); }; });
     root.querySelectorAll("[data-cc-eur]").forEach((x) => { x.onchange = () => { const v = euroDa(x); if (v === null) return; c[x.dataset.ccEur] = v; renderLeve(); }; });
     const pct = (x) => { const v = Number(String(x.value).replace(",", ".")); const ok = x.value.trim() !== "" && v >= 0 && v <= 100; x.classList.toggle("invalid", !ok); return ok ? v : null; };
@@ -1853,6 +1863,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         <button id="aggiungi-c">+ correzione</button></div>`;
     renderFornitori();
     collegaLeve();
+    ricordaBozza();  // anche le modifiche ai patti (che ridisegnano senza ricalcolare) finiscono nella bozza
   }
 
   // ── Il fornitore come oggetto (brief UI, punto 8) ──
@@ -1874,6 +1885,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const sigle = c.length >= 4 ? ana.filter((f) => compat(f.nome).includes(c)) : [];
     return sigle.length === 1 ? sigle[0] : null;
   }
+  const nomeEsolver = (codice) => ((D.fornitori || []).find((x) => String(x.codice) === String(codice)) || {}).nome || "";
   function fornitoriDelloScenario(sc) {
     const mappa = sc.fornitori || {};
     const usi = {};
@@ -1890,16 +1902,45 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       const f = mappa[id] || {}, u = usi[id] || vuoto(), mesi = u.mesi.sort();
       return { id, nome: f.nome || id, codice: f.codice_esolver || null, societa: f.societa || [...u.societa].join("/") || "", drive_url: f.drive_url || "",
         proposto: f.codice_esolver ? null : riconosci(f.nome || id), progetti: [...u.progetti], n: u.n, lordo: u.lordo, lordoAcceso: u.lordoAcceso,
-        primo: mesi[0] || null, ultimo: mesi[mesi.length - 1] || null, documenti: u.documenti };
+        primo: mesi[0] || null, ultimo: mesi[mesi.length - 1] || null, documenti: u.documenti, patti: f.patti || null };
     });
   }
+  // ── patti abituali del fornitore: la forma di «come paghi» senza mesi assoluti né totale ──
+  // Si ricordano da un contratto scritto (i mesi diventano distanze dall'inizio) e si riapplicano a un
+  // contratto nuovo dando l'inizio e il totale. La seconda fornitura eredita come hai pagato la prima.
+  const mesePiu = (m, k) => { const [a, mm] = m.split("-").map(Number); const t = (mm - 1) + k; return `${a + Math.floor(t / 12)}-${String(((t % 12) + 12) % 12 + 1).padStart(2, "0")}`; };
+  const mesiFra = (a, b) => { const [ya, ma] = a.split("-").map(Number), [yb, mb] = b.split("-").map(Number); return (yb - ya) * 12 + (mb - ma); };
+  const dentroOrizzonte = (m) => (D.mesi.includes(m) ? m : m < D.mesi[0] ? D.mesi[0] : D.mesi[D.mesi.length - 1]);
+  function pattiDaContratto(c) {
+    const perc = c.modo === "percentuali";
+    const inizio = perc ? ((c.quote || []).map((q) => q.mese).sort()[0] || D.mesi[0]) : ((c.anticipo_pct ? c.anticipo_mese : c.sal_da) || c.sal_da || D.mesi[0]);
+    const p = { modo: perc ? "percentuali" : "sal", aliquota_iva: c.aliquota_iva ?? 22 };
+    if (perc) p.quote = (c.quote || []).map((q) => ({ pct: q.pct, dopo: mesiFra(inizio, q.mese) }));
+    else Object.assign(p, { anticipo_pct: c.anticipo_pct || 0, anticipo_dopo: c.anticipo_pct ? mesiFra(inizio, c.anticipo_mese || inizio) : 0, sal_modo: c.sal_modo || "n", sal_n: c.sal_n || 1, sal_ogni: c.sal_ogni || 0, sal_passo: c.sal_passo || 1, sal_dopo: mesiFra(inizio, c.sal_da || inizio), ritenuta_pct: c.ritenuta_pct || 0, svincolo_dopo: c.ritenuta_pct ? mesiFra(inizio, c.svincolo_mese || inizio) : 0 });
+    return p;
+  }
+  function contrattoDaPatti(p, inizio, fornitore, totale) {
+    const c = { fornitore, totale: totale || 0, aliquota_iva: p.aliquota_iva ?? 22, modo: p.modo === "percentuali" ? "percentuali" : "sal", stato: "contratto" };
+    if (c.modo === "percentuali") c.quote = (p.quote || []).map((q) => ({ pct: q.pct, mese: dentroOrizzonte(mesePiu(inizio, q.dopo || 0)) }));
+    else Object.assign(c, { anticipo_pct: p.anticipo_pct || 0, anticipo_mese: dentroOrizzonte(mesePiu(inizio, p.anticipo_dopo || 0)), ritenuta_pct: p.ritenuta_pct || 0, svincolo_mese: dentroOrizzonte(mesePiu(inizio, p.svincolo_dopo || 0)), sal_modo: p.sal_modo || "n", sal_n: p.sal_n || 1, sal_ogni: p.sal_ogni || 0, sal_da: dentroOrizzonte(mesePiu(inizio, p.sal_dopo || 0)), sal_passo: p.sal_passo || 1, quote: [] });
+    return c;
+  }
+  function riassuntoPatti(p) {
+    if (!p) return "";
+    const dopo = (k) => (k ? `${k} ${k === 1 ? "mese" : "mesi"} dopo l'inizio` : "all'inizio");
+    if (p.modo === "percentuali") return (p.quote || []).map((q) => `${pctIt(q.pct)}% ${dopo(q.dopo)}`).join(" · ") || "nessuna quota";
+    const passo = (PASSI.find(([x]) => x === (p.sal_passo || 1)) || [0, ""])[1];
+    return [p.anticipo_pct ? `anticipo ${pctIt(p.anticipo_pct)}% ${dopo(p.anticipo_dopo)}` : "", p.sal_modo === "ogni" ? `un SAL ogni ${fmt(p.sal_ogni || 0, false)} di lavori` : `${p.sal_n} SAL ${passo}`, `da ${dopo(p.sal_dopo)}`, p.ritenuta_pct ? `ritenuta ${pctIt(p.ritenuta_pct)}% svincolata ${dopo(p.svincolo_dopo)}` : "", `IVA ${p.aliquota_iva ?? 22}%`].filter(Boolean).join(" · ");
+  }
+  const contrattoVuoto = (c) => !(c.totale || 0) && !(c.quote || []).length && !(c.anticipo_pct || 0) && !(c.ritenuta_pct || 0) && (c.sal_n || 1) === 1;
+  const pattiDi = (F) => (((stato.scenario.fornitori || {})[String(F || "").trim()] || {}).patti) || null;
   const selSocV = (val) => `<select data-vf="societa"><option value="" ${val ? "" : "selected"}>società…</option>${SOC.map((s) => `<option ${s === val ? "selected" : ""}>${s}</option>`).join("")}</select>`;
   function renderFornitori() {
     const sc = stato.scenario;
     sc.fornitori = sc.fornitori || {};
     const righe = fornitoriDelloScenario(sc);
     const html = righe.map((f) => { const k = `v:${f.id}`; return `<details class="leva" data-k="${k}" data-v="${esc(f.id)}" ${aperte.has(k) ? "open" : ""}>
-      <summary><span class="nome">${esc(f.nome)}</span>${f.codice ? `<span class="badge" title="codice Esolver">Esolver ${esc(f.codice)}</span>` : f.proposto ? chipStato("da_verificare", `in anagrafica Esolver: ${f.proposto.nome}`, `Esolver? ${f.proposto.codice}`) : chipStato("non_registrato", "nessun codice Esolver: scrivilo o scegli dall'anagrafica", "senza codice")}${f.societa ? `<span class="badge">${esc(f.societa)}</span>` : ""}
+      <summary><span class="nome">${esc(f.nome)}</span>${f.codice ? `<span class="badge" title="${esc(nomeEsolver(f.codice) || "codice Esolver")}">Esolver ${esc(f.codice)}</span>` : f.proposto ? chipStato("da_verificare", `in anagrafica Esolver: ${f.proposto.nome}`, `Esolver? ${f.proposto.codice}`) : chipStato("non_registrato", "nessun codice Esolver: scrivilo o scegli dall'anagrafica", "senza codice")}${f.societa ? `<span class="badge">${esc(f.societa)}</span>` : ""}
         <span class="num tot">${fmt(f.lordo, false)} €</span><span class="piccolo num">${f.n ? `${f.n} ${f.n === 1 ? "pagamento" : "pagamenti"} in ${f.progetti.length} ${f.progetti.length === 1 ? "progetto" : "progetti"} · ${f.primo === f.ultimo ? meseIt(f.primo) : `${meseIt(f.primo)} – ${meseIt(f.ultimo)}`}${f.lordoAcceso !== f.lordo ? ` · ${fmt(f.lordoAcceso, false)} nei progetti accesi` : ""}` : "nessun pagamento nello scenario"}${f.documenti ? ` · ${f.documenti} doc.` : ""}</span>
         ${f.drive_url ? `<a class="doc" href="${esc(f.drive_url)}" target="_blank" rel="noopener">Drive</a>` : ""}<button type="button" class="mini apri-leva" data-apri-foglio aria-label="apri">apri ›</button></summary>
       <div class="corpo">
@@ -1909,7 +1950,8 @@ if (typeof module !== "undefined") module.exports = EXCEL;
           ${selSocV(f.societa)}</div>
         <div class="riga"><label class="piccolo" style="flex:1 1 220px;display:flex;gap:6px;align-items:center">cartella Drive <input type="url" class="nome" style="flex:1 1 160px" data-vf="drive_url" value="${esc(f.drive_url)}" placeholder="https://drive.google.com/…"></label></div>
         <div class="piccolo">${f.progetti.length ? `nei progetti: ${f.progetti.map(esc).join(" · ")}` : "non ancora in un pagamento: scrivi il suo id in «fornitore» dentro un pagamento"}</div>
-        <div class="nota">id nei pagamenti: <code>${esc(f.id)}</code> · patti abituali: prossimo passo</div>
+        <div class="riga"><span class="piccolo"><strong>patti abituali</strong> · ${f.patti ? `${esc(riassuntoPatti(f.patti))} <button type="button" class="mini" data-vf-dimentica title="dimentica i patti abituali">× dimentica</button>` : "nessuno: in un progetto, dentro «Come paghi …», premi «ricorda come patti abituali»"}</span></div>
+        <div class="nota">il nome è il nostro, il codice aggancia Esolver${f.codice && nomeEsolver(f.codice) ? ` (${esc(nomeEsolver(f.codice))})` : ""} · id nei pagamenti: <code>${esc(f.id)}</code></div>
       </div></details>`; }).join("");
     const ana = D.fornitori || [];
     el("fornitori").innerHTML = `${html || '<div class="nota">nessun fornitore: compare qui chi è scritto in «fornitore» dentro un pagamento</div>'}
@@ -2036,6 +2078,8 @@ if (typeof module !== "undefined") module.exports = EXCEL;
           ricalcola();
         };
       });
+      const dim = div.querySelector("button[data-vf-dimentica]");
+      if (dim) dim.onclick = () => { delete f().patti; if (!Object.keys(f()).length) delete sc.fornitori[id]; ricalcola(); };
       const usa = div.querySelector("button[data-vf-usa]");
       if (usa) usa.onclick = () => {
         const c = parseInt(usa.dataset.vfUsa, 10), a = (D.fornitori || []).find((x) => x.codice === c);

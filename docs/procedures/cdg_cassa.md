@@ -114,7 +114,13 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
     numero di pagamenti, mesi, documenti e progetti. L'**anagrafica Esolver** (`d_fornitori`, senza
     intercompany ed esclusi) entra nel payload come `fornitori` e serve a **riconoscere** il codice da un
     nome scritto a mano: proposta («Esolver? 1640», bottone «usa»), mai imposta. `hotelops cdg tabelle` ha
-    la tabella `fornitori` e l'Excel il foglio «Fornitori» con le stesse colonne. Patti abituali: prossimo passo.
+    la tabella `fornitori` e l'Excel il foglio «Fornitori» con le stesse colonne. Il **nome è il nostro**
+    («AMCN», «Prisco il tappezziere»): il codice aggancia Esolver, il cui nome resta come dettaglio.
+    **Patti abituali**: dentro «Come paghi <fornitore>» il bottone «ricorda come patti abituali» salva la
+    forma dei patti nella scheda del fornitore (anticipo, SAL, ritenuta o quote, con i mesi come distanze
+    dall'inizio, senza totale); un contratto nuovo ancora vuoto li eredita appena scrivi quel fornitore,
+    uno già scritto li prende solo con «usa i patti abituali». La scheda li mostra in una riga, con
+    «× dimentica»; la colonna `patti_abituali` è nella tabella e nel foglio.
 
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 

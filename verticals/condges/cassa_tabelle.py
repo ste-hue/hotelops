@@ -312,6 +312,7 @@ def tabelle(payload: dict, documento: dict | None = None) -> dict[str, Tabella]:
             "primo_mese",
             "ultimo_mese",
             "progetti",
+            "patti_abituali",
         ],
         [
             [
@@ -325,6 +326,7 @@ def tabelle(payload: dict, documento: dict | None = None) -> dict[str, Tabella]:
                 min((usi.get(fid) or {}).get("mesi") or [""]),
                 max((usi.get(fid) or {}).get("mesi") or [""]),
                 " ".join((usi.get(fid) or {}).get("progetti", [])),
+                _riassunto_patti((mappa.get(fid) or {}).get("patti")),
             ]
             for fid in sorted(set(mappa) | set(usi))
         ],
@@ -410,6 +412,52 @@ DENARO = {
     "netto_da_contratto",
     "lordo_da_contratto",
 }
+
+
+def _riassunto_patti(p: dict | None) -> str:
+    """I patti abituali di un fornitore in una riga, come li scrive la pagina (stesse parole)."""
+    if not p:
+        return ""
+
+    def dopo(k):
+        k = int(k or 0)
+        return (
+            f"{k} {'mese' if k == 1 else 'mesi'} dopo l'inizio" if k else "all'inizio"
+        )
+
+    def pct(x):
+        return str(x).replace(".", ",").removesuffix(",0")
+
+    if p.get("modo") == "percentuali":
+        return (
+            " · ".join(
+                f"{pct(q.get('pct', 0))}% {dopo(q.get('dopo'))}"
+                for q in p.get("quote") or []
+            )
+            or "nessuna quota"
+        )
+    passi = {
+        1: "ogni mese",
+        2: "ogni 2 mesi",
+        3: "ogni 3 mesi",
+        4: "ogni 4 mesi",
+        6: "ogni 6 mesi",
+        12: "ogni anno",
+    }
+    parti = [
+        f"anticipo {pct(p['anticipo_pct'])}% {dopo(p.get('anticipo_dopo'))}"
+        if p.get("anticipo_pct")
+        else "",
+        f"un SAL ogni {_euro(int(p.get('sal_ogni') or 0))} di lavori"
+        if p.get("sal_modo") == "ogni"
+        else f"{p.get('sal_n', 1)} SAL {passi.get(int(p.get('sal_passo') or 1), '')}".strip(),
+        f"da {dopo(p.get('sal_dopo'))}",
+        f"ritenuta {pct(p['ritenuta_pct'])}% svincolata {dopo(p.get('svincolo_dopo'))}"
+        if p.get("ritenuta_pct")
+        else "",
+        f"IVA {p.get('aliquota_iva', 22)}%",
+    ]
+    return " · ".join(x for x in parti if x)
 
 
 def _e_denaro(colonna: str) -> bool:

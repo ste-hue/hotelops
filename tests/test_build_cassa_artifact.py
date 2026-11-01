@@ -1002,6 +1002,13 @@ def test_template_fornitore_come_oggetto():
     assert 'nome: "Fornitori", colonne: ["fornitore_id", "nome", "codice_esolver"' in html
     # il payload porta l'anagrafica (vuota nello snapshot sintetico)
     assert build_payload(snapshot_sintetico(), [])["fornitori"] == []
+    # patti abituali: si ricordano da un contratto (mesi → distanze dall'inizio) e si riapplicano a uno nuovo
+    assert "function pattiDaContratto(c)" in html and "function contrattoDaPatti(p, inizio, fornitore, totale)" in html
+    assert "data-ricorda-patti" in html and "data-usa-patti" in html and "data-vf-dimentica" in html
+    # un contratto ancora vuoto eredita i patti del fornitore appena scritto; uno già scritto no
+    assert 'x.dataset.cc === "fornitore" && pattiDi(x.value) && contrattoVuoto(c)' in html
+    # il nome è il nostro, il codice aggancia Esolver
+    assert "il nome è il nostro, il codice aggancia Esolver" in html
 
 
 def test_template_trascina_con_soglia_presa_e_volo():
