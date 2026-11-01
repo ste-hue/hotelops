@@ -362,6 +362,34 @@ def tabelle(payload: dict, documento: dict | None = None) -> dict[str, Tabella]:
         [[i + 1, x] for i, x in enumerate(payload.get("limiti") or [])],
     )
 
+    t["pf_correzioni"] = (
+        [
+            "societa",
+            "voce_id",
+            "mese",
+            "nel_pf",
+            "corretto",
+            "applicata",
+            "dichiarato_da",
+            "dichiarato_il",
+            "fonte",
+        ],
+        [
+            [
+                c["societa"],
+                c["voce_id"],
+                c["mese"],
+                c["nel_pf"],
+                c["corretto"],
+                "sì" if c.get("applicata") else c.get("motivo", "no"),
+                c.get("dichiarato_da", ""),
+                c.get("dichiarato_il", ""),
+                c.get("fonte", ""),
+            ]
+            for c in payload.get("pf_correzioni") or []
+        ],
+    )
+
     t["versioni"] = (
         ["voce", "valore"],
         [
@@ -396,6 +424,8 @@ def tabelle(payload: dict, documento: dict | None = None) -> dict[str, Tabella]:
 DENARO = {
     "saldo",
     "totale_lordo",
+    "nel_pf",
+    "corretto",
     "saldo_iniziale",
     "saldo_finale",
     "saldo_minimo",

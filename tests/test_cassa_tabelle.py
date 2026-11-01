@@ -284,3 +284,43 @@ def test_i_patti_abituali_si_leggono_in_una_riga():
     }
     assert _riassunto_patti(perc) == "40% all'inizio · 60% 2 mesi dopo l'inizio"
     assert _riassunto_patti(None) == ""
+
+
+def test_la_tabella_pf_correzioni_porta_le_voci_dichiarate():
+    from verticals.condges.cassa_tabelle import DENARO
+
+    p = build_payload(
+        snapshot_sintetico(),
+        [],
+        pf_corretto={
+            "correzioni": [
+                {
+                    "societa": "INTUR",
+                    "voce_id": "USCITE_TASSE",
+                    "mese": "2026-11",
+                    "importo_cent": 3_500_000,
+                    "dichiarato_da": "Rosa",
+                    "dichiarato_il": "2026-10-31",
+                    "fonte": "f",
+                }
+            ]
+        },
+    )
+    colonne, righe = tabelle(p)["pf_correzioni"]
+    assert (
+        colonne[:5] == ["societa", "voce_id", "mese", "nel_pf", "corretto"]
+        and {"nel_pf", "corretto"} <= DENARO
+    )
+    assert righe == [
+        [
+            "INTUR",
+            "USCITE_TASSE",
+            "2026-11",
+            1_000_000,
+            3_500_000,
+            "sì",
+            "Rosa",
+            "2026-10-31",
+            "f",
+        ]
+    ]

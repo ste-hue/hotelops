@@ -112,6 +112,8 @@ details.sotto>summary{font-size:12px;color:var(--accent)}
 .mesi .op{padding:0 6px;min-height:24px;min-width:24px;font-size:12px;line-height:22px;color:var(--muted)}
 .doc{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--accent);text-decoration:none;margin-left:4px;max-width:220px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;white-space:nowrap}
 .documenti{margin-top:6px}
+.pf-corretto{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:4px 0 10px;background:var(--soft)}
+.pf-corretto .riga .nome{font-weight:600}
 .pag .mesi input{width:92px;text-align:right;font-size:12px;padding:3px 5px}
 .nota{font-size:12px;color:var(--muted);font-style:italic;margin-top:4px}
 .come{margin-top:6px}
@@ -1126,6 +1128,9 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     // PF così com'è (la base di Rosa nell'orizzonte)
     fogli.push({ nome: "PF", colonne: ["società", "voce", "mese", "direzione", "importo €"], euro: [4],
       righe: D.pf.map((r) => [r.societa, etichetta(r.voce_id), r.mese, r.direzione === "E" ? "entrata" : "uscita", E(r.importo)]) });
+    // PF corretto (stesse colonne della tabella CLI)
+    fogli.push({ nome: "PF corretto", colonne: ["società", "voce", "mese", "nel PF €", "corretto €", "applicata", "dichiarato da", "dichiarato il", "fonte"], euro: [3, 4],
+      righe: (D.pf_correzioni || []).map((c) => [c.societa, etichetta(c.voce_id), c.mese, E(c.nel_pf), E(c.corretto), c.applicata ? "sì" : (c.motivo || "no"), c.dichiarato_da || "", c.dichiarato_il || "", c.fonte || ""]) });
     // Fonti e versioni
     const fonti = [["pagina generata il", D.generato_il], ["fonti lette da BigQuery il", D.acquisito_il || ""], ["scenario", nomeSc], ["esportato il", new Date().toISOString()]];
     for (const s of SOC) {
@@ -1174,6 +1179,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       <li>Fonti lette da BigQuery il ${oraDi(D.acquisito_il) || "—"} · pagina generata il ${oraDi(D.generato_il)}</li>
       <li>Seme «${esc(D.seme.nome)}» dal file locale, salvato il ${oraDi(D.seme.salvato_il)}${D.seme.compatibile ? "" : " (base PF diversa)"}</li>
       <li>Scenari salvati su BigQuery nel menu: ${D.scenari.length}.${nascosti}</li>
+      ${(D.pf_correzioni || []).length ? `<li>PF corretto: ${(D.pf_correzioni || []).filter((c) => c.applicata).length} voci dichiarate al posto del file di Rosa, per tutti gli scenari (vedi «Voci del PF corrette»)</li>` : ""}
       ${CONTR ? `<li>Contratto del canone: ${esc(CONTR.fonte)}</li>` : ""}
       <li>Canone di riferimento: ${CR.dichiarato ? `${fmt(CR.lordo_annuo, false)} € lordo/anno IVA inclusa (${fmt(CR.netto_annuo, false)} netto) dichiarato il ${esc(CR.dichiarato_il || "—")} — ${esc(CR.fonte)}` : esc(CR.fonte)}</li>
       <li>Mesi senza PF: ${D.mesi_ipotetici.length ? `${meseIt(D.mesi_ipotetici[0])} – ${meseIt(ULTIMO)}` : "nessuno"} (il PF finisce a ${meseIt(ULTIMO_PF)})</li></ul>`;
@@ -1858,7 +1864,14 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       </div></details>`;
     }).join("");
     const vociPf = [...new Set(D.pf.map((r) => `${r.societa}|${r.voce_id}|${r.direzione}`))].sort();
-    el("correzioni").innerHTML = `${corr || '<div class="nota">nessuna voce corretta: il PF vale così com\'è</div>'}
+    // Il PF corretto: voci dichiarate (Rosa) al posto del file, per tutti gli scenari. Si legge, non si edita qui.
+    const dich = (D.pf_correzioni || []);
+    const pfCorr = dich.length ? `<div class="pf-corretto"><div class="piccolo"><strong>PF corretto</strong> · vale per tutti gli scenari, anche Solo PF</div>
+      ${dich.map((c) => `<div class="riga"><span class="nome">${esc(etichetta(c.voce_id))}</span><span class="badge">${esc(c.societa)}</span><span class="piccolo">${meseIt(c.mese)}</span>
+        <span class="num"><strong>${fmt(c.corretto, false)}</strong> <span class="piccolo">al posto di ${fmt(c.nel_pf, false)}</span></span>
+        ${c.applicata ? chipStato("dichiarato", `${c.dichiarato_da ? `dichiarato da ${c.dichiarato_da}` : "dichiarato"}${c.dichiarato_il ? ` il ${dataIt(c.dichiarato_il)}` : ""}${c.fonte ? ` · ${c.fonte}` : ""}`, c.dichiarato_da ? `dichiarato · ${c.dichiarato_da}` : "dichiarato") : chipStato("non_registrato", c.motivo || "non applicata", "non applicata")}</div>`).join("")}
+      <div class="nota">si cambia dal file pf_corretto.json sul Mac; sparisce quando il PF di Rosa porta queste cifre</div></div>` : "";
+    el("correzioni").innerHTML = `${pfCorr}${corr || '<div class="nota">nessuna voce corretta nello scenario</div>'}
       <div class="strumenti"><label class="piccolo">voce del PF <select id="corr-voce">${vociPf.map((v) => { const [s, voce, dir] = v.split("|"); return `<option value="${esc(v)}">${esc(s)} · ${esc(etichetta(voce))} (${dir === "E" ? "entrata" : "uscita"})</option>`; }).join("")}</select></label>
         <button id="aggiungi-c">+ correzione</button></div>`;
     renderFornitori();
