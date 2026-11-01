@@ -10,6 +10,7 @@ import pytest
 
 from tests.test_cassa_scenario import scenario_sintetico
 from verticals.condges.build_cassa_artifact import (
+    applica_pf_corretto,
     KV_DATA_KEY,
     KV_KEY,
     PUSH_ENV_VARS,
@@ -1009,6 +1010,38 @@ def test_template_fornitore_come_oggetto():
     assert 'x.dataset.cc === "fornitore" && pattiDi(x.value) && contrattoVuoto(c)' in html
     # il nome è il nostro, il codice aggancia Esolver
     assert "il nome è il nostro, il codice aggancia Esolver" in html
+
+
+def test_pf_corretto_sostituisce_la_voce_per_tutti_gli_scenari():
+    # Le tasse dichiarate da Rosa valgono per tutti: Solo PF, seme, salvati. Il file del PF non cambia.
+    snap = snapshot_sintetico()
+    mese = MESI_PF[1]
+    prima = sum(r["importo"] for r in snap["pf"] if (r["societa"], r["voce_id"], r["mese"]) == ("INTUR", "USCITE_TASSE", mese))
+    corr = {"schema": "cdg-cassa-pf-corretto/1", "correzioni": [
+        {"societa": "INTUR", "voce_id": "USCITE_TASSE", "mese": mese, "importo_cent": prima + 5_000_00, "dichiarato_da": "Rosa", "dichiarato_il": "2026-10-31", "fonte": "test"},
+        {"societa": "INTUR", "voce_id": "USCITE_TASSE", "mese": "2031-01", "importo_cent": 1, "dichiarato_da": "Rosa"},
+    ]}
+    nuovo, esito = applica_pf_corretto(snap, corr)
+    assert snap["pf"] is not nuovo["pf"]  # l'originale non cambia
+    dopo = [r for r in nuovo["pf"] if (r["societa"], r["voce_id"], r["mese"]) == ("INTUR", "USCITE_TASSE", mese)]
+    assert len(dopo) == 1 and dopo[0]["importo"] == prima + 5_000_00 and dopo[0]["origine"] == "pf" and dopo[0]["direzione"] == "U"
+    assert [(c["applicata"], c["nel_pf"]) for c in esito] == [(True, prima), (False, 0)] and esito[1]["motivo"] == "mese fuori dal PF"
+    # nel payload: Solo PF (baseline) più basso di 5.000 nel mese, la lista pf_correzioni e una riga nei limiti
+    p0 = build_payload(snapshot_sintetico(), [])
+    p1 = build_payload(snapshot_sintetico(), [], pf_corretto=corr)
+    fin0 = next(r["fin"] for r in p0["baseline"]["righe"] if r["societa"] == "INTUR" and r["mese"] == mese)
+    fin1 = next(r["fin"] for r in p1["baseline"]["righe"] if r["societa"] == "INTUR" and r["mese"] == mese)
+    assert fin0 - fin1 == 5_000_00
+    assert [c["corretto"] for c in p1["pf_correzioni"]] == [prima + 5_000_00, 1]
+    assert any(x.startswith("PF corretto: 1 voce del PF dichiarate da Rosa") for x in p1["limiti"])
+    assert p0["pf_correzioni"] == [] and not any(x.startswith("PF corretto") for x in p0["limiti"])
+
+
+def test_template_mostra_il_pf_corretto_come_dichiarato():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert "D.pf_correzioni" in html and 'class="pf-corretto"' in html
+    assert "vale per tutti gli scenari, anche Solo PF" in html and 'nome: "PF corretto"' in html
+    assert 'chipStato("dichiarato", `${c.dichiarato_da ? `dichiarato da ${c.dichiarato_da}`' in html
 
 
 def test_template_trascina_con_soglia_presa_e_volo():

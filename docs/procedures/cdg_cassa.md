@@ -122,6 +122,14 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
     uno già scritto li prende solo con «usa i patti abituali». La scheda li mostra in una riga, con
     «× dimentica»; la colonna `patti_abituali` è nella tabella e nel foglio.
 
+13. **PF corretto.** Una voce del PF che una persona dichiara diversa dal file di Rosa (le tasse del
+    31/10) non è una leva dello scenario: vive in `.hotelops_state/cdg_cassa/pf_corretto.json`
+    (`correzioni: [{societa, voce_id, mese, importo_cent, dichiarato_da, dichiarato_il, fonte}]`) e al
+    `cdg cassa` prende il posto della voce **prima** di ogni scenario, Solo PF compreso. La pagina la
+    mostra in «Voci del PF corrette» col chip «dichiarato · Rosa», i limiti la dichiarano, `cdg tabelle`
+    ha la tabella `pf_correzioni` e l'Excel il foglio «PF corretto». Una correzione su un mese fuori dal PF
+    non si applica e resta elencata. Si toglie dal file quando il PF di Rosa porta la cifra.
+
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 
 1. Intake + promote del file (policy AUTO):

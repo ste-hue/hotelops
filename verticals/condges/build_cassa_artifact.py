@@ -45,6 +45,9 @@ from verticals.condges.cassa_scenario import (
 DEFAULT_OUT = Path("docs/reports/artifacts/cassa.html")
 SEME_PATH = cf.SNAPSHOT_HOME / "base_scenario.json"
 CANONE_PATH = cf.SNAPSHOT_HOME / "canone_dichiarato.json"
+# Il PF corretto: voci che una persona ha dichiarato diverse dal file di Rosa (le tasse del 31/10).
+# Valgono per tutti gli scenari, Solo PF compreso; spariscono da sole quando il PF le porta.
+PF_CORRETTO_PATH = cf.SNAPSHOT_HOME / "pf_corretto.json"
 TEMPLATE = Path(__file__).with_name("cassa_template.html")
 
 KV_KEY = "cassa_html"
@@ -363,6 +366,64 @@ def _limiti_canone(c: dict, mesi: list[str] = (), mesi_ipotetici: set[str] = fro
     ]
 
 
+def applica_pf_corretto(snapshot: dict, pf_corretto: dict | None) -> tuple[dict, list[dict]]:
+    """Sostituisce nel PF dello snapshot le voci dichiarate (società, voce, mese) e dice cosa ha fatto.
+
+    Una correzione sul mese fuori dall'orizzonte o oltre il PF non si applica e resta dichiarata
+    come tale. Il risultato è un nuovo snapshot: l'originale non cambia."""
+    righe = list(snapshot["pf"])
+    esito: list[dict] = []
+    if not pf_corretto:
+        return snapshot, esito
+    coda = set(snapshot.get("mesi_ipotetici") or ())
+    for c in pf_corretto.get("correzioni") or []:
+        chiave = (c["societa"], c["voce_id"], c["mese"])
+        vecchie = [r for r in righe if (r["societa"], r["voce_id"], r["mese"]) == chiave]
+        nel_pf = sum(r["importo"] for r in vecchie)
+        voce = {
+            "societa": c["societa"],
+            "voce_id": c["voce_id"],
+            "mese": c["mese"],
+            "nel_pf": nel_pf,
+            "corretto": int(c["importo_cent"]),
+            "dichiarato_da": c.get("dichiarato_da") or "",
+            "dichiarato_il": c.get("dichiarato_il") or "",
+            "fonte": c.get("fonte") or "",
+        }
+        if c["mese"] not in snapshot["mesi"] or c["mese"] in coda:
+            voce["applicata"] = False
+            voce["motivo"] = "mese fuori dal PF"
+            esito.append(voce)
+            continue
+        direzione = vecchie[0]["direzione"] if vecchie else c.get("direzione") or "U"
+        righe = [r for r in righe if (r["societa"], r["voce_id"], r["mese"]) != chiave]
+        righe.append(
+            {
+                "societa": c["societa"],
+                "voce_id": c["voce_id"],
+                "mese": c["mese"],
+                "importo": int(c["importo_cent"]),
+                "direzione": direzione,
+                "origine": "pf",
+            }
+        )
+        voce["applicata"] = True
+        esito.append(voce)
+    return {**snapshot, "pf": righe}, esito
+
+
+def _limiti_pf_corretto(correzioni: list[dict]) -> list[str]:
+    fatte = [c for c in correzioni if c["applicata"]]
+    if not fatte:
+        return []
+    chi = sorted({c["dichiarato_da"] for c in fatte if c["dichiarato_da"]})
+    return [
+        f"PF corretto: {len(fatte)} {'voce' if len(fatte) == 1 else 'voci'} del PF "
+        f"{'dichiarate da ' + ', '.join(chi) if chi else 'dichiarate'} al posto del file di Rosa, "
+        "per tutti gli scenari (anche Solo PF). Si tolgono dal file pf_corretto.json quando il PF le porta."
+    ]
+
+
 def build_payload(
     snapshot: dict,
     scenari: list[tuple[Scenario, Base, dict]],
@@ -371,8 +432,10 @@ def build_payload(
     seme_salvato_il: str | None = None,
     canone_dichiarato: dict | None = None,
     scenari_ritirati: list[str] | None = None,
+    pf_corretto: dict | None = None,
 ) -> dict:
     snapshot = senza_coda(snapshot)
+    snapshot, pf_correzioni = applica_pf_corretto(snapshot, pf_corretto)
     base = snapshot["base"]
     vuoto = Scenario("Nessuna leva", [], [])
     baseline = to_dict(calcola(input_da_snapshot(snapshot, vuoto)))
@@ -413,12 +476,14 @@ def build_payload(
         "intercompany": snapshot["intercompany"],
         "fatti": snapshot["fatti"],
         "fornitori": list(snapshot.get("fornitori") or []),
+        "pf_correzioni": pf_correzioni,
         "seme": seme_doc,
         "scenari": salvati,
         "scenari_sostituiti": sostituiti,
         "canone_rif": canone_riferimento(snapshot["intercompany"], canone_dichiarato),
         "baseline": baseline,
         "limiti": _limiti(snapshot, sc_seme, baseline)
+        + _limiti_pf_corretto(pf_correzioni)
         + _limiti_canone(
             canone_riferimento(snapshot["intercompany"], canone_dichiarato),
             list(snapshot["mesi"]),
@@ -487,6 +552,11 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
     canone_dichiarato = (
         json.loads(CANONE_PATH.read_text(encoding="utf-8")) if CANONE_PATH.exists() else None
     )
+    pf_corretto = (
+        json.loads(PF_CORRETTO_PATH.read_text(encoding="utf-8"))
+        if PF_CORRETTO_PATH.exists()
+        else None
+    )
     payload = build_payload(
         snapshot,
         scenari_da_snapshot(snapshot),
@@ -494,7 +564,13 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
         seme_salvato_il=seme_salvato_il,
         canone_dichiarato=canone_dichiarato,
         scenari_ritirati=scenari_ritirati,
+        pf_corretto=pf_corretto,
     )
+    for c in payload["pf_correzioni"]:
+        print(
+            f"  PF corretto: {c['societa']} {c['voce_id']} {c['mese']} {_eur(c['corretto'])} "
+            f"(nel PF {_eur(c['nel_pf'])}) — {'applicata' if c['applicata'] else c['motivo']}"
+        )
     html = render_html(payload)
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
