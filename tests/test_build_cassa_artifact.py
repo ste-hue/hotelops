@@ -974,7 +974,7 @@ def test_template_i_patti_col_fornitore_non_si_chiamano_contratto():
     assert "togli i patti" in html and "togli il contratto" not in html
     assert "il calcolo legge solo quelle" in html
     # nella vista a tutto schermo ogni riga ha un tasto «apri ›» esplicito, oltre al tocco sulla riga
-    assert html.count("data-apri-foglio aria-label=\"apri\"") == 3 and 'e.target.closest("button[data-apri-foglio]")' in html
+    assert html.count("data-apri-foglio aria-label=\"apri\"") == 4 and 'e.target.closest("button[data-apri-foglio]")' in html
     # a tutto schermo c'è un editor alla volta: «apri tutto / chiudi tutto» spariscono (aprivano tendine che la vista non mostra)
     assert "body.vista-leve .strumenti button[data-apri],body.vista-leve .strumenti button[data-chiudi]{display:none}" in html
 
@@ -989,6 +989,19 @@ def test_template_ricorda_la_bozza_nel_browser():
     assert "b.salvata = true" in html
     # l'avviso prima di chiudere c'è solo se il browser non ha memoria
     assert "if (modificato() && !memoriaOk)" in html
+
+
+def test_template_fornitore_come_oggetto():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    # scheda Fornitori, segmento nella vista, mappa nello scenario, riconoscimento dall'anagrafica Esolver
+    assert 'id="fornitori"' in html and 'data-seg="fornitori"' in html and "function renderFornitori()" in html
+    assert "function riconosci(nome)" in html and "s.fornitori = s.fornitori || {};" in html
+    # il campo «fornitore» del pagamento suggerisce gli id noti; il nuovo fornitore eredita il codice riconosciuto
+    assert 'list="lista-fornitori-id"' in html and 'id="aggiungi-v"' in html and "data-vf-usa" in html
+    # l'Excel ha il foglio Fornitori con le colonne della tabella CLI
+    assert 'nome: "Fornitori", colonne: ["fornitore_id", "nome", "codice_esolver"' in html
+    # il payload porta l'anagrafica (vuota nello snapshot sintetico)
+    assert build_payload(snapshot_sintetico(), [])["fornitori"] == []
 
 
 def test_template_trascina_con_soglia_presa_e_volo():

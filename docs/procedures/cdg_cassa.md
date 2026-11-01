@@ -107,6 +107,15 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
     riga lo dice. Senza memoria del browser (navigazione privata) la pagina avvisa prima di chiudere.
     Non è un salvataggio condiviso: per fissare una bozza nel seme serve ancora il file .json e il Mac.
 
+12. **Il fornitore come oggetto** (brief UI, punto 8, primo passo). Un fornitore è l'**id** scritto in
+    «fornitore» dentro i pagamenti (lo stesso in ogni pagamento) più una scheda nella mappa `fornitori`
+    dello scenario: nome, codice Esolver, società, cartella Drive. La scheda «Fornitori» (e il segmento
+    nella vista a tutto schermo) elenca chi è usato nei pagamenti e chi è nella mappa, con totale lordo,
+    numero di pagamenti, mesi, documenti e progetti. L'**anagrafica Esolver** (`d_fornitori`, senza
+    intercompany ed esclusi) entra nel payload come `fornitori` e serve a **riconoscere** il codice da un
+    nome scritto a mano: proposta («Esolver? 1640», bottone «usa»), mai imposta. `hotelops cdg tabelle` ha
+    la tabella `fornitori` e l'Excel il foglio «Fornitori» con le stesse colonne. Patti abituali: prossimo passo.
+
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 
 1. Intake + promote del file (policy AUTO):

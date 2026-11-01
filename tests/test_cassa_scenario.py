@@ -276,6 +276,19 @@ def test_documenti_e_cartella_drive_sopravvivono_a_json_e_righe():
     assert "drive_url" not in j0 and all("documenti" not in g for g in j0["pagamenti"])
 
 
+def test_la_mappa_fornitori_sopravvive_a_json_e_righe():
+    sc, base = scenario_sintetico()
+    forn = {"AMCN": {"nome": "A.M.C.N. Costruzioni", "codice_esolver": 1576, "societa": "INTUR", "drive_url": "https://drive.google.com/drive/folders/x"}}
+    con = replace(sc, fornitori=forn)
+    doc = scenario_to_json(con, base)
+    assert json.loads(doc)["scenario"]["fornitori"] == forn
+    assert scenario_from_json(doc)[0] == con
+    s, f, p = righe_p(doc, "rid", datetime(2026, 11, 1, tzinfo=UTC), "stefano")
+    ((sc3, _, _),) = scenario_da_righe(s, f, p)
+    assert sc3 == con
+    assert "fornitori" not in json.loads(scenario_to_json(sc, base))["scenario"]
+
+
 def test_contratti_del_progetto_sopravvivono_a_json_e_righe():
     """I parametri del contratto (da cui la pagina genera i pagamenti) non si perdono né
     nel file esportato né nel salvataggio su BigQuery; il calcolo non li usa."""

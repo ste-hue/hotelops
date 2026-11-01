@@ -13,6 +13,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from core.config import (
+    D_FORNITORI,
     F_BANCHE_MOVIMENTI,
     F_PIANO_FINANZIARIO_INPUT,
     F_PROGETTO_EVENTI,
@@ -311,6 +312,29 @@ def leggi_fatti(query: Query) -> list[Fatto]:
 
 
 # ── scenari ──
+
+
+_SQL_FORNITORI = f"""
+SELECT codice_fornitore, nome_esolver, societa_id
+FROM `{D_FORNITORI}`
+WHERE NOT COALESCE(is_intercompany, FALSE) AND NOT COALESCE(is_excluded, FALSE)
+ORDER BY societa_id, nome_esolver"""
+
+
+def leggi_fornitori(query: Query) -> list[dict]:
+    """L'anagrafica fornitori di Esolver (d_fornitori): codice, nome, società.
+
+    Serve alla pagina per riconoscere un fornitore scritto a mano e proporgli il codice;
+    intercompany ed esclusi restano fuori. Sola lettura."""
+    return [
+        {
+            "codice": int(r["codice_fornitore"]),
+            "nome": str(r.get("nome_esolver") or ""),
+            "societa": r.get("societa_id"),
+        }
+        for r in query(_SQL_FORNITORI)
+        if r.get("codice_fornitore") is not None
+    ]
 
 
 def leggi_scenari(query: Query):

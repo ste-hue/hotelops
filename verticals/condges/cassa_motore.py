@@ -155,6 +155,9 @@ class Scenario:
     canone: ScalettaCanone | None = None
     manuali: list[Riga] = field(default_factory=list)
     soglia: int = 0
+    # Il fornitore come oggetto: {id usato nei pagamenti: {nome, codice_esolver, societa, drive_url}}.
+    # Memoria dell'interfaccia; il calcolo non lo legge.
+    fornitori: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

@@ -73,9 +73,11 @@ def snapshot_da_fonti(
     fatti: list[Fatto],
     scenari: list[tuple[Scenario, Base, dict]],
     acquisito_il: datetime | None = None,
+    fornitori: list[dict] | None = None,
 ) -> dict:
     """Forma JSON dello snapshot (date ISO, frozenset -> lista ordinata, dataclass -> dict)."""
     return {
+        "fornitori": list(fornitori or []),
         "acquisito_il": (acquisito_il or datetime.now()).isoformat(timespec="minutes"),
         "mesi": list(mesi),
         "mesi_ipotetici": [m for m in mesi if m in mesi_ipotetici],
@@ -128,6 +130,7 @@ def acquisisci(query=cf.query_bq) -> dict:
     righe, flussi, base, mesi = cf.leggi_baseline(query)
     fatti = cf.leggi_fatti(query)
     scenari = cf.leggi_scenari(query)
+    fornitori = cf.leggi_fornitori(query)
     # I mesi oltre il PF restano nell'orizzonte (le leve ci arrivano) ma senza
     # righe PF né flussi copiati: nessun saldo inventato, solo effetto delle leve.
     mesi_tutti, coda = cf.mesi_ipotetici(mesi)
@@ -140,6 +143,7 @@ def acquisisci(query=cf.query_bq) -> dict:
         mesi_ipotetici=coda,
         fatti=fatti,
         scenari=scenari,
+        fornitori=fornitori,
     )
 
 
@@ -408,6 +412,7 @@ def build_payload(
         "pf": snapshot["pf"],
         "intercompany": snapshot["intercompany"],
         "fatti": snapshot["fatti"],
+        "fornitori": list(snapshot.get("fornitori") or []),
         "seme": seme_doc,
         "scenari": salvati,
         "scenari_sostituiti": sostituiti,

@@ -230,3 +230,29 @@ def test_i_json_portano_record_con_centesimi_interi_e_un_manifesto_che_li_elenca
         ]
         assert v["righe"] == len(json.loads(testo)["righe"])
     assert "riservati" in man["nota"].lower()
+
+
+def test_la_tabella_fornitori_aggrega_i_pagamenti_per_fornitore(payload_con_seme):
+    tab = tabelle(payload_con_seme)
+    colonne, righe = tab["fornitori"]
+    assert colonne[:6] == [
+        "fornitore_id",
+        "nome",
+        "codice_esolver",
+        "societa",
+        "n_pagamenti",
+        "totale_lordo",
+    ]
+    per_id = {r[0]: r for r in righe}
+    # lo scenario sintetico ha due pagamenti con fornitore F0 e F1, sei mesi ciascuno
+    assert set(per_id) >= {"F0", "F1"}
+    assert (
+        per_id["F0"][4] == 1
+        and per_id["F0"][5] > 0
+        and per_id["F0"][6] <= per_id["F0"][7]
+    )
+    # totale_lordo è denaro: in CSV diventa euro con la virgola
+    assert (
+        formatta(colonne, per_id["F0"])[5].endswith(",00")
+        or "," in formatta(colonne, per_id["F0"])[5]
+    )

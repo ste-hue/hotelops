@@ -12,6 +12,7 @@ from verticals.condges.cassa_fonti import (
     leggi_ancore,
     leggi_baseline,
     leggi_fatti,
+    leggi_fornitori,
     leggi_scenari,
     mesi_ipotetici,
     salva_snapshot,
@@ -482,3 +483,29 @@ def test_snapshot_latest(tmp_path):
     assert carica_snapshot(home) == {"a": 1}
     assert p.name.startswith("snapshot_") and p.suffix == ".json" and p.exists()
     assert (home / "latest.json").exists()
+
+
+def test_fornitori_anagrafica_esolver_senza_intercompany_ne_esclusi():
+    # L'anagrafica serve a riconoscere un fornitore scritto a mano: codice, nome, società; niente altro.
+    righe = [
+        {
+            "codice_fornitore": 1640,
+            "nome_esolver": "DOMUS TAPPEZZERIA D'ARREDO S.R.L.",
+            "societa_id": "INTUR",
+        },
+        {
+            "codice_fornitore": "121",
+            "nome_esolver": "SANTELIA LUIGI",
+            "societa_id": "INTUR",
+        },
+        {"codice_fornitore": None, "nome_esolver": "riga rotta", "societa_id": "INTUR"},
+    ]
+    out = leggi_fornitori(finta({"d_fornitori": righe}))
+    assert out == [
+        {
+            "codice": 1640,
+            "nome": "DOMUS TAPPEZZERIA D'ARREDO S.R.L.",
+            "societa": "INTUR",
+        },
+        {"codice": 121, "nome": "SANTELIA LUIGI", "societa": "INTUR"},
+    ]
