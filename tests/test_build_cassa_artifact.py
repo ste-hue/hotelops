@@ -1657,3 +1657,66 @@ def test_js_leggi_documento_accetta_scenario_1_e_2(tmp_path):
     a, b, c = json.loads(out)
     assert a is None and b is None
     assert c and "cdg-cassa-scenario/3" in c
+
+
+# Un progetto come il terzo piano scritto prima dei livelli: anticipo, 5 SAL e ritenuta AMCN una riga ciascuno,
+# i patti da 482.000 e un altro fornitore. IVA 10% per vedere anche l'IVA.
+PIANO3_JS = (
+    "(() => { const m = D.mesi, r = (nome, mese, cent) => ({ nome, mesi: { [mese]: cent }, aliquota_iva: 10, stato: 'contratto', fornitore_id: 'AMCN' });"
+    " return { id: 'P3', nome: 'Terzo piano', societa: 'INTUR', acceso: true, stato: 'contratto',"
+    " pagamenti: [r('AMCN · anticipo 15%', m[0], 7230000), ...[1, 2, 3, 4, 5].map((k) => r(`AMCN · SAL ${k}/5`, m[k], 7230000)),"
+    " r('AMCN · svincolo ritenuta 10%', m[7], 4820000),"
+    " { nome: 'Impianti STE', mesi: { [m[2]]: 5000000 }, aliquota_iva: 22, stato: 'ipotesi', fornitore_id: 'STE' }],"
+    " contratti: [{ fornitore: 'AMCN', totale: 48200000, aliquota_iva: 10, stato: 'contratto', modo: 'sal', anticipo_pct: 15, anticipo_mese: m[0],"
+    " ritenuta_pct: 10, svincolo_mese: m[7], sal_modo: 'n', sal_n: 5, sal_ogni: 0, sal_da: m[1], sal_passo: 1, quote: [] }] }; })()"
+)
+
+
+def test_js_conversione_consolida_le_rate_dei_patti(tmp_path):
+    # Alla conversione le 7 righe AMCN tornano una sottovoce legata ai patti: cassa identica al centesimo.
+    # Se i totali non tornano, o due righe cadono nello stesso mese, non si tocca niente e i patti restano slegati.
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_fn(
+        tmp_path,
+        html,
+        "(() => { const F = require('./formato.js'); const P = " + PIANO3_JS + ";"
+        " const conv = (p) => { const q = F.consolidaContratti({ ...p, livelli: F.livelliDaPagamenti(p) }); q.pagamenti = F.derivaPagamenti(q, D.mesi); return q; };"
+        " const sc = (p) => ({ ...D.seme.scenario, progetti: [p] });"
+        " const q = conv(P), a = M.calcola(D, sc(P)), b = M.calcola(D, sc(q));"
+        " const storto = conv({ ...P, contratti: [{ ...P.contratti[0], totale: 48199999 }] });"
+        " const doppio = conv({ ...P, pagamenti: P.pagamenti.map((g, i) => (i === 1 ? { ...g, mesi: { [D.mesi[2]]: 7230000 } } : g)) });"
+        " return JSON.stringify({ voci: q.livelli.macro[0].voci.map((v) => [v.nome, v.fornitore_id, v.netto, Object.keys(v.mesi).length]),"
+        " legata: q.contratti[0].voce_id, idVoce: q.livelli.macro[0].voci[0].id, uguali: JSON.stringify(a.righe) === JSON.stringify(b.righe),"
+        " storto: [storto.livelli.macro[0].voci.length, storto.contratti[0].voce_id || null],"
+        " doppio: [doppio.livelli.macro[0].voci.length, doppio.contratti[0].voce_id || null] }); })()",
+    )
+    r = json.loads(out)
+    assert r["voci"] == [["AMCN", "AMCN", 48200000, 7], ["Impianti STE", "STE", 5000000, 1]]
+    assert r["legata"] == r["idVoce"] and r["uguali"] is True
+    assert r["storto"] == [8, None] and r["doppio"] == [8, None]
+
+
+def test_js_genera_scrive_solo_la_sottovoce_dei_patti(tmp_path):
+    # «Genera» con patti diversi ma stesso totale: cambiano solo i mesi della sottovoce legata, il totale del
+    # progetto no; le altre sottovoci restano identiche. Mai unire: un fornitore con due sottovoci e patti
+    # slegati dà un errore leggibile invece di scegliere.
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_fn(
+        tmp_path,
+        html,
+        "(() => { const F = require('./formato.js'); const P = " + PIANO3_JS + ";"
+        " const q = F.consolidaContratti({ ...P, livelli: F.livelliDaPagamenti(P) }); q.pagamenti = F.derivaPagamenti(q, D.mesi);"
+        " q.contratti[0] = { ...q.contratti[0], sal_n: 3, sal_passo: 2 };"
+        " const r = F.generaPatti(q, 0, D.mesi), g = r.progetto; g.pagamenti = F.derivaPagamenti(g, D.mesi);"
+        " const lordo = (p) => p.pagamenti.reduce((t, x) => t + Object.values(x.mesi).reduce((s, v) => s + M.iva(v, x.aliquota_iva), 0), 0);"
+        " const v0 = q.livelli.macro[0].voci, v1 = g.livelli.macro[0].voci;"
+        " const slegato = { ...P, livelli: F.livelliDaPagamenti(P) };"
+        " return JSON.stringify({ voce: r.voce_id === v0[0].id, mesiPrima: Object.keys(v0[0].mesi).length, mesiDopo: Object.keys(v1[0].mesi).length,"
+        " netto: [v0[0].netto, v1[0].netto], altra: JSON.stringify(v0[1]) === JSON.stringify(v1[1]), nVoci: v1.length,"
+        " lordo: [lordo(q), lordo(g)], errore: F.generaPatti(slegato, 0, D.mesi).errore || null }); })()",
+    )
+    r = json.loads(out)
+    assert r["voce"] and r["nVoci"] == 2 and r["altra"]
+    assert r["mesiPrima"] == 7 and r["mesiDopo"] != 7 and r["netto"] == [48200000, 48200000]
+    assert r["lordo"][0] == r["lordo"][1]
+    assert r["errore"] and "7 sottovoci" in r["errore"]
