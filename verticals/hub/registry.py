@@ -33,6 +33,7 @@ _BANCHE_LOOKER = (
     "https://datastudio.google.com/u/0/reporting/"
     "2a7a4c25-56f2-44d4-986f-9a9cc27a03cd/page/TlJ0C"
 )
+_EDIFICIO = "https://edificio.panorama-host.com"
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,9 @@ APPS: list[HubApp] = [
     # ── Progetti ─────────────────────────────────────────────────────────────
     # progetti: sensibile per dati riservati (contratti, budget cantiere su Drive) — nessun write-path BQ.
     HubApp("progetti", "Progetti", "🏗️", "Progetti", "page", progetti.render, "cantiere terzo piano & soft restyling: scadenze, app, documenti", sensitive=True),
+    # edificio: atlante privato Hotel Panorama (repo ste-hue/hpan-building-model, deploy suo
+    # su Cloudflare). Sensibile per dati riservati (rilievi, passaporto) — nessun write-path BQ.
+    HubApp("edificio", "Edificio", "🏨", "Progetti", "bind", _EDIFICIO, "atlante: camere, tavole, misure, fonti", sensitive=True),
     # ── Sistema ──────────────────────────────────────────────────────────────
     # L'ingest NON è una sezione trasversale: è una funzione di ciascun vertical
     # (accodamenti → condges/Finanza, F&B → Operations, …). La vecchia pagina
