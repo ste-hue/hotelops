@@ -1,7 +1,10 @@
 -- v_previsione_cassa: Proiezione cash forward mensile con ancora bancaria reale.
 --
 -- Logica:
---   1. ANCORA: ultimo saldo reale per banca (f_saldi_banca_snapshot), sommato per società.
+--   1. ANCORA: saldi da estratto conto di fine mese (f_saldi_banca_chiusura_mensile, D1),
+--      all'ultima data in cui ci sono TUTTI i conti obbligatori della società
+--      (specchio di verticals/condges/pf_rotate/saldi_registry.py, test di allineamento).
+--      Un mese inserito a metà non sposta l'ancora.
 --   2. MESI: 12 mesi in avanti dall'ancora (es. mar 2026 → feb 2027).
 --   3. FLUSSI per mese:
 --        tipo_periodo = CONSUNTIVO → actuals da v_piano_finanziario_consuntivo
@@ -22,26 +25,35 @@ CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_previsione_cassa` AS
 
 WITH
 
--- ── 1. Ancora: ultimo saldo per banca, aggregato per società ─────────────────
+-- ── 1. Ancora: fine mese completo più recente, da estratto conto ─────────────
+conti_richiesti AS (
+  SELECT societa_id, banca_id
+  FROM UNNEST([
+    STRUCT('ORTI' AS societa_id, 'INTESA' AS banca_id),
+    ('ORTI', 'MPS'), ('ORTI', 'MPS_KROSS'), ('ORTI', 'UNICREDIT'),
+    ('INTUR', 'SELLA'), ('INTUR', 'MPS'), ('INTUR', 'INTESA')
+  ])
+),
+date_complete AS (
+  SELECT s.societa_id, s.data_riferimento
+  FROM `hotelops-suite.hotelops.f_saldi_banca_chiusura_mensile` s
+  JOIN conti_richiesti r USING (societa_id, banca_id)
+  JOIN (SELECT societa_id, COUNT(*) AS n FROM conti_richiesti GROUP BY 1) k USING (societa_id)
+  GROUP BY s.societa_id, s.data_riferimento, k.n
+  HAVING COUNT(DISTINCT s.banca_id) = k.n
+),
 ancora AS (
   SELECT
-    societa_id,
-    ROUND(SUM(saldo_finale), 2)  AS saldo_iniziale,
-    MAX(data_snapshot)           AS data_ancora
-  FROM (
-    SELECT
-      societa_id,
-      banca_id,
-      saldo_finale,
-      data_snapshot,
-      ROW_NUMBER() OVER (
-        PARTITION BY societa_id, banca_id
-        ORDER BY data_snapshot DESC
-      ) AS rn
-    FROM `hotelops-suite.hotelops.f_saldi_banca_snapshot`
-  )
-  WHERE rn = 1
-  GROUP BY societa_id
+    s.societa_id,
+    ROUND(SUM(s.saldo_eur), 2) AS saldo_iniziale,
+    s.data_riferimento         AS data_ancora
+  FROM `hotelops-suite.hotelops.f_saldi_banca_chiusura_mensile` s
+  JOIN conti_richiesti r USING (societa_id, banca_id)
+  JOIN (
+    SELECT societa_id, MAX(data_riferimento) AS data_riferimento
+    FROM date_complete GROUP BY 1
+  ) d USING (societa_id, data_riferimento)
+  GROUP BY 1, 3
 ),
 
 -- ── 2. Finestra 12 mesi in avanti dall'ancora ────────────────────────────────
