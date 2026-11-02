@@ -1763,3 +1763,85 @@ def test_filtra_livelli_spegne_righe(tmp_path):
     assert r["stessi"] is True
     # tutte spente = nessuna differenza dal progetto
     assert r["niente"] == 0
+
+
+def test_quando_percentuali_esatte_con_arrotondamento_in_eccesso(tmp_path):
+    # 50% di 1.234.567 arrotonda a 617.284: due parti sforano di un centesimo, l'ultima lo restituisce
+    r = _formato(
+        tmp_path,
+        "JSON.stringify([F.quandoParse('gen 27 50% · feb 27 50%', 1234567),"
+        " F.quandoParse('gen 27 50% · feb 27 50%', 1234568),"
+        " F.quandoParse('gen 27 30% · feb 27 60%', 1234567)])",
+    )
+    assert r[0] == {"2027-01": 617_284, "2027-02": 617_283}
+    assert r[1] == {"2027-01": 617_284, "2027-02": 617_284}
+    assert r[2] is None
+
+
+def test_budget_ripetuto_va_da_sistemare(tmp_path):
+    righe = [
+        ["Macro", "Sottovoce", "Fornitore", "Totale netto €", "Quando"],
+        ["budget progetto", "", "", 165000, "gen 27"],
+        ["Tessili", "budget", "", 40000, "gen 27"],
+        ["Tessili", "budget", "", 50000, "feb 27"],
+        ["budget progetto", "", "", 200000, "feb 27"],
+    ]
+    r = _formato(
+        tmp_path,
+        f"(() => {{ const r = {json.dumps(righe)}; const g = F.indovinaColonne(r);"
+        " return JSON.stringify(F.livelliDaFoglio(r, g.colonne, {testa: g.testa})); })()",
+    )
+    assert r["livelli"]["budget_netto"] == 16_500_000
+    assert r["livelli"]["macro"][0]["budget_netto"] == 4_000_000
+    assert r["da_sistemare"] == [{"n": 4, "motivo": "budget ripetuto"}, {"n": 5, "motivo": "budget ripetuto"}]
+
+
+def test_voce_senza_mesi_esporta_il_suo_netto(tmp_path):
+    p = _progetto_tre_righe()
+    senza = _voce("v9", "tappezzeria", {}, "TAPP")
+    senza["netto"] = 500_000
+    p["livelli"]["macro"][0]["voci"].append(senza)
+    r = _formato(tmp_path, _giro(p))
+    riga = next(x for x in r["r"] if x[1] == "tappezzeria")
+    assert riga[4] == 5000 and riga[5] == ""
+    # al reimport (mese_default) la voce torna con il suo netto nel mese scelto: cambia, non sparisce
+    assert [(d["tipo"], d["sottovoce"]) for d in r["d"]] == [("cambia", "tappezzeria")]
+    d = r["d"][0]
+    assert d["prima"]["netto"] == d["dopo"]["netto"] == 500_000
+    assert d["dopo"]["mesi"] == {"2027-01": 500_000}
+    tessili = r["dopo"]["livelli"]["macro"][0]
+    assert [(v["id"], v["netto"]) for v in tessili["voci"] if v["nome"] == "tappezzeria"] == [("v9", 500_000)]
+
+
+def test_applica_livelli_macro_che_differiscono_per_maiuscole(tmp_path):
+    p = _progetto_tre_righe()
+    nuovi = {
+        "budget_netto": None, "mesi_budget": None, "aliquota_iva": 22,
+        "macro": [_macro("x1", "Tessili", []), _macro("x2", "tessili", []), _macro("x3", "Pitture", [])],
+    }
+    r = _formato(
+        tmp_path,
+        f"JSON.stringify(F.applicaLivelli({json.dumps(p)}, {json.dumps(nuovi)}).livelli.macro.map((m) => m.id))",
+    )
+    assert r[0] == "m1" and r[2] == "m2"
+    assert len(set(r)) == 3 and r[1] not in ("m1", "m2")
+
+
+def test_import_in_una_macro_toglie_solo_i_patti_di_quella_macro(tmp_path):
+    p = _progetto_tre_righe()
+    p["livelli"]["macro"][0]["voci"].append(_voce("v3", "Opere", {"2027-02": 1_200_000}, "AMCN"))
+    p["contratti"] = [
+        {"fornitore": "AMCN", "totale": 3_000_000, "voce_id": "v1"},  # Pitture
+        {"fornitore": "AMCN", "totale": 1_200_000, "voce_id": "v3"},  # Tessili
+    ]
+    righe = [["Fornitore", "Area di intervento", "Totale netto €"], ["AMCN", "Opere", 12000]]
+    r = _formato(
+        tmp_path,
+        f"(() => {{ const p = {json.dumps(p)}; const r = {json.dumps(righe)}; const g = F.indovinaColonne(r);"
+        " const L = F.livelliDaFoglio(r, g.colonne, {testa: g.testa, macro_scelta: 'Tessili', mese_default: '2027-03', iva_default: 22});"
+        " const base = {macro: [{...p.livelli.macro[0], budget_netto: null}]};"
+        " return JSON.stringify({d: F.diffLivelli(base, L.livelli, F.contrattiToccati(p, 'Tessili')),"
+        " c: F.applicaLivelli(p, L.livelli, {macro_scelta: 'Tessili'}).contratti}); })()",
+    )
+    assert any(d.get("patti_persi") and d["fornitore"] == "AMCN" for d in r["d"])
+    assert r["c"] == [{"fornitore": "AMCN", "totale": 3_000_000, "voce_id": "v1"}]

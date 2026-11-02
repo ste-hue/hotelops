@@ -37,7 +37,8 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
 ## 2. Salvare uno scenario (versionato, mai sovrascritto)
 
 1. Nella pagina, regola le leve e premi **Esporta scenario**: scarica
-   `cassa-scenario-<nome>.json` (schema `cdg-cassa-scenario/1`, con dentro la base PF usata).
+   `cassa-scenario-<nome>.json` (schema `cdg-cassa-scenario/2`, con dentro la base PF usata; i
+   file `/1` già salvati si rileggono e si promuovono come prima).
 2. Registra il file:
 
        hotelops cdg scenario salva FILE --nome "Nome scenario"
@@ -45,6 +46,16 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
    fa intake nel lineage (source `CDG_SCENARIOCASSA_GROUP_APPEND`, raw su GCS) e promote nelle
    tre tabelle `hotelops_previsioni.p_scenari`, `p_scenario_flussi`, `p_progetti_pagamenti`
    (append-only, importi in centesimi, `raw_object_id` obbligatorio). Il nome vive nel documento.
+
+   **Una volta, dopo il merge dei progetti a livelli e prima di salvare qualsiasi scenario:**
+
+       python -m core.bq.load.create_previsioni_tables
+
+   aggiunge a `p_progetti_pagamenti` le colonne `macro` e `area` (ALTER idempotente: rilanciarlo
+   non fa danni; `--dry-run` stampa le istruzioni senza eseguirle). Se lo si dimentica, il promote
+   si ferma **prima di scrivere** con `RuntimeError: … senza colonne ['macro', 'area']: esegui prima
+   python -m core.bq.load.create_previsioni_tables … Nessuna riga scritta.`: si lancia il comando e
+   si ripete il salvataggio, nessuna riga da pulire.
 3. `hotelops cdg scenario lista` elenca gli scenari salvati. Al prossimo `--aggiorna` entrano
    nel menu Scenario della pagina, con l'ora di salvataggio; se la base PF è cambiata sono
    marcati «base diversa».
@@ -165,7 +176,8 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
       scelta** nell'anteprima; di default è una macro nuova col nome del file. Senza «Quando» ogni riga
       è una rata al mese scelto; senza «IVA %» vale l'IVA scelta («come la macro» di default).
     Prima di applicare, l'**anteprima** dice riga per riga cosa **entra**, cosa **cambia** (prima → dopo) e
-    cosa **sparisce**, le righe **da sistemare** (importo, «quando» o IVA illeggibili: non entrano), il
+    cosa **sparisce**, le righe **da sistemare** (importo, «quando» o IVA illeggibili, un secondo «budget»
+    della stessa macro o un secondo «budget progetto»: non entrano), il
     totale del progetto prima → dopo (lordo in cassa e netto) e il **minimo della società** prima → dopo.
     Ogni riga si spegne: spenta, resta com'è nel progetto; una macro spenta vale con tutte le sue righe.
     Un file uguale al progetto dice «nessuna differenza». «Sostituisci» applica, crea le schede dei
@@ -173,7 +185,14 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
     (da prezzare) si saltano; «Da assegnare», TBD e vuoto diventano sottovoci **senza fornitore**, che
     consumano il budget della macro. Una sottovoce ritrovata (stessa macro, sottovoce e fornitore) tiene
     stato e documenti. Se il suo «Quando» è cambiato, il testo vince: i patti di quel fornitore cadono e
-    l'anteprima lo scrive («i patti di AMCN si perdono: le rate vengono dal file»).
+    l'anteprima lo scrive («i patti di AMCN si perdono: le rate vengono dal file»). Con una macro scelta
+    cadono solo i patti legati alle sottovoci di quella macro; quelli dello stesso fornitore in altre
+    macro restano.
+    **Quando l'orizzonte scorre** (nuovo mese chiuso), la pagina ricalcola il «da assegnare» sui mesi del
+    budget rimasti nell'orizzonte. Le tabelle Python (`hotelops cdg tabelle`) e BigQuery invece leggono i
+    pagamenti salvati al momento del salvataggio. Per uno scenario `/2` salvato prima che l'orizzonte
+    scorresse, pagina e tabelle possono quindi dare cifre diverse sul «da assegnare» finché lo scenario
+    non viene ri-esportato e ri-salvato (punto 2).
 
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 

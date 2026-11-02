@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS `{P_PROGETTI_PAGAMENTI}` (
     aliquota_iva        INT64 NOT NULL,
     stato               STRING NOT NULL,
     fornitore_id        STRING,
+    macro               STRING,
+    area                STRING,
     societa_id          STRING NOT NULL,
     raw_object_id       STRING,
     hash_riga           STRING NOT NULL,
@@ -76,7 +78,20 @@ CREATE TABLE IF NOT EXISTS `{P_PROGETTI_PAGAMENTI}` (
 )
 """
 
-STATEMENTS = [DDL_SCHEMA, DDL_SCENARI, DDL_FLUSSI, DDL_PAGAMENTI]
+# Tabelle create prima di cdg-cassa-scenario/2: aggiunge le colonne dei livelli.
+ALTER_PAGAMENTI_LIVELLI = (
+    f"ALTER TABLE `{P_PROGETTI_PAGAMENTI}` "
+    "ADD COLUMN IF NOT EXISTS macro STRING, "
+    "ADD COLUMN IF NOT EXISTS area STRING"
+)
+
+STATEMENTS = [
+    DDL_SCHEMA,
+    DDL_SCENARI,
+    DDL_FLUSSI,
+    DDL_PAGAMENTI,
+    ALTER_PAGAMENTI_LIVELLI,
+]
 
 
 def main() -> None:

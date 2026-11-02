@@ -1009,7 +1009,7 @@ const FORMATO = (() => {
   // Testo -> {mese: cent} che somma a `totale`; null se illeggibile o se le cifre non tornano.
   // Parti separate da «·»: «mar 27» (il resto), «mar 27 30%», «mar 27 12.000», «gen 27–mar 27 ×3» (rate
   // uguali, resto sull'ultima). Una sola parte senza cifra; senza, le percentuali devono fare 100 e il loro
-  // arrotondamento (al più un centesimo per parte) chiude sull'ultima.
+  // arrotondamento (al più un centesimo per parte, in più o in meno) chiude sull'ultima.
   // Accetta anche il formato di calendarioParse («2027-03=12.000,00; …»).
   function quandoParse(txt, totale) {
     const s = String(txt ?? "").trim();
@@ -1036,9 +1036,11 @@ const FORMATO = (() => {
     }
     const libere = parti.filter((x) => x.importo === null);
     const resto = totale - parti.reduce((t, x) => t + (x.importo || 0), 0);
-    if (libere.length > 1 || resto < 0) return null;
-    if (libere.length) libere[0].importo = resto;
-    else if (resto && parti.every((x) => x.pct !== null) && parti.reduce((t, x) => t + x.pct, 0) === 10000 && resto <= parti.length) parti[parti.length - 1].importo += resto;
+    const tuttePct = parti.every((x) => x.pct !== null) && parti.reduce((t, x) => t + x.pct, 0) === 10000;
+    const ultima = parti[parti.length - 1];
+    if (libere.length > 1) return null;
+    if (libere.length) { if (resto < 0) return null; libere[0].importo = resto; }
+    else if (resto && tuttePct && Math.abs(resto) <= parti.length && ultima.importo + resto >= 0) ultima.importo += resto;
     else if (resto) return null;
     const out = {};
     for (const x of parti) {
@@ -1051,6 +1053,8 @@ const FORMATO = (() => {
   const inEuro = (c) => (c == null ? "" : c / 100);
   // I pesi del budget diventano importi (quelli che si pagano), così «Quando» si legge come per le righe.
   const mesiBudget = (budget, pesi) => (budget && haMesi(pesi) ? perPesi(budget, pesi, ordinati(pesi)) : {});
+  // Il netto di una voce: la somma dei mesi; senza mesi, il netto scritto (una voce non ancora messa nei mesi).
+  const nettoDiVoce = (v) => (Object.keys(v.mesi || {}).length ? somma(v.mesi) : v.netto || 0);
   // Righe del foglio (senza intestazione = TESTA_PROGETTO), importi in euro. `vuoto`: solo il budget del progetto.
   function righeProgetto(p, vuoto = false) {
     const L = p.livelli || livelliDaPagamenti(p);
@@ -1060,7 +1064,7 @@ const FORMATO = (() => {
     for (const m of L.macro || []) {
       if (m.budget_netto != null) out.push([m.nome, "budget", "", "", inEuro(m.budget_netto), quandoTesto(mesiBudget(m.budget_netto, m.mesi_budget)), iva(m.aliquota_iva), ""]);
       else if (!(m.voci || []).length) out.push([m.nome, "", "", "", "", "", iva(m.aliquota_iva), ""]);  // macro vuota: Sottovoce vuota
-      for (const v of m.voci || []) out.push([m.nome, v.nome, v.fornitore_id || "", v.area || "", inEuro(somma(v.mesi)), quandoTesto(v.mesi), iva(v.aliquota_iva), v.note || ""]);
+      for (const v of m.voci || []) out.push([m.nome, v.nome, v.fornitore_id || "", v.area || "", inEuro(nettoDiVoce(v)), quandoTesto(v.mesi), iva(v.aliquota_iva), v.note || ""]);
     }
     return out;
   }
@@ -1118,6 +1122,7 @@ const FORMATO = (() => {
       return m;
     };
     let nv = 0;
+    const budgetVisti = new Set();  // «budget progetto» e «budget» di ogni macro: uno solo ciascuno
     if (!(c.macro >= 0) && o.macro_scelta) macroDi(o.macro_scelta);  // anche se il file non porta voci
     righe.slice(testa + 1).forEach((r, i) => {
       const n = testa + i + 2;
@@ -1137,6 +1142,9 @@ const FORMATO = (() => {
         // un budget senza mesi non si salva: senza «Quando» prende il mese scelto, come le voci
         const pesi = !netto ? null : txt ? quandoParse(txt, netto) : o.mese_default ? { [o.mese_default]: netto } : null;
         if (netto && !pesi) return da_sistemare.push({ n, motivo: txt ? "quando illeggibile" : "budget senza mesi" });
+        const qui = progetto ? null : macro;  // null = il progetto
+        if (budgetVisti.has(qui)) return da_sistemare.push({ n, motivo: "budget ripetuto" });
+        budgetVisti.add(qui);
         const dove = progetto ? L : macroDi(macro);
         Object.assign(dove, { budget_netto: netto, mesi_budget: pesi, aliquota_iva: progetto ? iva ?? 22 : iva });
         return;
@@ -1166,7 +1174,7 @@ const FORMATO = (() => {
       if (m.budget_netto != null) metti(chiave(m.nome, "budget"), { macro: m.nome, sottovoce: "budget", fornitore: null, val: budget(m) });
       for (const v of m.voci || []) {
         metti(chiave(m.nome, v.nome, v.fornitore_id), { macro: m.nome, sottovoce: v.nome, fornitore: v.fornitore_id ?? null, voce: v,
-          val: { netto: somma(v.mesi), mesi: { ...v.mesi }, area: v.area || null, aliquota_iva: v.aliquota_iva ?? null, note: v.note || "" } });
+          val: { netto: nettoDiVoce(v), mesi: { ...v.mesi }, area: v.area || null, aliquota_iva: v.aliquota_iva ?? null, note: v.note || "" } });
       }
     }
     return out;
@@ -1194,13 +1202,21 @@ const FORMATO = (() => {
   // Applica i livelli importati a `p` (puro: torna un progetto nuovo, i pagamenti si derivano dopo).
   // Senza `macro_scelta` sostituisce tutto il progetto; con, solo quella macro (budget della macro invariato).
   // Le voci ritrovate per chiave tengono id, stato e documenti; le altre prendono id nuovi. I patti dei
-  // fornitori con patti_persi cadono.
+  // fornitori con patti_persi cadono (con `macro_scelta`, solo quelli legati a voci di quella macro).
+  // I patti che l'import può toccare: tutti, o con una macro scelta quelli delle sue voci.
+  function contrattiToccati(p, solo) {
+    if (solo === null) return p.contratti || [];
+    const L = p.livelli || livelliDaPagamenti(p);
+    const ids = new Set((L.macro || []).filter((m) => m.nome === solo).flatMap((m) => (m.voci || []).map((v) => v.id)));
+    return (p.contratti || []).filter((c) => c.voce_id && ids.has(c.voce_id));
+  }
   function applicaLivelli(p, nuovi, opzioni = {}) {
     const vecchi = p.livelli || livelliDaPagamenti(p);
     const solo = opzioni.macro_scelta ?? null;
     // un file senza colonna Macro non porta il budget della macro: si confrontano solo le voci
     const base = solo === null ? vecchi : { macro: (vecchi.macro || []).filter((m) => m.nome === solo).map((m) => ({ ...m, budget_netto: null })) };
-    const persi = new Set(diffLivelli(base, nuovi, p.contratti || []).filter((d) => d.patti_persi).map((d) => d.fornitore));
+    const toccati = contrattiToccati(p, solo);
+    const persi = new Set(diffLivelli(base, nuovi, toccati).filter((d) => d.patti_persi).map((d) => d.fornitore));
     const vecchie = new Map(righeConfronto(base).filter((e) => e.voce).map((e) => [e.chiave, e.voce]));
     const libero = (usati, pref) => { let k = 1; while (usati.has(`${pref}${k}`)) k++; usati.add(`${pref}${k}`); return `${pref}${k}`; };
     const idVoci = new Set((vecchi.macro || []).flatMap((m) => (m.voci || []).map((v) => v.id)));
@@ -1211,8 +1227,10 @@ const FORMATO = (() => {
     }));
     let livelli;
     if (solo === null) {
+      const macroUsate = new Set();  // un id vecchio va a una macro sola («Tessili» e «tessili» non lo condividono)
       const macro = (nuovi.macro || []).map((m) => {
-        const v = (vecchi.macro || []).find((x) => x.nome.toLowerCase() === m.nome.toLowerCase());
+        const v = (vecchi.macro || []).find((x) => !macroUsate.has(x.id) && x.nome.toLowerCase() === m.nome.toLowerCase());
+        if (v) macroUsate.add(v.id);
         return { ...m, id: v ? v.id : libero(idMacro, "m"), area: m.area ?? (v ? v.area : null), voci: (m.voci || []).map((x) => voce.get(x)) };
       });
       livelli = { ...vecchi, budget_netto: nuovi.budget_netto, mesi_budget: nuovi.mesi_budget, aliquota_iva: nuovi.aliquota_iva, macro };
@@ -1223,7 +1241,7 @@ const FORMATO = (() => {
       const nuova = { nome: solo, budget_netto: null, mesi_budget: null, aliquota_iva: null, area: null, ...(nuovi.macro || [])[0], id: libero(idMacro, "m"), voci };
       livelli = { ...vecchi, macro: v ? vecchi.macro.map((m) => (m === v ? { ...v, voci } : m)) : [...(vecchi.macro || []), nuova] };
     }
-    return { ...p, livelli, contratti: (p.contratti || []).filter((c) => !persi.has(String(c.fornitore).trim())) };
+    return { ...p, livelli, contratti: (p.contratti || []).filter((c) => !(toccati.includes(c) && persi.has(String(c.fornitore).trim()))) };
   }
   // I livelli importati con alcune righe dell'anteprima spente (`spente` = chiavi di diffLivelli(vecchi, nuovi)):
   // entra spenta non entra, cambia spenta resta come in `vecchi`, sparisce spenta resta. Una macro spenta
@@ -1264,7 +1282,7 @@ const FORMATO = (() => {
     return N;
   }
   return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata, livelliDaPagamenti, consolidaContratti, generaPatti, buste, derivaPagamenti, avvisiLivelli, perPesi,
-    quandoTesto, quandoParse, TESTA_PROGETTO, righeProgetto, PAROLE_SALTA, senzaFornitore, indovinaColonne, livelliDaFoglio, diffLivelli, applicaLivelli, filtraLivelli };
+    quandoTesto, quandoParse, TESTA_PROGETTO, righeProgetto, PAROLE_SALTA, senzaFornitore, indovinaColonne, livelliDaFoglio, diffLivelli, contrattiToccati, applicaLivelli, filtraLivelli };
 })();
 if (typeof module !== "undefined") module.exports = FORMATO;
 </script>
@@ -2691,7 +2709,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const { livelli, da_sistemare } = FORMATO.livelliDaFoglio(imp.fogli[imp.foglio].righe, c, { testa: imp.testa, macro_scelta: scelta, mese_default: imp.mese, iva_default: imp.iva, fornitore });
     // con una macro scelta si confronta quella sola, senza il suo budget: lo stesso confronto che fa applicaLivelli
     const base = scelta === null ? p.livelli : { macro: p.livelli.macro.filter((m) => m.nome === scelta).map((m) => ({ ...m, budget_netto: null })) };
-    const diff = FORMATO.diffLivelli(base, livelli, p.contratti || []);
+    const diff = FORMATO.diffLivelli(base, livelli, FORMATO.contrattiToccati(p, scelta));
     const dopo = FORMATO.applicaLivelli(p, FORMATO.filtraLivelli(base, livelli, imp.spente), { macro_scelta: scelta });
     dopo.pagamenti = FORMATO.derivaPagamenti(dopo, D.mesi);
     const usati = new Set(dopo.livelli.macro.flatMap((m) => (m.voci || []).map((v) => v.fornitore_id)));
