@@ -143,6 +143,37 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
     riga si accende o spegne. «Aggiungi N pagamenti» li mette nel progetto scelto (o in uno nuovo, spento)
     con stato «ipotesi», crea le schede dei fornitori nuovi col codice se riconosciuto, e la bozza resta nel
     browser come sempre. Il foglio di Drive «Budget interno terzo piano» (per opera) si importa così com'è.
+    Le righe entrano come sottovoci di una **macro nuova col nome del file**: «Importa budget» aggiunge,
+    non sostituisce. Per rifare un progetto (o una sua macro) da un foglio Excel, vedi il punto 15.
+
+15. **Progetti a livelli e giro Excel.** Dentro ogni progetto c'è una tabella a tre livelli: **budget del
+    progetto → macro → sottovoci** (fornitore, area, netto, «quando», IVA). Si scrive nelle celle; per
+    aggiungere si scrive nell'ultima riga vuota. Le sottovoci consumano il budget della macro, le macro
+    consumano il budget del progetto; quello che non è assegnato si paga nei mesi del budget («da
+    assegnare»). Il calcolo legge solo i pagamenti, che la pagina deriva dai livelli a ogni modifica.
+    Sopra la tabella, tre bottoni:
+    - **Esporta (.xlsx)** scarica `<progetto>-<AAAA-MM-GG>.xlsx`: un foglio col nome del progetto, colonne
+      Macro · Sottovoce · Fornitore · Area · Totale netto € · Quando · IVA % · Note. Una riga per
+      sottovoce; i budget in testa («budget progetto» nella colonna Macro, «budget» nella colonna
+      Sottovoce). «Quando» è testo che si riscrive a mano: `mar 27`, `gen 27–mar 27 ×3`,
+      `ott 26 15% · nov 26–mar 27 ×5 · mag 27 10%`.
+    - **Esporta vuoto** scarica `<progetto>-<AAAA-MM-GG>-vuoto.xlsx`: solo l'intestazione e la riga del
+      budget del progetto, da riempire in Excel.
+    - **Importa (.xlsx/.csv)** legge un foglio e **sostituisce**. Un file **con** la colonna «Macro»
+      sostituisce **tutto il progetto**. Un file **senza** (il foglio «Per fornitore» di hpan26-soft:
+      Struttura · Fornitore · Area di intervento · Totale netto € · Note) sostituisce **solo la macro
+      scelta** nell'anteprima; di default è una macro nuova col nome del file. Senza «Quando» ogni riga
+      è una rata al mese scelto; senza «IVA %» vale l'IVA scelta («come la macro» di default).
+    Prima di applicare, l'**anteprima** dice riga per riga cosa **entra**, cosa **cambia** (prima → dopo) e
+    cosa **sparisce**, le righe **da sistemare** (importo, «quando» o IVA illeggibili: non entrano), il
+    totale del progetto prima → dopo (lordo in cassa e netto) e il **minimo della società** prima → dopo.
+    Ogni riga si spegne: spenta, resta com'è nel progetto; una macro spenta vale con tutte le sue righe.
+    Un file uguale al progetto dice «nessuna differenza». «Sostituisci» applica, crea le schede dei
+    fornitori nuovi e il messaggio in basso ha «annulla». Le righe di totale, IVA e imprevisti e quelle a 0
+    (da prezzare) si saltano; «Da assegnare», TBD e vuoto diventano sottovoci **senza fornitore**, che
+    consumano il budget della macro. Una sottovoce ritrovata (stessa macro, sottovoce e fornitore) tiene
+    stato e documenti. Se il suo «Quando» è cambiato, il testo vince: i patti di quel fornitore cadono e
+    l'anteprima lo scrive («i patti di AMCN si perdono: le rate vengono dal file»).
 
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 

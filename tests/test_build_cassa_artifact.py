@@ -1720,3 +1720,46 @@ def test_js_genera_scrive_solo_la_sottovoce_dei_patti(tmp_path):
     assert r["mesiPrima"] == 7 and r["mesiDopo"] != 7 and r["netto"] == [48200000, 48200000]
     assert r["lordo"][0] == r["lordo"][1]
     assert r["errore"] and "7 sottovoci" in r["errore"]
+
+
+def test_template_giro_excel_progetto():
+    # In ogni progetto: esporta, esporta vuoto, importa; l'anteprima prima di sostituire.
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    for pezzo in ("data-esporta-progetto", "data-esporta-vuoto", "data-importa-progetto", 'id="progetto-import-pannello"',
+                  "FORMATO.righeProgetto(p, vuoto)", "FORMATO.livelliDaFoglio(", "FORMATO.diffLivelli(", "FORMATO.applicaLivelli(",
+                  "FORMATO.filtraLivelli(", "EXCEL.leggi(file)"):
+        assert pezzo in html, pezzo
+    # nome del file: <progetto>-<YYYY-MM-DD>.xlsx, «-vuoto» per la struttura
+    assert '${vuoto ? "-vuoto" : ""}.xlsx' in html
+
+
+def test_filtra_livelli_spegne_righe(tmp_path):
+    # Ogni riga dell'anteprima si spegne: entra spenta non entra, cambia spenta resta com'era,
+    # sparisce spenta resta; una macro spenta resta tutta com'era (o non entra).
+    p = _progetto_tre_righe()
+    modifica = (
+        "r[3][4] = 25000; r.splice(4, 1); r.push(['Arredi', 'sedie', 'FLAB', '', 1000, 'mar 27', 22, '']);"
+    )
+    espr = (
+        f"(() => {{ const p = {json.dumps(p)}; const r = [F.TESTA_PROGETTO, ...F.righeProgetto(p)]; {modifica}"
+        " const g = F.indovinaColonne(r);"
+        " const N = F.livelliDaFoglio(r, g.colonne, {testa: g.testa, mese_default: '2027-01'}).livelli;"
+        " const d = F.diffLivelli(p.livelli, N, p.contratti);"
+        " const k = (tipo, sv) => d.find((x) => x.tipo === tipo && x.sottovoce === sv).chiave;"
+        " const voci = (L) => L.macro.map((m) => [m.nome, m.voci.map((v) => [v.nome, v.netto])]);"
+        " const via = (...ks) => F.filtraLivelli(p.livelli, N, new Set(ks));"
+        " const macroArredi = d.find((x) => x.tipo === 'entra' && x.macro === 'Arredi' && x.sottovoce === '').chiave;"
+        " const macroPitture = d.find((x) => x.tipo === 'sparisce' && x.macro === 'Pitture' && x.sottovoce === '').chiave;"
+        " return JSON.stringify({ tutto: voci(via()), cambia: voci(via(k('cambia', 'tende'))),"
+        " sparisce: voci(via(macroPitture)), entra: voci(via(macroArredi)),"
+        " stessi: JSON.stringify(F.filtraLivelli(p.livelli, N, new Set())) === JSON.stringify(N),"
+        " niente: F.diffLivelli(p.livelli, via(...d.map((x) => x.chiave))).length }); })()"
+    )
+    r = _formato(tmp_path, espr)
+    assert r["tutto"] == [["Tessili", [["tende", 2_500_000]]], ["Arredi", [["sedie", 100_000]]]]
+    assert r["cambia"] == [["Tessili", [["tende", 2_200_000]]], ["Arredi", [["sedie", 100_000]]]]
+    assert r["sparisce"] == [["Tessili", [["tende", 2_500_000]]], ["Arredi", [["sedie", 100_000]]], ["Pitture", [["pitture camere", 3_000_000]]]]
+    assert r["entra"] == [["Tessili", [["tende", 2_500_000]]]]
+    assert r["stessi"] is True
+    # tutte spente = nessuna differenza dal progetto
+    assert r["niente"] == 0

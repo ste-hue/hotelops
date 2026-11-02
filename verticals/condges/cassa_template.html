@@ -146,6 +146,11 @@ table.livelli .liv-conferma td{background:var(--bad-bg);color:var(--ink)}
 .budget td.num,.budget th.num{text-align:right}
 .budget .salta td{color:var(--muted);text-decoration:line-through}
 .budget .wrap{overflow-x:auto;margin-top:6px}
+.budget .imp-tipo{font-weight:600;white-space:nowrap}
+.budget .imp-tipo[data-tipo="entra"]{color:var(--ok)}
+.budget .imp-tipo[data-tipo="cambia"]{color:var(--warn)}
+.budget .imp-tipo[data-tipo="sparisce"]{color:var(--bad)}
+.budget .imp-esito{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:6px;font-size:13px}
 .pf-corretto{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:4px 0 10px;background:var(--soft)}
 .pf-corretto .riga .nome{font-weight:600}
 .pag .mesi input{width:92px;text-align:right;font-size:12px;padding:3px 5px}
@@ -1220,8 +1225,46 @@ const FORMATO = (() => {
     }
     return { ...p, livelli, contratti: (p.contratti || []).filter((c) => !persi.has(String(c.fornitore).trim())) };
   }
+  // I livelli importati con alcune righe dell'anteprima spente (`spente` = chiavi di diffLivelli(vecchi, nuovi)):
+  // entra spenta non entra, cambia spenta resta come in `vecchi`, sparisce spenta resta. Una macro spenta
+  // (riga «#macro» che entra o sparisce) vale per tutta la macro: non entra, o resta com'era con le sue righe.
+  function filtraLivelli(vecchi, nuovi, spente) {
+    const copiaDi = (x) => JSON.parse(JSON.stringify(x));
+    const N = copiaDi(nuovi);
+    if (!spente || !spente.size) return N;
+    const A = new Map(righeConfronto(vecchi).map((e) => [e.chiave, e]));
+    const B = new Map(righeConfronto(N).map((e) => [e.chiave, e]));
+    const vecchiaMacro = (nome) => (vecchi.macro || []).find((m) => m.nome === nome);
+    const nuovaMacro = (nome) => N.macro.find((m) => m.nome === nome);
+    const eMacro = (k) => /\|#macro(#\d+)?$/.test(k);
+    const ferme = new Set();   // macro spente: le loro righe non si guardano una per una
+    for (const k of spente) {
+      if (!eMacro(k)) continue;
+      const a = A.get(k), b = B.get(k);
+      if (a && !b) { N.macro.push(copiaDi(vecchiaMacro(a.macro))); ferme.add(a.macro); }
+      else if (b && !a) { N.macro.splice(N.macro.indexOf(nuovaMacro(b.macro)), 1); ferme.add(b.macro); }
+    }
+    for (const k of spente) {
+      const a = A.get(k), b = B.get(k), e = a || b;
+      if (!e || eMacro(k) || ferme.has(e.macro)) continue;
+      if (e.macro === "budget progetto" && !e.voce) {
+        Object.assign(N, { budget_netto: vecchi.budget_netto ?? null, mesi_budget: vecchi.mesi_budget ?? null, aliquota_iva: vecchi.aliquota_iva ?? N.aliquota_iva });
+        continue;
+      }
+      const m = nuovaMacro(e.macro);
+      if (!m) continue;
+      if (!e.voce) {   // il budget della macro
+        const v = a ? vecchiaMacro(a.macro) : null;
+        Object.assign(m, { budget_netto: v ? v.budget_netto : null, mesi_budget: v ? v.mesi_budget : null, aliquota_iva: v ? v.aliquota_iva : m.aliquota_iva });
+      } else if (b) {
+        const i = m.voci.indexOf(b.voce);
+        if (a) m.voci[i] = copiaDi(a.voce); else m.voci.splice(i, 1);
+      } else m.voci.push(copiaDi(a.voce));
+    }
+    return N;
+  }
   return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata, livelliDaPagamenti, consolidaContratti, generaPatti, buste, derivaPagamenti, avvisiLivelli, perPesi,
-    quandoTesto, quandoParse, TESTA_PROGETTO, righeProgetto, PAROLE_SALTA, senzaFornitore, indovinaColonne, livelliDaFoglio, diffLivelli, applicaLivelli };
+    quandoTesto, quandoParse, TESTA_PROGETTO, righeProgetto, PAROLE_SALTA, senzaFornitore, indovinaColonne, livelliDaFoglio, diffLivelli, applicaLivelli, filtraLivelli };
 })();
 if (typeof module !== "undefined") module.exports = FORMATO;
 </script>
@@ -1686,15 +1729,17 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     fogli.push({ nome: "Fonti", colonne: ["cosa", "valore"], righe: fonti });
     return fogli;
   }
-  function esportaExcel() {
-    const bytes = EXCEL.costruisci(fogliExcel());
+  function scaricaXlsx(bytes, nome) {
     const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `cassa-${(stato.nome || "scenario").replace(/[^\w.-]+/g, "_")}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.download = nome;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  function esportaExcel() {
+    scaricaXlsx(EXCEL.costruisci(fogliExcel()), `cassa-${(stato.nome || "scenario").replace(/[^\w.-]+/g, "_")}-${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
   function esporta() {
     const doc = { schema: D.schema, nome: stato.nome, salvato_il: new Date().toISOString(), base: D.base, scenario: { ...stato.scenario, nome: stato.nome } };
@@ -2480,7 +2525,8 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         ${chiusa ? "" : voci.map((v) => voceRiga(m, v)).join("") + voceRiga(m, nuovaVoce(L), true)}`;
     }).join("");
     const nuovaM = nuovaMacro(L, "");
-    return `<div class="livelli-testa"><strong>Budget, macro e sottovoci</strong> <span class="piccolo">scrivi nelle celle; per aggiungere, scrivi nell'ultima riga vuota</span><span class="excel-progetto"></span></div>
+    return `<div class="livelli-testa"><strong>Budget, macro e sottovoci</strong> <span class="piccolo">scrivi nelle celle; per aggiungere, scrivi nell'ultima riga vuota</span><span class="excel-progetto"><button type="button" class="mini" data-esporta-progetto title="il progetto in un foglio Excel: una riga per sottovoce, budget in testa; si corregge in Excel e si reimporta">Esporta (.xlsx)</button><button type="button" class="mini" data-esporta-vuoto title="solo l'intestazione e il budget del progetto: da riempire in Excel">Esporta vuoto</button><button type="button" class="mini" data-importa-progetto title="un foglio Excel sostituisce il progetto (o una sua macro): prima vedi cosa entra, cambia e sparisce">Importa (.xlsx/.csv)</button><input type="file" data-importa-file accept=".xlsx,.csv,.txt" hidden></span></div>
+      ${imp.p === p.id && imp.fogli ? pannelloImport(p) : ""}
       ${avvisi.length ? `<div class="avvisi-livelli">${avvisi.map((a) => `<div>⚠ ${esc(a)}</div>`).join("")}</div>` : ""}
       <div class="livelli-wrap"><table class="livelli">
         <colgroup><col class="c-nome"><col class="c-forn"><col class="c-area"><col class="c-netto"><col class="c-quando"><col class="c-iva"><col class="c-az"></colgroup>
@@ -2517,6 +2563,13 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   }
   function collegaLivelli(div, p) {
     const L = p.livelli;
+    div.querySelector("button[data-esporta-progetto]").onclick = () => esportaProgetto(p, false);
+    div.querySelector("button[data-esporta-vuoto]").onclick = () => esportaProgetto(p, true);
+    const fi = div.querySelector("input[data-importa-file]");
+    div.querySelector("button[data-importa-progetto]").onclick = () => fi.click();
+    fi.onchange = async (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) await apriImport(p, f); };
+    const box = div.querySelector("#progetto-import-pannello");
+    if (box) collegaImport(box, p);
     const tab = div.querySelector("table.livelli");
     if (!tab) return;
     const k = div.dataset.k;
@@ -2601,6 +2654,124 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         p.contratti.push({ ...FORMATO.contrattoDaPagamenti(p.pagamenti.filter((g) => g.voce_id === v.id), F, D.mesi), voce_id: v.id });
         renderLeve();
       };
+    });
+  }
+  // ── Il giro Excel del progetto: esporta, correggi in Excel, reimporta. L'import sostituisce: un file con la
+  // colonna «Macro» tutto il progetto, uno senza solo la macro scelta qui. Prima di applicare si vede, riga per
+  // riga, cosa entra, cambia e sparisce, il totale prima → dopo e il minimo della società; ogni riga si spegne. ──
+  const imp = { p: null, file: "", fogli: null, foglio: 0, testa: 0, colonne: {}, macro: "", mese: null, iva: null, spente: new Set() };
+  const nomeDaFile = () => imp.file.replace(/\.(xlsx|csv|txt)$/i, "").slice(0, 60);
+  function esportaProgetto(p, vuoto) {
+    const bytes = EXCEL.costruisci([{ nome: p.nome, colonne: FORMATO.TESTA_PROGETTO, righe: FORMATO.righeProgetto(p, vuoto), euro: [4] }]);
+    scaricaXlsx(bytes, `${String(p.nome || "progetto").replace(/[^\w.-]+/g, "_")}-${new Date().toISOString().slice(0, 10)}${vuoto ? "-vuoto" : ""}.xlsx`);
+  }
+  async function apriImport(p, file) {
+    let fogli;
+    try { fogli = await EXCEL.leggi(file); } catch (e) { mostraErrore(`Importa in «${p.nome}» il file «${file.name}»: ${e.message}`); return; }
+    // senza «Quando» una rata al primo mese in cui il progetto paga già (o al primo dell'orizzonte)
+    const primo = Object.keys(mesiDi(p.pagamenti)).sort().find((m) => D.mesi.includes(m)) || D.mesi[0];
+    Object.assign(imp, { p: p.id, file: file.name, fogli, mese: primo, iva: null, spente: new Set() });
+    imp.macro = nomeDaFile();   // di default una macro nuova col nome del file
+    scegliFoglioImport(foglioMigliore(fogli));
+    renderLeve();
+    const box = el("progetto-import-pannello");
+    if (box) box.scrollIntoView({ behavior: ridotto() ? "auto" : "smooth", block: "nearest" });
+  }
+  function scegliFoglioImport(i) {
+    const g = FORMATO.indovinaColonne(imp.fogli[i].righe);
+    Object.assign(imp, { foglio: i, testa: g.testa, colonne: g.colonne, spente: new Set() });
+  }
+  // Il file letto contro il progetto: differenze, righe da sistemare e il progetto come sarebbe (righe spente escluse).
+  function anteprimaImport(p) {
+    const sc = stato.scenario, c = imp.colonne, scelta = c.macro >= 0 ? null : imp.macro;
+    // i fornitori: un id già in uso resta quello (il giro Excel scrive gli id); gli altri si riconoscono come in «Importa budget»
+    const ids = new Set([...Object.keys(sc.fornitori || {}), ...sc.progetti.flatMap((q) => q.pagamenti.map((g) => g.fornitore_id)).filter(Boolean)]);
+    const ric = {};
+    const fornitore = (nome) => { if (ids.has(nome)) return nome; const r = riconosciFornitoreBudget(nome); if (r.id) ric[r.id] = r; return r.id || null; };
+    const { livelli, da_sistemare } = FORMATO.livelliDaFoglio(imp.fogli[imp.foglio].righe, c, { testa: imp.testa, macro_scelta: scelta, mese_default: imp.mese, iva_default: imp.iva, fornitore });
+    // con una macro scelta si confronta quella sola, senza il suo budget: lo stesso confronto che fa applicaLivelli
+    const base = scelta === null ? p.livelli : { macro: p.livelli.macro.filter((m) => m.nome === scelta).map((m) => ({ ...m, budget_netto: null })) };
+    const diff = FORMATO.diffLivelli(base, livelli, p.contratti || []);
+    const dopo = FORMATO.applicaLivelli(p, FORMATO.filtraLivelli(base, livelli, imp.spente), { macro_scelta: scelta });
+    dopo.pagamenti = FORMATO.derivaPagamenti(dopo, D.mesi);
+    const usati = new Set(dopo.livelli.macro.flatMap((m) => (m.voci || []).map((v) => v.fornitore_id)));
+    return { diff, da_sistemare, dopo, scelta, nuovi: Object.values(ric).filter((r) => usati.has(r.id) && !(sc.fornitori || {})[r.id]) };
+  }
+  const nettoPag = (p) => p.pagamenti.reduce((t, g) => t + somma(g.mesi), 0);
+  const lordoPag = (p) => p.pagamenti.reduce((t, g) => t + Object.values(g.mesi).reduce((a, v) => a + MOTORE.iva(v, g.aliquota_iva), 0), 0);
+  const eMacroRiga = (d) => /\|#macro(#\d+)?$/.test(d.chiave);
+  function pannelloImport(p) {
+    const a = anteprimaImport(p), c = imp.colonne, soc = p.societa, sc = stato.scenario;
+    imp.diff = a.diff;   // le caselle dell'anteprima puntano a queste righe
+    const testa = imp.fogli[imp.foglio].righe[imp.testa] || [];
+    const ruoli = [["macro", "macro"], ["sottovoce", "sottovoce"], ["opera", "sottovoce"], ["fornitore", "fornitore"], ["area", "area"], ["importo", "netto"], ["quando", "quando"], ["iva", "IVA"], ["note", "note"]];
+    const lette = ruoli.filter(([k]) => c[k] >= 0 && !(k === "opera" && c.sottovoce >= 0)).map(([k, r]) => `${r} «${esc(String(testa[c[k]] ?? ""))}»`);
+    // una macro che entra o sparisce porta con sé le sue righe: si spegne tutta insieme
+    const capo = (d) => (eMacroRiga(d) ? null : a.diff.find((x) => eMacroRiga(x) && x.macro === d.macro && x.tipo === d.tipo) || null);
+    const accesa = (d) => !imp.spente.has((capo(d) || d).chiave);
+    const val = (v) => (v ? `${v.netto == null ? "" : eu(v.netto)}${Object.keys(v.mesi || {}).length ? ` · ${esc(FORMATO.quandoTesto(v.mesi))}` : ""}` : "");
+    const altro = (x, y) => [x.area !== y.area ? `area ${esc(x.area || "—")} → ${esc(y.area || "—")}` : "", x.aliquota_iva !== y.aliquota_iva ? `IVA ${x.aliquota_iva ?? "↑"} → ${y.aliquota_iva ?? "↑"}` : "", x.note !== y.note ? "note cambiate" : ""].filter(Boolean).join(" · ");
+    const righe = a.diff.map((d, i) => {
+      const k = capo(d), on = accesa(d), macro = eMacroRiga(d);
+      const cosa = macro ? `macro «${esc(d.macro)}»` : d.macro === "budget progetto" ? "budget del progetto" : `${esc(d.macro)} › ${esc(d.sottovoce)}`;
+      const nota = macro ? (d.tipo === "entra" ? "macro nuova, con le sue righe" : "la macro esce, con le sue righe") : d.tipo === "cambia" ? altro(d.prima, d.dopo) : "";
+      return `<tr class="${on ? "" : "salta"}"><td><input type="checkbox" data-imp-riga="${i}" ${on ? "checked" : ""} ${k ? `disabled title="segue la macro «${esc(d.macro)}»"` : ""} aria-label="${esc(d.tipo)} ${cosa}"></td>
+        <td><span class="imp-tipo" data-tipo="${d.tipo}">${d.tipo}</span></td><td>${cosa}</td><td>${d.fornitore ? `<code>${esc(d.fornitore)}</code>` : macro || d.macro === "budget progetto" || d.sottovoce === "budget" ? "" : "senza fornitore"}</td>
+        <td class="num">${val(d.prima)}</td><td class="num">${val(d.dopo)}</td>
+        <td class="piccolo">${nota}${d.patti_persi ? `${nota ? " · " : ""}<span class="resta">i patti di ${esc(d.fornitore)} si perdono: le rate vengono dal file</span>` : ""}</td></tr>`;
+    }).join("");
+    const conta = (t) => a.diff.filter((d) => d.tipo === t && accesa(d)).length;
+    const n = { entra: conta("entra"), cambia: conta("cambia"), sparisce: conta("sparisce") };
+    const tot = n.entra + n.cambia + n.sparisce;
+    const i = sc.progetti.indexOf(p), variante = copia(sc);
+    variante.progetti[i] = a.dopo;
+    const r2 = calcolaSicuro(variante), m1 = ris.minimi[soc], m2 = r2 ? r2.minimi[soc] : null;
+    const ivaOpz = [["", "come la macro ↑"], ...[0, 10, 22].map((x) => [String(x), `${x}%`])];
+    return `<div id="progetto-import-pannello" class="budget">
+      <div class="riga"><strong>Importa in «${esc(p.nome)}»</strong> <span class="piccolo">${esc(imp.file)}</span>
+        ${imp.fogli.length > 1 ? `<label class="piccolo">foglio <select data-imp-foglio>${imp.fogli.map((x, j) => `<option value="${j}" ${j === imp.foglio ? "selected" : ""}>${esc(x.nome)}</option>`).join("")}</select></label>` : ""}
+        <button type="button" class="mini" data-imp-chiudi>chiudi</button></div>
+      <div class="riga piccolo">colonne lette: ${lette.join(" · ") || "nessuna"}</div>
+      <div class="riga piccolo">${a.scelta === null ? "il file ha la colonna «Macro»: <strong>sostituisce tutto il progetto</strong>"
+        : `il file non ha la colonna «Macro»: sostituisce solo la macro <select data-imp-macro>${p.livelli.macro.map((m) => `<option value="${esc(m.nome)}" ${m.nome === imp.macro ? "selected" : ""}>${esc(m.nome)}</option>`).join("")}${p.livelli.macro.some((m) => m.nome === nomeDaFile()) ? "" : `<option value="${esc(nomeDaFile())}" ${imp.macro === nomeDaFile() ? "selected" : ""}>nuova: ${esc(nomeDaFile())}</option>`}</select>`}
+        ${c.quando >= 0 ? "" : ` · senza «Quando»: una rata a ${selMesi(imp.mese, "sel-imp-mese")}`}
+        ${c.iva >= 0 ? "" : ` · IVA <select data-imp-iva>${ivaOpz.map(([v, t]) => `<option value="${v}" ${v === (imp.iva === null ? "" : String(imp.iva)) ? "selected" : ""}>${t}</option>`).join("")}</select>`}</div>
+      ${a.diff.length ? `<div class="wrap"><table><thead><tr><th></th><th></th><th>riga</th><th>fornitore</th><th class="num">prima</th><th class="num">dopo</th><th></th></tr></thead><tbody>${righe}</tbody></table></div>`
+        : '<div class="riga"><strong>nessuna differenza</strong> <span class="piccolo">il file è uguale al progetto</span></div>'}
+      ${a.da_sistemare.length ? `<div class="avvisi-livelli">${a.da_sistemare.map((x) => `<div>⚠ riga ${x.n}: ${esc(x.motivo)}, non entra</div>`).join("")}</div>` : ""}
+      <div class="imp-esito"><span>progetto: lordo in cassa <span class="num">${fmt(lordoPag(p), false)} → <strong>${fmt(lordoPag(a.dopo), false)}</strong></span> <span class="piccolo">(netto ${fmt(nettoPag(p), false)} → ${fmt(nettoPag(a.dopo), false)})</span></span>
+        <span>minimo ${esc(soc)}: <span class="num">${fmt(m1.saldo, false)} <span class="piccolo">${meseIt(m1.mese)}</span> → ${m2 ? `<strong>${fmt(m2.saldo, false)}</strong> <span class="piccolo">${meseIt(m2.mese)}</span> <span class="peso ${m2.saldo < m1.saldo ? "neg" : ""}">${m2.saldo === m1.saldo ? "invariato" : segno(m2.saldo - m1.saldo, false)}</span>` : "non calcolabile"}</span>${p.acceso ? "" : ' <span class="piccolo">(progetto spento: non conta)</span>'}</span></div>
+      ${a.nuovi.length ? `<div class="riga piccolo">schede fornitore nuove: ${a.nuovi.map((r) => `<code>${esc(r.id)}</code>`).join(", ")}</div>` : ""}
+      ${a.diff.length ? `<div class="riga"><button type="button" class="primario" data-imp-applica ${tot ? "" : "disabled"}>Sostituisci · ${n.entra} ${n.entra === 1 ? "entra" : "entrano"} · ${n.cambia} ${n.cambia === 1 ? "cambia" : "cambiano"} · ${n.sparisce} ${n.sparisce === 1 ? "sparisce" : "spariscono"}</button>
+        <span class="piccolo">le righe spente restano come sono; documenti e stato delle sottovoci ritrovate restano</span></div>` : ""}
+    </div>`;
+  }
+  function collegaImport(box, p) {
+    const sf = box.querySelector("select[data-imp-foglio]");
+    if (sf) sf.onchange = () => { scegliFoglioImport(parseInt(sf.value, 10)); renderLeve(); };
+    const sm = box.querySelector("select[data-imp-macro]");
+    if (sm) sm.onchange = () => { imp.macro = sm.value; imp.spente = new Set(); renderLeve(); };
+    const ms = box.querySelector("select.sel-imp-mese");
+    if (ms) ms.onchange = () => { imp.mese = ms.value; renderLeve(); };
+    const si = box.querySelector("select[data-imp-iva]");
+    if (si) si.onchange = () => { imp.iva = si.value === "" ? null : parseInt(si.value, 10); renderLeve(); };
+    box.querySelectorAll("input[data-imp-riga]").forEach((cb) => {
+      cb.onchange = () => { const k = imp.diff[+cb.dataset.impRiga].chiave; if (cb.checked) imp.spente.delete(k); else imp.spente.add(k); renderLeve(); };
+    });
+    box.querySelector("button[data-imp-chiudi]").onclick = () => { imp.p = null; imp.fogli = null; renderLeve(); };
+    const ap = box.querySelector("button[data-imp-applica]");
+    if (ap) ap.onclick = () => applicaImport(p);
+  }
+  function applicaImport(p) {
+    const a = anteprimaImport(p), sc = stato.scenario, file = imp.file;
+    const schede = a.nuovi.filter((r) => schedaFornitore(sc, r)).map((r) => r.id);
+    sc.progetti[sc.progetti.indexOf(p)] = a.dopo;
+    imp.p = null; imp.fogli = null;
+    aggiornaProgetto(a.dopo);
+    avvisa(`«${p.nome}»: ${a.scelta === null ? "progetto sostituito" : `macro «${a.scelta}» sostituita`} dal file ${file}`, () => {
+      sc.progetti[sc.progetti.indexOf(a.dopo)] = p;
+      schede.forEach((id) => delete sc.fornitori[id]);
+      aggiornaProgetto(p);
     });
   }
   // La sottovoce dei patti: quella legata (dalla conversione, da «+ come paghi», da «Genera»); null = nessuna.
@@ -2720,6 +2891,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     renderFornitori();
     collegaLeve();
     ricordaBozza();  // anche le modifiche ai patti (che ridisegnano senza ricalcolare) finiscono nella bozza
+    applicaVista();  // a tutto schermo il pannello aperto resta aperto anche quando si ridisegnano solo le leve
   }
 
   // ── Importa budget (brief UI, punto 8, ultimo passo): «ti metto il budget, tu riconosci i fornitori» ──
@@ -2730,15 +2902,18 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   const budget = { file: "", fogli: null, foglio: 0, testa: 0, colonne: {}, progetto: "", mese: null, iva: 22, righe: [] };
   // parole di salto, «senza fornitore» e colonne indovinate: in FORMATO, uguali per «Importa budget» e per il giro Excel
   const { PAROLE_SALTA, senzaFornitore, indovinaColonne } = FORMATO;
+  // il foglio buono è quello con più righe che hanno un numero in una colonna «totale/importo»
+  function foglioMigliore(fogli) {
+    let migliore = 0, punti = -1;
+    fogli.forEach((f, i) => { const g = indovinaColonne(f.righe); const n = f.righe.filter((r) => typeof r[g.colonne.importo] === "number").length; if (g.colonne.importo >= 0 && n > punti) { punti = n; migliore = i; } });
+    return migliore;
+  }
   async function apriBudget(file) {
     try {
       budget.fogli = await EXCEL.leggi(file);
     } catch (e) { mostraErrore(`Importa budget «${file.name}»: ${e.message}`); return; }
     budget.file = file.name;
-    // il foglio buono è quello con più righe che hanno un numero in una colonna «totale/importo»
-    let migliore = 0, punti = -1;
-    budget.fogli.forEach((f, i) => { const g = indovinaColonne(f.righe); const n = f.righe.filter((r) => typeof r[g.colonne.importo] === "number").length; if (g.colonne.importo >= 0 && n > punti) { punti = n; migliore = i; } });
-    scegliFoglioBudget(migliore);
+    scegliFoglioBudget(foglioMigliore(budget.fogli));
     budget.progetto = budget.progetto || (stato.scenario.progetti[0] || {}).id || "";
     budget.mese = budget.mese || D.mesi[0];
     renderBudget();
@@ -2763,6 +2938,14 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const r = riconosci(n);
     if (r) return { id: slugId(n), nome: n, stato: "da_verificare", perche: `in anagrafica Esolver: ${r.nome} (${r.codice})`, codice: r.codice, societa: r.societa };
     return { id: slugId(n), nome: n, stato: "dichiarato", perche: "nuovo: nessuna corrispondenza in anagrafica" };
+  }
+  // Un fornitore riconosciuto (riconosciFornitoreBudget) senza scheda nello scenario la riceve, col codice Esolver se c'è.
+  function schedaFornitore(sc, ric) {
+    sc.fornitori = sc.fornitori || {};
+    if (!ric.id || sc.fornitori[ric.id]) return false;
+    sc.fornitori[ric.id] = { nome: ric.nome };
+    if (ric.codice) { sc.fornitori[ric.id].codice_esolver = ric.codice; if (ric.societa) sc.fornitori[ric.id].societa = ric.societa; }
+    return true;
   }
   function preparaRigheBudget() {
     const f = budget.fogli[budget.foglio]; const c = budget.colonne;
@@ -2833,7 +3016,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const m = aggiungi(L.macro, nuovaMacro(L, budget.file.replace(/\.(xlsx|csv|txt)$/i, "").slice(0, 60)));
     let n = 0;
     for (const r of budget.righe.filter((x) => x.attiva)) {
-      if (r.ric.id && !sc.fornitori[r.ric.id]) { sc.fornitori[r.ric.id] = { nome: r.ric.nome }; if (r.ric.codice) { sc.fornitori[r.ric.id].codice_esolver = r.ric.codice; if (r.ric.societa) sc.fornitori[r.ric.id].societa = r.ric.societa; } }
+      schedaFornitore(sc, r.ric);
       const pag = pianoRigaBudget(r).pagamenti, mesi = mesiDi(pag);
       Object.assign(aggiungi(m.voci, nuovaVoce(L, (r.opera || r.fornitore).slice(0, 80))), { fornitore_id: r.ric.id || null, mesi, netto: somma(mesi), aliquota_iva: pag[0].aliquota_iva, stato: "ipotesi", note: r.note || "" });
       n += 1;
