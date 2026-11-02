@@ -118,17 +118,27 @@ def load_consuntivo_ytd(societa: str = None, anno: int = None) -> pd.DataFrame:
 
 @st.cache_data(ttl=300, show_spinner="Caricamento saldi banca...")
 def load_saldi_banca(societa: str = None) -> pd.DataFrame:
-    """Ultimo saldo reale per banca."""
+    """Saldi da estratto conto all'ultimo fine mese con tutti i conti obbligatori (D1)."""
+    from verticals.condges.pf_rotate.saldi_registry import banche_richieste
+
     societa = societa or SOCIETA
+    richieste = sorted(banche_richieste(societa))
+    arr = ", ".join(f"'{b}'" for b in richieste)
     bq = get_bq()
     sql = f"""
-    SELECT banca_id, saldo_finale, data_snapshot
-    FROM (
-      SELECT *, ROW_NUMBER() OVER (PARTITION BY banca_id ORDER BY data_snapshot DESC) AS rn
-      FROM `{cfg.F_SALDI_BANCA_SNAPSHOT}`
-      WHERE societa_id = '{societa}'
+    WITH s AS (
+      SELECT banca_id, saldo_eur, data_riferimento
+      FROM `{cfg.F_SALDI_BANCA_CHIUSURA_MENSILE}`
+      WHERE societa_id = '{societa}' AND banca_id IN ({arr})
+    ),
+    ultima AS (
+      SELECT MAX(data_riferimento) AS d FROM (
+        SELECT data_riferimento FROM s GROUP BY 1
+        HAVING COUNT(DISTINCT banca_id) = {len(richieste)}
+      )
     )
-    WHERE rn = 1
+    SELECT banca_id, saldo_eur AS saldo_finale, data_riferimento AS data_snapshot
+    FROM s JOIN ultima ON s.data_riferimento = ultima.d
     ORDER BY banca_id
     """
     try:
@@ -765,7 +775,7 @@ def page_tesoreria(
 
     saldi = load_saldi_banca()
     if saldi.empty:
-        st.warning("Nessun saldo banca trovato in f_saldi_banca_snapshot.")
+        st.warning("Nessun fine mese completo in f_saldi_banca_chiusura_mensile.")
         saldo_iniziale = 0.0
         data_saldo = "N/A"
     else:
