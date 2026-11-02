@@ -442,10 +442,9 @@ def test_js_residuo_uguale_a_python(tmp_path):
     fatti = [Fatto("INTUR", "p", "AMCN", "2026-10", to_cent(1_500), "ev")]
     atteso = calcola(replace(input_da_snapshot(snap, sc), fatti=fatti))
     assert atteso.non_riconciliati == []
-    # scenario_to_json non porta `residuo` (lo emette la pagina): lo aggiungo a mano
-    doc = json.loads(scenario_to_json(sc, p["base"]))
-    doc["scenario"]["progetti"][0]["pagamenti"][0]["residuo"] = True
-    (tmp_path / "scenario.json").write_text(json.dumps(doc), encoding="utf-8")
+    (tmp_path / "scenario.json").write_text(
+        scenario_to_json(sc, p["base"]), encoding="utf-8"
+    )
     (tmp_path / "fatti.json").write_text(
         json.dumps([asdict(f) for f in fatti]), encoding="utf-8"
     )
@@ -737,13 +736,13 @@ def test_js_leggi_documento_importato(tmp_path):
     out = esegui_node_formato(
         tmp_path,
         html,
-        "(() => { const fs = require('fs'); const t = fs.readFileSync('./doc.json', 'utf8');"
-        " const ok = F.leggiDocumento(t, 'cdg-cassa-scenario/1');"
-        " const rotto = JSON.parse(t); rotto.scenario.progetti[0].pagamenti[0].mesi = {'2027-1': 5};"
-        " return JSON.stringify([ok.errore || null, ok.nome, ok.scenario.progetti.length,"
-        " F.leggiDocumento('non json', 'cdg-cassa-scenario/1').errore,"
-        " F.leggiDocumento(JSON.stringify({schema: 'altro/1'}), 'cdg-cassa-scenario/1').errore,"
-        " F.leggiDocumento(JSON.stringify(rotto), 'cdg-cassa-scenario/1').errore]); })()",
+        f"(() => {{ const fs = require('fs'); const t = fs.readFileSync('./doc.json', 'utf8');"
+        f" const ok = F.leggiDocumento(t, '{SCHEMA}');"
+        f" const rotto = JSON.parse(t); rotto.scenario.progetti[0].pagamenti[0].mesi = {{'2027-1': 5}};"
+        f" return JSON.stringify([ok.errore || null, ok.nome, ok.scenario.progetti.length,"
+        f" F.leggiDocumento('non json', '{SCHEMA}').errore,"
+        f" F.leggiDocumento(JSON.stringify({{schema: 'altro/1'}}), '{SCHEMA}').errore,"
+        f" F.leggiDocumento(JSON.stringify(rotto), '{SCHEMA}').errore]); }})()",
     )
     errore, nome, n_prog, e_json, e_schema, e_mese = json.loads(out)
     assert errore is None and nome and n_prog >= 1

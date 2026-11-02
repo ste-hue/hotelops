@@ -101,6 +101,9 @@ class Pagamento:
     # «Da assegnare»: il budget del progetto non ancora ripartito in sottovoci.
     # Un fatto senza pagamento del suo fornitore consuma questo, dal mese piu' vecchio.
     residuo: bool = False
+    # Dove cade nel budget a livelli: macrocategoria e area (voce) del progetto.
+    macro: str | None = None
+    area: str | None = None
 
 
 @dataclass
@@ -116,6 +119,8 @@ class Progetto:
     contratti: list[dict] = field(default_factory=list)
     # La cartella Drive del progetto (preventivi, fatture): memoria dell'interfaccia.
     drive_url: str | None = None
+    # Budget a livelli (progetto -> macro -> sottovoci): JSON opaco, memoria dell'interfaccia.
+    livelli: dict | None = None
 
 
 @dataclass(frozen=True)

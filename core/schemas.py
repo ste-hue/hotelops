@@ -1745,6 +1745,8 @@ class ProgettoPagamentoRow(BaseModel):
     aliquota_iva: int
     stato: str
     fornitore_id: str | None = None
+    macro: str | None = None
+    area: str | None = None
     societa_id: SocietaId
     raw_object_id: str
     hash_riga: str
