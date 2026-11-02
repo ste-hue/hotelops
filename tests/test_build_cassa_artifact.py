@@ -853,7 +853,8 @@ def test_documento_esportato_dalla_pagina_rientra_in_python(tmp_path: Path):
     """La pagina esporta `{schema, nome, salvato_il, base, scenario}` con lo scenario così come lo
     tiene in memoria (copia del seme, MAI `MOTORE.normalizza`, che riscrive i manuali in `importo`
     e romperebbe `scenario_from_json`) più i progetti e i finanziamenti nuovi creati con i default
-    letterali del template («+ progetto», «+ finanziamento», «+ pagamento»). Tutto deve rientrare
+    letterali del template («+ progetto», «+ finanziamento») e una sottovoce scritta nella tabella a livelli,
+    con i pagamenti derivati come fa la pagina. Tutto deve rientrare
     in `scenario_from_json` senza perdere nulla: è l'unico ponte browser → BigQuery."""
     import json as _json
 
@@ -865,11 +866,14 @@ def test_documento_esportato_dalla_pagina_rientra_in_python(tmp_path: Path):
     # cambia con loro (e non mente).
     nuovo_p = re.search(r"sc\.progetti\.push\((\{.*?\})\);", html).group(1)
     nuovo_f = re.search(r"sc\.finanziamenti\.push\((\{.*?\})\);", html).group(1)
-    nuovo_g = re.search(r"p\.pagamenti\.push\((\{.*?\})\);", html).group(1)
     espr = (
         "(() => { const sc = JSON.parse(JSON.stringify(D.seme.scenario)); const id = 'P1'; "
         f"sc.progetti.push({nuovo_p}); const p = sc.progetti[sc.progetti.length - 1]; "
-        f"p.pagamenti.push({nuovo_g}); p.pagamenti[1].mesi = M.distribuisci(12000000, D.mesi[1], 3, D.mesi); "
+        "const F = require('./formato.js'); "
+        "p.livelli.macro.push({ id: 'm1', nome: 'Lavori', budget_netto: null, mesi_budget: null, aliquota_iva: null, area: 'Opere', voci: ["
+        " { id: 'v1', nome: 'Pagamento', fornitore_id: null, area: null, netto: 0, mesi: {}, aliquota_iva: null, stato: null, documenti: [], note: '' },"
+        " { id: 'v2', nome: 'Nuovo pagamento', fornitore_id: null, area: null, netto: 12000000, mesi: M.distribuisci(12000000, D.mesi[1], 3, D.mesi), aliquota_iva: null, stato: null, documenti: [], note: '' }] }); "
+        "p.pagamenti = F.derivaPagamenti(p, D.mesi); "
         f"sc.finanziamenti.push({nuovo_f}); const f = sc.finanziamenti[sc.finanziamenti.length - 1]; "
         "f.erogazioni[D.mesi[0]] = 10000000; f.rate[D.mesi[2]] = 500000; "
         "sc.canone = { netto_per_anno: { '2026': 30000000 }, rate_n: 2, da_mese: D.mesi[0], calendario: null, aliquota_iva: 22 }; "
@@ -884,6 +888,8 @@ def test_documento_esportato_dalla_pagina_rientra_in_python(tmp_path: Path):
     nuovo = sc.progetti[-1]
     assert nuovo.id == "P1" and nuovo.acceso is True and len(nuovo.pagamenti) == 2
     assert sum(nuovo.pagamenti[1].mesi.values()) == 12_000_000
+    assert nuovo.pagamenti[1].macro == "Lavori" and nuovo.pagamenti[1].area == "Opere"
+    assert [v["id"] for v in nuovo.livelli["macro"][0]["voci"]] == ["v1", "v2"]
     fin = sc.finanziamenti[-1]
     assert fin.erogazioni == {p["mesi"][0]: 10_000_000} and fin.rate == {p["mesi"][2]: 500_000}
     # il giro completo: il documento riletto e riserializzato è identico nel contenuto
@@ -964,9 +970,9 @@ def test_template_brief_ui_1_3_parole_stati_e_finanziamenti():
     assert "quadra con i movimenti</span>" not in html and "solo dichiarato" not in html
     # bozze finte: il documento si completa all'apertura e una bozza nasce solo se è diversa da tutto il menu
     assert "function completa(scenario)" in html and "data-scarta=" in html
-    # il «× elimina» di un pagamento sta in testa alla riga, non dentro la tendina; il nuovo nasce aperto
-    assert html.index('<span class="num pag-tot">') < html.index("data-elimina-g") < html.index('<details class="sotto" data-k="${kg}"')
-    assert "aperte.add(`g:${p.id}:${p.pagamenti.length - 1}`)" in html
+    # il «×» di una sottovoce sta sulla sua riga, non dentro il dettaglio; la riga nuova tiene il fuoco
+    assert html.index("data-elimina-voce=") < html.index("function dettaglioVoce(p, m, v)")
+    assert "rinomina = { k, da: r, a: `v:${m.id}:${x.id}` };" in html
 
 
 def test_template_vista_scenario_a_tutto_schermo():
@@ -1610,3 +1616,44 @@ def test_budget_senza_quando_prende_il_mese_scelto(tmp_path):
     assert con["da_sistemare"] == []
     assert senza["da_sistemare"] == [{"n": 2, "motivo": "budget senza mesi"}, {"n": 3, "motivo": "budget senza mesi"}]
     assert senza["livelli"]["budget_netto"] is None
+
+
+def test_template_progetti_a_livelli():
+    # Dentro il progetto una tabella a livelli: budget del progetto, macro, sottovoci; si aggiunge scrivendo
+    # nell'ultima riga vuota. Ogni modifica rideriva i pagamenti (il calcolo legge solo quelli).
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    for pezzo in ("function aggiornaProgetto(p)", "p.pagamenti = FORMATO.derivaPagamenti(p, D.mesi);", "data-nuova-macro", "data-nuova-voce",
+                  "data-budget-progetto", "data-budget-macro", '"cdg-cassa-scenario/2"', "FORMATO.avvisiLivelli(p.livelli, D.mesi)",
+                  'class="livelli"', "data-elimina-macro", "data-conferma-macro"):
+        assert pezzo in html, pezzo
+    # il vecchio «+ pagamento» sparisce: si scrive nella riga vuota
+    assert "button[data-aggiungi-g]" not in html and "data-aggiungi-g" not in html
+    # all'apertura ogni progetto ha i suoi livelli (un progetto /1 diventa una macro col suo nome)
+    assert "FORMATO.livelliDaPagamenti(q)" in html
+    # oltre budget: «oltre di X ⚠», mai un «da assegnare» negativo
+    assert "oltre di ${fmt(b.oltre, false)} ⚠" in html
+    # le aree di hpan26-soft
+    assert '"Opere", "Fornitura e posa", "Da comprare"' in html
+
+
+def test_js_leggi_documento_accetta_scenario_1_e_2(tmp_path):
+    # Un file esportato prima dei livelli (/1) si apre ancora; uno di un altro tipo no.
+    p = build_payload(snapshot_sintetico(), [])
+    html = render_html(p)
+    sc, _ = scenario_sintetico()
+    doc = json.loads(scenario_to_json(sc, p["base"]))
+    vecchio = dict(doc, schema="cdg-cassa-scenario/1")
+    (tmp_path / "doc1.json").write_text(json.dumps(vecchio), encoding="utf-8")
+    (tmp_path / "doc2.json").write_text(json.dumps(doc), encoding="utf-8")
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        "(() => { const fs = require('fs');"
+        " const a = F.leggiDocumento(fs.readFileSync('./doc1.json', 'utf8'), 'cdg-cassa-scenario/2');"
+        " const b = F.leggiDocumento(fs.readFileSync('./doc2.json', 'utf8'), 'cdg-cassa-scenario/2');"
+        " const c = F.leggiDocumento(JSON.stringify({schema: 'cdg-cassa-scenario/3'}), 'cdg-cassa-scenario/2');"
+        " return JSON.stringify([a.errore || null, b.errore || null, c.errore || null]); })()",
+    )
+    a, b, c = json.loads(out)
+    assert a is None and b is None
+    assert c and "cdg-cassa-scenario/3" in c
