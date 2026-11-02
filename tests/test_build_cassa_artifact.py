@@ -2,7 +2,7 @@ import json
 import re
 import shutil
 import subprocess
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import date, datetime
 from pathlib import Path
 
@@ -427,6 +427,37 @@ def test_js_uguale_a_python(tmp_path):
     sc, _ = _scenario_base()
     out = esegui_node(tmp_path, render_html(p), p, scenario_to_json(sc, p["base"]))
     assert out == to_dict(calcola(input_da_snapshot(snap, sc)))
+
+
+def test_js_residuo_uguale_a_python(tmp_path):
+    snap = snapshot_sintetico()
+    p = build_payload(snap, [])
+    pag = Pagamento(
+        "da assegnare",
+        {"2026-10": to_cent(1_000), "2026-11": to_cent(1_000)},
+        0,
+        residuo=True,
+    )
+    sc = Scenario("r", [Progetto("p", "P", "INTUR", True, "ipotesi", [pag])], [])
+    fatti = [Fatto("INTUR", "p", "AMCN", "2026-10", to_cent(1_500), "ev")]
+    atteso = calcola(replace(input_da_snapshot(snap, sc), fatti=fatti))
+    assert atteso.non_riconciliati == []
+    # scenario_to_json non porta `residuo` (lo emette la pagina): lo aggiungo a mano
+    doc = json.loads(scenario_to_json(sc, p["base"]))
+    doc["scenario"]["progetti"][0]["pagamenti"][0]["residuo"] = True
+    (tmp_path / "scenario.json").write_text(json.dumps(doc), encoding="utf-8")
+    (tmp_path / "fatti.json").write_text(
+        json.dumps([asdict(f) for f in fatti]), encoding="utf-8"
+    )
+    out = esegui_node_fn(
+        tmp_path,
+        render_html(p),
+        "JSON.stringify(M.calcola({...D, fatti: require('./fatti.json')}, "
+        "require('./scenario.json').scenario))",
+    )
+    js = json.loads(out)
+    assert js["non_riconciliati"] == []
+    assert js["righe"] == to_dict(atteso)["righe"]
 
 
 def test_js_baseline_uguale_a_python(tmp_path):

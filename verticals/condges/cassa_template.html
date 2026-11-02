@@ -402,12 +402,17 @@ const MOTORE = (() => {
     const nonRic = [];
     for (const f of fatti) {
       const p = perId[f.progetto_id];
-      const slot = [];
-      for (const pag of (p ? p.pagamenti : [])) {
-        if (f.fornitore_id != null && pag.fornitore_id === f.fornitore_id) {
-          for (const m of Object.keys(pag.mesi)) slot.push({ m, pag });
+      const mesiDi = (scelta) => {
+        const out = [];
+        for (const pag of (p ? p.pagamenti : [])) {
+          if (f.fornitore_id != null && scelta(pag)) {
+            for (const m of Object.keys(pag.mesi)) out.push({ m, pag });
+          }
         }
-      }
+        return out;
+      };
+      let slot = mesiDi((pag) => pag.fornitore_id === f.fornitore_id);
+      if (!slot.length) slot = mesiDi((pag) => pag.residuo === true);
       slot.sort((a, b) => (a.m < b.m ? -1 : a.m > b.m ? 1 : 0));
       if (!slot.length) { nonRic.push(f); continue; }
       let resto = f.importo;

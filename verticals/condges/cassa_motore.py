@@ -98,6 +98,9 @@ class Pagamento:
     fornitore_id: str | None = None
     # Riferimenti (preventivo, contratto, fattura): [{"titolo", "url"}], memoria dell'interfaccia.
     documenti: list[dict] = field(default_factory=list)
+    # «Da assegnare»: il budget del progetto non ancora ripartito in sottovoci.
+    # Un fatto senza pagamento del suo fornitore consuma questo, dal mese piu' vecchio.
+    residuo: bool = False
 
 
 @dataclass
@@ -278,21 +281,28 @@ def flussi_canone(s: ScalettaCanone, mesi: list[str]) -> list[Flusso]:
 def _riconcilia(
     progetti: list[Progetto], fatti: list[Fatto]
 ) -> tuple[list[Progetto], list[Fatto]]:
-    """Riduce (su copie) i pagamenti dello stesso fornitore, dal mese piu' vecchio."""
+    """Riduce (su copie) i pagamenti dello stesso fornitore, dal mese piu' vecchio;
+    se non ce ne sono, quelli «da assegnare» (residuo) del progetto."""
     progetti = copy.deepcopy(progetti)
     per_id = {p.id: p for p in progetti}
     non_ric: list[Fatto] = []
     for f in fatti:
         p = per_id.get(f.progetto_id)
-        slot = sorted(
-            (
-                (m, pag)
-                for pag in (p.pagamenti if p else [])
-                if f.fornitore_id is not None and pag.fornitore_id == f.fornitore_id
-                for m in pag.mesi
-            ),
-            key=lambda x: x[0],
-        )
+
+        def mesi_di(scelta):
+            return sorted(
+                (
+                    (m, pag)
+                    for pag in (p.pagamenti if p else [])
+                    if f.fornitore_id is not None and scelta(pag)
+                    for m in pag.mesi
+                ),
+                key=lambda x: x[0],
+            )
+
+        slot = mesi_di(lambda pag: pag.fornitore_id == f.fornitore_id)
+        if not slot:
+            slot = mesi_di(lambda pag: pag.residuo)
         if not slot:
             non_ric.append(f)
             continue
