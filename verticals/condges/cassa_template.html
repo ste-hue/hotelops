@@ -787,7 +787,100 @@ const FORMATO = (() => {
     }
     return { nome: doc.nome || sc.nome || "importato", base: doc.base || {}, scenario: sc, salvato_il: doc.salvato_il || null };
   }
-  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata };
+  // ── livelli: totalone → macro → sottovoci. I pagamenti del progetto si derivano da qui ──
+  const somma = (mesi) => Object.values(mesi || {}).reduce((t, v) => t + v, 0);
+  const haMesi = (pesi) => Object.values(pesi || {}).some((w) => w > 0);
+  const euro = (c) => fmt(c, c % 100 !== 0);
+  // Progetto senza livelli (scenario /1): una macro col nome del progetto, una sottovoce per pagamento.
+  function livelliDaPagamenti(p) {
+    const voci = (p.pagamenti || []).map((g, k) => ({
+      id: `v${k + 1}`, nome: g.nome, fornitore_id: g.fornitore_id ?? null, area: g.area || null,
+      netto: somma(g.mesi), mesi: { ...g.mesi }, aliquota_iva: g.aliquota_iva, stato: g.stato,
+      documenti: (g.documenti || []).map((d) => ({ ...d })), note: "",
+    }));
+    return {
+      budget_netto: null, mesi_budget: null, aliquota_iva: 22,
+      macro: [{ id: "m1", nome: p.nome, budget_netto: null, mesi_budget: null, aliquota_iva: null, area: null, voci }],
+    };
+  }
+  // Buste: lo sforamento di una macro lo assorbe il progetto (peso della macro = max(budget, assegnato)).
+  // Assegnato = somma dei mesi delle sottovoci: il denaro che esce davvero.
+  function buste(livelli) {
+    const busta = (budget, assegnato) => ({
+      budget, assegnato,
+      da_assegnare: budget === null ? 0 : Math.max(0, budget - assegnato),
+      oltre: budget === null ? 0 : Math.max(0, assegnato - budget),
+    });
+    const macro = (livelli.macro || []).map((m) => ({ id: m.id, ...busta(m.budget_netto ?? null, (m.voci || []).reduce((t, v) => t + somma(v.mesi), 0)) }));
+    const peso = macro.reduce((t, m) => t + (m.budget === null ? m.assegnato : Math.max(m.budget, m.assegnato)), 0);
+    return { progetto: busta(livelli.budget_netto ?? null, peso), macro };
+  }
+  // `totale` sui mesi in proporzione ai pesi; l'ultimo mese prende il resto, la somma è esatta.
+  // Un mese fuori dall'orizzonte è un errore leggibile, come in `spalma` e nei patti.
+  function perPesi(totale, pesi, orizzonte, cosa) {
+    const mesi = ordinati(pesi).filter((m) => pesi[m] > 0);
+    for (const m of mesi) if (!orizzonte.includes(m)) throw new Error(`${cosa}: ${meseIt(m)} fuori dall'orizzonte`);
+    const W = mesi.reduce((t, m) => t + pesi[m], 0);
+    const interi = mesi.every((m) => Number.isInteger(pesi[m]));
+    const quota = (w) => (interi ? Number((BigInt(totale) * BigInt(w)) / BigInt(W)) : Math.floor((totale * w) / W));
+    const out = {};
+    let resto = totale;
+    mesi.forEach((m, k) => { const v = k === mesi.length - 1 ? resto : quota(pesi[m]); out[m] = v; resto -= v; });
+    return out;
+  }
+  // Pagamenti derivati, in quest'ordine: sottovoci, macro senza sottovoci, «da assegnare» delle macro,
+  // «da assegnare» del progetto. Puro: `p` non si tocca. Un «da assegnare» senza mesi non entra in cassa
+  // (lo dice avvisiLivelli).
+  function derivaPagamenti(p, orizzonte) {
+    const L = p.livelli || livelliDaPagamenti(p);
+    const B = buste(L);
+    const macro = L.macro || [];
+    const soloUna = macro.length === 1 && macro[0].nome === p.nome;
+    const stato = p.stato || "ipotesi";
+    const ivaMacro = (m) => m.aliquota_iva ?? L.aliquota_iva ?? 22;
+    const mesiMacro = (m) => (haMesi(m.mesi_budget) ? m.mesi_budget : L.mesi_budget);
+    const voci = [], macroSole = [], residui = [];
+    macro.forEach((m, i) => {
+      for (const v of m.voci || []) {
+        voci.push({
+          nome: soloUna ? v.nome : `${m.nome} · ${v.nome}`, mesi: { ...v.mesi },
+          aliquota_iva: v.aliquota_iva ?? ivaMacro(m), stato: v.stato || stato, fornitore_id: v.fornitore_id ?? null,
+          ...((v.documenti || []).length ? { documenti: v.documenti.map((d) => ({ ...d })) } : {}),
+          macro: m.nome, area: v.area || m.area || null,
+        });
+      }
+      const resto = B.macro[i].da_assegnare;
+      if (!resto || !haMesi(mesiMacro(m))) return;
+      const g = { aliquota_iva: ivaMacro(m), stato, macro: m.nome, area: m.area || null };
+      if (!(m.voci || []).length) macroSole.push({ nome: m.nome, mesi: perPesi(resto, mesiMacro(m), orizzonte, m.nome), ...g, fornitore_id: m.fornitore_id ?? null });
+      else residui.push({ nome: `${m.nome} · da assegnare`, mesi: perPesi(resto, mesiMacro(m), orizzonte, `${m.nome} · da assegnare`), ...g, fornitore_id: null, residuo: true });
+    });
+    if (B.progetto.da_assegnare && haMesi(L.mesi_budget)) {
+      residui.push({ nome: "da assegnare", mesi: perPesi(B.progetto.da_assegnare, L.mesi_budget, orizzonte, "da assegnare"),
+        aliquota_iva: L.aliquota_iva ?? 22, stato, macro: null, area: null, fornitore_id: null, residuo: true });
+    }
+    const usati = new Set();
+    return [...voci, ...macroSole, ...residui].map((g) => {
+      let nome = g.nome;
+      for (let k = 2; usati.has(nome); k++) nome = `${g.nome} (${k})`;
+      usati.add(nome);
+      return { ...g, nome };
+    });
+  }
+  // Avvisi leggibili sulle buste: sforamenti, e budget che non entrano in cassa perché senza mesi.
+  function avvisiLivelli(livelli) {
+    const B = buste(livelli);
+    const out = [];
+    (livelli.macro || []).forEach((m, i) => {
+      const b = B.macro[i];
+      if (b.oltre) out.push(`${m.nome}: oltre di ${euro(b.oltre)}`);
+      if (b.da_assegnare && !haMesi(m.mesi_budget) && !haMesi(livelli.mesi_budget)) out.push(`${m.nome}: budget ${euro(b.budget)} senza mesi: non entra in cassa`);
+    });
+    if (B.progetto.oltre) out.push(`progetto: oltre di ${euro(B.progetto.oltre)}`);
+    if (B.progetto.da_assegnare && !haMesi(livelli.mesi_budget)) out.push(`budget ${euro(B.progetto.budget)} senza mesi: non entra in cassa`);
+    return out;
+  }
+  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata, livelliDaPagamenti, buste, derivaPagamenti, avvisiLivelli };
 })();
 if (typeof module !== "undefined") module.exports = FORMATO;
 </script>

@@ -1141,3 +1141,186 @@ def test_js_sostituzione_uguale_a_python(tmp_path):
         assert r_js["fin"] == r_py.fin, (r_js["mese"], r_js["societa"])
         assert r_js["uscite"]["pf"] == r_py.uscite["pf"]
     assert js["minimi"]["ORTI"]["saldo"] == py.minimi["ORTI"].saldo
+
+
+# ── livelli: totalone → macro → sottovoci, i pagamenti si derivano ──
+
+TRE_MESI = {"2027-01": 1, "2027-02": 1, "2027-03": 1}
+
+
+def _livelli(budget, mesi_budget, macro, aliquota_iva=22):
+    return {
+        "budget_netto": budget,
+        "mesi_budget": mesi_budget,
+        "aliquota_iva": aliquota_iva,
+        "macro": macro,
+    }
+
+
+def _macro(id_, nome, voci, budget=None, mesi_budget=None, **extra):
+    return {
+        "id": id_,
+        "nome": nome,
+        "budget_netto": budget,
+        "mesi_budget": mesi_budget,
+        "aliquota_iva": None,
+        "area": None,
+        "voci": voci,
+        **extra,
+    }
+
+
+def _voce(id_, nome, mesi, fornitore=None, **extra):
+    return {
+        "id": id_,
+        "nome": nome,
+        "fornitore_id": fornitore,
+        "area": None,
+        "netto": sum(mesi.values()),
+        "mesi": mesi,
+        "aliquota_iva": None,
+        "stato": "ipotesi",
+        "documenti": [],
+        "note": "",
+        **extra,
+    }
+
+
+def _deriva(tmp_path, livelli, nome="Soft restyling"):
+    p = {"id": "S", "nome": nome, "stato": "ipotesi", "pagamenti": [], "livelli": livelli}
+    out = esegui_node_formato(
+        tmp_path,
+        render_html(build_payload(snapshot_sintetico(), [])),
+        f"(() => {{ const p = {json.dumps(p)}; const prima = JSON.stringify(p);"
+        f" const g = F.derivaPagamenti(p, {ORIZ_JS});"
+        " if (JSON.stringify(p) !== prima) throw new Error('p mutato');"
+        " return JSON.stringify({g, b: F.buste(p.livelli), a: F.avvisiLivelli(p.livelli)}); })()",
+    )
+    r = json.loads(out)
+    return r["g"], r["b"], r["a"]
+
+
+def _somma(pagamenti):
+    return sum(v for g in pagamenti for v in g["mesi"].values())
+
+
+def test_busta_consuma_senza_spostare_il_totale(tmp_path):
+    amcn = _voce("v1", "pitture camere", {"2027-02": 3_000_000}, "AMCN")
+    g, b, _ = _deriva(tmp_path, _livelli(16_500_000, TRE_MESI, [_macro("m1", "Pitture", [amcn])]))
+    assert _somma(g) == 16_500_000
+    assert [x["nome"] for x in g] == ["Pitture · pitture camere", "da assegnare"]
+    assert g[0]["fornitore_id"] == "AMCN" and g[0]["macro"] == "Pitture"
+    assert g[1]["residuo"] is True and "residuo" not in g[0]
+    assert g[1]["mesi"] == {"2027-01": 4_500_000, "2027-02": 4_500_000, "2027-03": 4_500_000}
+    assert b["progetto"] == {
+        "budget": 16_500_000,
+        "assegnato": 3_000_000,
+        "da_assegnare": 13_500_000,
+        "oltre": 0,
+    }
+
+
+def test_sforamento_macro_assorbito_dal_progetto(tmp_path):
+    voci = [
+        _voce("v1", "tende", {"2027-01": 2_500_000}),
+        _voce("v2", "testate", {"2027-02": 2_500_000}),
+    ]
+    g, b, a = _deriva(tmp_path, _livelli(16_500_000, TRE_MESI, [_macro("A", "A", voci, 4_000_000)]))
+    assert b["macro"] == [
+        {"id": "A", "budget": 4_000_000, "assegnato": 5_000_000, "da_assegnare": 0, "oltre": 1_000_000}
+    ]
+    assert b["progetto"]["da_assegnare"] == 11_500_000 and b["progetto"]["oltre"] == 0
+    assert _somma(g) == 16_500_000
+    assert "A: oltre di 10.000" in a
+
+
+def test_sforamento_oltre_il_progetto_fa_crescere_il_totale(tmp_path):
+    voci = [_voce("v1", "lavori", {"2027-01": 12_000_000})]
+    g, b, a = _deriva(tmp_path, _livelli(10_000_000, TRE_MESI, [_macro("m1", "Opere", voci)]))
+    assert b["progetto"]["oltre"] == 2_000_000 and b["progetto"]["da_assegnare"] == 0
+    assert _somma(g) == 12_000_000
+    assert not any(x.get("residuo") for x in g)
+    assert any("oltre di 20.000" in x for x in a)
+
+
+def test_residui_pesi_resto_iva_e_mesi_del_progetto(tmp_path):
+    """Pesi proporzionali, resto sull'ultimo mese; la macro senza mesi usa quelli del progetto."""
+    tessili = _macro(
+        "m1", "Tessili", [_voce("v1", "tende", {"2027-01": 1_000})], 2_000, aliquota_iva=10
+    )
+    tessili["area"] = "Fornitura e posa"
+    pitture = _macro("m2", "Pitture", [], 900, {"2026-12": 1, "2027-01": 2})
+    pesi = {"2027-01": 1, "2027-02": 1, "2027-03": 1}
+    g, b, _ = _deriva(tmp_path, _livelli(10_000, pesi, [tessili, pitture], aliquota_iva=4))
+    per_nome = {x["nome"]: x for x in g}
+    assert list(per_nome) == ["Tessili · tende", "Pitture", "Tessili · da assegnare", "da assegnare"]
+    assert per_nome["Pitture"]["mesi"] == {"2026-12": 300, "2027-01": 600}
+    assert "residuo" not in per_nome["Pitture"]
+    r = per_nome["Tessili · da assegnare"]
+    assert r["mesi"] == {"2027-01": 333, "2027-02": 333, "2027-03": 334}
+    assert (r["aliquota_iva"], r["area"], r["residuo"]) == (10, "Fornitura e posa", True)
+    assert per_nome["Tessili · tende"]["aliquota_iva"] == 10
+    assert per_nome["Tessili · tende"]["area"] == "Fornitura e posa"
+    assert per_nome["da assegnare"]["aliquota_iva"] == 4
+    assert per_nome["da assegnare"]["mesi"] == {"2027-01": 2366, "2027-02": 2366, "2027-03": 2368}
+    assert _somma(g) == 10_000 == b["progetto"]["budget"]
+
+
+def test_conversione_v1_cassa_identica(tmp_path):
+    sc, base = _scenario_base()
+    p0 = sc.progetti[0]
+    doc = [{"titolo": "preventivo", "url": "https://x/p.pdf"}]
+    pag = [replace(p0.pagamenti[0], documenti=doc, stato="contratto", aliquota_iva=10)]
+    sc = replace(sc, progetti=[replace(p0, pagamenti=pag + p0.pagamenti[1:])])
+    payload = build_payload(snapshot_sintetico(), [], seme=(sc, base))
+    (tmp_path / "scenario.json").write_text(scenario_to_json(sc, base), encoding="utf-8")
+    out = esegui_node_fn(
+        tmp_path,
+        render_html(payload),
+        "(() => { const F = require('./formato.js'); const sc = require('./scenario.json').scenario;"
+        " const nuovo = JSON.parse(JSON.stringify(sc));"
+        " nuovo.progetti = nuovo.progetti.map((p) => ({...p, pagamenti: F.derivaPagamenti("
+        "{...p, livelli: F.livelliDaPagamenti(p)}, D.mesi)}));"
+        " return JSON.stringify({prima: sc.progetti[0].pagamenti, dopo: nuovo.progetti[0].pagamenti,"
+        " livelli: F.livelliDaPagamenti(sc.progetti[0]),"
+        " r1: M.calcola(D, sc).righe, r2: M.calcola(D, nuovo).righe}); })()",
+    )
+    r = json.loads(out)
+    campi = ("nome", "mesi", "aliquota_iva", "fornitore_id", "stato")
+    assert [{k: g[k] for k in campi} for g in r["dopo"]] == [
+        {k: g[k] for k in campi} for g in r["prima"]
+    ]
+    assert r["dopo"][0]["documenti"] == doc and "documenti" not in r["dopo"][1]
+    assert all(g["macro"] == "Camere" and "residuo" not in g for g in r["dopo"])
+    assert r["livelli"]["budget_netto"] is None and r["livelli"]["aliquota_iva"] == 22
+    (m,) = r["livelli"]["macro"]
+    assert (m["id"], m["nome"], m["budget_netto"]) == ("m1", "Camere", None)
+    assert m["voci"][0]["netto"] == sum(pag[0].mesi.values())
+    assert r["r1"] == r["r2"]
+
+
+def test_nomi_derivati_unici(tmp_path):
+    m = TRE_MESI
+    macro = [
+        _macro("m1", "Tessili", [_voce("v1", "tende", {"2027-01": 100})]),
+        _macro(
+            "m2",
+            "Camere",
+            [_voce("v2", "tende", {"2027-01": 100}), _voce("v3", "tende", {"2027-02": 100})],
+        ),
+    ]
+    g, _, _ = _deriva(tmp_path, _livelli(None, m, macro))
+    assert [x["nome"] for x in g] == ["Tessili · tende", "Camere · tende", "Camere · tende (2)"]
+
+
+def test_budget_senza_mesi_segnalato(tmp_path):
+    g, b, a = _deriva(tmp_path, _livelli(16_500_000, None, []))
+    assert g == []
+    assert b["progetto"]["da_assegnare"] == 16_500_000
+    assert any("senza mesi" in x for x in a)
+    assert "budget 165.000 senza mesi: non entra in cassa" in a
+
+
+def test_mesi_budget_fuori_orizzonte_errore_leggibile(tmp_path):
+    with pytest.raises(AssertionError, match="fuori dall'orizzonte"):
+        _deriva(tmp_path, _livelli(1_000, {"2028-01": 1}, []))
