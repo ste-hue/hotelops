@@ -816,10 +816,10 @@ const FORMATO = (() => {
     return { progetto: busta(livelli.budget_netto ?? null, peso), macro };
   }
   // `totale` sui mesi in proporzione ai pesi; l'ultimo mese prende il resto, la somma è esatta.
-  // Un mese fuori dall'orizzonte è un errore leggibile, come in `spalma` e nei patti.
-  function perPesi(totale, pesi, orizzonte, cosa) {
-    const mesi = ordinati(pesi).filter((m) => pesi[m] > 0);
-    for (const m of mesi) if (!orizzonte.includes(m)) throw new Error(`${cosa}: ${meseIt(m)} fuori dall'orizzonte`);
+  // I mesi fuori dall'orizzonte (scenario salvato prima che l'orizzonte scorresse) si lasciano cadere:
+  // il totale va sui mesi rimasti; se non ne resta nessuno, {} (lo dice avvisiLivelli).
+  function perPesi(totale, pesi, orizzonte) {
+    const mesi = ordinati(pesi).filter((m) => pesi[m] > 0 && orizzonte.includes(m));
     const W = mesi.reduce((t, m) => t + pesi[m], 0);
     const interi = mesi.every((m) => Number.isInteger(pesi[m]));
     const quota = (w) => (interi ? Number((BigInt(totale) * BigInt(w)) / BigInt(W)) : Math.floor((totale * w) / W));
@@ -846,18 +846,22 @@ const FORMATO = (() => {
           nome: soloUna ? v.nome : `${m.nome} · ${v.nome}`, mesi: { ...v.mesi },
           aliquota_iva: v.aliquota_iva ?? ivaMacro(m), stato: v.stato || stato, fornitore_id: v.fornitore_id ?? null,
           ...((v.documenti || []).length ? { documenti: v.documenti.map((d) => ({ ...d })) } : {}),
-          macro: m.nome, area: v.area || m.area || null,
+          macro: m.nome, area: v.area || m.area || null, macro_id: m.id, voce_id: v.id,
         });
       }
       const resto = B.macro[i].da_assegnare;
       if (!resto || !haMesi(mesiMacro(m))) return;
-      const g = { aliquota_iva: ivaMacro(m), stato, macro: m.nome, area: m.area || null };
-      if (!(m.voci || []).length) macroSole.push({ nome: m.nome, mesi: perPesi(resto, mesiMacro(m), orizzonte, m.nome), ...g, fornitore_id: m.fornitore_id ?? null });
-      else residui.push({ nome: `${m.nome} · da assegnare`, mesi: perPesi(resto, mesiMacro(m), orizzonte, `${m.nome} · da assegnare`), ...g, fornitore_id: null, residuo: true });
+      const mesi = perPesi(resto, mesiMacro(m), orizzonte);
+      if (!haMesi(mesi)) return;
+      // Una macro senza sottovoci è denaro non ancora assegnato: anche lei è un «da assegnare».
+      const g = { mesi, aliquota_iva: ivaMacro(m), stato, macro: m.nome, area: m.area || null, macro_id: m.id, voce_id: null, residuo: true };
+      if (!(m.voci || []).length) macroSole.push({ nome: m.nome, ...g, fornitore_id: m.fornitore_id ?? null });
+      else residui.push({ nome: `${m.nome} · da assegnare`, ...g, fornitore_id: null });
     });
-    if (B.progetto.da_assegnare && haMesi(L.mesi_budget)) {
-      residui.push({ nome: "da assegnare", mesi: perPesi(B.progetto.da_assegnare, L.mesi_budget, orizzonte, "da assegnare"),
-        aliquota_iva: L.aliquota_iva ?? 22, stato, macro: null, area: null, fornitore_id: null, residuo: true });
+    const mesiP = B.progetto.da_assegnare ? perPesi(B.progetto.da_assegnare, L.mesi_budget || {}, orizzonte) : {};
+    if (haMesi(mesiP)) {
+      residui.push({ nome: "da assegnare", mesi: mesiP, aliquota_iva: L.aliquota_iva ?? 22, stato,
+        macro: null, area: null, macro_id: null, voce_id: null, fornitore_id: null, residuo: true });
     }
     const usati = new Set();
     return [...voci, ...macroSole, ...residui].map((g) => {
@@ -867,17 +871,26 @@ const FORMATO = (() => {
       return { ...g, nome };
     });
   }
-  // Avvisi leggibili sulle buste: sforamenti, e budget che non entrano in cassa perché senza mesi.
-  function avvisiLivelli(livelli) {
+  // Avvisi leggibili sulle buste: sforamenti, budget senza mesi e, con `orizzonte`, mesi del budget
+  // caduti fuori dall'orizzonte (la loro parte va sugli altri mesi, o non entra in cassa).
+  function avvisiLivelli(livelli, orizzonte) {
     const B = buste(livelli);
     const out = [];
+    const fuori = (pesi, chi) => {
+      const f = orizzonte ? ordinati(pesi || {}).filter((m) => pesi[m] > 0 && !orizzonte.includes(m)) : [];
+      if (f.length) out.push(`${chi}: mesi del budget fuori orizzonte (${f.map(meseIt).join(", ")})`);
+    };
+    let usaMesiProgetto = B.progetto.da_assegnare > 0;
     (livelli.macro || []).forEach((m, i) => {
       const b = B.macro[i];
       if (b.oltre) out.push(`${m.nome}: oltre di ${euro(b.oltre)}`);
       if (b.da_assegnare && !haMesi(m.mesi_budget) && !haMesi(livelli.mesi_budget)) out.push(`${m.nome}: budget ${euro(b.budget)} senza mesi: non entra in cassa`);
+      if (b.da_assegnare && haMesi(m.mesi_budget)) fuori(m.mesi_budget, m.nome);
+      else if (b.da_assegnare) usaMesiProgetto = true;
     });
     if (B.progetto.oltre) out.push(`progetto: oltre di ${euro(B.progetto.oltre)}`);
     if (B.progetto.da_assegnare && !haMesi(livelli.mesi_budget)) out.push(`budget ${euro(B.progetto.budget)} senza mesi: non entra in cassa`);
+    if (usaMesiProgetto) fuori(livelli.mesi_budget, "progetto");
     return out;
   }
   return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata, livelliDaPagamenti, buste, derivaPagamenti, avvisiLivelli };

@@ -1194,7 +1194,7 @@ def _deriva(tmp_path, livelli, nome="Soft restyling"):
         f"(() => {{ const p = {json.dumps(p)}; const prima = JSON.stringify(p);"
         f" const g = F.derivaPagamenti(p, {ORIZ_JS});"
         " if (JSON.stringify(p) !== prima) throw new Error('p mutato');"
-        " return JSON.stringify({g, b: F.buste(p.livelli), a: F.avvisiLivelli(p.livelli)}); })()",
+        f" return JSON.stringify({{g, b: F.buste(p.livelli), a: F.avvisiLivelli(p.livelli, {ORIZ_JS})}}); }})()",
     )
     r = json.loads(out)
     return r["g"], r["b"], r["a"]
@@ -1211,6 +1211,8 @@ def test_busta_consuma_senza_spostare_il_totale(tmp_path):
     assert [x["nome"] for x in g] == ["Pitture · pitture camere", "da assegnare"]
     assert g[0]["fornitore_id"] == "AMCN" and g[0]["macro"] == "Pitture"
     assert g[1]["residuo"] is True and "residuo" not in g[0]
+    assert (g[0]["macro_id"], g[0]["voce_id"]) == ("m1", "v1")
+    assert (g[1]["macro"], g[1]["macro_id"], g[1]["voce_id"]) == (None, None, None)
     assert g[1]["mesi"] == {"2027-01": 4_500_000, "2027-02": 4_500_000, "2027-03": 4_500_000}
     assert b["progetto"] == {
         "budget": 16_500_000,
@@ -1255,8 +1257,12 @@ def test_residui_pesi_resto_iva_e_mesi_del_progetto(tmp_path):
     per_nome = {x["nome"]: x for x in g}
     assert list(per_nome) == ["Tessili · tende", "Pitture", "Tessili · da assegnare", "da assegnare"]
     assert per_nome["Pitture"]["mesi"] == {"2026-12": 300, "2027-01": 600}
-    assert "residuo" not in per_nome["Pitture"]
+    # una macro senza sottovoci è denaro non assegnato: un fatto la consuma come ogni «da assegnare»
+    assert per_nome["Pitture"]["residuo"] is True
+    assert (per_nome["Pitture"]["macro_id"], per_nome["Pitture"]["voce_id"]) == ("m2", None)
+    assert (per_nome["Tessili · tende"]["macro_id"], per_nome["Tessili · tende"]["voce_id"]) == ("m1", "v1")
     r = per_nome["Tessili · da assegnare"]
+    assert (r["macro_id"], r["voce_id"]) == ("m1", None)
     assert r["mesi"] == {"2027-01": 333, "2027-02": 333, "2027-03": 334}
     assert (r["aliquota_iva"], r["area"], r["residuo"]) == (10, "Fornitura e posa", True)
     assert per_nome["Tessili · tende"]["aliquota_iva"] == 10
@@ -1321,6 +1327,23 @@ def test_budget_senza_mesi_segnalato(tmp_path):
     assert "budget 165.000 senza mesi: non entra in cassa" in a
 
 
-def test_mesi_budget_fuori_orizzonte_errore_leggibile(tmp_path):
-    with pytest.raises(AssertionError, match="fuori dall'orizzonte"):
-        _deriva(tmp_path, _livelli(1_000, {"2028-01": 1}, []))
+def test_mesi_budget_in_parte_fuori_orizzonte_vanno_sugli_altri(tmp_path):
+    """Uno scenario salvato prima: i mesi usciti dall'orizzonte cadono, il totale resta esatto."""
+    pitture = _macro("m1", "Pitture", [], 1_000, {"2026-09": 5, "2027-01": 1, "2027-02": 2})
+    pesi = {"2026-08": 1, "2027-03": 1, "2027-04": 1}
+    g, _, a = _deriva(tmp_path, _livelli(10_000, pesi, [pitture]))
+    per_nome = {x["nome"]: x["mesi"] for x in g}
+    assert per_nome == {
+        "Pitture": {"2027-01": 333, "2027-02": 667},
+        "da assegnare": {"2027-03": 4_500, "2027-04": 4_500},
+    }
+    assert _somma(g) == 10_000
+    assert "Pitture: mesi del budget fuori orizzonte (set 26)" in a
+    assert "progetto: mesi del budget fuori orizzonte (ago 26)" in a
+
+
+def test_mesi_budget_tutti_fuori_orizzonte_nessun_pagamento(tmp_path):
+    tessili = _macro("m1", "Tessili", [_voce("v1", "tende", {"2027-01": 100})], 1_000)
+    g, _, a = _deriva(tmp_path, _livelli(5_000, {"2026-08": 1, "2026-09": 1}, [tessili]))
+    assert [x["nome"] for x in g] == ["Tessili · tende"]
+    assert "progetto: mesi del budget fuori orizzonte (ago 26, set 26)" in a
