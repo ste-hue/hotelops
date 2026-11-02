@@ -893,7 +893,234 @@ const FORMATO = (() => {
     if (usaMesiProgetto) fuori(livelli.mesi_budget, "progetto");
     return out;
   }
-  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata, livelliDaPagamenti, buste, derivaPagamenti, avvisiLivelli };
+  // ── Excel del progetto: «Quando» leggibile, righe, import e differenze ──
+  const ord = (m) => parseInt(m.slice(0, 4), 10) * 12 + parseInt(m.slice(5), 10) - 1;
+  const daOrd = (o) => `${Math.floor(o / 12)}-${String((o % 12) + 1).padStart(2, "0")}`;
+  // Mesi -> testo che quandoParse rilegge identico: «mar 27», «gen 27–mar 27 ×3» (rate uguali a passo
+  // costante, resto sull'ultima), altrimenti «gen 27 10.000 · mar 27» (l'ultimo mese prende il resto).
+  function quandoTesto(mesi) {
+    const ms = ordinati(mesi || {});
+    if (!ms.length) return "";
+    if (ms.length === 1) return meseIt(ms[0]);
+    const n = ms.length, q = Math.floor(somma(mesi) / n), passo = ord(ms[1]) - ord(ms[0]);
+    if (ms.every((m, k) => !k || ord(m) - ord(ms[k - 1]) === passo) && ms.slice(0, -1).every((m) => mesi[m] === q)) return `${meseIt(ms[0])}–${meseIt(ms[n - 1])} ×${n}`;
+    return ms.map((m, k) => (k === n - 1 ? meseIt(m) : `${meseIt(m)} ${euro(mesi[m])}`)).join(" · ");
+  }
+  const MESE_RE = "([a-z]{3})\\s*(\\d{2}|\\d{4})";
+  const PARTE_RE = new RegExp(`^${MESE_RE}(?:\\s*[–—-]\\s*${MESE_RE}\\s*[×x]\\s*(\\d+))?(?:\\s+(\\S.*))?$`, "i");
+  const meseDa = (nome, anno) => {
+    const i = MESI_IT.indexOf(nome.toLowerCase());
+    return i < 0 ? null : `${anno.length === 2 ? 2000 + parseInt(anno, 10) : anno}-${String(i + 1).padStart(2, "0")}`;
+  };
+  // Testo -> {mese: cent} che somma a `totale`; null se illeggibile o se le cifre non tornano.
+  // Parti separate da «·»: «mar 27» (il resto), «mar 27 30%», «mar 27 12.000», «gen 27–mar 27 ×3» (rate
+  // uguali, resto sull'ultima). Una sola parte senza cifra; senza, le percentuali arrotondate chiudono sull'ultima.
+  // Accetta anche il formato di calendarioParse («2027-03=12.000,00; …»).
+  function quandoParse(txt, totale) {
+    const s = String(txt ?? "").trim();
+    if (!s) return totale ? null : {};
+    if (!Number.isInteger(totale)) return null;
+    if (s.includes("=")) { const cal = calendarioParse(s); return cal && somma(cal) === totale ? cal : null; }
+    const parti = [];
+    for (const pezzo of s.split("·")) {
+      const m = PARTE_RE.exec(pezzo.trim());
+      if (!m) return null;
+      const da = meseDa(m[1], m[2]);
+      if (!da) return null;
+      let mesi = [da];
+      if (m[3]) {
+        const a = meseDa(m[3], m[4]), n = parseInt(m[5], 10), salto = a ? ord(a) - ord(da) : -1;
+        if (!a || n < 1 || salto < 0 || (n === 1 ? salto !== 0 : salto % (n - 1) !== 0)) return null;
+        mesi = Array.from({ length: n }, (_, k) => daOrd(ord(da) + (n === 1 ? 0 : (k * salto) / (n - 1))));
+      }
+      const q = (m[6] || "").trim();
+      const pct = /^(\d+(?:[.,]\d+)?)\s*%$/.exec(q);
+      const importo = pct ? mulDiv(totale, Math.round(Number(pct[1].replace(",", ".")) * 100), 10000) : q ? parseEuro(q) : null;
+      if ((q && importo === null) || importo < 0) return null;
+      parti.push({ mesi, importo, pct: !!pct });
+    }
+    const libere = parti.filter((x) => x.importo === null);
+    const resto = totale - parti.reduce((t, x) => t + (x.importo || 0), 0);
+    if (libere.length > 1 || resto < 0) return null;
+    if (libere.length) libere[0].importo = resto;
+    else if (resto && parti.every((x) => x.pct)) parti[parti.length - 1].importo += resto;
+    else if (resto) return null;
+    const out = {};
+    for (const x of parti) {
+      const n = x.mesi.length, q = Math.floor(x.importo / n);
+      x.mesi.forEach((m, k) => { out[m] = (out[m] || 0) + (k === n - 1 ? x.importo - q * (n - 1) : q); });
+    }
+    return out;
+  }
+  const TESTA_PROGETTO = ["Macro", "Sottovoce", "Fornitore", "Area", "Totale netto €", "Quando", "IVA %", "Note"];
+  const inEuro = (c) => (c == null ? "" : c / 100);
+  // I pesi del budget diventano importi (quelli che si pagano), così «Quando» si legge come per le righe.
+  const mesiBudget = (budget, pesi) => (budget && haMesi(pesi) ? perPesi(budget, pesi, ordinati(pesi)) : {});
+  // Righe del foglio (senza intestazione = TESTA_PROGETTO), importi in euro. `vuoto`: solo il budget del progetto.
+  function righeProgetto(p, vuoto = false) {
+    const L = p.livelli || livelliDaPagamenti(p);
+    const iva = (x) => x ?? "";
+    const out = [["budget progetto", "", "", "", inEuro(L.budget_netto), quandoTesto(mesiBudget(L.budget_netto, L.mesi_budget)), iva(L.aliquota_iva), ""]];
+    if (vuoto) return out;
+    for (const m of L.macro || []) {
+      if (m.budget_netto != null) out.push([m.nome, "budget", "", "", inEuro(m.budget_netto), quandoTesto(mesiBudget(m.budget_netto, m.mesi_budget)), iva(m.aliquota_iva), ""]);
+      for (const v of m.voci || []) out.push([m.nome, v.nome, v.fornitore_id || "", v.area || "", inEuro(somma(v.mesi)), quandoTesto(v.mesi), iva(v.aliquota_iva), v.note || ""]);
+    }
+    return out;
+  }
+  // Righe di totale, IVA, imprevisti… che un foglio di budget porta e che non sono opere.
+  const PAROLE_SALTA = /^(totale|subtotale|imprevisti|iva\b|cuscinetto|media|controllo|camera tipo|lettura)/i;
+  // «senza fornitore»: vuoto, TBD, n.d., da definire, da assegnare, trattino.
+  const senzaFornitore = (nome) => /^(tbd|n\.?d\.?|da definire|da assegnare|-|—)?$/i.test(String(nome ?? "").trim());
+  const normTesta = (s) => String(s ?? "").toLowerCase().replace(/[^a-zà-ù0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  // La riga di testa è la prima con almeno tre celle di testo; le colonne si riconoscono dalle parole
+  // (per ogni parola vince l'intestazione uguale, poi quella che la contiene). -1 = colonna assente.
+  // «Area di intervento» è sia `opera` (il nome della voce, se manca «Sottovoce») sia `area`.
+  function indovinaColonne(righe) {
+    let testa = 0;
+    for (let i = 0; i < Math.min(righe.length, 30); i++) { if ((righe[i] || []).filter((c) => typeof c === "string" && c.trim()).length >= 3) { testa = i; break; } }
+    const t = (righe[testa] || []).map(normTesta);
+    const trova = (...parole) => {
+      for (const p of parole) { const i = t.indexOf(p) >= 0 ? t.indexOf(p) : t.findIndex((x) => x.includes(p)); if (i >= 0) return i; }
+      return -1;
+    };
+    return { testa, colonne: {
+      fornitore: trova("fornitore", "ditta", "impresa", "beneficiario"),
+      opera: trova("area di intervento", "opera", "lavorazione", "descrizione", "voce", "articolo", "oggetto"),
+      importo: trova("totale", "importo", "netto", "budget", "prezzo"),
+      note: trova("note", "nota"),
+      macro: trova("macro"),
+      sottovoce: trova("sottovoce", "voce"),
+      quando: trova("quando", "mesi", "rate"),
+      area: trova("area"),
+      iva: trova("iva"),
+    } };
+  }
+  // Foglio -> livelli. opzioni = {testa, macro_scelta, mese_default, iva_default, fornitore(nome) -> id}.
+  // Righe «budget progetto» (Macro) e «budget» (Sottovoce, o Sottovoce e Fornitore vuoti) = budget.
+  // Si saltano: righe vuote, a 0, di totale/IVA (PAROLE_SALTA). Le righe che non si leggono vanno in
+  // da_sistemare [{n: riga Excel, motivo}] e non entrano.
+  function livelliDaFoglio(righe, colonne, opzioni = {}) {
+    const c = colonne, o = opzioni, testa = o.testa || 0;
+    const cella = (r, k) => (c[k] >= 0 && r[c[k]] != null ? r[c[k]] : "");
+    const testo = (r, k) => String(cella(r, k)).trim();
+    const aliquota = (r) => {
+      if (!(c.iva >= 0)) return o.iva_default ?? null;
+      const v = cella(r, "iva");
+      if (v === "") return null;
+      const x = typeof v === "number" ? v : Number(String(v).replace("%", "").trim().replace(",", "."));
+      return Number.isFinite(x) && String(v).trim() ? (x > 0 && x < 1 ? Math.round(x * 100) : x) : NaN;
+    };
+    const L = { budget_netto: null, mesi_budget: null, aliquota_iva: o.iva_default ?? 22, macro: [] };
+    const da_sistemare = [];
+    const macroDi = (nome) => {
+      let m = L.macro.find((x) => x.nome === nome);
+      if (!m) L.macro.push((m = { id: `m${L.macro.length + 1}`, nome, budget_netto: null, mesi_budget: null, aliquota_iva: null, area: null, voci: [] }));
+      return m;
+    };
+    let nv = 0;
+    righe.slice(testa + 1).forEach((r, i) => {
+      const n = testa + i + 2;
+      r = r || [];
+      if (!r.some((x) => x != null && String(x).trim() !== "")) return;
+      const macro = c.macro >= 0 ? testo(r, "macro") : "";
+      const nome = testo(r, c.sottovoce >= 0 ? "sottovoce" : "opera");
+      const fornitore = testo(r, "fornitore");
+      const imp = cella(r, "importo");
+      const netto = imp === "" ? null : typeof imp === "number" ? Math.round(imp * 100) : parseEuro(imp);
+      if (imp !== "" && netto === null) return da_sistemare.push({ n, motivo: "importo illeggibile" });
+      const iva = aliquota(r);
+      if (Number.isNaN(iva)) return da_sistemare.push({ n, motivo: "IVA illeggibile" });
+      const txt = testo(r, "quando");
+      const progetto = macro.toLowerCase() === "budget progetto";
+      if (progetto || (macro && (nome.toLowerCase() === "budget" || (!nome && !fornitore)))) {
+        const pesi = netto && txt ? quandoParse(txt, netto) : null;
+        if (netto && txt && !pesi) return da_sistemare.push({ n, motivo: "quando illeggibile" });
+        const dove = progetto ? L : macroDi(macro);
+        Object.assign(dove, { budget_netto: netto, mesi_budget: pesi, aliquota_iva: progetto ? iva ?? 22 : iva });
+        return;
+      }
+      if (!netto || !(nome || fornitore) || [macro, nome, fornitore].some((x) => PAROLE_SALTA.test(x))) return;
+      const mesi = txt ? quandoParse(txt, netto) : o.mese_default ? { [o.mese_default]: netto } : null;
+      if (!mesi) return da_sistemare.push({ n, motivo: txt ? "quando illeggibile" : "manca il quando" });
+      macroDi(macro || o.macro_scelta || "Senza macro").voci.push({
+        id: `v${++nv}`, nome: nome || fornitore,
+        fornitore_id: senzaFornitore(fornitore) ? null : o.fornitore ? o.fornitore(fornitore) : fornitore,
+        area: testo(r, "area") || null, netto, mesi, aliquota_iva: iva, stato: "ipotesi", documenti: [], note: testo(r, "note"),
+      });
+    });
+    return { livelli: L, da_sistemare };
+  }
+  // Una riga di confronto per budget e voce. Chiave: macro + sottovoce + fornitore (minuscolo, spazi
+  // normalizzati); le chiavi ripetute prendono #2, #3… nell'ordine.
+  const chiave = (...xs) => xs.map((x) => String(x ?? "").toLowerCase().replace(/\s+/g, " ").trim()).join("|");
+  function righeConfronto(L) {
+    const out = [], visti = {};
+    const metti = (k, e) => { visti[k] = (visti[k] || 0) + 1; out.push({ chiave: visti[k] > 1 ? `${k}#${visti[k]}` : k, ...e }); };
+    const budget = (x) => ({ netto: x.budget_netto, mesi: mesiBudget(x.budget_netto, x.mesi_budget), area: null, aliquota_iva: x.aliquota_iva ?? null, note: "" });
+    if (L.budget_netto != null) metti(chiave("budget progetto"), { macro: "budget progetto", sottovoce: "", fornitore: null, val: budget(L) });
+    for (const m of L.macro || []) {
+      if (m.budget_netto != null) metti(chiave(m.nome, "budget"), { macro: m.nome, sottovoce: "budget", fornitore: null, val: budget(m) });
+      for (const v of m.voci || []) {
+        metti(chiave(m.nome, v.nome, v.fornitore_id), { macro: m.nome, sottovoce: v.nome, fornitore: v.fornitore_id ?? null, voce: v,
+          val: { netto: somma(v.mesi), mesi: { ...v.mesi }, area: v.area || null, aliquota_iva: v.aliquota_iva ?? null, note: v.note || "" } });
+      }
+    }
+    return out;
+  }
+  const mesiUguali = (a, b) => JSON.stringify(ordinati(a).map((m) => [m, a[m]])) === JSON.stringify(ordinati(b).map((m) => [m, b[m]]));
+  // Differenze riga per riga: entra · cambia (netto, mesi, area, IVA, note) · sparisce. Con `contratti`
+  // (p.contratti), un «cambia» nei mesi di una voce il cui fornitore ha patti porta patti_persi: true.
+  function diffLivelli(vecchi, nuovi, contratti = []) {
+    const A = righeConfronto(vecchi), B = righeConfronto(nuovi);
+    const inA = new Map(A.map((e) => [e.chiave, e])), inB = new Set(B.map((e) => e.chiave));
+    const riga = (tipo, e, prima, dopo) => ({ tipo, chiave: e.chiave, macro: e.macro, sottovoce: e.sottovoce, fornitore: e.fornitore, prima, dopo });
+    const out = [];
+    for (const b of B) {
+      const a = inA.get(b.chiave);
+      if (!a) { out.push(riga("entra", b, null, b.val)); continue; }
+      const x = a.val, y = b.val;
+      if (x.netto === y.netto && x.area === y.area && x.aliquota_iva === y.aliquota_iva && x.note === y.note && mesiUguali(x.mesi, y.mesi)) continue;
+      const d = riga("cambia", b, x, y);
+      if (b.fornitore && !mesiUguali(x.mesi, y.mesi) && contratti.some((c) => String(c.fornitore).trim() === b.fornitore)) d.patti_persi = true;
+      out.push(d);
+    }
+    for (const a of A) if (!inB.has(a.chiave)) out.push(riga("sparisce", a, a.val, null));
+    return out;
+  }
+  // Applica i livelli importati a `p` (puro: torna un progetto nuovo, i pagamenti si derivano dopo).
+  // Senza `macro_scelta` sostituisce tutto il progetto; con, solo quella macro (budget della macro invariato).
+  // Le voci ritrovate per chiave tengono id, stato e documenti; le altre prendono id nuovi. I patti dei
+  // fornitori con patti_persi cadono.
+  function applicaLivelli(p, nuovi, opzioni = {}) {
+    const vecchi = p.livelli || livelliDaPagamenti(p);
+    const solo = opzioni.macro_scelta ?? null;
+    // un file senza colonna Macro non porta il budget della macro: si confrontano solo le voci
+    const base = solo === null ? vecchi : { macro: (vecchi.macro || []).filter((m) => m.nome === solo).map((m) => ({ ...m, budget_netto: null })) };
+    const persi = new Set(diffLivelli(base, nuovi, p.contratti || []).filter((d) => d.patti_persi).map((d) => d.fornitore));
+    const vecchie = new Map(righeConfronto(base).filter((e) => e.voce).map((e) => [e.chiave, e.voce]));
+    const libero = (usati, pref) => { let k = 1; while (usati.has(`${pref}${k}`)) k++; usati.add(`${pref}${k}`); return `${pref}${k}`; };
+    const idVoci = new Set((vecchi.macro || []).flatMap((m) => (m.voci || []).map((v) => v.id)));
+    const idMacro = new Set((vecchi.macro || []).map((m) => m.id));
+    const voce = new Map(righeConfronto(nuovi).filter((e) => e.voce).map((e) => {
+      const v = vecchie.get(e.chiave);
+      return [e.voce, v ? { ...e.voce, id: v.id, stato: v.stato, documenti: (v.documenti || []).map((d) => ({ ...d })) } : { ...e.voce, id: libero(idVoci, "v") }];
+    }));
+    const macro = (nuovi.macro || []).map((m) => {
+      const v = (vecchi.macro || []).find((x) => x.nome.toLowerCase() === m.nome.toLowerCase());
+      const voci = (m.voci || []).map((x) => voce.get(x));
+      if (solo !== null && v) return { ...v, voci };
+      return { ...m, id: v ? v.id : libero(idMacro, "m"), area: m.area ?? (v ? v.area : null), voci };
+    });
+    const livelli = solo === null
+      ? { ...vecchi, budget_netto: nuovi.budget_netto, mesi_budget: nuovi.mesi_budget, aliquota_iva: nuovi.aliquota_iva, macro }
+      : { ...vecchi, macro: (vecchi.macro || []).some((m) => m.nome === solo)
+        ? (vecchi.macro || []).flatMap((m) => (m.nome === solo ? macro : [m]))
+        : [...(vecchi.macro || []), ...macro] };
+    return { ...p, livelli, contratti: (p.contratti || []).filter((c) => !persi.has(String(c.fornitore).trim())) };
+  }
+  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata, livelliDaPagamenti, buste, derivaPagamenti, avvisiLivelli,
+    quandoTesto, quandoParse, TESTA_PROGETTO, righeProgetto, PAROLE_SALTA, senzaFornitore, indovinaColonne, livelliDaFoglio, diffLivelli, applicaLivelli };
 })();
 if (typeof module !== "undefined") module.exports = FORMATO;
 </script>
@@ -2095,21 +2322,8 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   // abituali se ci sono, altrimenti una rata al mese scelto. Si vede tutto PRIMA di applicare; ogni riga si
   // può spegnere; le righe di totale e IVA si saltano da sole. Stato «ipotesi»: è un budget, non un impegno.
   const budget = { file: "", fogli: null, foglio: 0, testa: 0, colonne: {}, progetto: "", mese: null, iva: 22, righe: [] };
-  const PAROLE_SALTA = /^(totale|subtotale|imprevisti|iva\b|cuscinetto|media|controllo|camera tipo|lettura)/i;
-  const normTesta = (s) => String(s ?? "").toLowerCase().replace(/[^a-zà-ù0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
-  function indovinaColonne(righe) {
-    // la riga di testa è la prima con almeno tre celle di testo; le colonne si riconoscono dalle parole
-    let testa = 0;
-    for (let i = 0; i < Math.min(righe.length, 30); i++) { if ((righe[i] || []).filter((c) => typeof c === "string" && c.trim()).length >= 3) { testa = i; break; } }
-    const t = (righe[testa] || []).map(normTesta);
-    const trova = (...parole) => { for (const p of parole) { const i = t.findIndex((x) => x === p || x.includes(p)); if (i >= 0) return i; } return -1; };
-    return { testa, colonne: {
-      fornitore: trova("fornitore", "ditta", "impresa", "beneficiario"),
-      opera: trova("area di intervento", "opera", "lavorazione", "descrizione", "voce", "articolo", "oggetto"),
-      importo: trova("totale", "importo", "netto", "budget", "prezzo"),
-      note: trova("note", "nota"),
-    } };
-  }
+  // parole di salto, «senza fornitore» e colonne indovinate: in FORMATO, uguali per «Importa budget» e per il giro Excel
+  const { PAROLE_SALTA, senzaFornitore, indovinaColonne } = FORMATO;
   async function apriBudget(file) {
     try {
       budget.fogli = await EXCEL.leggi(file);
@@ -2133,7 +2347,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   const slugId = (nome) => String(nome || "").toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 24);
   function riconosciFornitoreBudget(nome) {
     const n = String(nome || "").trim();
-    if (!n || /^(tbd|n\.?d\.?|da definire|-|—)$/i.test(n)) return { id: "", nome: n, stato: "non_registrato", perche: "fornitore non indicato nel budget" };
+    if (senzaFornitore(n)) return { id: "", nome: n, stato: "non_registrato", perche: "fornitore non indicato nel budget" };
     const mappa = stato.scenario.fornitori || {};
     const cNome = n.toLowerCase().replace(/[^a-z0-9]+/g, "");
     const gia = Object.entries(mappa).find(([id, f]) => id === slugId(n) || String(f.nome || "").toLowerCase().replace(/[^a-z0-9]+/g, "") === cNome);
