@@ -178,3 +178,89 @@ def test_multibank_orti_maps_unicredit_and_revolut(tmp_path):
     out = parse_mastrino_multibank(path, "ORTI")
 
     assert sorted(r["banca_id"] for r in out) == ["MPS", "REVOLUT", "UNICREDIT"]
+
+
+# ── Scheda per conto con colonna unica "Registrazione" (archivio saldibanche, 2026-10-30) ─
+# Data e Rif. fusi in col 0 → col 7 è "Dare in valuta", non Partitario: importi da
+# 1–5 € venivano scambiati per codici banca (is_multibank True, conto sbagliato).
+# Il saldo di fine giorno sta sulla riga "Totale movimenti del giorno" (col 4) e
+# include il "Riporto saldi" quando l'export lo ha.
+
+REGISTRAZIONE_HEADER = [
+    "Registrazione", "Causale contabile", "Dare in UdC", "Avere in UdC", "Saldo in UdC",
+    "Documento", "Val.", "Dare in valuta", "Avere in valuta", "Riferimenti IVA",
+]
+
+REGISTRAZIONE_ROWS = [
+    [None, "Riporto saldi simulati", 1000, None, 1000, None, None, 1000, None, None],
+    ["GENNAIO 2026", "Totale movimenti del mese", 5, 2, 1003, None, "EUR", 5, 2, None],
+    ["     2/01/2026", "Totale movimenti del giorno", 2, None, 1002, None, "EUR", 2, None, None],
+    ["         2/01/2026 PNC n 1", "commissione", 2, None, 1002, None, "EUR", 2, None, None],
+    ["    15/01/2026", "Totale movimenti del giorno", 3, 2, 1003, None, "EUR", 3, 2, None],
+    ["        15/01/2026 PNC n 2", "incasso", 3, None, 1005, None, "EUR", 3, None, None],
+    ["        15/01/2026 PNC n 3", "bollo", None, 2, 1003, None, "EUR", None, 2, None],
+]
+
+
+def _make_registrazione_xlsx(tmp_path: Path, name: str) -> Path:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(REGISTRAZIONE_HEADER)
+    for row in REGISTRAZIONE_ROWS:
+        ws.append(row)
+    path = tmp_path / name
+    wb.save(path)
+    return path
+
+
+def test_registrazione_layout_detected_and_not_multibank(tmp_path):
+    from ingest.flussi.ingest_scheda_contabile import is_multibank, is_registrazione_layout
+
+    path = _make_registrazione_xlsx(tmp_path, "2026_ORTI_02_MPS_000001194052.xlsx")
+    assert is_registrazione_layout(path)
+    assert is_multibank(path)  # il rilevatore vecchio ci casca: per questo il routing lo precede
+    assert not is_registrazione_layout(_make_scheda_xlsx(tmp_path, ORTI_MULTIBANK_ROWS))
+
+
+def test_registrazione_daily_saldi_include_riporto(tmp_path):
+    from ingest.flussi.ingest_scheda_contabile import extract_daily_saldi_registrazione
+
+    path = _make_registrazione_xlsx(tmp_path, "2026_ORTI_02_MPS_000001194052.xlsx")
+    assert extract_daily_saldi_registrazione(path) == {
+        date(2026, 1, 2): 1002.0,
+        date(2026, 1, 15): 1003.0,
+    }
+
+
+@pytest.mark.parametrize(
+    "name, societa, banca",
+    [
+        ("2026_ORTI_03_MPS_000001205058.xlsx", "ORTI", "MPS_KROSS"),
+        ("2026_ORTI_05_REVOLUT.xlsx", "ORTI", "REVOLUT"),
+        ("2026_ORTI_04_UNICREDIT_000107433941_da-incolla.xlsx", "ORTI", "UNICREDIT"),
+        ("2025_INTUR_03_INTESA_100000011966.xlsx", "INTUR", "INTESA"),
+    ],
+)
+def test_infer_banca_from_archive_filename(name, societa, banca):
+    from ingest.flussi.ingest_scheda_contabile import infer_banca_from_filename
+
+    assert infer_banca_from_filename(name, societa) == banca
+
+
+def test_registrazione_process_file_writes_mono_bank(tmp_path, monkeypatch):
+    from ingest.flussi import ingest_scheda_contabile as mod
+
+    captured = {}
+
+    def fake_write(table, rows, mode, natural_key):
+        captured["rows"] = rows
+
+    import core.bq.write as bqw
+
+    monkeypatch.setattr(bqw, "bq_write_validated", fake_write)
+    path = _make_registrazione_xlsx(tmp_path, "2026_ORTI_03_MPS_000001205058.xlsx")
+    n = mod.process_file(path, "ORTI", None, dry_run=False, raw_object_id="ro-1")
+    assert n == 2
+    assert {r.banca_id for r in captured["rows"]} == {"MPS_KROSS"}
+    assert [r.saldo_finale for r in captured["rows"]] == [1002.0, 1003.0]
+    assert all(r.raw_object_id == "ro-1" for r in captured["rows"])

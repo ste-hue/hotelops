@@ -287,6 +287,37 @@ def parse_scheda_xlsx(filepath: Path) -> list[dict]:
     return rows
 
 
+def is_registrazione_layout(filepath: Path) -> bool:
+    """Detect the per-account Esolver scheda with a single "Registrazione" column.
+
+    Layout: Registrazione; Causale contabile; Dare in UdC; Avere in UdC;
+    Saldo in UdC; Documento; Val.; Dare in valuta; ... — date and Rif. are
+    merged in col 0, so col 7 is "Dare in valuta" (NOT Partitario: small
+    amounts would be mistaken for bank codes by is_multibank).
+    """
+    for fields in _iter_scheda_rows(filepath):
+        return bool(fields) and str(fields[0] or "").strip() == "Registrazione"
+    return False
+
+
+def extract_daily_saldi_registrazione(filepath: Path) -> dict[date, float]:
+    """End-of-day saldo from the "Totale movimenti del giorno" rows.
+
+    Esolver prints one total row per day whose "Saldo in UdC" (col 4) is the
+    running balance at end of day, carry-forward included when the export has
+    the "Riporto saldi" row. Works also for exports with daily totals only.
+    """
+    daily: dict[date, float] = {}
+    for fields in _iter_scheda_rows(filepath):
+        if len(fields) < 5 or str(fields[1] or "").strip() != "Totale movimenti del giorno":
+            continue
+        d = parse_date(fields[0])
+        saldo = parse_italian_number(fields[4])
+        if d is not None and saldo is not None:
+            daily[d] = round(saldo, 2)
+    return daily
+
+
 def parse_scheda_contabile(filepath: Path) -> list[dict]:
     """Parse scheda contabile file (auto-detect CSV vs XLSX)."""
     suffix = filepath.suffix.lower()
@@ -529,6 +560,13 @@ def infer_banca_from_filename(filename: str, societa: str | None = None) -> str 
     """
     upper = filename.upper()
 
+    # Archive pattern: <ANNO>_<SOCIETA>_<cod>_<BANCA>_... (cod = Esolver conto)
+    arch_match = re.match(r"\d{4}_(ORTI|INTUR)_(\d{2})_", upper)
+    if arch_match:
+        key = (arch_match.group(1), str(int(arch_match.group(2))))
+        if key in ESOLVER_CC_MAP:
+            return ESOLVER_CC_MAP[key]
+
     # Try to extract Cc number from Esolver CSV filename pattern
     # Pattern: _Cc{N}_ where N is the Esolver conto number
     cc_match = re.search(r"_CC(\d+)_", upper)
@@ -696,6 +734,15 @@ def process_file(
         log.info(f"Processing: {filepath.name}")
         if raw_object_id:
             log.info(f"  lineage raw_object_id: {raw_object_id}")
+
+        if is_registrazione_layout(filepath):
+            banca_id = banca_id or infer_banca_from_filename(filepath.name, societa_id)
+            if not banca_id:
+                log.error(f"Cannot infer banca from filename: {filepath.name}. Use --banca.")
+                return 0
+            daily_saldi = extract_daily_saldi_registrazione(filepath)
+            log.info(f"Registrazione layout, {banca_id}: {len(daily_saldi)} end-of-day saldi")
+            return write_saldi_to_bq(daily_saldi, societa_id, banca_id, dry_run, raw_object_id=raw_object_id)
 
         if is_multibank(filepath):
             log.info("Detected multi-bank Esolver mastrino (Partitario populated)")
