@@ -1419,12 +1419,14 @@ def _giro(p, modifica=""):
 
 def test_giro_excel_identita(tmp_path):
     p = _progetto_tre_righe()
+    p["livelli"]["macro"].append(_macro("m3", "Arredi", [], aliquota_iva=10))  # macro vuota: niente budget né voci
     r = _formato(tmp_path, _giro(p))
     assert r["r"][0] == ["Macro", "Sottovoce", "Fornitore", "Area", "Totale netto €", "Quando", "IVA %", "Note"]
     assert r["r"][1] == ["budget progetto", "", "", "", 165000, "gen 27–mar 27 ×3", 22, ""]
     assert r["r"][2] == ["Tessili", "budget", "", "", 40000, "gen 27 13.333,33 · mar 27", "", ""]
     assert r["r"][3] == ["Tessili", "tende", "PRISCO", "Fornitura e posa", 22000, "gen 27 10.000 · mar 27", 10, "testate comprese"]
     assert r["r"][4] == ["Pitture", "pitture camere", "AMCN", "", 30000, "feb 27", 22, ""]
+    assert r["r"][5] == ["Arredi", "", "", "", "", "", 10, ""]
     assert r["vuoto"] == [r["r"][1]]
     c = r["colonne"]
     assert (c["macro"], c["sottovoce"], c["opera"], c["area"], c["importo"], c["quando"], c["iva"], c["note"]) == (0, 1, 1, 3, 4, 5, 6, 7)
@@ -1435,7 +1437,8 @@ def test_giro_excel_identita(tmp_path):
     voci = {v["nome"]: v for m in dopo["livelli"]["macro"] for v in m["voci"]}
     assert voci["pitture camere"]["documenti"] == p["livelli"]["macro"][1]["voci"][0]["documenti"]
     assert (voci["pitture camere"]["id"], voci["tende"]["id"]) == ("v1", "v2")
-    assert [m["id"] for m in dopo["livelli"]["macro"]] == ["m1", "m2"]
+    assert [m["id"] for m in dopo["livelli"]["macro"]] == ["m1", "m2", "m3"]
+    assert dopo["livelli"]["macro"][2] == p["livelli"]["macro"][2]
     assert dopo["livelli"]["budget_netto"] == 16_500_000
 
 
@@ -1492,7 +1495,11 @@ def test_diff_sostituisce_e_segnala(tmp_path):
     p = _progetto_tre_righe()
     # riga 3 (tende): cifra cambiata; riga 4 (AMCN) cancellata
     r = _formato(tmp_path, _giro(p, "r[3][4] = 25000; r.splice(4, 1);"))
-    assert [(d["tipo"], d["sottovoce"]) for d in r["d"]] == [("cambia", "tende"), ("sparisce", "pitture camere")]
+    assert [(d["tipo"], d["macro"], d["sottovoce"]) for d in r["d"]] == [
+        ("cambia", "Tessili", "tende"),
+        ("sparisce", "Pitture", ""),
+        ("sparisce", "Pitture", "pitture camere"),
+    ]
     assert r["d"][0]["prima"]["netto"] == 2_200_000 and r["d"][0]["dopo"]["netto"] == 2_500_000
     assert "patti_persi" not in r["d"][0]
     # «Quando» cambiato su una voce con patti: i patti di quel fornitore cadono, i documenti restano
@@ -1520,3 +1527,86 @@ def test_import_in_una_macro_tocca_solo_quella(tmp_path):
     assert [(v["nome"], v["fornitore_id"], v["netto"]) for v in tessili["voci"]] == [("Opere", "AMCN", 1_200_000), ("Opere", None, 50_000)]
     assert len({v["id"] for m in r["macro"] for v in m["voci"]}) == 3
     assert r["budget_netto"] == 16_500_000
+
+
+def test_macro_cancellata_si_vede_nel_diff(tmp_path):
+    p = _progetto_tre_righe()
+    p["livelli"]["macro"].append(_macro("m3", "Arredi", []))
+    r = _formato(tmp_path, _giro(p, "r.splice(5, 1);"))
+    assert [(d["tipo"], d["macro"]) for d in r["d"]] == [("sparisce", "Arredi")]
+
+
+def test_import_in_una_macro_senza_voci_tiene_la_macro(tmp_path):
+    p = _progetto_tre_righe()
+    righe = [["Fornitore", "Area di intervento", "Totale netto €"], ["Da assegnare", "Opere", 0]]
+    r = _formato(
+        tmp_path,
+        f"(() => {{ const p = {json.dumps(p)}; const r = {json.dumps(righe)}; const g = F.indovinaColonne(r);"
+        " const L = F.livelliDaFoglio(r, g.colonne, {testa: g.testa, macro_scelta: 'Tessili', mese_default: '2027-02'});"
+        " return JSON.stringify({d: F.diffLivelli({macro: [{...p.livelli.macro[0], budget_netto: null}]}, L.livelli),"
+        " L: F.applicaLivelli(p, L.livelli, {macro_scelta: 'Tessili'}).livelli}); })()",
+    )
+    tessili = r["L"]["macro"][0]
+    vecchia = p["livelli"]["macro"][0]
+    assert tessili == {**vecchia, "voci": []}
+    assert (tessili["budget_netto"], tessili["mesi_budget"]) == (4_000_000, {"2027-01": 1, "2027-03": 2})
+    assert [(d["tipo"], d["sottovoce"]) for d in r["d"]] == [("sparisce", "tende")]
+
+
+def test_quando_percentuali_che_non_fanno_cento(tmp_path):
+    r = _formato(
+        tmp_path,
+        "JSON.stringify([F.quandoParse('mar 27 30% · giu 27 60%', 1000000),"
+        " F.quandoParse('mar 27 33,33% · giu 27 33,33% · set 27 33,34%', 100),"
+        " F.quandoParse('mar 27 33% · giu 27 33% · set 27 33%', 100)])",
+    )
+    assert r[0] is None
+    assert r[1] == {"2027-03": 33, "2027-06": 33, "2027-09": 34}
+    assert r[2] is None
+
+
+def test_iva_solo_aliquote_valide_e_colonna_iva_importo(tmp_path):
+    netto_iva_lordo = [["Fornitore", "Descrizione", "Netto", "IVA", "Lordo"], ["AMCN", "pitture", 1000, 220, 1220]]
+    con_aliquota = [
+        ["Fornitore", "Descrizione", "Totale netto €", "IVA %"],
+        ["AMCN", "pitture", 1000, 22],
+        ["STE", "impianti", 2000, 21],
+        ["Flab", "lampade", 300, "10%"],
+    ]
+    r = _formato(
+        tmp_path,
+        f"(() => {{ const a = {json.dumps(netto_iva_lordo)}, b = {json.dumps(con_aliquota)};"
+        " const ga = F.indovinaColonne(a), gb = F.indovinaColonne(b);"
+        " const opz = {macro_scelta: 'Opere', mese_default: '2027-02', iva_default: 22};"
+        " return JSON.stringify({ga: ga.colonne, gb: gb.colonne, A: F.livelliDaFoglio(a, ga.colonne, opz),"
+        " B: F.livelliDaFoglio(b, gb.colonne, opz),"
+        " intest: ['IVA %', 'iva%', 'Aliquota', 'IVA % applicata', 'IVA', 'Totale IVA'].map((h) =>"
+        " F.indovinaColonne([['Fornitore', 'Voce', h]]).colonne.iva)}); })()",
+    )
+    assert r["ga"]["iva"] == -1 and r["ga"]["importo"] == 2
+    assert r["A"]["livelli"]["macro"][0]["voci"][0]["aliquota_iva"] == 22  # iva_default, non 220
+    assert r["gb"]["iva"] == 3
+    voci = r["B"]["livelli"]["macro"][0]["voci"]
+    assert [(v["fornitore_id"], v["aliquota_iva"]) for v in voci] == [("AMCN", 22), ("Flab", 10)]
+    assert r["B"]["da_sistemare"] == [{"n": 3, "motivo": "IVA illeggibile"}]
+    assert r["intest"] == [2, 2, 2, 2, -1, -1]
+
+
+def test_budget_senza_quando_prende_il_mese_scelto(tmp_path):
+    righe = [
+        ["Macro", "Sottovoce", "Fornitore", "Totale netto €", "Quando"],
+        ["budget progetto", "", "", 165000, ""],
+        ["Tessili", "budget", "", 40000, ""],
+    ]
+    r = _formato(
+        tmp_path,
+        f"(() => {{ const r = {json.dumps(righe)}; const g = F.indovinaColonne(r);"
+        " return JSON.stringify([F.livelliDaFoglio(r, g.colonne, {testa: g.testa, mese_default: '2027-01'}),"
+        " F.livelliDaFoglio(r, g.colonne, {testa: g.testa})]); })()",
+    )
+    con, senza = r
+    assert (con["livelli"]["budget_netto"], con["livelli"]["mesi_budget"]) == (16_500_000, {"2027-01": 16_500_000})
+    assert con["livelli"]["macro"][0]["mesi_budget"] == {"2027-01": 4_000_000}
+    assert con["da_sistemare"] == []
+    assert senza["da_sistemare"] == [{"n": 2, "motivo": "budget senza mesi"}, {"n": 3, "motivo": "budget senza mesi"}]
+    assert senza["livelli"]["budget_netto"] is None

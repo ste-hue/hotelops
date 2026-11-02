@@ -914,7 +914,8 @@ const FORMATO = (() => {
   };
   // Testo -> {mese: cent} che somma a `totale`; null se illeggibile o se le cifre non tornano.
   // Parti separate da «·»: «mar 27» (il resto), «mar 27 30%», «mar 27 12.000», «gen 27–mar 27 ×3» (rate
-  // uguali, resto sull'ultima). Una sola parte senza cifra; senza, le percentuali arrotondate chiudono sull'ultima.
+  // uguali, resto sull'ultima). Una sola parte senza cifra; senza, le percentuali devono fare 100 e il loro
+  // arrotondamento (al più un centesimo per parte) chiude sull'ultima.
   // Accetta anche il formato di calendarioParse («2027-03=12.000,00; …»).
   function quandoParse(txt, totale) {
     const s = String(txt ?? "").trim();
@@ -937,13 +938,13 @@ const FORMATO = (() => {
       const pct = /^(\d+(?:[.,]\d+)?)\s*%$/.exec(q);
       const importo = pct ? mulDiv(totale, Math.round(Number(pct[1].replace(",", ".")) * 100), 10000) : q ? parseEuro(q) : null;
       if ((q && importo === null) || importo < 0) return null;
-      parti.push({ mesi, importo, pct: !!pct });
+      parti.push({ mesi, importo, pct: pct ? Math.round(Number(pct[1].replace(",", ".")) * 100) : null });
     }
     const libere = parti.filter((x) => x.importo === null);
     const resto = totale - parti.reduce((t, x) => t + (x.importo || 0), 0);
     if (libere.length > 1 || resto < 0) return null;
     if (libere.length) libere[0].importo = resto;
-    else if (resto && parti.every((x) => x.pct)) parti[parti.length - 1].importo += resto;
+    else if (resto && parti.every((x) => x.pct !== null) && parti.reduce((t, x) => t + x.pct, 0) === 10000 && resto <= parti.length) parti[parti.length - 1].importo += resto;
     else if (resto) return null;
     const out = {};
     for (const x of parti) {
@@ -964,6 +965,7 @@ const FORMATO = (() => {
     if (vuoto) return out;
     for (const m of L.macro || []) {
       if (m.budget_netto != null) out.push([m.nome, "budget", "", "", inEuro(m.budget_netto), quandoTesto(mesiBudget(m.budget_netto, m.mesi_budget)), iva(m.aliquota_iva), ""]);
+      else if (!(m.voci || []).length) out.push([m.nome, "", "", "", "", "", iva(m.aliquota_iva), ""]);  // macro vuota: Sottovoce vuota
       for (const v of m.voci || []) out.push([m.nome, v.nome, v.fornitore_id || "", v.area || "", inEuro(somma(v.mesi)), quandoTesto(v.mesi), iva(v.aliquota_iva), v.note || ""]);
     }
     return out;
@@ -980,6 +982,7 @@ const FORMATO = (() => {
     let testa = 0;
     for (let i = 0; i < Math.min(righe.length, 30); i++) { if ((righe[i] || []).filter((c) => typeof c === "string" && c.trim()).length >= 3) { testa = i; break; } }
     const t = (righe[testa] || []).map(normTesta);
+    const crude = (righe[testa] || []).map((x) => String(x ?? "").toLowerCase().replace(/\s+/g, " ").trim());
     const trova = (...parole) => {
       for (const p of parole) { const i = t.indexOf(p) >= 0 ? t.indexOf(p) : t.findIndex((x) => x.includes(p)); if (i >= 0) return i; }
       return -1;
@@ -993,7 +996,8 @@ const FORMATO = (() => {
       sottovoce: trova("sottovoce", "voce"),
       quando: trova("quando", "mesi", "rate"),
       area: trova("area"),
-      iva: trova("iva"),
+      // l'aliquota solo da «IVA %», «IVA%», «Aliquota»: una colonna «IVA» (Netto | IVA | Lordo) è un importo
+      iva: crude.findIndex((x, i) => x === "iva %" || x === "iva%" || x.startsWith("iva %") || t[i] === "aliquota"),
     } };
   }
   // Foglio -> livelli. opzioni = {testa, macro_scelta, mese_default, iva_default, fornitore(nome) -> id}.
@@ -1009,7 +1013,8 @@ const FORMATO = (() => {
       const v = cella(r, "iva");
       if (v === "") return null;
       const x = typeof v === "number" ? v : Number(String(v).replace("%", "").trim().replace(",", "."));
-      return Number.isFinite(x) && String(v).trim() ? (x > 0 && x < 1 ? Math.round(x * 100) : x) : NaN;
+      const a = Number.isFinite(x) && String(v).trim() ? (x > 0 && x < 1 ? Math.round(x * 100) : x) : NaN;
+      return [0, 10, 22].includes(a) ? a : NaN;  // solo 0, 10, 22
     };
     const L = { budget_netto: null, mesi_budget: null, aliquota_iva: o.iva_default ?? 22, macro: [] };
     const da_sistemare = [];
@@ -1019,6 +1024,7 @@ const FORMATO = (() => {
       return m;
     };
     let nv = 0;
+    if (!(c.macro >= 0) && o.macro_scelta) macroDi(o.macro_scelta);  // anche se il file non porta voci
     righe.slice(testa + 1).forEach((r, i) => {
       const n = testa + i + 2;
       r = r || [];
@@ -1034,8 +1040,9 @@ const FORMATO = (() => {
       const txt = testo(r, "quando");
       const progetto = macro.toLowerCase() === "budget progetto";
       if (progetto || (macro && (nome.toLowerCase() === "budget" || (!nome && !fornitore)))) {
-        const pesi = netto && txt ? quandoParse(txt, netto) : null;
-        if (netto && txt && !pesi) return da_sistemare.push({ n, motivo: "quando illeggibile" });
+        // un budget senza mesi non si salva: senza «Quando» prende il mese scelto, come le voci
+        const pesi = !netto ? null : txt ? quandoParse(txt, netto) : o.mese_default ? { [o.mese_default]: netto } : null;
+        if (netto && !pesi) return da_sistemare.push({ n, motivo: txt ? "quando illeggibile" : "budget senza mesi" });
         const dove = progetto ? L : macroDi(macro);
         Object.assign(dove, { budget_netto: netto, mesi_budget: pesi, aliquota_iva: progetto ? iva ?? 22 : iva });
         return;
@@ -1060,6 +1067,8 @@ const FORMATO = (() => {
     const budget = (x) => ({ netto: x.budget_netto, mesi: mesiBudget(x.budget_netto, x.mesi_budget), area: null, aliquota_iva: x.aliquota_iva ?? null, note: "" });
     if (L.budget_netto != null) metti(chiave("budget progetto"), { macro: "budget progetto", sottovoce: "", fornitore: null, val: budget(L) });
     for (const m of L.macro || []) {
+      // la macro stessa: una macro che sparisce (anche vuota) si vede
+      metti(chiave(m.nome, "#macro"), { macro: m.nome, sottovoce: "", fornitore: null, val: { netto: null, mesi: {}, area: null, aliquota_iva: null, note: "" } });
       if (m.budget_netto != null) metti(chiave(m.nome, "budget"), { macro: m.nome, sottovoce: "budget", fornitore: null, val: budget(m) });
       for (const v of m.voci || []) {
         metti(chiave(m.nome, v.nome, v.fornitore_id), { macro: m.nome, sottovoce: v.nome, fornitore: v.fornitore_id ?? null, voce: v,
@@ -1106,17 +1115,20 @@ const FORMATO = (() => {
       const v = vecchie.get(e.chiave);
       return [e.voce, v ? { ...e.voce, id: v.id, stato: v.stato, documenti: (v.documenti || []).map((d) => ({ ...d })) } : { ...e.voce, id: libero(idVoci, "v") }];
     }));
-    const macro = (nuovi.macro || []).map((m) => {
-      const v = (vecchi.macro || []).find((x) => x.nome.toLowerCase() === m.nome.toLowerCase());
-      const voci = (m.voci || []).map((x) => voce.get(x));
-      if (solo !== null && v) return { ...v, voci };
-      return { ...m, id: v ? v.id : libero(idMacro, "m"), area: m.area ?? (v ? v.area : null), voci };
-    });
-    const livelli = solo === null
-      ? { ...vecchi, budget_netto: nuovi.budget_netto, mesi_budget: nuovi.mesi_budget, aliquota_iva: nuovi.aliquota_iva, macro }
-      : { ...vecchi, macro: (vecchi.macro || []).some((m) => m.nome === solo)
-        ? (vecchi.macro || []).flatMap((m) => (m.nome === solo ? macro : [m]))
-        : [...(vecchi.macro || []), ...macro] };
+    let livelli;
+    if (solo === null) {
+      const macro = (nuovi.macro || []).map((m) => {
+        const v = (vecchi.macro || []).find((x) => x.nome.toLowerCase() === m.nome.toLowerCase());
+        return { ...m, id: v ? v.id : libero(idMacro, "m"), area: m.area ?? (v ? v.area : null), voci: (m.voci || []).map((x) => voce.get(x)) };
+      });
+      livelli = { ...vecchi, budget_netto: nuovi.budget_netto, mesi_budget: nuovi.mesi_budget, aliquota_iva: nuovi.aliquota_iva, macro };
+    } else {
+      // solo le voci della macro scelta cambiano; budget, mesi del budget e posto restano (anche con zero voci)
+      const voci = (nuovi.macro || []).flatMap((m) => (m.voci || []).map((x) => voce.get(x)));
+      const v = (vecchi.macro || []).find((m) => m.nome === solo);
+      const nuova = { nome: solo, budget_netto: null, mesi_budget: null, aliquota_iva: null, area: null, ...(nuovi.macro || [])[0], id: libero(idMacro, "m"), voci };
+      livelli = { ...vecchi, macro: v ? vecchi.macro.map((m) => (m === v ? { ...v, voci } : m)) : [...(vecchi.macro || []), nuova] };
+    }
     return { ...p, livelli, contratti: (p.contratti || []).filter((c) => !persi.has(String(c.fornitore).trim())) };
   }
   return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata, livelliDaPagamenti, buste, derivaPagamenti, avvisiLivelli,
