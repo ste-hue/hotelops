@@ -1189,3 +1189,64 @@ def test_payload_porta_la_banda_e_la_pagina_la_mostra():
     assert "function banda(soc, h)" in html and "const fraseBanda" in html and 'class="piccolo banda"' in html
     assert "Documento di pianificazione, non previsione." in html and "c.hidden = !(hPf > 12)" in html
     assert '"senza PF", "non pianificato", "saldo iniziale €"' in html
+
+
+# ── orizzonte aperto: le leve oltre l'ultimo mese allungano l'orizzonte ──
+
+
+def _scenario_oltre(mesi: list[str]) -> tuple[Scenario, str]:
+    """Utenze in 12 rate dall'ultimo mese: undici cadono oltre l'orizzonte."""
+    from verticals.condges.cassa_motore import allunga_orizzonte
+
+    oltre, _ = allunga_orizzonte(mesi, (), None)
+    da = oltre[-1]
+    rate = {}
+    m = da
+    for _ in range(12):
+        rate[m] = 100_000
+        a, n = (int(x) for x in m.split("-"))
+        m = f"{a + n // 12}-{n % 12 + 1:02d}"
+    pag = [Pagamento("utenze", rate, 22, "ipotesi")]
+    sc = Scenario("oltre", [Progetto("SH", "Staff House", "ORTI", True, "ipotesi", pag)], [])
+    return sc, max(rate)
+
+
+def test_orizzonte_aperto_python_e_js_uguali(tmp_path):
+    from verticals.condges.cassa_motore import allunga_orizzonte, mesi_citati
+    from verticals.condges.cassa_tabelle import input_da_payload, payload_allungato
+
+    p = build_payload(snapshot_allungato(), [])
+    sc, ultima = _scenario_oltre(p["mesi"])
+    doc = json.loads(scenario_to_json(sc, p["base"]))
+    assert max(mesi_citati(doc["scenario"])) == ultima > p["mesi"][-1]
+    pp = payload_allungato(p, doc)
+    assert pp["mesi"][-1] == ultima and pp["mesi"][: len(p["mesi"])] == p["mesi"]
+    assert set(pp["mesi_ipotetici"]) == set(p["mesi_ipotetici"]) | set(pp["mesi"][len(p["mesi"]) :])
+    # non accorcia mai, e senza mesi oltre non tocca il payload
+    assert allunga_orizzonte(p["mesi"], p["mesi_ipotetici"], p["mesi"][0])[0] == p["mesi"]
+    assert payload_allungato(p, {"scenario": {}}) is p
+    atteso = to_dict(calcola(input_da_payload(pp, sc)))
+    # tutte e dodici le rate contano: l'ultima riga ORTI ha pagato 12 × lordo
+    orti = [r for r in atteso["righe"] if r["societa"] == "ORTI"]
+    assert orti[-1]["mese"] == ultima
+    assert sum(r["uscite"]["progetto"] for r in orti) == 12 * 122_000
+    (tmp_path / "scenario.json").write_text(json.dumps(doc), encoding="utf-8")
+    out = esegui_node_fn(
+        tmp_path,
+        render_html(p),
+        "(() => { const S = require('./scenario.json').scenario;"
+        " const o = M.allungaOrizzonte(D.mesi, D.mesi_ipotetici, [...M.mesiCitati(S)].sort().pop());"
+        " return JSON.stringify(M.calcola({ ...D, ...o }, S)); })()",
+    )
+    assert json.loads(out) == atteso
+
+
+def test_la_pagina_allunga_l_orizzonte_invece_di_rifiutare():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert "function allunga(scenario)" in html and "allunga(stato.scenario);" in html
+    assert "const ORIZ = () =>" in html
+    # generare e spostare le rate usa l'orizzonte aperto, non più D.mesi
+    assert "n, passo, ORIZ()));" in html and "FORMATO.sposta(leggi(), parseInt(b.dataset.sposta, 10), ORIZ())" in html
+    assert "FORMATO.pagamentiDaContratto(c, D.mesi)" not in html
+    # il solo PF si ricalcola sui mesi nuovi (prima: «reading 'fin'» sul primo mese aggiunto)
+    assert "D.baseline = MOTORE.calcola(D, { nome: \"solo PF\"" in html
