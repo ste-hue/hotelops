@@ -158,6 +158,9 @@ details.leva summary .sw{display:inline-flex;align-items:center}
 details.leva.spento summary .nome,details.leva.spento summary .tot{color:var(--muted);font-weight:500}
 details.leva .corpo{padding:4px 0 6px 18px}
 .minimi .oltre{font-size:12px;color:var(--muted);margin-top:4px}
+.minimi .banda{color:var(--muted);margin-top:4px}
+.cornice{margin-top:10px;padding:8px 12px;border-radius:8px;background:var(--warn-bg);color:var(--ink);font-size:13px}
+.cornice[hidden]{display:none}
 .minimi .avviso{color:var(--bad);margin-top:2px}
 .minimi details.dettagli{margin-top:6px}
 .minimi details.dettagli>summary{font-size:12px;color:var(--muted);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:4px}
@@ -518,8 +521,11 @@ const MOTORE = (() => {
     const minimi = {};
     for (const soc of SOCIETA) {
       const mie = righe.filter((r) => r.societa === soc);
-      const pfR = mie.filter((r) => !ipo.has(r.mese));
-      const coda = mie.filter((r) => ipo.has(r.mese));
+      // Mesi non pianificati (colonna nel file, nessuna riga): per il minimo contano come senza PF.
+      const vuoti = new Set((payload.mesi_non_pianificati || {})[soc] || []);
+      const senza = (m) => ipo.has(m) || vuoti.has(m);
+      const pfR = mie.filter((r) => !senza(r.mese));
+      const coda = mie.filter((r) => senza(r.mese));
       const m = primoMin(pfR.length ? pfR : coda);
       const c = coda.length ? primoMin(coda) : null;
       minimi[soc] = {
@@ -960,6 +966,36 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   const MESI_PF = D.mesi.filter((m) => !IPO.has(m));
   const ULTIMO_PF = MESI_PF[MESI_PF.length - 1];
   const ULTIMO = D.mesi[D.mesi.length - 1];
+  // Per società: mesi dentro il file ma senza righe («non pianificato», §A non registrato). Mai zero.
+  const VUOTI = Object.fromEntries(SOC.map((s) => [s, new Set((D.mesi_non_pianificati || {})[s] || [])]));
+  const senzaPf = (soc, m) => IPO.has(m) || VUOTI[soc].has(m);
+  const ultimoPf = (soc) => { const p = MESI_PF.filter((m) => !VUOTI[soc].has(m)); return p[p.length - 1] || null; };
+  // Orizzonte h = mesi fra l'ancora e un mese; banda d'errore del PF per h (misurata fino a 3, poi solo il segno).
+  const BANDA = D.banda_pf || { societa: {} };
+  const hDi = (soc, m) => { const a = D.ancore[soc]; if (!a || !m) return 0; const [ay, am] = String(a.data).slice(0, 7).split("-").map(Number); const [y, mm] = m.split("-").map(Number); return y * 12 + mm - (ay * 12 + am); };
+  function banda(soc, h) {
+    const b = (BANDA.societa || {})[soc];
+    if (!b || h < 1) return null;
+    const hs = Object.keys(b.h || {}).map(Number).sort((x, y) => x - y);
+    if (!hs.length) return null;
+    const hmax = hs[hs.length - 1];
+    if (h <= hmax) {
+      const k = hs.filter((x) => x <= h).pop();
+      // La larghezza non si restringe con h: a n = 3 la cella è più stretta solo per caso.
+      const larghezza = Math.max(...hs.filter((x) => x <= h).map((x) => b.h[String(x)].banda));
+      return { h, medio: b.h[String(k)].medio, larghezza, misurata: true, n: b.h[String(k)].n, segno: b.segno };
+    }
+    return { h, medio: b.h[String(hmax)].medio + (b.crescita_mese || 0) * (h - hmax), larghezza: null, misurata: false, segno: b.segno, crescita: b.crescita_mese || 0 };
+  }
+  const hs = (soc) => Math.max(0, ...Object.keys(((BANDA.societa || {})[soc] || {}).h || {}).map(Number));
+  const fraseBanda = (soc, m) => {
+    const h = hDi(soc, m), b = banda(soc, h);
+    if (!b) return "";
+    const mila = (v) => `${v < 0 ? "−" : "+"}${fmt(Math.round(Math.abs(v) / 100000) * 100000, false)}`;
+    return b.misurata
+      ? `a ${h} ${h === 1 ? "mese" : "mesi"} dall'ancora il PF è storicamente ${b.segno} su ${soc} di circa ${mila(b.medio)} (banda ±${fmt(b.larghezza, false)}, n = ${b.n})`
+      : `a ${h} mesi dall'ancora la banda non è misurata (fino a ${hs(soc)}): vale solo il segno, ${b.segno}, che per storia cresce di circa ${mila(b.crescita)} al mese; il numero qui sopra è un ordine di grandezza`;
+  };
   const { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi } = FORMATO;
   // Legge un campo euro: null = non valido (campo marcato, stato invariato).
   const euroDa = (inp) => { const v = parseEuro(inp.value); inp.classList.toggle("invalid", v === null); return v; };
@@ -1090,6 +1126,12 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const anc = Object.values(D.ancore)[0];
     // Corta: chi vuole i file e le ore li trova in «Fonti e versioni».
     el("sub").textContent = `saldi al ${anc ? dataIt(anc.data) : "—"} · pagina del ${oraDi(D.generato_il)}`;
+    // Oltre 12 mesi di PF dall'ancora la curva non è più una previsione: lo dice in testa.
+    const hPf = Math.max(...SOC.map((s) => hDi(s, ULTIMO_PF)));
+    let c = el("cornice");
+    if (!c) { c = document.createElement("div"); c.id = "cornice"; c.className = "cornice"; c.setAttribute("role", "note"); document.querySelector("header").insertAdjacentElement("afterend", c); }
+    c.hidden = !(hPf > 12);
+    c.innerHTML = hPf > 12 ? `<strong>Documento di pianificazione, non previsione.</strong> Il PF arriva a ${hPf} mesi dall'ancora: la banda d'errore è misurata fino a 3 mesi (${esc(BANDA.finestra || "")}); oltre vale solo il segno. I numeri lontani sono ordini di grandezza.` : "";
   }
 
   function renderScenario() {
@@ -1182,10 +1224,10 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         .concat(SOC.map((s) => ["solo PF", s, D.baseline.minimi[s].mese, E(D.baseline.minimi[s].saldo), "", 0])) });
     // Saldi mese per mese
     const origini = Object.keys(ris.righe[0].entrate);
-    fogli.push({ nome: "Saldi mese per mese", colonne: ["scenario", "mese", "società", "senza PF", "saldo iniziale €", ...origini.map((o) => `entrate ${o} €`), "entrate totali €", ...origini.map((o) => `uscite ${o} €`), "uscite totali €", "saldo finale €"],
-      euro: [4, ...origini.map((_, i) => 5 + i), 5 + origini.length, ...origini.map((_, i) => 6 + origini.length + i), 6 + 2 * origini.length, 7 + 2 * origini.length],
+    fogli.push({ nome: "Saldi mese per mese", colonne: ["scenario", "mese", "società", "senza PF", "non pianificato", "saldo iniziale €", ...origini.map((o) => `entrate ${o} €`), "entrate totali €", ...origini.map((o) => `uscite ${o} €`), "uscite totali €", "saldo finale €"],
+      euro: [5, ...origini.map((_, i) => 6 + i), 6 + origini.length, ...origini.map((_, i) => 7 + origini.length + i), 7 + 2 * origini.length, 8 + 2 * origini.length],
       righe: ris.righe.map((r) => { const te = origini.reduce((s, o) => s + r.entrate[o], 0), tu = origini.reduce((s, o) => s + r.uscite[o], 0);
-        return [nomeSc, r.mese, r.societa, IPO.has(r.mese) ? "sì" : "no", E(r.ini), ...origini.map((o) => E(r.entrate[o])), E(te), ...origini.map((o) => E(r.uscite[o])), E(tu), E(r.fin)]; }) });
+        return [nomeSc, r.mese, r.societa, IPO.has(r.mese) ? "sì" : "no", VUOTI[r.societa].has(r.mese) ? "sì" : "no", E(r.ini), ...origini.map((o) => E(r.entrate[o])), E(te), ...origini.map((o) => E(r.uscite[o])), E(tu), E(r.fin)]; }) });
     // Calendario (lordo in cassa, una riga per rata) + canone
     const cal = [];
     for (const r of righeCalendario()) for (const [m, v] of Object.entries(r.mesi()).sort()) if (v) cal.push([r.gruppo, r.nome, r.soc, r.tipo, r.spento ? "no" : "sì", m, E(r.lordo(v))]);
@@ -1278,7 +1320,9 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       ${(D.pf_correzioni || []).length ? `<li>PF corretto: ${(D.pf_correzioni || []).filter((c) => c.applicata).length} voci dichiarate al posto del file di Rosa, per tutti gli scenari (vedi «Voci del PF corrette»)</li>` : ""}
       ${CONTR ? `<li>Contratto del canone: ${esc(CONTR.fonte)}</li>` : ""}
       <li>Canone di riferimento: ${CR.dichiarato ? `${fmt(CR.lordo_annuo, false)} € lordo/anno IVA inclusa (${fmt(CR.netto_annuo, false)} netto) dichiarato il ${esc(CR.dichiarato_il || "—")} — ${esc(CR.fonte)}` : esc(CR.fonte)}</li>
-      <li>Mesi senza PF: ${D.mesi_ipotetici.length ? `${meseIt(D.mesi_ipotetici[0])} – ${meseIt(ULTIMO)}` : "nessuno"} (il PF finisce a ${meseIt(ULTIMO_PF)})</li></ul>`;
+      <li>Mesi senza PF: ${D.mesi_ipotetici.length ? `${meseIt(D.mesi_ipotetici[0])} – ${meseIt(ULTIMO)}` : "nessuno"} (il PF finisce a ${meseIt(ULTIMO_PF)})</li>
+      <li>Mesi non pianificati (colonna nel file, nessuna riga): ${SOC.map((s) => `${s} ${VUOTI[s].size ? intervalloMesi([...VUOTI[s]].sort()) : "nessuno"}`).join(" · ")}</li>
+      <li>Banda d'errore del PF: ${BANDA.misurata_il ? `misurata il ${esc(dataIt(BANDA.misurata_il))} su ${esc(BANDA.finestra || "")}: ordine di grandezza, non statistica` : "non misurata"}</li></ul>`;
   }
 
   // ── canone: lo slider parte dal PF ──
@@ -1506,6 +1550,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const fin = (stato.scenario.finanziamenti || []).filter((f) => f.societa === soc && statoFin(f.stato) === "da_verificare" && Object.keys(f.erogazioni || {}).some((x) => x <= m.mese));
     if (fin.length) out.push({ stato: "da_verificare", testo: `regge su ${fin.length === 1 ? "un finanziamento" : `${fin.length} finanziamenti`} da verificare`, titolo: fin.map((f) => f.nome).join(" · ") });
     if (!MESI_PF.length) out.push({ stato: "non_registrato", testo: "nessun mese con PF", titolo: "senza PF il «sotto zero» non può dire niente" });
+    if (VUOTI[soc].size) { const v = [...VUOTI[soc]].sort(); out.push({ stato: "non_registrato", testo: `non pianificato ${intervalloMesi(v)}`, titolo: `il file del PF di ${soc} ha la colonna ma nessuna riga in ${v.length === 1 ? "questo mese" : "questi mesi"}: non è zero, è vuoto; per il minimo conta come senza PF` }); }
     return out;
   }
   function renderMinimi() {
@@ -1528,6 +1573,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         <div class="saldo num ${m.saldo < 0 ? "neg" : ""}">${fmt(m.saldo)} €</div>
         <div class="delta num">${delta === 0 ? "come con il solo PF" : `${segno(delta, false)} rispetto al solo PF`}</div>
         ${sotto}
+        ${fraseBanda(soc, m.mese) ? `<div class="piccolo banda" title="${esc(BANDA.finestra || "")}; ordine di grandezza, non statistica">${esc(fraseBanda(soc, m.mese))}</div>` : ""}
         <div class="condizioni">${cond.map((c) => chipStato(c.stato, c.titolo, c.testo)).join("")}</div>
         <details class="dettagli" data-k="${kd}" ${aperte.has(kd) ? "open" : ""}><summary>dettagli</summary>
           <div class="piccolo">solo PF: minimo ${fmt(b.saldo)} a ${meseIt(b.mese)} · ancora al ${dataIt(a.data)} ${chipStato(statoAncora(a), a.attestato ? "quadra con i movimenti in banca" : "dal foglio dei saldi, non riscontrato coi movimenti")}</div>
@@ -1589,8 +1635,16 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const assi = D.mesi.map((m, i) => (i % passo ? "" : `<text x="${x(i).toFixed(1)}" y="${H - 12}" text-anchor="middle" font-size="10" fill="var(--muted)">${meseIt(m)}</text>`)).join("");
     const griglia = [lo + pad, (lo + hi) / 2, hi - pad].map((v) => `<text x="${L - 6}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)" class="num">${fmt(Math.round(v / 100) * 100, false)}</text>`).join("");
     const punti = sce.slice(0, nPF).map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${v < 0 ? "var(--bad)" : "var(--accent)"}"><title>${meseIt(D.mesi[i])}: ${fmt(v)} € (solo PF ${fmt(bas[i])})</title></circle>`).join("");
+    // Corridoio d'errore: il saldo atteso per storia (previsto − scarto medio) ± banda, fino a dove
+    // la banda è misurata; oltre, solo la deriva del segno, tratteggiata. Si allarga a vista con h.
+    const bande = D.mesi.slice(0, nPF).map((m, i) => ({ i, b: banda(soc, hDi(soc, m)) })).filter((o) => o.b);
+    const mis = bande.filter((o) => o.b.misurata), oltrePF = bande.filter((o) => !o.b.misurata && o.b.h <= hs(soc) + 3);
+    const yc = (v) => Math.min(H - B, Math.max(T, y(v)));
+    const corridoio = mis.length ? `<polygon points="${mis.map((o) => `${x(o.i).toFixed(1)},${yc(sce[o.i] - o.b.medio + o.b.larghezza).toFixed(1)}`).concat(mis.slice().reverse().map((o) => `${x(o.i).toFixed(1)},${yc(sce[o.i] - o.b.medio - o.b.larghezza).toFixed(1)}`)).join(" ")}" fill="var(--accent)" opacity="0.10"><title>banda d'errore del PF fino a ${mis[mis.length - 1].b.h} mesi dall'ancora (misurata)</title></polygon>` : "";
+    const deriva = oltrePF.length ? `<path d="${[mis[mis.length - 1], ...oltrePF].filter(Boolean).map((o, k) => `${k ? "L" : "M"}${x(o.i).toFixed(1)},${yc(sce[o.i] - o.b.medio).toFixed(1)}`).join(" ")}" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="2 4"><title>oltre la banda misurata: solo il segno (${oltrePF[0].b.segno}), non un numero</title></path>` : "";
+    const vuoti = D.mesi.slice(0, nPF).map((m, i) => VUOTI[soc].has(m) ? `<rect x="${(x(i) - dx / 2).toFixed(1)}" y="${T}" width="${dx.toFixed(1)}" height="${H - T - B}" fill="var(--warn-bg)" opacity="0.6"><title>${meseIt(m)}: non pianificato (colonna nel file, nessuna riga)</title></rect>` : "").join("");
     return `<svg class="graf" viewBox="0 0 ${W} ${H}" role="img" aria-label="Saldo ${soc}">
-      ${coda}
+      ${coda}${vuoti}${corridoio}${deriva}
       <line x1="${L}" x2="${W - R}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>
       ${griglia}${barre}
       <path d="${path(bas)}" fill="none" stroke="var(--base-line)" stroke-width="1.5" stroke-dasharray="5 4"/>
@@ -1615,20 +1669,21 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       const dPF = righe[iPF].fin - basi[iPF].fin;
       const corpo = righe.map((r, i) => {
         const k = `${soc}|${r.mese}`;
-        const ipo = IPO.has(r.mese);
+        const vuoto = VUOTI[soc].has(r.mese);
+        const ipo = IPO.has(r.mese) || vuoto;
         const ent = somma(r.entrate), usc = somma(r.uscite);
         const d = ipo ? (r.fin - basi[i].fin) - dPF : r.fin - basi[i].fin;
         let dett = "";
         if (aperti.has(k)) {
           const v = vociMese(soc, r.mese);
           const lista = (o, segno) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([n, x]) => `<li>${segno} ${esc(n)} <span class="num">${fmt(x)}</span></li>`).join("");
-          dett = `<tr class="dett"><td colspan="5">${ipo ? '<div class="nota">mese senza PF: contano solo le leve dello scenario</div>' : ""}<ul>${lista(v.E, "+") + lista(v.U, "−") || "<li>nessun movimento</li>"}</ul></td></tr>`;
+          dett = `<tr class="dett"><td colspan="5">${vuoto ? '<div class="nota">mese nel file del PF ma senza righe: non pianificato, non zero; contano solo le leve dello scenario</div>' : ipo ? '<div class="nota">mese senza PF: contano solo le leve dello scenario</div>' : ""}<ul>${lista(v.E, "+") + lista(v.U, "−") || "<li>nessun movimento</li>"}</ul></td></tr>`;
         }
         const finale = ipo
           ? `<td class="num ${d < 0 ? "neg" : ""}">${d ? `<span class="piccolo">leve</span> ${segno(d)}` : "—"}</td>`
           : `<td class="num ${r.fin < 0 ? "neg" : ""}">${fmt(r.fin)}${d ? `<br><span class="piccolo num">${segno(d)}</span>` : ""}</td>`;
         return `<tr class="mese ${ipo ? "ipo" : ""}" data-k="${k}">
-          <td>${meseIt(r.mese)}${ipo ? ' <span class="badge">senza PF</span>' : ""}</td>
+          <td>${meseIt(r.mese)}${vuoto ? ' <span class="badge warn" title="colonna nel file, nessuna riga">non pianificato</span>' : ipo ? ' <span class="badge">senza PF</span>' : ""}</td>
           <td class="num ini ${ipo ? "vuoto" : ""}">${ipo ? "—" : fmt(r.ini)}</td><td class="num ${ipo && !ent ? "vuoto" : ""}">${ipo && !ent ? "—" : fmt(ent)}</td><td class="num ${ipo && !usc ? "vuoto" : ""}">${ipo && !usc ? "—" : fmt(usc)}</td>
           ${finale}</tr>${dett}`;
       }).join("");

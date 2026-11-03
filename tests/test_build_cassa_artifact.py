@@ -1111,3 +1111,81 @@ def test_js_sostituzione_uguale_a_python(tmp_path):
         assert r_js["fin"] == r_py.fin, (r_js["mese"], r_js["societa"])
         assert r_js["uscite"]["pf"] == r_py.uscite["pf"]
     assert js["minimi"]["ORTI"]["saldo"] == py.minimi["ORTI"].saldo
+
+
+# ── mesi non pianificati: colonna nel file, nessuna riga; mai zero ──
+
+VUOTI_3 = ["2027-04", "2027-05", "2027-06"]
+CODA_3 = ["2027-07", "2027-08", "2027-09"]
+
+
+def snapshot_allungato():
+    """Lo stesso PF di snapshot_sintetico, con il file allungato di tre mesi vuoti per
+    entrambe le società (pf-extend senza scrivere niente): i tre mesi sono «non pianificati»
+    e la coda ipotetica slitta dopo."""
+    return dict(
+        snapshot_sintetico(),
+        mesi=MESI_PF + VUOTI_3 + CODA_3,
+        mesi_ipotetici=CODA_3,
+        mesi_non_pianificati={"INTUR": VUOTI_3, "ORTI": VUOTI_3},
+    )
+
+
+def test_il_minimo_non_cambia_se_il_file_si_allunga_senza_righe():
+    # Ricevuta del coordinatore (03/11): minimo IDENTICO prima e dopo l'allungamento finché
+    # nessuna cella nuova è scritta. È la prova che il vuoto non è diventato zero.
+    prima, dopo = snapshot_sintetico(), snapshot_allungato()
+    assert dopo["mesi_non_pianificati"] == {"INTUR": VUOTI_3, "ORTI": VUOTI_3}
+    for sc in (Scenario("v", [], []), _scenario_base()[0]):
+        a = calcola(input_da_snapshot(prima, sc)).minimi
+        b = calcola(input_da_snapshot(dopo, sc)).minimi
+        for soc in ("ORTI", "INTUR"):
+            assert (b[soc].mese, b[soc].saldo, b[soc].sotto_soglia) == (
+                a[soc].mese,
+                a[soc].saldo,
+                a[soc].sotto_soglia,
+            )
+    # La distinzione è misurabile: con i vuoti marcati, la «coda senza PF» parte dal primo
+    # mese non pianificato (come prima dell'allungamento); se gli stessi mesi passassero per
+    # «con PF» a zero, la coda partirebbe tre mesi dopo e il minimo li conterebbe.
+    vuoto = Scenario("v", [], [])
+    assert calcola(input_da_snapshot(dopo, vuoto)).minimi["ORTI"].coda_mese == VUOTI_3[0]
+    assert calcola(input_da_snapshot(prima, vuoto)).minimi["ORTI"].coda_mese == VUOTI_3[0]
+    zero = dict(snapshot_allungato(), mesi_non_pianificati={})
+    assert calcola(input_da_snapshot(zero, vuoto)).minimi["ORTI"].coda_mese == CODA_3[0]
+
+
+def test_js_uguale_a_python_con_mesi_non_pianificati(tmp_path):
+    snap = snapshot_allungato()
+    p = build_payload(snap, [])
+    assert p["mesi_non_pianificati"] == {"INTUR": VUOTI_3, "ORTI": VUOTI_3}
+    sc, _ = _scenario_base()
+    out = esegui_node(tmp_path, render_html(p), p, scenario_to_json(sc, p["base"]))
+    assert out == to_dict(calcola(input_da_snapshot(snap, sc)))
+    vuoto = Scenario("v", [], [])
+    out = esegui_node(tmp_path, render_html(p), p, scenario_to_json(vuoto, p["base"]))
+    assert out == p["baseline"]
+
+
+BANDA_FINTA = {
+    "misurata_il": "2026-10-30",
+    "finestra": "finta: cinque mesi, ventidue versioni",
+    "societa": {
+        "INTUR": {"segno": "ottimista", "crescita_mese": 100, "h": {"1": {"medio": 10, "banda": 50, "n": 5}, "2": {"medio": 20, "banda": 40, "n": 4}}},
+        "ORTI": {"segno": "pessimista", "crescita_mese": -100, "h": {"1": {"medio": -10, "banda": 30, "n": 5}}},
+    },
+}
+
+
+def test_payload_porta_la_banda_e_la_pagina_la_mostra():
+    # Le misure vere stanno nel file locale banda_pf.json (repo pubblico): qui una banda finta.
+    assert build_payload(snapshot_allungato(), [])["banda_pf"] == {"societa": {}}
+    p = build_payload(snapshot_allungato(), [], banda_pf=BANDA_FINTA)
+    assert p["banda_pf"] == BANDA_FINTA
+    # ORTI: a 3 mesi il file del PF ha la colonna ma nessuna riga: la pagina lo dice e non stampa zero
+    assert any("non pianificato, non zero" in riga and riga.startswith("ORTI") for riga in p["limiti"])
+    html = render_html(p)
+    assert "non pianificato" in html and 'class="badge warn" title="colonna nel file, nessuna riga"' in html
+    assert "function banda(soc, h)" in html and "const fraseBanda" in html and 'class="piccolo banda"' in html
+    assert "Documento di pianificazione, non previsione." in html and "c.hidden = !(hPf > 12)" in html
+    assert '"senza PF", "non pianificato", "saldo iniziale €"' in html

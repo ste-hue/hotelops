@@ -324,3 +324,13 @@ def test_la_tabella_pf_correzioni_porta_le_voci_dichiarate():
             "f",
         ]
     ]
+
+
+def test_i_saldi_portano_la_colonna_non_pianificato(payload):
+    p = dict(payload, mesi_non_pianificati={"ORTI": [payload["mesi"][0]]})
+    t = tabelle(p)
+    colonne, righe = t["saldi_mensili"]
+    assert colonne[3:6] == ["mese_senza_pf", "mese_non_pianificato", "saldo_iniziale"]
+    orti = [r for r in righe if r[2] == "ORTI" and r[1] == payload["mesi"][0]]
+    assert orti and all(r[4] == "sì" for r in orti)
+    assert all(r[4] == "no" for r in righe if r[2] == "INTUR")
