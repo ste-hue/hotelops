@@ -114,6 +114,7 @@ def apply_scadenzario(
     # (chiave riservata, non è una voce_label): estraila prima di usare le
     # chiavi restanti come "voci_aggiornate"/conteggio scritti.
     oltre_orizzonte = write_summary.pop("oltre_orizzonte", {})
+    senza_foglio = write_summary.pop("senza_foglio", {})
 
     # Niente perso in silenzio: i non-mappati vanno nel foglio DA MAPPARE, gli
     # esclusi (is_excluded) nel foglio ESCLUSI. Riusa il motore del generatore
@@ -172,5 +173,6 @@ def apply_scadenzario(
         "voci_aggiornate": list(write_summary.keys()),
         "totale_fornitori_scritti": sum(len(v) for v in write_summary.values()),
         "oltre_orizzonte": oltre_orizzonte,
+        "senza_foglio": senza_foglio,
     }
     return updated_bytes, summary

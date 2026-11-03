@@ -35,6 +35,7 @@ VOCE_TO_SHEET_CANDIDATES = {
     "USCITE_MUTUI": ["Mutui e Finaziamenti"],
     "USCITE_CONSULENZE": ["Consulenze"],
     "USCITE_CANONE_PASSIVO": ["Godimento Beni di Terzi"],
+    "USCITE_GODIMENTO_BENI": ["Godimento Beni di Terzi"],  # stesso foglio (264 su BQ)
     "USCITE_VARIE_EXT": [" Varie ed Eventuali"],
     "USCITE_SERVIZI_PRODUZIONE": ["Canoni e servizi"],
     "USCITE_CANONI": ["Canoni e servizi"],  # condivide il foglio con SERVIZI_PRODUZIONE
@@ -276,7 +277,9 @@ def write_pf(
 
     Periodi senza colonna nel foglio (oltre l'orizzonte del PF) non vengono
     scritti né sommati altrove: finiscono nel summary sotto
-    ``"oltre_orizzonte": {codice_fornitore: importo}``.
+    ``"oltre_orizzonte": {codice_fornitore: importo}``. Allo stesso modo i
+    fornitori la cui voce non ha un foglio dettaglio finiscono sotto
+    ``"senza_foglio": {codice_fornitore: (voce_id, importo)}``.
 
     Handles the PREVISIONALE adjustment: if the PREVISIONALE row is inside
     the SUM range of the total row, reduce it by the scadenzario total so
@@ -298,6 +301,7 @@ def write_pf(
     )
     summary: dict = {}
     oltre_orizzonte: dict[int, float] = {}
+    senza_foglio: dict[int, tuple[str, float]] = {}
 
     # Group scadenzario suppliers by voce_id
     excluded = excluded or set()
@@ -353,6 +357,9 @@ def write_pf(
                 voce_id,
                 len(suppliers),
             )
+            for s in suppliers:
+                tot = s["scaduto"] + sum(s[f"mese_{m}"] for m in bucket_periodi)
+                senza_foglio[s["codice_fornitore"]] = (voce_id, tot)
             continue
 
         ws = wb[sheet_name]
@@ -492,6 +499,7 @@ def write_pf(
             summary[voce_label] = written
 
     summary["oltre_orizzonte"] = oltre_orizzonte
+    summary["senza_foglio"] = senza_foglio
 
     buf = BytesIO()
     wb.save(buf)

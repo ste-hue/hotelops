@@ -214,6 +214,11 @@ def _handle(args: argparse.Namespace) -> int:
         print(
             f"\n⚠️ Oltre orizzonte (senza colonna nel PF): {len(oltre)} fornitori, {tot:,.2f} € NON scritti"
         )
+    senza = (result.scadenzario_summary or {}).get("senza_foglio") or {}
+    for cod, (voce, imp) in sorted(senza.items()):
+        print(
+            f"⚠️ Senza foglio nel PF: fornitore {cod} ({voce}) {abs(imp):,.2f} € NON scritti"
+        )
     return 1 if result.failed else 0
 
 
