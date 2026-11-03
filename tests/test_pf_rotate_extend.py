@@ -417,3 +417,169 @@ def test_trim_poi_rotate_smoke(minimal_pf_orti_bytes, tmp_path):
 
     assert result.failed is False
     assert result.n_controlli_err == 0
+
+
+# ── Controlli: l'allungamento deve riscrivere i check ancorati all'orizzonte ──
+#
+# Caso reale (ORTI_PF_2026-10 allungato a 2029-12, 2026-11-03): i controlli dei
+# blocchi 9/10 restavano ancorati a R (vecchia TOTALI) e C:Q → 5 ERRORE su 25;
+# gli altri 20 guardavano solo fino a Q. insert_cols non tocca le formule di
+# un altro foglio, quindi le riscrive extend_to.
+
+
+def _wb_con_controlli() -> openpyxl.Workbook:
+    """Master minimo: mesi C..Q (apr 2026 – giu 2027), TOTALI in R, mese chiuso
+    SETTEMBRE (H), dettaglio Utenze con mesi D..R. Controlli nello stile del
+    foglio reale (esplicito per cella + matriciali + colonna totali)."""
+    from openpyxl.worksheet.formula import ArrayFormula
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    pf = wb.create_sheet("Piano Finanziario")
+    pf["C1"], pf["L1"] = 2026, 2027
+    mesi = _MESI_ORDINATI[3:] + _MESI_ORDINATI[:6]  # APRILE..DICEMBRE, GENNAIO..GIUGNO
+    for i, m in enumerate(mesi):
+        pf.cell(2, 3 + i, m)
+    pf["R2"] = "TOTALI"
+    for c in range(3, 18):  # C..Q
+        L = get_column_letter(c)
+        pf.cell(4, c, 100.0 if c <= 8 else f"={get_column_letter(c - 1)}37")
+        pf.cell(6, c, 10.0)
+        pf.cell(12, c, f"=SUM({L}6:{L}11)")
+        pf.cell(29, c, f"={L}12-{L}27")
+        pf.cell(37, c, f"={L}4+{L}29")
+    pf["R12"], pf["R37"] = "=SUM(C12:Q12)", "=Q37"
+
+    ut = wb.create_sheet("Utenze")
+    ut["D1"], ut["M1"] = 2026, 2027
+    for i, m in enumerate(mesi):
+        ut.cell(2, 4 + i, m)
+    for c in range(4, 19):
+        L = get_column_letter(c)
+        ut.cell(3, c, f"=SUM({L}4:{L}10)")
+
+    P = "'Piano Finanziario'!"
+    ct = wb.create_sheet("Controlli")
+    ct["A4"] = "C4:H4 = saldi iniziali hardcoded (mesi chiusi), I4:Q4 = formula (mesi aperti)?"
+    ct["B4"] = (
+        "=IF(AND("
+        + ",".join(f"NOT(_xlfn.ISFORMULA({P}{get_column_letter(c)}4))" for c in range(3, 9))
+        + ","
+        + ",".join(f"_xlfn.ISFORMULA({P}{get_column_letter(c)}4)" for c in range(9, 18))
+        + '),"OK","ERRORE")'
+    )
+    ct["A5"] = "I4 = H37 (ottobre parte da saldo reale settembre)?"
+    ct["B5"] = f'=IF({P}I4={P}H37,"OK","ERRORE")'
+    ct["A6"] = "Catena I4:Q4 = mese prec riga 37?"
+    ct["B6"] = (
+        "=IF(AND("
+        + ",".join(
+            f"{P}{get_column_letter(c)}4={P}{get_column_letter(c - 1)}37" for c in range(9, 18)
+        )
+        + '),"OK","ERRORE")'
+    )
+    ct["A7"], ct["B7"] = "Primo mese proiettato:", f"={P}H2"
+    ct["A10"] = "Riga 12 = SUM(6:11) per mesi C:Q?"
+    ct["B10"] = ArrayFormula(
+        "B10", f'=IF(SUMPRODUCT(--(ROUND({P}C12:Q12-{P}C6:Q6,2)<>0))=0,"OK","ERRORE")'
+    )
+    ct["A22"] = "Riga 15 — Utenze"
+    ct["B22"] = ArrayFormula(
+        "B22", f'=IF(SUMPRODUCT(--(ROUND({P}C15:Q15-Utenze!D3:R3,2)<>0))=0,"OK","ERRORE")'
+    )
+    ct["A39"] = "9. COLONNA TOTALI (R)"
+    ct["A40"] = "R12 Totale Entrate = SUM(C12:Q12)?"
+    ct["B40"] = f'=IF(ROUND({P}R12-SUM({P}C12:Q12),2)=0,"OK","ERRORE")'
+    ct["A45"] = "R6:R11 Entrate per voce = SUM(C:Q)?"
+    ct["B45"] = ArrayFormula(
+        "B45",
+        f'=IF(SUMPRODUCT(--(ROUND({P}R6:R11-MMULT(0+{P}C6:Q11,ROW({P}C1:C15)^0),2)<>0))=0,"OK","ERRORE")',
+    )
+    ct["A47"] = "R37 = Q37 e R45 = Q45 (saldo finale = ultimo mese)?"
+    ct["B47"] = f'=IF(AND(ROUND({P}R37-{P}Q37,2)=0,ROUND({P}R45-{P}Q45,2)=0),"OK","ERRORE")'
+    ct["B49"] = '=IF(COUNTIF(B4:B47,"ERRORE")=0,"OK","ERRORI")'
+    return wb
+
+
+def _t(v):
+    return getattr(v, "text", v)
+
+
+def test_extend_riscrive_i_controlli_sull_orizzonte_intero():
+    wb = _wb_con_controlli()
+    extend_to(wb, periodo(2027, 12))  # +6 mesi: ultimo mese W, TOTALI X, 21 mesi
+    ct = wb["Controlli"]
+    P = "'Piano Finanziario'!"
+    # blocchi 2-8: gli intervalli PF arrivano all'ultimo mese, i dettagli a X (D..X)
+    assert f"{P}C12:W12-{P}C6:W6" in _t(ct["B10"].value)
+    assert f"{P}C15:W15-Utenze!D3:X3" in _t(ct["B22"].value)
+    # blocco 9/10: la colonna totali segue lo spostamento, i range coprono C:W
+    assert _t(ct["B40"].value) == f'=IF(ROUND({P}X12-SUM({P}C12:W12),2)=0,"OK","ERRORE")'
+    b45 = _t(ct["B45"].value)
+    assert f"{P}X6:X11-MMULT(0+{P}C6:W11,ROW({P}C1:C21)^0)" in b45
+    assert _t(ct["B47"].value) == (
+        f'=IF(AND(ROUND({P}X37-{P}W37,2)=0,ROUND({P}X45-{P}W45,2)=0),"OK","ERRORE")'
+    )
+    # blocco 1: catena fino all'ultimo mese, primo mese proiettato = ottobre (I)
+    assert _t(ct["B6"].value).endswith(f'{P}W4={P}V37),"OK","ERRORE")')
+    assert f"_xlfn.ISFORMULA({P}W4)" in _t(ct["B4"].value)
+    assert _t(ct["B7"].value) == f"={P}I2"
+    # riferimenti al foglio Controlli stesso: intatti
+    assert _t(ct["B49"].value) == '=IF(COUNTIF(B4:B47,"ERRORE")=0,"OK","ERRORI")'
+    # etichette in colonna A seguono le colonne
+    assert ct["A10"].value == "Riga 12 = SUM(6:11) per mesi C:W?"
+    assert ct["A39"].value == "9. COLONNA TOTALI (X)"
+    assert ct["A47"].value.startswith("X37 = W37 e X45 = W45")
+    # le formule-array restano array
+    from openpyxl.worksheet.formula import ArrayFormula
+
+    assert isinstance(ct["B10"].value, ArrayFormula)
+    assert isinstance(ct["B45"].value, ArrayFormula)
+
+
+def test_extend_controlli_idempotente():
+    wb = _wb_con_controlli()
+    extend_to(wb, periodo(2027, 12))
+    prima = {c.coordinate: _t(c.value) for row in wb["Controlli"].iter_rows() for c in row}
+    extend_to(wb, periodo(2027, 12))
+    dopo = {c.coordinate: _t(c.value) for row in wb["Controlli"].iter_rows() for c in row}
+    assert prima == dopo
+
+
+def test_extend_senza_foglio_controlli_non_cambia_nulla():
+    wb = _wb_con_controlli()
+    wb.remove(wb["Controlli"])
+    changed = extend_to(wb, periodo(2027, 12))
+    assert "Controlli" not in wb.sheetnames
+    assert not any("Controlli" in c for c in changed)
+
+
+def test_extend_controlli_gia_stantii_vengono_riallineati():
+    """Caso reale: un file già allungato in passato SENZA aggiornare i controlli
+    (pf-rotate con il motore vecchio): i mesi arrivano a T e TOTALI è in U, ma i
+    check citano ancora Q/R. L'orizzonte dei check si legge dalle formule, non
+    da uno stato "prima": il riallineamento deve avvenire lo stesso."""
+    from verticals.condges.pf_rotate.controlli_sheet import widen_controlli
+    from verticals.condges.pf_rotate.extend import _extend_sheet
+
+    wb = _wb_con_controlli()
+    for name in wb.sheetnames:  # allunga i fogli senza passare da extend_to
+        if name != "Controlli":
+            _extend_sheet(wb[name], periodo(2027, 9))
+    P = "'Piano Finanziario'!"
+    assert f"{P}R12-SUM({P}C12:Q12)" in _t(wb["Controlli"]["B40"].value)  # stantio
+    widen_controlli(wb)
+    assert _t(wb["Controlli"]["B40"].value) == (
+        f'=IF(ROUND({P}U12-SUM({P}C12:T12),2)=0,"OK","ERRORE")'
+    )
+    assert f"{P}C15:T15-Utenze!D3:U3" in _t(wb["Controlli"]["B22"].value)
+    assert f"ROW({P}C1:C18)^0" in _t(wb["Controlli"]["B45"].value)
+
+
+def test_extend_controlli_senza_colonna_totali_non_tocca():
+    wb = _wb_con_controlli()
+    pf = wb["Piano Finanziario"]
+    pf["R2"], pf["R12"], pf["R37"] = None, None, None
+    b40 = _t(wb["Controlli"]["B40"].value)
+    extend_to(wb, periodo(2027, 12))
+    assert _t(wb["Controlli"]["B40"].value) == b40

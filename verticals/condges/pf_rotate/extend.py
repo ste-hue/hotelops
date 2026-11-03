@@ -16,6 +16,7 @@ from openpyxl.formula.translate import Translator
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
+from verticals.condges.pf_rotate.controlli_sheet import widen_controlli
 from verticals.condges.pf_rotate.excel_model import (
     MESI_IT,
     find_month_periods,
@@ -132,11 +133,17 @@ def _extend_sheet(ws: Worksheet, target_periodo: int) -> list[str]:
 
 
 def extend_to(wb: Workbook, target_periodo: int) -> list[str]:
-    """Estende ogni foglio con colonne-mese fino a target_periodo. In-place."""
+    """Estende ogni foglio con colonne-mese fino a target_periodo. In-place.
+
+    Il foglio Controlli (se c'è) viene riscritto sull'orizzonte nuovo:
+    insert_cols non tocca le formule di un altro foglio, e i suoi check
+    resterebbero ancorati alla vecchia ultima colonna e alla vecchia TOTALI.
+    """
     require_periodo(target_periodo, "target_periodo")
     changed: list[str] = []
     for name in wb.sheetnames:
         changed += _extend_sheet(wb[name], target_periodo)
+    changed += widen_controlli(wb)
     return changed
 
 
