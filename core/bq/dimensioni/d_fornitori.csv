@@ -36,9 +36,14 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 554,OCEANO DISTRIBUZIONE SRL,Oceano Distribuzione,USCITE_MATERIE_PRIME,False,False,,INTUR
 596,BABBI SRL,BABBI SRL,USCITE_MATERIE_PRIME,False,False,,INTUR
 615,J.F. AMONN SRL,J.F. Amonn,USCITE_MATERIE_PRIME,False,False,,INTUR
+644,J & D S.N.C. DEI F.LLI SIANO G. E D.,J & D S.N.C. Dei F.Lli Siano G. E D.,USCITE_MATERIE_PRIME,False,False,,INTUR
+645,D'aiuto Daniele,D'Aiuto (legale),USCITE_CONSULENZE,False,False,,INTUR
 649,Guariniello Lorenzo,Guariniello Lorenzo,USCITE_CONSULENZE,False,False,,INTUR
+654,GOOGLE CLOUD ITALY S.R.L.,Google Cloud Italy S.R.L.,USCITE_CANONI,False,False,,INTUR
+671,2A SYSTEMS SRL,2A Systems Srl,USCITE_SERVIZI_PRODUZIONE,False,False,,INTUR
 678,PUNZI PIERLUIGI,Revisore - Punzi,USCITE_CONSULENZE,False,False,,INTUR
 716,CERAMICA D'ARTE SICIGNANO SRL,CERAMICA D'ARTE SICIGNANO SRL,USCITE_VARIE_EXT,False,False,HPAN25PIANO1,INTUR
+722,Barbella Srl,Barbella Srl,USCITE_VARIE_EXT,False,False,,INTUR
 723,CO.I.RE.S SRL,CoIrEs SRL,USCITE_MATERIE_PRIME,False,False,,INTUR
 734,LEONE S.R.L.,LEONE S.R.L.,USCITE_VARIE_EXT,False,False,,INTUR
 766,VI.VA.GI. DI D'AMATO GIUSEPPE & C. SNC,Vi.Va.Gi.,USCITE_MATERIE_PRIME,False,False,,INTUR
@@ -50,6 +55,7 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 796,RAIA LIBERATO,RAIA LIBERATO,,False,True,una_tantum,INTUR
 853,Banca Sella S.p.A.,Banca sella - canone e-commerce RID,USCITE_COMMISSIONI,False,False,,INTUR
 863,SALA GIANPIERO,SALA GIANPIERO,USCITE_VARIE_EXT,False,False,HPAN25PIANO1,INTUR
+921,IL CENTRO C.S.C. SRL,Il Centro C.S.C. Srl,USCITE_CONSULENZE,False,False,,INTUR
 963,CSW Engineering s.r.l,CSW Engineering s.r.l,USCITE_CONSULENZE,False,False,,INTUR
 993,ALDEN SRL SOCIETA TRA PROFESSIONISTI,ALDEN,USCITE_CONSULENZE,False,False,,INTUR
 1008,MIELE GIUSEPPE E FIGLI SPA,MIELE GIUSEPPE E FIGLI SPA,USCITE_VARIE_EXT,False,False,HPAN25PIANO1,INTUR
@@ -61,6 +67,9 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 1048,MEDITERRANEO SNC DI TRAMONTANO,MEDITERRANEO SNC DI TRAMONTANO,,False,True,una_tantum,INTUR
 1054,O.V.I.T. SRL,O.V.I.T. SRL,USCITE_VARIE_EXT,False,False,,INTUR
 1069,TOPWHITE DI DANIELE RAVELLI,TOPWHITE DI DANIELE RAVELLI,USCITE_SERVIZI_PRODUZIONE,False,False,,INTUR
+1078,Intesa Sanpaolo S.p.a,Intesa Sanpaolo S.p.a,USCITE_SPESE_BANCARIE,False,False,,INTUR
+1091,HOSPITALITY PROJECT S.R.L.,Hospitality Project S.R.L.,USCITE_CONSULENZE,False,False,,INTUR
+1162,S.T.E. S.R.L. con socio unico,STE elettrico,USCITE_VARIE_EXT,False,False,,INTUR
 1214,VDA GROUP S.p.A. a socio unico,VDA GROUP S.p.A. a socio unico,USCITE_VARIE_EXT,False,False,HPAN25PIANO1,INTUR
 1269,MARIGLIANO SALVATORE,MARIGLIANO SALVATORE,USCITE_VARIE_EXT,False,False,HPAN25PIANO1,INTUR
 1426,RASTELLI ANTONIA,Rastrelli Antonia,USCITE_MATERIE_PRIME,False,False,,INTUR
@@ -78,6 +87,8 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 1716,NOTINO ITALIA S.R.L.,Notino Italia,USCITE_MATERIE_PRIME,False,False,,INTUR
 1734,CE.DI.S. S.R.L.,Ce.Di.S. srl,USCITE_VARIE_EXT,False,False,,INTUR
 1738,ALDEN & PARTNERS S.R.L.S. STP,Alden & Partners S.R.L.S. Stp,USCITE_CONSULENZE,False,False,,INTUR
+1890,Tsemplifico soc. coop.,Tsemplifico soc. coop.,USCITE_CONSULENZE,False,False,,INTUR
+1911,Masucci Marco,Masucci Marco,USCITE_MATERIE_PRIME,False,False,,INTUR
 1,LE CROISSANT SRL,Le Croissant srl,USCITE_MATERIE_PRIME,False,False,,ORTI
 4,Giacinto Di Palma,Giacinto Di Palma,USCITE_MATERIE_PRIME,False,False,,ORTI
 5,SALTUR SRL,,USCITE_VARIE_EXT,False,False,,ORTI
@@ -99,6 +110,7 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 49,ZUCCHETTI HOSPITALITY SRL A SOCIO UNICO,Zucchetti Hospitality Srl A Socio Unico,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
 52,Aruba S.p.A.,Aruba,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
 64,PARAVIA ELEVATORS SRL,,USCITE_MATERIE_PRIME,False,False,,ORTI
+68,FINSAL s.a.s. di DE RISO SALVATORE e C.,FINSAL s.a.s. di DE RISO SALVATORE e C.,USCITE_MATERIE_PRIME,False,False,,ORTI
 70,MAGALDI LIFE SRL SOC. UNIP.,MAGALDI LIFE SRL SOC. UNIP.,USCITE_VARIE_EXT,False,False,,ORTI
 71,VICART S.R.L.,Vicart,USCITE_MATERIE_PRIME,False,False,,ORTI
 73,DELLA PIETRA STEFANO,,USCITE_CANONE_PASSIVO,False,False,,ORTI
@@ -132,6 +144,7 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 147,AMATO FILIPPO,Amato Prisco Pane,USCITE_MATERIE_PRIME,False,False,,ORTI
 158,GALLO GIOVANNI & C. SNC,Gallo Giovanni,USCITE_MATERIE_PRIME,False,False,,ORTI
 161,DI SARNO COFFEE SERVICE DI TERMINIELLO ROSA,Di Sarno Coffee,USCITE_MATERIE_PRIME,False,False,,ORTI
+165,MEDITERRANEA PESCA SPA,Mediterranea Pesca Spa,USCITE_MATERIE_PRIME,False,False,,ORTI
 170,Leroy Merlin Italia srl,Leroy Merlin Italia srl,USCITE_VARIE_EXT,False,False,,ORTI
 179,FERRIGNO MARIA C S N C,FERRIGNO MARIA C S N C,USCITE_MATERIE_PRIME,False,False,,ORTI
 186,L'EUROPEA - ORGANIZZAZIONE NAZIONALE SRL,L'Europea,USCITE_MATERIE_PRIME,False,False,,ORTI
@@ -142,11 +155,17 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 226,DE LUCA SRL,De Luca srl,USCITE_MATERIE_PRIME,False,False,,ORTI
 231,Ikea Italia Retail Srl,Ikea Italia Retail Srl,USCITE_VARIE_EXT,False,False,,ORTI
 236,RISTORANTE GIARDINIELLO SRL,Giardiniello,USCITE_MATERIE_PRIME,False,False,,ORTI
-264,PANORAMA COMPANY S.R.L.,Fitto Ramo d' Azienda,USCITE_CANONE_PASSIVO,True,False,tracciato: cash reale ORTI->INTUR (netta solo nel consolidato),ORTI
+264,PANORAMA COMPANY S.R.L.,Fitto Ramo d' Azienda,USCITE_GODIMENTO_BENI,True,False,"tracciato: fitto appartamenti CVM viale Capone, subaffitto da Panorama Company (~150k/anno, pagamento giu-ott). Le fatture arretrate 2025 (FT 1 del 22/12/2025 + FT 3 del 31/12/2025 = 446.425,69) NON si contano nel PF — decisione Stefano 2026-08-14",ORTI
+265,PASTICCERIA NAPOLI SNC,Pasticceria Napoli Snc,USCITE_MATERIE_PRIME,False,False,,ORTI
 266,B & T S.p.A. Azionista Unico,,USCITE_VARIE_EXT,False,False,,ORTI
 275,Serverplan srl societá unipersonale,Serverplan,USCITE_CANONE_PASSIVO,False,False,,ORTI
+294,RISTORANTE MARIA GRAZIA S.R.L.,Ristorante Maria Grazia S.R.L.,USCITE_VARIE_EXT,False,False,,ORTI
 315,CENTRO SERVICE SNC DI VOCCIA MASSIMO & ANTONIO,Centro service Snc,USCITE_MATERIE_PRIME,False,False,,ORTI
+321,CASA DEL CORREDO PESCATORE S.A.S. DI PISCOPO MARIO E C.,Casa Del Corredo Pescatore S.A.S. Di Piscopo Mario E C.,USCITE_MATERIE_PRIME,False,False,,ORTI
 325,ALFERA S.R.L.,,USCITE_MATERIE_PRIME,False,False,,ORTI
+359,THIRD GENERATION GROUP SRL,Third Generation Group Srl,USCITE_VARIE_EXT,False,False,,ORTI
+362,AMATO ERASMO,AMATO ERASMO,USCITE_VARIE_EXT,False,False,,ORTI
+365,FUSCO RAFFAELE,Fusco Raffaele,USCITE_MATERIE_PRIME,False,False,,ORTI
 369,CREATIVE IDEA S.N.C. DI DE MARTINO DIODATO & C.,Creative Idea S.N.C. Di De Martino Diodato & C.,USCITE_CONSULENZE,False,False,,ORTI
 385,FRANCESCA FUSCO,Francesca Fusco,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
 412,Alberto D Urso S.a.s. di Tecla Apicella,Alberto D'Urso,USCITE_MATERIE_PRIME,False,False,,ORTI
@@ -158,14 +177,20 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 554,OCEANO DISTRIBUZIONE SRL,Oceano Distribuzione Srl,USCITE_MATERIE_PRIME,False,False,,ORTI
 596,BABBI SRL,,USCITE_MATERIE_PRIME,False,False,,ORTI
 615,J.F. AMONN SRL,J.F. Amonn Srl,USCITE_MATERIE_PRIME,False,False,,ORTI
+617,D AUTOMOTIVE S.R.L.,D Automotive S.R.L.,USCITE_CANONI,False,False,,ORTI
 618,APPLE RETAIL ITALIA S.R.L.,Apple Retail Italia,USCITE_VARIE_EXT,False,False,,ORTI
+629,GDM S.P.A.,Gdm S.P.A.,USCITE_VARIE_EXT,False,False,,ORTI
+644,J & D S.N.C. DEI F.LLI SIANO G. E D.,J & D S.N.C. Dei F.Lli Siano G. E D.,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
 647,H & M HENNES & MAURITZ S.R.L.,,USCITE_VARIE_EXT,False,False,,ORTI
+648,ALBA NEON S.R.L.,Alba Neon S.R.L.,USCITE_VARIE_EXT,False,False,,ORTI
 649,Guariniello,,USCITE_VARIE_EXT,False,False,,ORTI
 654,GOOGLE CLOUD ITALY S.R.L.,GOOGLE CLOUD ITALY S.R.L.,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
 667,ATTIANESE ALFONSO S.A.S. DI ATTIANESE ALFONSO E C.,Attianese Frutta e Verdura,USCITE_MATERIE_PRIME,False,False,,ORTI
+671,2A SYSTEMS SRL,2A Systems Srl,USCITE_VARIE_EXT,False,False,,ORTI
 715,ZURLI MAURIZIO,Zurli Maurizio,USCITE_MATERIE_PRIME,False,False,,ORTI
 716,CERAMICA D'ARTE SICIGNANO SRL,,USCITE_VARIE_EXT,False,False,,ORTI
 718,LA FLOREALE SAS DI ANDREA CIOFFI,La Floreale,USCITE_MATERIE_PRIME,False,False,,ORTI
+722,Barbella Srl,Barbella Srl,USCITE_VARIE_EXT,False,False,,ORTI
 723,CO.I.RE.S SRL,CoIrEs SRL,USCITE_MATERIE_PRIME,False,False,,ORTI
 734,LEONE S.R.L.,,USCITE_VARIE_EXT,False,False,,ORTI
 744,Nola Ferramenta Srl,Nola Ferramenta Srl,USCITE_VARIE_EXT,False,False,,ORTI
@@ -180,13 +205,17 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 796,RAIA,,USCITE_VARIE_EXT,False,False,,ORTI
 797,PUNTOFFICE DI CARDARELLI RITA,Puntoffice Di Cardarelli Rita,USCITE_VARIE_EXT,False,False,,ORTI
 801,A. MIGLIORE S.R.L.,,USCITE_MATERIE_PRIME,False,False,,ORTI
+853,Banca Sella S.p.A.,Banca Sella S.p.A.,USCITE_SPESE_BANCARIE,False,False,,ORTI
 863,SALA,,USCITE_VARIE_EXT,False,False,,ORTI
 864,CAPUANO RAFFAELE,Capuano Raffaele,USCITE_MATERIE_PRIME,False,False,,ORTI
+919,ERRA ALFONSINA,Erra Alfonsina,USCITE_VARIE_EXT,False,False,,ORTI
+921,IL CENTRO C.S.C. SRL,Il Centro C.S.C. Srl,USCITE_CONSULENZE,False,False,,ORTI
 929,IPEI Srl di D'Esposito Guglielmo,IPEI srl,USCITE_VARIE_EXT,False,False,,ORTI
 948,HOXELL SA,Hoxell,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
 963,CSW Engineering s.r.l,,USCITE_VARIE_EXT,False,False,,ORTI
 980,RISTORANTE O PADRONE DO'MARE DI DE SIANO GIACINTO & C. SNC,Ristorante O Padrone Do'Mare Di De Siano Giacinto & C. Snc,USCITE_VARIE_EXT,False,False,,ORTI
 985,ALBERGO SANTA CHIARA,,USCITE_MATERIE_PRIME,False,False,,ORTI
+993,ALDEN SRL SOCIETA TRA PROFESSIONISTI,Alden Srl Societa Tra Professionisti,USCITE_CONSULENZE,False,False,,ORTI
 994,InfoCamere S.C.p.A.,,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
 1003,DITTA PANSA DI G.PANSA E FIGLIO A. PANSA SAS,Ditta Pansa,USCITE_MATERIE_PRIME,False,False,,ORTI
 1007,BIOLUMA S.R.L.S.,BIOLUMA S.R.L.S.,,False,True,escluso da app cashflow,ORTI
@@ -199,6 +228,7 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 1036,Re Denari di Marco Oliva & C. Sas,Re Denari di Marco Oliva & C. Sas,USCITE_VARIE_EXT,False,False,,ORTI
 1048,MEDITERRANEO SNC DI TRAMONTANO,Mediterraneo,USCITE_MATERIE_PRIME,False,False,,ORTI
 1054,O.V.I.T. SRL,,USCITE_VARIE_EXT,False,False,,ORTI
+1058,MUSICA TOTALE S.R.L.,MUSICA TOTALE S.R.L.,USCITE_VARIE_EXT,False,False,,ORTI
 1069,TOPWHITE DI DANIELE RAVELLI,,USCITE_MATERIE_PRIME,False,False,,ORTI
 1076,ALD Automotive Italia S.r.l.,Noleggio Tesla,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
 1078,Intesa Sanpaolo S.p.a,Intesa Sanpaolo S.p.a,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
@@ -207,7 +237,11 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 1081,SALERNO MOBILITA' S.P.A.,Salerno Mobilita,USCITE_VARIE_EXT,False,False,,ORTI
 1091,HOSPITALITY PROJECT SRL,Hospitality Project,USCITE_CONSULENZE,False,False,,ORTI
 1104,I.C.P. INGROSSO CHIMICA PEPE S.R.L.,I.C.P srl,USCITE_MATERIE_PRIME,False,False,,ORTI
+1144,GAMBARDELLA G. E FIGLI SRL,Gambardella G. E Figli Srl,USCITE_MATERIE_PRIME,False,False,,ORTI
+1145,VALGARDA S.r.l.,VALGARDA S.r.l.,USCITE_MATERIE_PRIME,False,False,,ORTI
 1147,MINIERI MARIANO,Minieri Mariano,USCITE_MATERIE_PRIME,False,False,,ORTI
+1157,RG Commerciale S.r.l.,RG Commerciale S.r.l.,USCITE_MATERIE_PRIME,False,False,,ORTI
+1162,S.T.E. S.R.L. con socio unico,S.T.E. S.R.L. con socio unico,USCITE_MATERIE_PRIME,False,False,,ORTI
 1168,Gest. D.M.F. Srl,,USCITE_MATERIE_PRIME,False,False,,ORTI
 1183,ADRA S.R.L.,ADRA S.R.L.,USCITE_MATERIE_PRIME,False,False,,ORTI
 1184,Italy Green Power S.p.A.,Energia elettrica,USCITE_UTENZE,False,False,,ORTI
@@ -216,10 +250,12 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 1222,PIETRA DI LUNA HOTEL - S.R.L.,Pietra Di Luna Hotel - S.R.L.,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
 1230,Salsano Tiziano,Salzano Tiziano,USCITE_MATERIE_PRIME,False,False,,ORTI
 1233,LE SETTE SORELLE SOCIETA' A RESPONSABILITA' LIMITATA SEMPL,,USCITE_MATERIE_PRIME,False,False,,ORTI
+1236,MAISONS DU MONDE ITALIE S.R.L.,Maisons Du Monde Italie S.R.L.,USCITE_MATERIE_PRIME,False,False,,ORTI
 1270,BESTRANK SOCIETA' A RESPONSABILITA' LIMITATA,,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
 1276,ALBA LEASING S.P.A.,Alba Leasing S.P.A.,USCITE_SERVIZI_PRODUZIONE,False,False,,ORTI
 1298,APICELLA LORENZO,Apicella Lorenzo,USCITE_VARIE_EXT,False,False,,ORTI
 1306,VITAGLIANO MAURIZIO,VITAGLIANO MAURIZIO,USCITE_MATERIE_PRIME,False,False,,ORTI
+1356,LA NOVITA  SRL,La Novita  Srl,USCITE_MATERIE_PRIME,False,False,,ORTI
 1426,RASTELLI ANTONIA,Rastrelli Antonia,USCITE_MATERIE_PRIME,False,False,,ORTI
 1438,ROMANO CIRO S.R.L.,Romano Ciro,USCITE_MATERIE_PRIME,False,False,,ORTI
 1519,AVINO S.R.L.,Avino srl,USCITE_VARIE_EXT,False,False,,ORTI
@@ -260,6 +296,7 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 1706,"""INGROSSO FRUTTA"" DI AVAGLIANO MICHELE & VINCENZO - S.N.C.",Ingrosso Frutta Avagliano,USCITE_MATERIE_PRIME,False,False,,ORTI
 1712,ANTARES - SOCIETA' A RESPONSABILITA' LIMITATA,Antares srl,USCITE_CANONE_PASSIVO,False,False,,ORTI
 1714,PRODOTTI TIPICI DI CARLO TAGLIAFIERRO,Prodotti Tipici Tagliafierro,USCITE_MATERIE_PRIME,False,False,,ORTI
+1715,SIANO MARIELLA,SIANO MARIELLA,USCITE_VARIE_EXT,False,False,,ORTI
 1720,AMALFI GHIACCIO DI AGOSTINO DELLA PIETRA,Amalfi Ghiaccio,USCITE_MATERIE_PRIME,False,False,,ORTI
 1723,IL MARCO DI OZ S.R.L.,Il Marco di Oz,USCITE_CANONE_PASSIVO,False,False,,ORTI
 1724,D.L. Brothers srl,D.L. Brothers,USCITE_VARIE_EXT,False,False,,ORTI
@@ -280,5 +317,20 @@ codice_fornitore,nome_esolver,nome_pf,voce_id,is_intercompany,is_excluded,exclud
 1768,I.R.P.S. SRL,I.R.P.S. Srl,USCITE_VARIE_EXT,False,False,,ORTI
 1772,PROPAC S.R.L.,Propac S.R.L.,USCITE_VARIE_EXT,False,False,,ORTI
 1773,Gruppo Adam s.r.l.,Gruppo Adam s.r.l.,USCITE_VARIE_EXT,False,False,,ORTI
-1162,S.T.E. S.R.L. con socio unico,STE elettrico,USCITE_VARIE_EXT,False,False,,INTUR
-645,D'aiuto Daniele,D'Aiuto (legale),USCITE_CONSULENZE,False,False,,INTUR
+1795,HYGIEN TECH S.R.L.,Hygien Tech S.R.L.,USCITE_MATERIE_PRIME,False,False,,ORTI
+1800,Bacci Elisa,Bacci Elisa,USCITE_CONSULENZE,False,False,,ORTI
+1823,TO SHARE SRLS,To Share Srls,USCITE_VARIE_EXT,False,False,,ORTI
+1825,SLOPE S.R.L.,Slope S.R.L.,USCITE_VARIE_EXT,False,False,,ORTI
+1827,RHE S.R.L.,Rhe S.R.L.,USCITE_VARIE_EXT,False,False,,ORTI
+1829,atelier tessuti & arredo srls,atelier tessuti & arredo srls,USCITE_VARIE_EXT,False,False,,ORTI
+1830,societa agricola BIO TI CA ss di tirendi luca & ca,societa agricola BIO TI CA ss di tirendi luca & ca,USCITE_VARIE_EXT,False,False,,ORTI
+1832,Presspower S.r.l.,Presspower S.r.l.,USCITE_VARIE_EXT,False,False,,ORTI
+1840,ONE STOP ALIMENTARI DAL MONDO DI TARIQ SHAGUFTA,One Stop Alimentari Dal Mondo Di Tariq Shagufta,USCITE_MATERIE_PRIME,False,False,,ORTI
+1865,OSCULATI S.R.L.,Osculati S.R.L.,USCITE_VARIE_EXT,False,False,,ORTI
+1867,KOHL THOMAS,Kohl Thomas,USCITE_VARIE_EXT,False,False,,ORTI
+1875,Libutti sas,Libutti sas,USCITE_VARIE_EXT,False,False,,ORTI
+1876,I.P.I.B. SRL,I.P.I.B. Srl,USCITE_VARIE_EXT,False,False,,ORTI
+1877,MAVI S.R.L.,Mavi S.R.L.,USCITE_VARIE_EXT,False,False,,ORTI
+1890,Tsemplifico soc. coop.,Tsemplifico soc. coop.,USCITE_CONSULENZE,False,False,,ORTI
+1911,Masucci Marco,Masucci Marco,USCITE_MATERIE_PRIME,False,False,,ORTI
+1948,MACI SOCIETA' A RESPONSABILITA' LIMITATA,MACI SOCIETA' A RESPONSABILITA' LIMITATA,USCITE_VARIE_EXT,False,False,,ORTI
