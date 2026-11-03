@@ -95,6 +95,8 @@ input.nome{width:100%}
 .pag-testa{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
 .pag-testa .mini{margin-left:auto}
 .pag-nome{font-weight:600;flex:1 1 160px}
+input.pag-nome{border:1px solid transparent;background:transparent;padding:2px 4px;margin-left:-5px;font:inherit;font-weight:600}
+input.pag-nome:hover,input.pag-nome:focus{border-color:var(--line);background:var(--card)}
 .pag-tot{font-weight:600;white-space:nowrap}
 .frase{font-size:13px;line-height:1.45;margin-top:3px}
 details.sotto{margin-top:6px}
@@ -1745,7 +1747,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   // La frase «come si paga»: quante rate, ogni quanto, la prima e l'ultima, e quante cadono senza PF.
   function comeSiPaga(mesi, aliquota) {
     const f = FORMATO.formaRate(mesi, D.mesi);
-    if (!f.n) return "nessuna rata. Scrivi il totale, in quante rate, ogni quanto e la prima rata, poi «Genera le rate».";
+    if (!f.n) return "ancora nessun importo: scrivilo qui sopra, scegli in quante rate e da quando, poi «Metti in cassa».";
     const passo = f.passo ? (PASSI.find(([x]) => x === f.passo) || [0, `ogni ${f.passo} mesi`])[1] : "a mesi liberi";
     const conIva = aliquota !== null && aliquota > 0;
     const quota = f.n > 1 && f.quota !== null ? ` da ${fmt(f.quota, false)}${conIva ? ` netto (${fmt(MOTORE.iva(f.quota, aliquota), false)} lordo)` : ""}` : "";
@@ -1822,19 +1824,18 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       } catch (e) { err.textContent = e.message; }
     };
   }
-  function bloccoRate(mesi, aliquota) {
+  function bloccoRate(mesi, aliquota, etichetta = "prezzo") {
     const f = FORMATO.formaRate(mesi, D.mesi);
     return `<div class="come">
-      <div class="riga"><label class="piccolo">totale <input type="text" class="eur" data-spalma-tot value="${fmt(f.totale)}"></label>
+      <div class="riga"><label class="piccolo">${etichetta} <input type="text" class="eur" data-spalma-tot value="${f.totale ? fmt(f.totale) : ""}" placeholder="es. 15.000"></label>
         ${aliquota ? '<select data-spalma-base><option value="netto">netto</option><option value="lordo">lordo IVA inclusa</option></select>' : ""}
         <label class="piccolo">in <input type="text" class="n" data-spalma-n value="${Math.max(1, f.n)}"> rate</label>
         <select data-spalma-passo ${f.n <= 1 ? "hidden" : ""}>${PASSI.map(([x, e]) => `<option value="${x}" ${x === (f.passo || 1) ? "selected" : ""}>${e}</option>`).join("")}</select>
         <label class="piccolo"><span data-spalma-quando>${f.n <= 1 ? "mese" : "prima rata"}</span> ${selMesi(f.primo || D.mesi[0], "sel-spalma-da")}</label>
-        <button data-spalma>Genera le rate</button></div>
-      <div class="riga"><button class="mini" data-sposta="-1" ${f.n ? "" : "disabled"}>◀ tutto un mese prima</button>
-        <button class="mini" data-sposta="1" ${f.n ? "" : "disabled"}>tutto un mese dopo ▶</button>
-        <span class="errore-r" data-errore-spalma></span></div>
-      <div class="piccolo">mese per mese (puoi correggere ogni importo)</div></div>`;
+        <button data-spalma class="${f.n ? "" : "primario"}">${f.n ? "Rifai le rate" : "Metti in cassa"}</button></div>
+      <div class="riga">${f.n ? `<button class="mini" data-sposta="-1">◀ tutto un mese prima</button>
+        <button class="mini" data-sposta="1">tutto un mese dopo ▶</button>` : ""}
+        <span class="errore-r" data-errore-spalma></span></div></div>`;
   }
   const selMeseA = (val, attr) => `<select ${attr}>${D.mesi.map((m) => `<option value="${m}" ${m === val ? "selected" : ""}>${meseIt(m)}</option>`).join("")}</select>`;
   const pctIt = (x) => String(x || 0).replace(".", ",");
@@ -1979,15 +1980,16 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         <div class="riga"><label class="piccolo" style="flex:1 1 220px;display:flex;gap:6px;align-items:center">cartella Drive <input type="url" class="nome" style="flex:1 1 160px" data-campo="drive_url" value="${esc(p.drive_url || "")}" placeholder="https://drive.google.com/…"></label>${p.drive_url ? `<a class="doc" href="${esc(p.drive_url)}" target="_blank" rel="noopener">apri la cartella</a>` : ""}</div>
         ${(p.contratti || []).map((c, ci) => bloccoContratto(p, c, ci)).join("")}
         ${p.pagamenti.map((g, j) => { const kg = `g:${p.id}:${j}`; return `<div class="pag" data-g="${j}">
-          <div class="pag-testa"><span class="pag-nome">${esc(g.nome)}</span>${g.fornitore_id ? `<span class="badge">${esc(g.fornitore_id)}</span>` : ""}${(g.documenti || []).filter((d) => d.url).map((d) => `<a class="doc" href="${esc(d.url)}" target="_blank" rel="noopener" title="${esc(d.url)}">📄 ${esc(d.titolo || "documento")}</a>`).join("")}
+          <div class="pag-testa"><input type="text" class="pag-nome nome" data-campo="nome" value="${esc(g.nome)}" aria-label="nome del pagamento" title="scrivi qui il nome del pagamento">${g.fornitore_id ? `<span class="badge">${esc(g.fornitore_id)}</span>` : ""}${(g.documenti || []).filter((d) => d.url).map((d) => `<a class="doc" href="${esc(d.url)}" target="_blank" rel="noopener" title="${esc(d.url)}">📄 ${esc(d.titolo || "documento")}</a>`).join("")}
             <span class="num pag-tot">${fmt(Object.values(g.mesi).reduce((a, b) => a + MOTORE.iva(b, g.aliquota_iva), 0), false)} €</span>
             <button class="mini" data-elimina-g title="elimina questo pagamento dal progetto" aria-label="elimina il pagamento ${esc(g.nome)}">× elimina</button></div>
+          ${bloccoRate(g.mesi, g.aliquota_iva)}
           <div class="frase">${esc(comeSiPaga(g.mesi, g.aliquota_iva))}</div>
-          <details class="sotto" data-k="${kg}" ${aperte.has(kg) ? "open" : ""}><summary>modifica nome, IVA e rate</summary>
-            <div class="riga"><input type="text" class="nome" style="flex:1 1 140px" data-campo="nome" value="${esc(g.nome)}"> ${selIva(g.aliquota_iva)}
+          <details class="sotto" data-k="${kg}" ${aperte.has(kg) ? "open" : ""}><summary>dettagli: IVA, fornitore, mese per mese, documenti</summary>
+            <div class="riga">${selIva(g.aliquota_iva)}
               <input type="text" class="n" style="width:90px" data-campo="stato" value="${esc(g.stato)}" title="stato">
               <input type="text" class="n" style="width:110px" data-campo="fornitore_id" value="${esc(g.fornitore_id || "")}" placeholder="fornitore" list="lista-fornitori-id" title="id del fornitore: lo stesso in ogni pagamento, lo trovi nella scheda Fornitori"></div>
-            ${bloccoRate(g.mesi, g.aliquota_iva)}
+            <div class="piccolo">mese per mese (puoi correggere ogni importo)</div>
             ${grigliaMesi(g.mesi, "mese")}
             <div class="documenti"><div class="piccolo">documenti (preventivo, contratto, fattura: link Drive)</div>
               ${(g.documenti || []).map((d, di) => `<div class="riga" data-doc="${di}"><input type="text" class="nome" style="flex:1 1 120px" data-doc-titolo value="${esc(d.titolo || "")}" placeholder="titolo, es. preventivo 0066/26"><input type="url" class="nome" style="flex:2 1 200px" data-doc-url value="${esc(d.url || "")}" placeholder="https://drive.google.com/…"><button type="button" class="mini" data-elimina-doc title="togli il documento" aria-label="togli il documento ${esc(d.titolo || "")}">×</button></div>`).join("")}
@@ -2018,7 +2020,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
           ${grigliaMesi(f.erogazioni, "erog")}</div>
         <div class="riquadro rate"><div class="piccolo"><strong>Quando li restituisci</strong> · rate del mutuo</div>
           ${Object.keys(f.rate).length ? "" : `<div class="avviso-r">${chipStato("non_registrato", "nessuna rata di rimborso scritta nello scenario", "rate non registrate")} entra solo il denaro erogato: il minimo è ottimista</div>`}
-          <div class="frase">${esc(comeSiPaga(f.rate, null))}</div><div class="rate-f">${bloccoRate(f.rate, null)}</div>${grigliaMesi(f.rate, "rata")}</div>
+          <div class="frase">${esc(comeSiPaga(f.rate, null))}</div><div class="rate-f">${bloccoRate(f.rate, null, "totale")}</div>${grigliaMesi(f.rate, "rata")}</div>
         <div class="documenti"><div class="piccolo">documenti (relazione notarile, delibera, contratto di mutuo: link Drive)</div>
           ${(f.documenti || []).map((d, di) => `<div class="riga" data-doc="${di}"><input type="text" class="nome" style="flex:1 1 120px" data-doc-titolo value="${esc(d.titolo || "")}" placeholder="titolo, es. relazione notarile 22/10/2026"><input type="url" class="nome" style="flex:2 1 200px" data-doc-url value="${esc(d.url || "")}" placeholder="https://drive.google.com/…"><button type="button" class="mini" data-elimina-doc title="togli il documento" aria-label="togli il documento ${esc(d.titolo || "")}">×</button></div>`).join("")}
           <button type="button" class="mini" data-aggiungi-doc>+ documento</button></div>
@@ -2362,7 +2364,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       div.querySelector("button[data-aggiungi-g]").onclick = () => { p.pagamenti.push({ nome: "Nuovo pagamento", mesi: {}, aliquota_iva: 22, stato: "ipotesi", fornitore_id: null }); aperte.add(`g:${p.id}:${p.pagamenti.length - 1}`); renderLeve(); };
       div.querySelectorAll(".pag").forEach((pg) => {
         const g = p.pagamenti[parseInt(pg.dataset.g, 10)];
-        pg.querySelectorAll(".sotto > .riga [data-campo]").forEach((inp) => {
+        pg.querySelectorAll(".pag-testa > [data-campo], .sotto > .riga [data-campo]").forEach((inp) => {
           inp.onchange = () => {
             const v = inp.value;
             g[inp.dataset.campo] = inp.dataset.campo === "aliquota_iva" ? parseInt(v, 10) : inp.dataset.campo === "fornitore_id" ? (v || null) : v;
@@ -2381,7 +2383,10 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         pg.querySelector("button[data-aggiungi-doc]").onclick = () => { g.documenti = g.documenti || []; g.documenti.push({ titolo: "", url: "" }); aperte.add(`g:${p.id}:${pg.dataset.g}`); renderLeve(); };
       });
     });
-    el("aggiungi-p").onclick = () => { const id = `P${Date.now().toString(36)}`; sc.progetti.push({ id, nome: "Nuovo progetto", societa: "INTUR", acceso: true, stato: "ipotesi", pagamenti: [{ nome: "Pagamento", mesi: {}, aliquota_iva: 22, stato: "ipotesi", fornitore_id: null }] }); aperte.add(`p:${id}`); ricalcola(); };
+    el("aggiungi-p").onclick = () => { const id = `P${Date.now().toString(36)}`; sc.progetti.push({ id, nome: "Nuovo progetto", societa: "INTUR", acceso: true, stato: "ipotesi", pagamenti: [{ nome: "Pagamento", mesi: {}, aliquota_iva: 22, stato: "ipotesi", fornitore_id: null }] }); aperte.add(`p:${id}`); ricalcola();
+      // il progetto nuovo si apre col nome selezionato: si scrive subito il nome, poi il prezzo qui sotto
+      const campo = el("progetti").querySelector(`details[data-k="p:${id}"] .corpo input[data-campo="nome"]`);
+      if (campo) { campo.scrollIntoView({ block: "center" }); campo.focus(); campo.select(); } };
     // finanziamenti
     el("finanziamenti").querySelectorAll("details.leva[data-f]").forEach((div) => {
       const i = parseInt(div.dataset.f, 10);
