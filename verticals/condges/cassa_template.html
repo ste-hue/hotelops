@@ -375,6 +375,22 @@ const MOTORE = (() => {
     return out;
   }
 
+  // Orizzonte aperto: le leve possono andare oltre l'ultimo mese, l'orizzonte le segue.
+  // Stessa regola di cassa_motore.mesi_citati / allunga_orizzonte.
+  const meseValido = (x) => typeof x === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(x);
+  function mesiCitati(obj, out = new Set()) {
+    if (Array.isArray(obj)) obj.forEach((v) => mesiCitati(v, out));
+    else if (obj && typeof obj === "object") for (const [k, v] of Object.entries(obj)) { if (meseValido(k)) out.add(k); mesiCitati(v, out); }
+    else if (meseValido(obj)) out.add(obj);
+    return out;
+  }
+  const meseDopo = (m) => { const [a, n] = m.split("-").map(Number); return `${a + Math.floor(n / 12)}-${String((n % 12) + 1).padStart(2, "0")}`; };
+  // I mesi aggiunti sono senza PF: contano solo le leve, nessun saldo inventato. Non accorcia mai.
+  function allungaOrizzonte(mesi, ipotetici, finoA) {
+    const out = mesi.slice(), ipo = new Set(ipotetici);
+    while (finoA && out[out.length - 1] < finoA) { const m = meseDopo(out[out.length - 1]); out.push(m); ipo.add(m); }
+    return { mesi: out, mesi_ipotetici: [...ipo].sort() };
+  }
   function flussiCanone(s, mesi) {
     const out = [];
     const anni = Object.keys(s.netto_per_anno).map(Number).sort((a, b) => a - b);
@@ -549,7 +565,7 @@ const MOTORE = (() => {
     return { righe, minimi, consolidato, non_riconciliati: nonRic };
   }
 
-  return { ORIGINI, SOCIETA, SOSTITUZIONE, calcola, distribuisci, iva, flussiCanone, riconcilia, normalizza };
+  return { ORIGINI, SOCIETA, SOSTITUZIONE, calcola, distribuisci, iva, flussiCanone, riconcilia, normalizza, mesiCitati, meseDopo, allungaOrizzonte };
 })();
 if (typeof module !== "undefined") module.exports = MOTORE;
 </script>
@@ -965,7 +981,23 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   const IPO = new Set(D.mesi_ipotetici);
   const MESI_PF = D.mesi.filter((m) => !IPO.has(m));
   const ULTIMO_PF = MESI_PF[MESI_PF.length - 1];
-  const ULTIMO = D.mesi[D.mesi.length - 1];
+  let ULTIMO = D.mesi[D.mesi.length - 1];
+  // Orizzonte aperto: se lo scenario cita un mese oltre l'ultimo, i mesi mancanti si aggiungono
+  // senza PF (D.mesi e IPO crescono sul posto, chi li legge li vede). Non si accorcia mai.
+  function allunga(scenario) {
+    const fino = [...MOTORE.mesiCitati(scenario)].sort().pop();
+    if (!fino || fino <= ULTIMO) return;
+    const o = MOTORE.allungaOrizzonte(D.mesi, D.mesi_ipotetici, fino);
+    const nuovi = o.mesi.slice(D.mesi.length);
+    D.mesi.push(...nuovi);
+    D.mesi_ipotetici.push(...nuovi);
+    nuovi.forEach((m) => IPO.add(m));
+    ULTIMO = D.mesi[D.mesi.length - 1];
+    // Il solo PF sui mesi nuovi: stesso motore, scenario vuoto (è come lo calcola il build).
+    D.baseline = MOTORE.calcola(D, { nome: "solo PF", progetti: [], finanziamenti: [], manuali: [], canone: null, soglia: 0 });
+  }
+  // Dove le rate si possono generare o spostare: l'orizzonte più dieci anni virtuali.
+  const ORIZ = () => { const o = D.mesi.slice(); for (let k = 0; k < 120; k++) o.push(MOTORE.meseDopo(o[o.length - 1])); return o; };
   // Per società: mesi dentro il file ma senza righe («non pianificato», §A non registrato). Mai zero.
   const VUOTI = Object.fromEntries(SOC.map((s) => [s, new Set((D.mesi_non_pianificati || {})[s] || [])]));
   const senzaPf = (soc, m) => IPO.has(m) || VUOTI[soc].has(m);
@@ -1052,11 +1084,12 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   }
 
   function calcolaSicuro(scenario) {
-    try { return MOTORE.calcola(D, scenario); } catch (e) { return null; }
+    try { allunga(scenario); return MOTORE.calcola(D, scenario); } catch (e) { return null; }
   }
 
   function ricalcola(opts = {}) {
     try {
+      allunga(stato.scenario);
       ris = MOTORE.calcola(D, stato.scenario);
     } catch (e) {
       mostraErrore(`Scenario non calcolabile: ${e.message}`);
@@ -1781,7 +1814,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
           if (m2 <= m1) throw new Error("la fine lavori deve venire dopo la metà lavori");
           const meta = Math.floor(imp / 2);
           er = { [m1]: meta, [m2]: imp - meta };
-        } else er = FORMATO.spalma(imp, m1, parseInt(box.querySelector("input[data-tranche-n]").value, 10), parseInt(box.querySelector("select[data-tranche-passo]").value, 10), D.mesi);
+        } else er = FORMATO.spalma(imp, m1, parseInt(box.querySelector("input[data-tranche-n]").value, 10), parseInt(box.querySelector("select[data-tranche-passo]").value, 10), ORIZ());
         f.importo = imp;
         f.erogazioni = er;
         err.textContent = "";
@@ -1819,7 +1852,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     // Verifica mese per mese: i pagamenti verso F seguono i patti scritti qui sopra?
     const perMese = (lista) => { const o = {}; for (const g of lista) for (const [m, v] of Object.entries(g.mesi)) o[m] = (o[m] || 0) + v; return JSON.stringify(Object.entries(o).filter(([, v]) => v).sort()); };
     let seguono = false;
-    try { seguono = perMese(FORMATO.pagamentiDaContratto(c, D.mesi)) === perMese(p.pagamenti.filter((g) => g.fornitore_id === F)); } catch (e) { seguono = false; }
+    try { seguono = perMese(FORMATO.pagamentiDaContratto(c, ORIZ())) === perMese(p.pagamenti.filter((g) => g.fornitore_id === F)); } catch (e) { seguono = false; }
     const verifica = !F ? "" : seguono
       ? `<span class="ok-t">✓ i pagamenti verso ${esc(F)} seguono questi patti: ${fmt(c.totale, false)} netto</span>`
       : diff !== 0
@@ -1872,7 +1905,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     root.querySelector("[data-togli-c]").onclick = () => { sc.splice(sc.indexOf(c), 1); renderLeve(); };
     root.querySelector("[data-genera]").onclick = () => {
       try {
-        const nuovi = FORMATO.pagamentiDaContratto(c, D.mesi);
+        const nuovi = FORMATO.pagamentiDaContratto(c, ORIZ());
         const F = String(c.fornitore).trim();
         const i = p.pagamenti.findIndex((g) => g.fornitore_id === F);
         const altri = p.pagamenti.filter((g) => g.fornitore_id !== F);
@@ -1896,9 +1929,9 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       const tot = base && base.value === "lordo" ? FORMATO.nettoDaLordo(t, aliquota) : t;
       const n = parseInt(root.querySelector("input[data-spalma-n]").value, 10);
       const passo = parseInt(root.querySelector("select[data-spalma-passo]").value, 10);
-      prova(() => FORMATO.spalma(tot, root.querySelector("select.sel-spalma-da").value, n, passo, D.mesi));
+      prova(() => FORMATO.spalma(tot, root.querySelector("select.sel-spalma-da").value, n, passo, ORIZ()));
     };
-    root.querySelectorAll("button[data-sposta]").forEach((b) => { b.onclick = () => prova(() => FORMATO.sposta(leggi(), parseInt(b.dataset.sposta, 10), D.mesi)); });
+    root.querySelectorAll("button[data-sposta]").forEach((b) => { b.onclick = () => prova(() => FORMATO.sposta(leggi(), parseInt(b.dataset.sposta, 10), ORIZ())); });
   }
   const selSoc = (val) => `<select data-campo="societa">${SOC.map((s) => `<option ${s === val ? "selected" : ""}>${s}</option>`).join("")}</select>`;
   // L'aliquota del pagamento entra tra le opzioni se non è tra le tre standard: la select non mente mai.
@@ -2105,7 +2138,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     // i mesi: dai patti abituali del fornitore se ci sono; altrimenti una rata al mese scelto
     const p = riga.ric.patti;
     if (p) {
-      try { const c = contrattoDaPatti(p, budget.mese, riga.ric.id, riga.importo); const pag = FORMATO.pagamentiDaContratto(c, D.mesi); return { pagamenti: pag.map((g) => ({ ...g, nome: `${riga.opera || riga.fornitore} · ${g.nome.replace(/^[^·]+· /, "")}`.slice(0, 80), stato: "ipotesi" })), come: `patti abituali: ${riassuntoPatti(p)}` }; } catch (e) { /* patti non applicabili qui: cade sulla rata unica */ }
+      try { const c = contrattoDaPatti(p, budget.mese, riga.ric.id, riga.importo); const pag = FORMATO.pagamentiDaContratto(c, ORIZ()); return { pagamenti: pag.map((g) => ({ ...g, nome: `${riga.opera || riga.fornitore} · ${g.nome.replace(/^[^·]+· /, "")}`.slice(0, 80), stato: "ipotesi" })), come: `patti abituali: ${riassuntoPatti(p)}` }; } catch (e) { /* patti non applicabili qui: cade sulla rata unica */ }
     }
     return { pagamenti: [{ nome: riga.opera || riga.fornitore, mesi: { [budget.mese]: riga.importo }, aliquota_iva: budget.iva, stato: "ipotesi", fornitore_id: riga.ric.id || null }], come: `una rata a ${meseIt(budget.mese)}` };
   }
@@ -2518,10 +2551,11 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       chip.onkeydown = (e) => {
         if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
         e.preventDefault();
-        const i = D.mesi.indexOf(da) + (e.key === "ArrowLeft" ? -1 : 1);
-        if (i < 0 || i >= D.mesi.length) return;
-        muovi(riga, da, D.mesi[i]);
-        const nuovo = el("calendario").querySelector(`.chip[data-r="${riga.id}"][data-m="${D.mesi[i]}"]`);
+        // → sull'ultimo mese allunga l'orizzonte di un mese (orizzonte aperto)
+        const o = ORIZ(), i = o.indexOf(da) + (e.key === "ArrowLeft" ? -1 : 1);
+        if (i < 0) return;
+        muovi(riga, da, o[i]);
+        const nuovo = el("calendario").querySelector(`.chip[data-r="${riga.id}"][data-m="${o[i]}"]`);
         if (nuovo) nuovo.focus();
       };
       chip.onpointerdown = (e) => {

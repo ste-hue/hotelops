@@ -139,7 +139,20 @@ def _righe_saldi(
     return out
 
 
+def payload_allungato(payload: dict, documento: dict | None = None) -> dict:
+    """Come la pagina: l'orizzonte arriva fino all'ultimo mese citato dallo scenario."""
+    doc = documento if documento is not None else payload.get("seme")
+    fino = max(M.mesi_citati((doc or {}).get("scenario") or {}), default=None)
+    if not fino or fino <= payload["mesi"][-1]:
+        return payload
+    mesi, ipo = M.allunga_orizzonte(
+        payload["mesi"], payload.get("mesi_ipotetici") or (), fino
+    )
+    return {**payload, "mesi": mesi, "mesi_ipotetici": sorted(ipo)}
+
+
 def tabelle(payload: dict, documento: dict | None = None) -> dict[str, Tabella]:
+    payload = payload_allungato(payload, documento)
     sc, nome = scenario_del_payload(payload, documento)
     ipo = set(payload.get("mesi_ipotetici") or ())
     vuoti = {s: set(v) for s, v in (payload.get("mesi_non_pianificati") or {}).items()}

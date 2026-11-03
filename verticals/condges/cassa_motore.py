@@ -403,6 +403,50 @@ def distribuisci(totale: int, da: str, n: int, mesi: list[str]) -> dict[str, int
     return out
 
 
+# ── orizzonte aperto: le leve possono andare oltre l'ultimo mese, l'orizzonte le segue ──
+
+
+def _mese_valido(x) -> bool:
+    return (
+        isinstance(x, str)
+        and len(x) == 7
+        and x[4] == "-"
+        and x[:4].isdigit()
+        and x[5:].isdigit()
+        and 1 <= int(x[5:]) <= 12
+    )
+
+
+def mesi_citati(obj) -> set[str]:
+    """Ogni mese «AAAA-MM» che compare in un documento JSON, come chiave o come valore."""
+    out: set[str] = set()
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if _mese_valido(k):
+                out.add(k)
+            out |= mesi_citati(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            out |= mesi_citati(v)
+    elif _mese_valido(obj):
+        out.add(obj)
+    return out
+
+
+def allunga_orizzonte(
+    mesi: list[str], ipotetici, fino_a: str | None
+) -> tuple[list[str], frozenset[str]]:
+    """Allunga l'orizzonte fino a `fino_a`: i mesi aggiunti sono senza PF (contano solo le
+    leve, nessun saldo inventato). Non accorcia mai."""
+    mesi, ipo = list(mesi), set(ipotetici)
+    while fino_a and mesi[-1] < fino_a:
+        a, m = (int(x) for x in mesi[-1].split("-"))
+        nuovo = f"{a + m // 12}-{m % 12 + 1:02d}"
+        mesi.append(nuovo)
+        ipo.add(nuovo)
+    return mesi, frozenset(ipo)
+
+
 def to_dict(r: Risultato) -> dict:
     d = asdict(r)
     for m in d["minimi"].values():
