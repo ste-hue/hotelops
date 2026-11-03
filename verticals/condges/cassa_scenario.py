@@ -27,7 +27,8 @@ from verticals.condges.cassa_motore import (
     Scenario,
 )
 
-SCHEMA = "cdg-cassa-scenario/1"
+SCHEMA = "cdg-cassa-scenario/2"
+SCHEMI_LEGGIBILI = {"cdg-cassa-scenario/1", SCHEMA}
 ORIGINI_MANUALI = ("manuale", "sostituzione")
 
 
@@ -112,11 +113,15 @@ def scenario_to_json(
                             "stato": g.stato,
                             "fornitore_id": g.fornitore_id,
                             **({"documenti": g.documenti} if g.documenti else {}),
+                            **({"residuo": True} if g.residuo else {}),
+                            **({"macro": g.macro} if g.macro else {}),
+                            **({"area": g.area} if g.area else {}),
                         }
                         for g in p.pagamenti
                     ],
                     "contratti": p.contratti,
                     **({"drive_url": p.drive_url} if p.drive_url else {}),
+                    **({"livelli": p.livelli} if p.livelli is not None else {}),
                 }
                 for p in sc.progetti
             ],
@@ -151,8 +156,10 @@ def scenario_to_json(
 
 def _load(raw: str | bytes) -> dict:
     doc = json.loads(raw)
-    if doc.get("schema") != SCHEMA:
-        raise ValueError(f"schema {doc.get('schema')!r} diverso da {SCHEMA}")
+    if doc.get("schema") not in SCHEMI_LEGGIBILI:
+        raise ValueError(
+            f"schema {doc.get('schema')!r} non leggibile: attesi {sorted(SCHEMI_LEGGIBILI)}"
+        )
     return doc
 
 
@@ -174,11 +181,15 @@ def scenario_from_json(raw: str | bytes) -> tuple[Scenario, Base, dict]:
                     stato=g["stato"],
                     fornitore_id=g.get("fornitore_id"),
                     documenti=list(g.get("documenti") or []),
+                    residuo=bool(g.get("residuo", False)),
+                    macro=g.get("macro") or None,
+                    area=g.get("area") or None,
                 )
                 for g in p["pagamenti"]
             ],
             contratti=p.get("contratti", []),
             drive_url=p.get("drive_url") or None,
+            livelli=p.get("livelli"),
         )
         for p in s["progetti"]
     ]
@@ -255,6 +266,7 @@ def righe_p(
                 "stato": p.stato,
                 "contratti": p.contratti,
                 **({"drive_url": p.drive_url} if p.drive_url else {}),
+                **({"livelli": p.livelli} if p.livelli is not None else {}),
                 **(
                     {"documenti": {g.nome: g.documenti for g in p.pagamenti if g.documenti}}
                     if any(g.documenti for g in p.pagamenti)
@@ -333,8 +345,10 @@ def righe_p(
             "mese": m,
             "importo_netto_cent": v,
             "aliquota_iva": g.aliquota_iva,
-            "stato": g.stato,
+            "stato": "da_assegnare" if g.residuo else g.stato,
             "fornitore_id": g.fornitore_id,
+            "macro": g.macro,
+            "area": g.area,
             "societa_id": p.societa,
             "hash_riga": _hash(sid, p.id, g.nome, m),
         }
@@ -373,8 +387,12 @@ def scenario_da_righe(
                         nome=r["pagamento"],
                         mesi={},
                         aliquota_iva=r["aliquota_iva"],
-                        stato=r["stato"],
+                        # il residuo in BQ ha stato «da_assegnare»: lo stato d'origine non si conserva
+                        stato="ipotesi" if r["stato"] == "da_assegnare" else r["stato"],
                         fornitore_id=r["fornitore_id"],
+                        residuo=r["stato"] == "da_assegnare",
+                        macro=r.get("macro"),
+                        area=r.get("area"),
                         documenti=list((pm.get("documenti") or {}).get(r["pagamento"], [])),
                     ),
                 )
@@ -389,6 +407,7 @@ def scenario_da_righe(
                     pagamenti=list(pagam.values()),
                     contratti=pm.get("contratti", []),
                     drive_url=pm.get("drive_url"),
+                    livelli=pm.get("livelli"),
                 )
             )
 

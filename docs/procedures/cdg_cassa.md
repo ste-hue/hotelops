@@ -37,7 +37,8 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
 ## 2. Salvare uno scenario (versionato, mai sovrascritto)
 
 1. Nella pagina, regola le leve e premi **Esporta scenario**: scarica
-   `cassa-scenario-<nome>.json` (schema `cdg-cassa-scenario/1`, con dentro la base PF usata).
+   `cassa-scenario-<nome>.json` (schema `cdg-cassa-scenario/2`, con dentro la base PF usata; i
+   file `/1` già salvati si rileggono e si promuovono come prima).
 2. Registra il file:
 
        hotelops cdg scenario salva FILE --nome "Nome scenario"
@@ -45,6 +46,16 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
    fa intake nel lineage (source `CDG_SCENARIOCASSA_GROUP_APPEND`, raw su GCS) e promote nelle
    tre tabelle `hotelops_previsioni.p_scenari`, `p_scenario_flussi`, `p_progetti_pagamenti`
    (append-only, importi in centesimi, `raw_object_id` obbligatorio). Il nome vive nel documento.
+
+   **Una volta, dopo il merge dei progetti a livelli e prima di salvare qualsiasi scenario:**
+
+       python -m core.bq.load.create_previsioni_tables
+
+   aggiunge a `p_progetti_pagamenti` le colonne `macro` e `area` (ALTER idempotente: rilanciarlo
+   non fa danni; `--dry-run` stampa le istruzioni senza eseguirle). Se lo si dimentica, il promote
+   si ferma **prima di scrivere** con `RuntimeError: … senza colonne ['macro', 'area']: esegui prima
+   python -m core.bq.load.create_previsioni_tables … Nessuna riga scritta.`: si lancia il comando e
+   si ripete il salvataggio, nessuna riga da pulire.
 3. `hotelops cdg scenario lista` elenca gli scenari salvati. Al prossimo `--aggiorna` entrano
    nel menu Scenario della pagina, con l'ora di salvataggio; se la base PF è cambiata sono
    marcati «base diversa».
@@ -143,7 +154,47 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
     riga si accende o spegne. «Aggiungi N pagamenti» li mette nel progetto scelto (o in uno nuovo, spento)
     con stato «ipotesi», crea le schede dei fornitori nuovi col codice se riconosciuto, e la bozza resta nel
     browser come sempre. Il foglio di Drive «Budget interno terzo piano» (per opera) si importa così com'è.
-15. **Orizzonte lungo: «non pianificato» non è zero, e la banda cresce con h.** Il PF vivo è un file solo
+    Le righe entrano come sottovoci di una **macro nuova col nome del file**: «Importa budget» aggiunge,
+    non sostituisce. Per rifare un progetto (o una sua macro) da un foglio Excel, vedi il punto 15.
+
+15. **Progetti a livelli e giro Excel.** Dentro ogni progetto c'è una tabella a tre livelli: **budget del
+    progetto → macro → sottovoci** (fornitore, area, netto, «quando», IVA). Si scrive nelle celle; per
+    aggiungere si scrive nell'ultima riga vuota. Le sottovoci consumano il budget della macro, le macro
+    consumano il budget del progetto; quello che non è assegnato si paga nei mesi del budget («da
+    assegnare»). Il calcolo legge solo i pagamenti, che la pagina deriva dai livelli a ogni modifica.
+    Sopra la tabella, tre bottoni:
+    - **Esporta (.xlsx)** scarica `<progetto>-<AAAA-MM-GG>.xlsx`: un foglio col nome del progetto, colonne
+      Macro · Sottovoce · Fornitore · Area · Totale netto € · Quando · IVA % · Note. Una riga per
+      sottovoce; i budget in testa («budget progetto» nella colonna Macro, «budget» nella colonna
+      Sottovoce). «Quando» è testo che si riscrive a mano: `mar 27`, `gen 27–mar 27 ×3`,
+      `ott 26 15% · nov 26–mar 27 ×5 · mag 27 10%`.
+    - **Esporta vuoto** scarica `<progetto>-<AAAA-MM-GG>-vuoto.xlsx`: solo l'intestazione e la riga del
+      budget del progetto, da riempire in Excel.
+    - **Importa (.xlsx/.csv)** legge un foglio e **sostituisce**. Un file **con** la colonna «Macro»
+      sostituisce **tutto il progetto**. Un file **senza** (il foglio «Per fornitore» di hpan26-soft:
+      Struttura · Fornitore · Area di intervento · Totale netto € · Note) sostituisce **solo la macro
+      scelta** nell'anteprima; di default è una macro nuova col nome del file. Senza «Quando» ogni riga
+      è una rata al mese scelto; senza «IVA %» vale l'IVA scelta («come la macro» di default).
+    Prima di applicare, l'**anteprima** dice riga per riga cosa **entra**, cosa **cambia** (prima → dopo) e
+    cosa **sparisce**, le righe **da sistemare** (importo, «quando» o IVA illeggibili, un secondo «budget»
+    della stessa macro o un secondo «budget progetto»: non entrano), il
+    totale del progetto prima → dopo (lordo in cassa e netto) e il **minimo della società** prima → dopo.
+    Ogni riga si spegne: spenta, resta com'è nel progetto; una macro spenta vale con tutte le sue righe.
+    Un file uguale al progetto dice «nessuna differenza». «Sostituisci» applica, crea le schede dei
+    fornitori nuovi e il messaggio in basso ha «annulla». Le righe di totale, IVA e imprevisti e quelle a 0
+    (da prezzare) si saltano; «Da assegnare», TBD e vuoto diventano sottovoci **senza fornitore**, che
+    consumano il budget della macro. Una sottovoce ritrovata (stessa macro, sottovoce e fornitore) tiene
+    stato e documenti. Se il suo «Quando» è cambiato, il testo vince: i patti di quel fornitore cadono e
+    l'anteprima lo scrive («i patti di AMCN si perdono: le rate vengono dal file»). Con una macro scelta
+    cadono solo i patti legati alle sottovoci di quella macro; quelli dello stesso fornitore in altre
+    macro restano.
+    **Quando l'orizzonte scorre** (nuovo mese chiuso), la pagina ricalcola il «da assegnare» sui mesi del
+    budget non ancora passati (i mesi oltre l'ultimo allungano l'orizzonte, punto 16). Le tabelle Python (`hotelops cdg tabelle`) e BigQuery invece leggono i
+    pagamenti salvati al momento del salvataggio. Per uno scenario `/2` salvato prima che l'orizzonte
+    scorresse, pagina e tabelle possono quindi dare cifre diverse sul «da assegnare» finché lo scenario
+    non viene ri-esportato e ri-salvato (punto 2).
+
+16. **Orizzonte lungo: «non pianificato» non è zero, e la banda cresce con h.** Il PF vivo è un file solo
     su due anni (colonne datate per anno dall'ingest, wrap dicembre→gennaio); si allunga con
     `pf-extend --to AAAA-MM` sul master, alla finestra, come atto dichiarato nel verbale. L'ingest non
     emette celle a zero, quindi un mese con la colonna ma senza righe per una società è **non

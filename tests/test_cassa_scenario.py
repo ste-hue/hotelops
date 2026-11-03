@@ -137,8 +137,66 @@ def test_righe_p_e_ritorno_danno_lo_stesso_risultato():
 
 
 def test_schema_diverso_rifiutato():
-    with pytest.raises(ValueError, match="cdg-cassa-scenario/1"):
+    with pytest.raises(ValueError, match="cdg-cassa-scenario/2"):
         scenario_from_json(json.dumps({"schema": "altro"}))
+
+
+def test_schema_sconosciuto_rifiutato():
+    with pytest.raises(ValueError, match="non leggibile"):
+        scenario_from_json(json.dumps({"schema": "cdg-cassa-scenario/3"}))
+
+
+def test_v1_si_legge_ancora():
+    sc, base = scenario_sintetico()
+    doc = json.loads(scenario_to_json(sc, base))
+    doc["schema"] = "cdg-cassa-scenario/1"
+    sc2, _, meta = scenario_from_json(json.dumps(doc))
+    assert sc2 == sc and meta["schema"] == "cdg-cassa-scenario/1"
+    # i default non sporcano il documento: nessuna chiave /2 se non servono
+    j = doc["scenario"]["progetti"][0]
+    assert "livelli" not in j
+    assert all(not {"residuo", "macro", "area"} & g.keys() for g in j["pagamenti"])
+
+
+def _con_livelli(sc):
+    p = sc.progetti[0]
+    livelli = {"budget_netto": 16_500_000, "macro": [{"nome": "Tessili", "budget": 1_000_000}]}
+    resto = Pagamento(
+        "da assegnare",
+        {"2026-11": 1_000_000},
+        10,
+        residuo=True,
+        macro="Tessili",
+    )
+    voce = replace(p.pagamenti[0], macro="Tessili", area="Fornitura e posa")
+    return replace(
+        sc, progetti=[replace(p, livelli=livelli, pagamenti=[voce, *p.pagamenti[1:], resto])]
+    )
+
+
+def test_v2_giro_completo_livelli_e_residuo():
+    sc, base = scenario_sintetico()
+    con = _con_livelli(sc)
+    doc = scenario_to_json(con, base)
+    assert json.loads(doc)["schema"] == "cdg-cassa-scenario/2"
+    sc2, _, meta = scenario_from_json(doc)
+    assert sc2 == con and meta["schema"] == "cdg-cassa-scenario/2"
+    s, f, pg = righe_p(doc, "rid", datetime(2026, 10, 31, tzinfo=UTC), "stefano")
+    ((sc3, _, _),) = scenario_da_righe(s, f, pg)
+    assert sc3 == con
+
+
+def test_righe_bq_portano_macro_area_e_stato_da_assegnare():
+    sc, base = scenario_sintetico()
+    doc = scenario_to_json(_con_livelli(sc), base)
+    _, _, pg = righe_p(doc, "rid", datetime(2026, 10, 31, tzinfo=UTC), "stefano")
+    resto = [r for r in pg if r["pagamento"] == "da assegnare"]
+    assert resto and all(
+        r["stato"] == "da_assegnare" and r["macro"] == "Tessili" and r["area"] is None
+        for r in resto
+    )
+    voce = [r for r in pg if r["area"] == "Fornitura e posa"]
+    assert voce and all(r["macro"] == "Tessili" for r in voce)
 
 
 def test_base_diversa_si_vede():

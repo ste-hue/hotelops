@@ -114,6 +114,33 @@ details.sotto>summary{font-size:12px;color:var(--accent)}
 .mesi .op{padding:0 6px;min-height:24px;min-width:24px;font-size:12px;line-height:22px;color:var(--muted)}
 .doc{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--accent);text-decoration:none;margin-left:4px;max-width:220px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;white-space:nowrap}
 .documenti{margin-top:6px}
+/* progetti a livelli: una tabella come Excel, si scrive nelle celle */
+.livelli-testa{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;margin-top:12px}
+.livelli-testa .excel-progetto{margin-left:auto}
+.avvisi-livelli{margin-top:6px;padding:6px 10px;border-radius:8px;background:var(--warn-bg);color:var(--warn);font-size:12px}
+.livelli-wrap{overflow-x:auto;margin-top:6px}
+table.livelli{font-size:12px;min-width:640px;table-layout:fixed}
+table.livelli th,table.livelli td{text-align:left;padding:3px 3px;vertical-align:top}
+table.livelli th.num{text-align:right}
+table.livelli col.c-nome{width:25%} table.livelli col.c-forn{width:12%} table.livelli col.c-area{width:13%}
+table.livelli col.c-netto{width:11%} table.livelli col.c-quando{width:20%} table.livelli col.c-iva{width:8%} table.livelli col.c-az{width:11%}
+table.livelli tr:not(.liv-dett)>td>input,table.livelli tr:not(.liv-dett)>td>select,table.livelli .nome-macro input{width:100%;box-sizing:border-box;font-size:12px;padding:3px 5px}
+table.livelli .liv-dett td{font-size:13px}
+table.livelli .liv-progetto td{background:var(--soft);border-bottom:2px solid var(--line)}
+table.livelli .liv-macro td{border-top:1px solid var(--line)}
+table.livelli .liv-macro .nome-macro{display:flex;gap:3px;align-items:center}
+table.livelli .liv-macro .nome-macro input{font-weight:600}
+table.livelli .piega{padding:0 5px;min-width:24px;min-height:24px;border:0;background:transparent;color:var(--ink);font-size:13px}
+table.livelli .liv-voce td.nome-l{padding-left:26px}
+table.livelli .liv-nuova input,table.livelli .liv-nuova select{border-style:dashed;background:transparent}
+table.livelli .liv-nuova input::placeholder{color:var(--muted);font-style:italic}
+table.livelli td.az .mini{margin:0 2px 2px 0}
+table.livelli td.az .mini{padding:2px 5px}
+table.livelli .liv-dett>td{padding:0 0 6px 26px;border-bottom:1px solid var(--line)}
+table.livelli .liv-dett .pag{margin-top:2px}
+table.livelli .liv-conferma td{background:var(--bad-bg);color:var(--ink)}
+.oltre{color:var(--bad);font-weight:600}
+.resta{color:var(--warn)}
 .budget{margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
 .budget[hidden]{display:none}
 .budget table{font-size:12px}
@@ -121,6 +148,11 @@ details.sotto>summary{font-size:12px;color:var(--accent)}
 .budget td.num,.budget th.num{text-align:right}
 .budget .salta td{color:var(--muted);text-decoration:line-through}
 .budget .wrap{overflow-x:auto;margin-top:6px}
+.budget .imp-tipo{font-weight:600;white-space:nowrap}
+.budget .imp-tipo[data-tipo="entra"]{color:var(--ok)}
+.budget .imp-tipo[data-tipo="cambia"]{color:var(--warn)}
+.budget .imp-tipo[data-tipo="sparisce"]{color:var(--bad)}
+.budget .imp-esito{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:6px;font-size:13px}
 .pf-corretto{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:4px 0 10px;background:var(--soft)}
 .pf-corretto .riga .nome{font-weight:600}
 .pag .mesi input{width:92px;text-align:right;font-size:12px;padding:3px 5px}
@@ -281,6 +313,10 @@ body.vista-leve details.leva.aperta>.corpo{display:block;padding-left:0}
   body.vista-leve .leve-scrim{display:none}
   body.vista-leve details.blocco[data-blocco="leve"] .card{margin-right:min(580px,calc(50vw + 20px))}
   body.vista-leve[data-seg="calendario"] details.blocco[data-blocco="calendario"]{margin-right:0}
+  /* un progetto aperto porta la tabella a livelli: il pannello prende lo spazio libero, la lista si stringe */
+  body.vista-leve[data-seg="progetti"] #progetti details.leva.aperta{width:max(min(560px,50vw),min(1040px,calc(100vw - 360px)))}
+  body.vista-leve[data-seg="progetti"]:has(#progetti details.leva.aperta) main{max-width:none}
+  body.vista-leve[data-seg="progetti"]:has(#progetti details.leva.aperta) details.blocco[data-blocco="leve"] .card{margin-right:calc(max(min(560px,50vw),min(1040px,calc(100vw - 360px))) + 12px)}
 }
 @media (prefers-reduced-transparency: reduce){.leve-top{background:var(--bg);backdrop-filter:none;-webkit-backdrop-filter:none}}
 .leg i.eff{width:12px;height:10px;border:0;background:var(--accent);opacity:.35;border-radius:2px}
@@ -423,12 +459,17 @@ const MOTORE = (() => {
     const nonRic = [];
     for (const f of fatti) {
       const p = perId[f.progetto_id];
-      const slot = [];
-      for (const pag of (p ? p.pagamenti : [])) {
-        if (f.fornitore_id != null && pag.fornitore_id === f.fornitore_id) {
-          for (const m of Object.keys(pag.mesi)) slot.push({ m, pag });
+      const mesiDi = (scelta) => {
+        const out = [];
+        for (const pag of (p ? p.pagamenti : [])) {
+          if (f.fornitore_id != null && scelta(pag)) {
+            for (const m of Object.keys(pag.mesi)) out.push({ m, pag });
+          }
         }
-      }
+        return out;
+      };
+      let slot = mesiDi((pag) => pag.fornitore_id === f.fornitore_id);
+      if (!slot.length) slot = mesiDi((pag) => pag.residuo === true);
       slot.sort((a, b) => (a.m < b.m ? -1 : a.m > b.m ? 1 : 0));
       if (!slot.length) { nonRic.push(f); continue; }
       let resto = f.importo;
@@ -780,7 +821,9 @@ const FORMATO = (() => {
   function leggiDocumento(testo, schema) {
     let doc;
     try { doc = JSON.parse(testo); } catch (e) { return { errore: "il file non è JSON leggibile" }; }
-    if (!doc || doc.schema !== schema) return { errore: `schema ${doc && doc.schema !== undefined ? doc.schema : "assente"} diverso da ${schema}` };
+    // /2 (livelli) legge anche /1: i progetti senza livelli si convertono all'apertura.
+    const leggibili = schema === "cdg-cassa-scenario/2" ? ["cdg-cassa-scenario/1", "cdg-cassa-scenario/2"] : [schema];
+    if (!doc || !leggibili.includes(doc.schema)) return { errore: `schema ${doc && doc.schema !== undefined ? doc.schema : "assente"} diverso da ${schema}` };
     const sc = doc.scenario;
     if (!sc || !Array.isArray(sc.progetti) || !Array.isArray(sc.finanziamenti)) return { errore: "manca lo scenario (progetti e finanziamenti)" };
     const mesiOk = (o, dove) => {
@@ -806,7 +849,464 @@ const FORMATO = (() => {
     }
     return { nome: doc.nome || sc.nome || "importato", base: doc.base || {}, scenario: sc, salvato_il: doc.salvato_il || null };
   }
-  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata };
+  // ── livelli: totalone → macro → sottovoci. I pagamenti del progetto si derivano da qui ──
+  const somma = (mesi) => Object.values(mesi || {}).reduce((t, v) => t + v, 0);
+  const haMesi = (pesi) => Object.values(pesi || {}).some((w) => w > 0);
+  const euro = (c) => fmt(c, c % 100 !== 0);
+  // Progetto senza livelli (scenario /1): una macro col nome del progetto, una sottovoce per pagamento.
+  function livelliDaPagamenti(p) {
+    const voci = (p.pagamenti || []).map((g, k) => ({
+      id: `v${k + 1}`, nome: g.nome, fornitore_id: g.fornitore_id ?? null, area: g.area || null,
+      netto: somma(g.mesi), mesi: { ...g.mesi }, aliquota_iva: g.aliquota_iva, stato: g.stato,
+      documenti: (g.documenti || []).map((d) => ({ ...d })), note: "",
+    }));
+    return {
+      budget_netto: null, mesi_budget: null, aliquota_iva: 22,
+      macro: [{ id: "m1", nome: p.nome, budget_netto: null, mesi_budget: null, aliquota_iva: null, area: null, voci }],
+    };
+  }
+  // Una volta sola, alla conversione: le rate di un fornitore con patti (anticipo, SAL, ritenuta: una sottovoce
+  // ciascuna) tornano una sottovoce sola legata ai patti, se e solo se in una macro sommano esattamente il totale
+  // dei patti, hanno la stessa IVA e mesi tutti diversi (così ogni mese ha lo stesso importo e la stessa IVA:
+  // la cassa resta identica al centesimo). Altrimenti non si tocca niente e i patti restano slegati.
+  function consolidaContratti(p) {
+    const L = { ...p.livelli, macro: p.livelli.macro.map((m) => ({ ...m, voci: [...(m.voci || [])] })) };
+    const contratti = (p.contratti || []).map((c) => ({ ...c }));
+    for (const c of contratti) {
+      const F = String(c.fornitore || "").trim();
+      if (!F || c.voce_id) continue;
+      for (const m of L.macro) {
+        const suoi = m.voci.filter((v) => v.fornitore_id === F);
+        if (!suoi.length || suoi.reduce((t, v) => t + somma(v.mesi), 0) !== (c.totale || 0)) continue;
+        const mesi = suoi.flatMap((v) => Object.keys(v.mesi || {}));
+        if (new Set(mesi).size !== mesi.length || new Set(suoi.map((v) => v.aliquota_iva)).size !== 1) continue;
+        const primo = suoi[0];
+        const docs = [];
+        for (const d of suoi.flatMap((v) => v.documenti || [])) if (!docs.some((x) => x.titolo === d.titolo && x.url === d.url)) docs.push({ ...d });
+        const una = suoi.length === 1 ? primo : { ...primo, nome: F, mesi: Object.fromEntries(ordinati(Object.assign({}, ...suoi.map((v) => v.mesi))).map((x) => [x, suoi.find((v) => x in v.mesi).mesi[x]])), documenti: docs };
+        una.netto = somma(una.mesi);
+        m.voci = m.voci.filter((v) => !suoi.includes(v) || v === primo).map((v) => (v === primo ? una : v));
+        c.voce_id = una.id;
+        break;
+      }
+    }
+    return { ...p, livelli: L, contratti };
+  }
+  // «Genera i pagamenti»: i patti `p.contratti[ci]` scrivono i mesi della SOLA sottovoce legata; le altre non si
+  // toccano e non si uniscono mai. Senza legame: l'unica sottovoce di F, o una nuova nell'unica macro (in una
+  // macro nuova se il progetto non ne ha). Più sottovoci di F, o più macro senza la sua sottovoce: {errore}.
+  function generaPatti(p, ci, orizzonte) {
+    const c = p.contratti[ci];
+    const F = String(c.fornitore || "").trim();
+    const L = { ...p.livelli, macro: p.livelli.macro.map((m) => ({ ...m, voci: (m.voci || []).map((v) => ({ ...v })) })) };
+    const tutte = L.macro.flatMap((m) => m.voci.map((v) => [m, v]));
+    let [m, v] = tutte.find(([, x]) => c.voce_id && x.id === c.voce_id) || [null, null];
+    if (!v) {
+      const suoi = F ? tutte.filter(([, x]) => x.fornitore_id === F) : [];
+      if (suoi.length > 1) return { errore: `${F} ha ${suoi.length} sottovoci in questo progetto: apri quella dei patti e usa «+ come paghi ${F}» dal suo dettaglio` };
+      if (suoi.length === 1) [m, v] = suoi[0];
+      else {
+        if (L.macro.length > 1) return { errore: `${F || "il fornitore"} non ha una sottovoce e il progetto ha più macro: scrivila nella macro giusta, poi «+ come paghi» dal suo dettaglio` };
+        if (!L.macro.length) L.macro.push({ id: "m1", nome: p.nome, budget_netto: null, mesi_budget: null, aliquota_iva: null, area: null, voci: [] });
+        m = L.macro[0];
+        const ids = tutte.map(([, x]) => x.id);
+        let k = ids.length + 1;
+        while (ids.includes(`v${k}`)) k += 1;
+        v = { id: `v${k}`, nome: F || "fornitore", fornitore_id: F || null, area: null, netto: 0, mesi: {}, aliquota_iva: null, stato: null, documenti: [], note: "" };
+        m.voci.push(v);
+      }
+    }
+    const mesi = {};
+    for (const g of pagamentiDaContratto(c, orizzonte)) for (const [x, n] of Object.entries(g.mesi)) mesi[x] = (mesi[x] || 0) + n;
+    Object.assign(v, { mesi, netto: somma(mesi), aliquota_iva: c.aliquota_iva ?? 22, stato: c.stato || "contratto" });
+    return { progetto: { ...p, livelli: L, contratti: p.contratti.map((x, i) => (i === ci ? { ...x, voce_id: v.id } : x)) }, macro_id: m.id, voce_id: v.id };
+  }
+  // Buste: lo sforamento di una macro lo assorbe il progetto (peso della macro = max(budget, assegnato)).
+  // Assegnato = somma dei mesi delle sottovoci: il denaro che esce davvero.
+  function buste(livelli) {
+    const busta = (budget, assegnato) => ({
+      budget, assegnato,
+      da_assegnare: budget === null ? 0 : Math.max(0, budget - assegnato),
+      oltre: budget === null ? 0 : Math.max(0, assegnato - budget),
+    });
+    const macro = (livelli.macro || []).map((m) => ({ id: m.id, ...busta(m.budget_netto ?? null, (m.voci || []).reduce((t, v) => t + somma(v.mesi), 0)) }));
+    const peso = macro.reduce((t, m) => t + (m.budget === null ? m.assegnato : Math.max(m.budget, m.assegnato)), 0);
+    return { progetto: busta(livelli.budget_netto ?? null, peso), macro };
+  }
+  // `totale` sui mesi in proporzione ai pesi; l'ultimo mese prende il resto, la somma è esatta.
+  // I mesi fuori dall'orizzonte (scenario salvato prima che l'orizzonte scorresse) si lasciano cadere:
+  // il totale va sui mesi rimasti; se non ne resta nessuno, {} (lo dice avvisiLivelli).
+  function perPesi(totale, pesi, orizzonte) {
+    const mesi = ordinati(pesi).filter((m) => pesi[m] > 0 && orizzonte.includes(m));
+    const W = mesi.reduce((t, m) => t + pesi[m], 0);
+    const interi = mesi.every((m) => Number.isInteger(pesi[m]));
+    const quota = (w) => (interi ? Number((BigInt(totale) * BigInt(w)) / BigInt(W)) : Math.floor((totale * w) / W));
+    const out = {};
+    let resto = totale;
+    mesi.forEach((m, k) => { const v = k === mesi.length - 1 ? resto : quota(pesi[m]); out[m] = v; resto -= v; });
+    return out;
+  }
+  // Pagamenti derivati, in quest'ordine: sottovoci, macro senza sottovoci, «da assegnare» delle macro,
+  // «da assegnare» del progetto. Puro: `p` non si tocca. Un «da assegnare» senza mesi non entra in cassa
+  // (lo dice avvisiLivelli).
+  function derivaPagamenti(p, orizzonte) {
+    const L = p.livelli || livelliDaPagamenti(p);
+    const B = buste(L);
+    const macro = L.macro || [];
+    const soloUna = macro.length === 1 && macro[0].nome === p.nome;
+    const stato = p.stato || "ipotesi";
+    const ivaMacro = (m) => m.aliquota_iva ?? L.aliquota_iva ?? 22;
+    const mesiMacro = (m) => (haMesi(m.mesi_budget) ? m.mesi_budget : L.mesi_budget);
+    const voci = [], macroSole = [], residui = [];
+    macro.forEach((m, i) => {
+      for (const v of m.voci || []) {
+        voci.push({
+          nome: soloUna ? v.nome : `${m.nome} · ${v.nome}`, mesi: { ...v.mesi },
+          aliquota_iva: v.aliquota_iva ?? ivaMacro(m), stato: v.stato || stato, fornitore_id: v.fornitore_id ?? null,
+          ...((v.documenti || []).length ? { documenti: v.documenti.map((d) => ({ ...d })) } : {}),
+          macro: m.nome, area: v.area || m.area || null, macro_id: m.id, voce_id: v.id,
+        });
+      }
+      const resto = B.macro[i].da_assegnare;
+      if (!resto || !haMesi(mesiMacro(m))) return;
+      const mesi = perPesi(resto, mesiMacro(m), orizzonte);
+      if (!haMesi(mesi)) return;
+      // Una macro senza sottovoci è denaro non ancora assegnato: anche lei è un «da assegnare».
+      const g = { mesi, aliquota_iva: ivaMacro(m), stato, macro: m.nome, area: m.area || null, macro_id: m.id, voce_id: null, residuo: true };
+      if (!(m.voci || []).length) macroSole.push({ nome: m.nome, ...g, fornitore_id: m.fornitore_id ?? null });
+      else residui.push({ nome: `${m.nome} · da assegnare`, ...g, fornitore_id: null });
+    });
+    const mesiP = B.progetto.da_assegnare ? perPesi(B.progetto.da_assegnare, L.mesi_budget || {}, orizzonte) : {};
+    if (haMesi(mesiP)) {
+      residui.push({ nome: "da assegnare", mesi: mesiP, aliquota_iva: L.aliquota_iva ?? 22, stato,
+        macro: null, area: null, macro_id: null, voce_id: null, fornitore_id: null, residuo: true });
+    }
+    const usati = new Set();
+    return [...voci, ...macroSole, ...residui].map((g) => {
+      let nome = g.nome;
+      for (let k = 2; usati.has(nome); k++) nome = `${g.nome} (${k})`;
+      usati.add(nome);
+      return { ...g, nome };
+    });
+  }
+  // Avvisi leggibili sulle buste: sforamenti, budget senza mesi e, con `orizzonte`, mesi del budget
+  // caduti fuori dall'orizzonte (la loro parte va sugli altri mesi, o non entra in cassa).
+  function avvisiLivelli(livelli, orizzonte) {
+    const B = buste(livelli);
+    const out = [];
+    const fuori = (pesi, chi) => {
+      const f = orizzonte ? ordinati(pesi || {}).filter((m) => pesi[m] > 0 && !orizzonte.includes(m)) : [];
+      if (f.length) out.push(`${chi}: mesi del budget fuori orizzonte (${f.map(meseIt).join(", ")})`);
+    };
+    let usaMesiProgetto = B.progetto.da_assegnare > 0;
+    (livelli.macro || []).forEach((m, i) => {
+      const b = B.macro[i];
+      if (b.oltre) out.push(`${m.nome}: oltre di ${euro(b.oltre)}`);
+      if (b.da_assegnare && !haMesi(m.mesi_budget) && !haMesi(livelli.mesi_budget)) out.push(`${m.nome}: budget ${euro(b.budget)} senza mesi: non entra in cassa`);
+      if (b.da_assegnare && haMesi(m.mesi_budget)) fuori(m.mesi_budget, m.nome);
+      else if (b.da_assegnare) usaMesiProgetto = true;
+    });
+    if (B.progetto.oltre) out.push(`progetto: oltre di ${euro(B.progetto.oltre)}`);
+    if (B.progetto.da_assegnare && !haMesi(livelli.mesi_budget)) out.push(`budget ${euro(B.progetto.budget)} senza mesi: non entra in cassa`);
+    if (usaMesiProgetto) fuori(livelli.mesi_budget, "progetto");
+    return out;
+  }
+  // ── Excel del progetto: «Quando» leggibile, righe, import e differenze ──
+  const ord = (m) => parseInt(m.slice(0, 4), 10) * 12 + parseInt(m.slice(5), 10) - 1;
+  const daOrd = (o) => `${Math.floor(o / 12)}-${String((o % 12) + 1).padStart(2, "0")}`;
+  // Mesi -> testo che quandoParse rilegge identico: «mar 27», «gen 27–mar 27 ×3» (rate uguali a passo
+  // costante, resto sull'ultima), altrimenti «gen 27 10.000 · mar 27» (l'ultimo mese prende il resto).
+  function quandoTesto(mesi) {
+    const ms = ordinati(mesi || {});
+    if (!ms.length) return "";
+    if (ms.length === 1) return meseIt(ms[0]);
+    const n = ms.length, q = Math.floor(somma(mesi) / n), passo = ord(ms[1]) - ord(ms[0]);
+    if (ms.every((m, k) => !k || ord(m) - ord(ms[k - 1]) === passo) && ms.slice(0, -1).every((m) => mesi[m] === q)) return `${meseIt(ms[0])}–${meseIt(ms[n - 1])} ×${n}`;
+    return ms.map((m, k) => (k === n - 1 ? meseIt(m) : `${meseIt(m)} ${euro(mesi[m])}`)).join(" · ");
+  }
+  const MESE_RE = "([a-z]{3})\\s*(\\d{2}|\\d{4})";
+  const PARTE_RE = new RegExp(`^${MESE_RE}(?:\\s*[–—-]\\s*${MESE_RE}\\s*[×x]\\s*(\\d+))?(?:\\s+(\\S.*))?$`, "i");
+  const meseDa = (nome, anno) => {
+    const i = MESI_IT.indexOf(nome.toLowerCase());
+    return i < 0 ? null : `${anno.length === 2 ? 2000 + parseInt(anno, 10) : anno}-${String(i + 1).padStart(2, "0")}`;
+  };
+  // Testo -> {mese: cent} che somma a `totale`; null se illeggibile o se le cifre non tornano.
+  // Parti separate da «·»: «mar 27» (il resto), «mar 27 30%», «mar 27 12.000», «gen 27–mar 27 ×3» (rate
+  // uguali, resto sull'ultima). Una sola parte senza cifra; senza, le percentuali devono fare 100 e il loro
+  // arrotondamento (al più un centesimo per parte, in più o in meno) chiude sull'ultima.
+  // Accetta anche il formato di calendarioParse («2027-03=12.000,00; …»).
+  function quandoParse(txt, totale) {
+    const s = String(txt ?? "").trim();
+    if (!s) return totale ? null : {};
+    if (!Number.isInteger(totale)) return null;
+    if (s.includes("=")) { const cal = calendarioParse(s); return cal && somma(cal) === totale ? cal : null; }
+    const parti = [];
+    for (const pezzo of s.split("·")) {
+      const m = PARTE_RE.exec(pezzo.trim());
+      if (!m) return null;
+      const da = meseDa(m[1], m[2]);
+      if (!da) return null;
+      let mesi = [da];
+      if (m[3]) {
+        const a = meseDa(m[3], m[4]), n = parseInt(m[5], 10), salto = a ? ord(a) - ord(da) : -1;
+        if (!a || n < 1 || salto < 0 || (n === 1 ? salto !== 0 : salto % (n - 1) !== 0)) return null;
+        mesi = Array.from({ length: n }, (_, k) => daOrd(ord(da) + (n === 1 ? 0 : (k * salto) / (n - 1))));
+      }
+      const q = (m[6] || "").trim();
+      const pct = /^(\d+(?:[.,]\d+)?)\s*%$/.exec(q);
+      const importo = pct ? mulDiv(totale, Math.round(Number(pct[1].replace(",", ".")) * 100), 10000) : q ? parseEuro(q) : null;
+      if ((q && importo === null) || importo < 0) return null;
+      parti.push({ mesi, importo, pct: pct ? Math.round(Number(pct[1].replace(",", ".")) * 100) : null });
+    }
+    const libere = parti.filter((x) => x.importo === null);
+    const resto = totale - parti.reduce((t, x) => t + (x.importo || 0), 0);
+    const tuttePct = parti.every((x) => x.pct !== null) && parti.reduce((t, x) => t + x.pct, 0) === 10000;
+    const ultima = parti[parti.length - 1];
+    if (libere.length > 1) return null;
+    if (libere.length) { if (resto < 0) return null; libere[0].importo = resto; }
+    else if (resto && tuttePct && Math.abs(resto) <= parti.length && ultima.importo + resto >= 0) ultima.importo += resto;
+    else if (resto) return null;
+    const out = {};
+    for (const x of parti) {
+      const n = x.mesi.length, q = Math.floor(x.importo / n);
+      x.mesi.forEach((m, k) => { out[m] = (out[m] || 0) + (k === n - 1 ? x.importo - q * (n - 1) : q); });
+    }
+    return out;
+  }
+  const TESTA_PROGETTO = ["Macro", "Sottovoce", "Fornitore", "Area", "Totale netto €", "Quando", "IVA %", "Note"];
+  const inEuro = (c) => (c == null ? "" : c / 100);
+  // I pesi del budget diventano importi (quelli che si pagano), così «Quando» si legge come per le righe.
+  const mesiBudget = (budget, pesi) => (budget && haMesi(pesi) ? perPesi(budget, pesi, ordinati(pesi)) : {});
+  // Il netto di una voce: la somma dei mesi; senza mesi, il netto scritto (una voce non ancora messa nei mesi).
+  const nettoDiVoce = (v) => (Object.keys(v.mesi || {}).length ? somma(v.mesi) : v.netto || 0);
+  // Righe del foglio (senza intestazione = TESTA_PROGETTO), importi in euro. `vuoto`: solo il budget del progetto.
+  function righeProgetto(p, vuoto = false) {
+    const L = p.livelli || livelliDaPagamenti(p);
+    const iva = (x) => x ?? "";
+    const out = [["budget progetto", "", "", "", inEuro(L.budget_netto), quandoTesto(mesiBudget(L.budget_netto, L.mesi_budget)), iva(L.aliquota_iva), ""]];
+    if (vuoto) return out;
+    for (const m of L.macro || []) {
+      if (m.budget_netto != null) out.push([m.nome, "budget", "", "", inEuro(m.budget_netto), quandoTesto(mesiBudget(m.budget_netto, m.mesi_budget)), iva(m.aliquota_iva), ""]);
+      else if (!(m.voci || []).length) out.push([m.nome, "", "", "", "", "", iva(m.aliquota_iva), ""]);  // macro vuota: Sottovoce vuota
+      for (const v of m.voci || []) out.push([m.nome, v.nome, v.fornitore_id || "", v.area || "", inEuro(nettoDiVoce(v)), quandoTesto(v.mesi), iva(v.aliquota_iva), v.note || ""]);
+    }
+    return out;
+  }
+  // Righe di totale, IVA, imprevisti… che un foglio di budget porta e che non sono opere.
+  const PAROLE_SALTA = /^(totale|subtotale|imprevisti|iva\b|cuscinetto|media|controllo|camera tipo|lettura)/i;
+  // «senza fornitore»: vuoto, TBD, n.d., da definire, da assegnare, trattino.
+  const senzaFornitore = (nome) => /^(tbd|n\.?d\.?|da definire|da assegnare|-|—)?$/i.test(String(nome ?? "").trim());
+  const normTesta = (s) => String(s ?? "").toLowerCase().replace(/[^a-zà-ù0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  // La riga di testa è la prima con almeno tre celle di testo; le colonne si riconoscono dalle parole
+  // (per ogni parola vince l'intestazione uguale, poi quella che la contiene). -1 = colonna assente.
+  // «Area di intervento» è sia `opera` (il nome della voce, se manca «Sottovoce») sia `area`.
+  function indovinaColonne(righe) {
+    let testa = 0;
+    for (let i = 0; i < Math.min(righe.length, 30); i++) { if ((righe[i] || []).filter((c) => typeof c === "string" && c.trim()).length >= 3) { testa = i; break; } }
+    const t = (righe[testa] || []).map(normTesta);
+    const crude = (righe[testa] || []).map((x) => String(x ?? "").toLowerCase().replace(/\s+/g, " ").trim());
+    const trova = (...parole) => {
+      for (const p of parole) { const i = t.indexOf(p) >= 0 ? t.indexOf(p) : t.findIndex((x) => x.includes(p)); if (i >= 0) return i; }
+      return -1;
+    };
+    return { testa, colonne: {
+      fornitore: trova("fornitore", "ditta", "impresa", "beneficiario"),
+      opera: trova("area di intervento", "opera", "lavorazione", "descrizione", "voce", "articolo", "oggetto"),
+      importo: trova("totale", "importo", "netto", "budget", "prezzo"),
+      note: trova("note", "nota"),
+      macro: trova("macro"),
+      sottovoce: trova("sottovoce", "voce"),
+      quando: trova("quando", "mesi", "rate"),
+      area: trova("area"),
+      // l'aliquota solo da «IVA %», «IVA%», «Aliquota»: una colonna «IVA» (Netto | IVA | Lordo) è un importo
+      iva: crude.findIndex((x, i) => x === "iva %" || x === "iva%" || x.startsWith("iva %") || t[i] === "aliquota"),
+    } };
+  }
+  // Foglio -> livelli. opzioni = {testa, macro_scelta, mese_default, iva_default, fornitore(nome) -> id}.
+  // Righe «budget progetto» (Macro) e «budget» (Sottovoce, o Sottovoce e Fornitore vuoti) = budget.
+  // Si saltano: righe vuote, a 0, di totale/IVA (PAROLE_SALTA). Le righe che non si leggono vanno in
+  // da_sistemare [{n: riga Excel, motivo}] e non entrano.
+  function livelliDaFoglio(righe, colonne, opzioni = {}) {
+    const c = colonne, o = opzioni, testa = o.testa || 0;
+    const cella = (r, k) => (c[k] >= 0 && r[c[k]] != null ? r[c[k]] : "");
+    const testo = (r, k) => String(cella(r, k)).trim();
+    const aliquota = (r) => {
+      if (!(c.iva >= 0)) return o.iva_default ?? null;
+      const v = cella(r, "iva");
+      if (v === "") return null;
+      const x = typeof v === "number" ? v : Number(String(v).replace("%", "").trim().replace(",", "."));
+      const a = Number.isFinite(x) && String(v).trim() ? (x > 0 && x < 1 ? Math.round(x * 100) : x) : NaN;
+      return [0, 10, 22].includes(a) ? a : NaN;  // solo 0, 10, 22
+    };
+    const L = { budget_netto: null, mesi_budget: null, aliquota_iva: o.iva_default ?? 22, macro: [] };
+    const da_sistemare = [];
+    const macroDi = (nome) => {
+      let m = L.macro.find((x) => x.nome === nome);
+      if (!m) L.macro.push((m = { id: `m${L.macro.length + 1}`, nome, budget_netto: null, mesi_budget: null, aliquota_iva: null, area: null, voci: [] }));
+      return m;
+    };
+    let nv = 0;
+    const budgetVisti = new Set();  // «budget progetto» e «budget» di ogni macro: uno solo ciascuno
+    if (!(c.macro >= 0) && o.macro_scelta) macroDi(o.macro_scelta);  // anche se il file non porta voci
+    righe.slice(testa + 1).forEach((r, i) => {
+      const n = testa + i + 2;
+      r = r || [];
+      if (!r.some((x) => x != null && String(x).trim() !== "")) return;
+      const macro = c.macro >= 0 ? testo(r, "macro") : "";
+      const nome = testo(r, c.sottovoce >= 0 ? "sottovoce" : "opera");
+      const fornitore = testo(r, "fornitore");
+      const imp = cella(r, "importo");
+      const netto = imp === "" ? null : typeof imp === "number" ? Math.round(imp * 100) : parseEuro(imp);
+      if (imp !== "" && netto === null) return da_sistemare.push({ n, motivo: "importo illeggibile" });
+      const iva = aliquota(r);
+      if (Number.isNaN(iva)) return da_sistemare.push({ n, motivo: "IVA illeggibile" });
+      const txt = testo(r, "quando");
+      const progetto = macro.toLowerCase() === "budget progetto";
+      if (progetto || (macro && (nome.toLowerCase() === "budget" || (!nome && !fornitore)))) {
+        // un budget senza mesi non si salva: senza «Quando» prende il mese scelto, come le voci
+        const pesi = !netto ? null : txt ? quandoParse(txt, netto) : o.mese_default ? { [o.mese_default]: netto } : null;
+        if (netto && !pesi) return da_sistemare.push({ n, motivo: txt ? "quando illeggibile" : "budget senza mesi" });
+        const qui = progetto ? null : macro;  // null = il progetto
+        if (budgetVisti.has(qui)) return da_sistemare.push({ n, motivo: "budget ripetuto" });
+        budgetVisti.add(qui);
+        const dove = progetto ? L : macroDi(macro);
+        Object.assign(dove, { budget_netto: netto, mesi_budget: pesi, aliquota_iva: progetto ? iva ?? 22 : iva });
+        return;
+      }
+      if (!netto || !(nome || fornitore) || [macro, nome, fornitore].some((x) => PAROLE_SALTA.test(x))) return;
+      const mesi = txt ? quandoParse(txt, netto) : o.mese_default ? { [o.mese_default]: netto } : null;
+      if (!mesi) return da_sistemare.push({ n, motivo: txt ? "quando illeggibile" : "manca il quando" });
+      macroDi(macro || o.macro_scelta || "Senza macro").voci.push({
+        id: `v${++nv}`, nome: nome || fornitore,
+        fornitore_id: senzaFornitore(fornitore) ? null : o.fornitore ? o.fornitore(fornitore) : fornitore,
+        area: testo(r, "area") || null, netto, mesi, aliquota_iva: iva, stato: "ipotesi", documenti: [], note: testo(r, "note"),
+      });
+    });
+    return { livelli: L, da_sistemare };
+  }
+  // Una riga di confronto per budget e voce. Chiave: macro + sottovoce + fornitore (minuscolo, spazi
+  // normalizzati); le chiavi ripetute prendono #2, #3… nell'ordine.
+  const chiave = (...xs) => xs.map((x) => String(x ?? "").toLowerCase().replace(/\s+/g, " ").trim()).join("|");
+  function righeConfronto(L) {
+    const out = [], visti = {};
+    const metti = (k, e) => { visti[k] = (visti[k] || 0) + 1; out.push({ chiave: visti[k] > 1 ? `${k}#${visti[k]}` : k, ...e }); };
+    const budget = (x) => ({ netto: x.budget_netto, mesi: mesiBudget(x.budget_netto, x.mesi_budget), area: null, aliquota_iva: x.aliquota_iva ?? null, note: "" });
+    if (L.budget_netto != null) metti(chiave("budget progetto"), { macro: "budget progetto", sottovoce: "", fornitore: null, val: budget(L) });
+    for (const m of L.macro || []) {
+      // la macro stessa: una macro che sparisce (anche vuota) si vede
+      metti(chiave(m.nome, "#macro"), { macro: m.nome, sottovoce: "", fornitore: null, val: { netto: null, mesi: {}, area: null, aliquota_iva: null, note: "" } });
+      if (m.budget_netto != null) metti(chiave(m.nome, "budget"), { macro: m.nome, sottovoce: "budget", fornitore: null, val: budget(m) });
+      for (const v of m.voci || []) {
+        metti(chiave(m.nome, v.nome, v.fornitore_id), { macro: m.nome, sottovoce: v.nome, fornitore: v.fornitore_id ?? null, voce: v,
+          val: { netto: nettoDiVoce(v), mesi: { ...v.mesi }, area: v.area || null, aliquota_iva: v.aliquota_iva ?? null, note: v.note || "" } });
+      }
+    }
+    return out;
+  }
+  const mesiUguali = (a, b) => JSON.stringify(ordinati(a).map((m) => [m, a[m]])) === JSON.stringify(ordinati(b).map((m) => [m, b[m]]));
+  // Differenze riga per riga: entra · cambia (netto, mesi, area, IVA, note) · sparisce. Con `contratti`
+  // (p.contratti), un «cambia» nei mesi di una voce il cui fornitore ha patti porta patti_persi: true.
+  function diffLivelli(vecchi, nuovi, contratti = []) {
+    const A = righeConfronto(vecchi), B = righeConfronto(nuovi);
+    const inA = new Map(A.map((e) => [e.chiave, e])), inB = new Set(B.map((e) => e.chiave));
+    const riga = (tipo, e, prima, dopo) => ({ tipo, chiave: e.chiave, macro: e.macro, sottovoce: e.sottovoce, fornitore: e.fornitore, prima, dopo });
+    const out = [];
+    for (const b of B) {
+      const a = inA.get(b.chiave);
+      if (!a) { out.push(riga("entra", b, null, b.val)); continue; }
+      const x = a.val, y = b.val;
+      if (x.netto === y.netto && x.area === y.area && x.aliquota_iva === y.aliquota_iva && x.note === y.note && mesiUguali(x.mesi, y.mesi)) continue;
+      const d = riga("cambia", b, x, y);
+      if (b.fornitore && !mesiUguali(x.mesi, y.mesi) && contratti.some((c) => String(c.fornitore).trim() === b.fornitore)) d.patti_persi = true;
+      out.push(d);
+    }
+    for (const a of A) if (!inB.has(a.chiave)) out.push(riga("sparisce", a, a.val, null));
+    return out;
+  }
+  // Applica i livelli importati a `p` (puro: torna un progetto nuovo, i pagamenti si derivano dopo).
+  // Senza `macro_scelta` sostituisce tutto il progetto; con, solo quella macro (budget della macro invariato).
+  // Le voci ritrovate per chiave tengono id, stato e documenti; le altre prendono id nuovi. I patti dei
+  // fornitori con patti_persi cadono (con `macro_scelta`, solo quelli legati a voci di quella macro).
+  // I patti che l'import può toccare: tutti, o con una macro scelta quelli delle sue voci.
+  function contrattiToccati(p, solo) {
+    if (solo === null) return p.contratti || [];
+    const L = p.livelli || livelliDaPagamenti(p);
+    const ids = new Set((L.macro || []).filter((m) => m.nome === solo).flatMap((m) => (m.voci || []).map((v) => v.id)));
+    return (p.contratti || []).filter((c) => c.voce_id && ids.has(c.voce_id));
+  }
+  function applicaLivelli(p, nuovi, opzioni = {}) {
+    const vecchi = p.livelli || livelliDaPagamenti(p);
+    const solo = opzioni.macro_scelta ?? null;
+    // un file senza colonna Macro non porta il budget della macro: si confrontano solo le voci
+    const base = solo === null ? vecchi : { macro: (vecchi.macro || []).filter((m) => m.nome === solo).map((m) => ({ ...m, budget_netto: null })) };
+    const toccati = contrattiToccati(p, solo);
+    const persi = new Set(diffLivelli(base, nuovi, toccati).filter((d) => d.patti_persi).map((d) => d.fornitore));
+    const vecchie = new Map(righeConfronto(base).filter((e) => e.voce).map((e) => [e.chiave, e.voce]));
+    const libero = (usati, pref) => { let k = 1; while (usati.has(`${pref}${k}`)) k++; usati.add(`${pref}${k}`); return `${pref}${k}`; };
+    const idVoci = new Set((vecchi.macro || []).flatMap((m) => (m.voci || []).map((v) => v.id)));
+    const idMacro = new Set((vecchi.macro || []).map((m) => m.id));
+    const voce = new Map(righeConfronto(nuovi).filter((e) => e.voce).map((e) => {
+      const v = vecchie.get(e.chiave);
+      return [e.voce, v ? { ...e.voce, id: v.id, stato: v.stato, documenti: (v.documenti || []).map((d) => ({ ...d })) } : { ...e.voce, id: libero(idVoci, "v") }];
+    }));
+    let livelli;
+    if (solo === null) {
+      const macroUsate = new Set();  // un id vecchio va a una macro sola («Tessili» e «tessili» non lo condividono)
+      const macro = (nuovi.macro || []).map((m) => {
+        const v = (vecchi.macro || []).find((x) => !macroUsate.has(x.id) && x.nome.toLowerCase() === m.nome.toLowerCase());
+        if (v) macroUsate.add(v.id);
+        return { ...m, id: v ? v.id : libero(idMacro, "m"), area: m.area ?? (v ? v.area : null), voci: (m.voci || []).map((x) => voce.get(x)) };
+      });
+      livelli = { ...vecchi, budget_netto: nuovi.budget_netto, mesi_budget: nuovi.mesi_budget, aliquota_iva: nuovi.aliquota_iva, macro };
+    } else {
+      // solo le voci della macro scelta cambiano; budget, mesi del budget e posto restano (anche con zero voci)
+      const voci = (nuovi.macro || []).flatMap((m) => (m.voci || []).map((x) => voce.get(x)));
+      const v = (vecchi.macro || []).find((m) => m.nome === solo);
+      const nuova = { nome: solo, budget_netto: null, mesi_budget: null, aliquota_iva: null, area: null, ...(nuovi.macro || [])[0], id: libero(idMacro, "m"), voci };
+      livelli = { ...vecchi, macro: v ? vecchi.macro.map((m) => (m === v ? { ...v, voci } : m)) : [...(vecchi.macro || []), nuova] };
+    }
+    return { ...p, livelli, contratti: (p.contratti || []).filter((c) => !(toccati.includes(c) && persi.has(String(c.fornitore).trim()))) };
+  }
+  // I livelli importati con alcune righe dell'anteprima spente (`spente` = chiavi di diffLivelli(vecchi, nuovi)):
+  // entra spenta non entra, cambia spenta resta come in `vecchi`, sparisce spenta resta. Una macro spenta
+  // (riga «#macro» che entra o sparisce) vale per tutta la macro: non entra, o resta com'era con le sue righe.
+  function filtraLivelli(vecchi, nuovi, spente) {
+    const copiaDi = (x) => JSON.parse(JSON.stringify(x));
+    const N = copiaDi(nuovi);
+    if (!spente || !spente.size) return N;
+    const A = new Map(righeConfronto(vecchi).map((e) => [e.chiave, e]));
+    const B = new Map(righeConfronto(N).map((e) => [e.chiave, e]));
+    const vecchiaMacro = (nome) => (vecchi.macro || []).find((m) => m.nome === nome);
+    const nuovaMacro = (nome) => N.macro.find((m) => m.nome === nome);
+    const eMacro = (k) => /\|#macro(#\d+)?$/.test(k);
+    const ferme = new Set();   // macro spente: le loro righe non si guardano una per una
+    for (const k of spente) {
+      if (!eMacro(k)) continue;
+      const a = A.get(k), b = B.get(k);
+      if (a && !b) { N.macro.push(copiaDi(vecchiaMacro(a.macro))); ferme.add(a.macro); }
+      else if (b && !a) { N.macro.splice(N.macro.indexOf(nuovaMacro(b.macro)), 1); ferme.add(b.macro); }
+    }
+    for (const k of spente) {
+      const a = A.get(k), b = B.get(k), e = a || b;
+      if (!e || eMacro(k) || ferme.has(e.macro)) continue;
+      if (e.macro === "budget progetto" && !e.voce) {
+        Object.assign(N, { budget_netto: vecchi.budget_netto ?? null, mesi_budget: vecchi.mesi_budget ?? null, aliquota_iva: vecchi.aliquota_iva ?? N.aliquota_iva });
+        continue;
+      }
+      const m = nuovaMacro(e.macro);
+      if (!m) continue;
+      if (!e.voce) {   // il budget della macro
+        const v = a ? vecchiaMacro(a.macro) : null;
+        Object.assign(m, { budget_netto: v ? v.budget_netto : null, mesi_budget: v ? v.mesi_budget : null, aliquota_iva: v ? v.aliquota_iva : m.aliquota_iva });
+      } else if (b) {
+        const i = m.voci.indexOf(b.voce);
+        if (a) m.voci[i] = copiaDi(a.voce); else m.voci.splice(i, 1);
+      } else m.voci.push(copiaDi(a.voce));
+    }
+    return N;
+  }
+  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata, livelliDaPagamenti, consolidaContratti, generaPatti, buste, derivaPagamenti, avvisiLivelli, perPesi,
+    quandoTesto, quandoParse, TESTA_PROGETTO, righeProgetto, PAROLE_SALTA, senzaFornitore, indovinaColonne, livelliDaFoglio, diffLivelli, contrattiToccati, applicaLivelli, filtraLivelli };
 })();
 if (typeof module !== "undefined") module.exports = FORMATO;
 </script>
@@ -1067,7 +1567,14 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   function completa(scenario) {
     const s = copia(scenario);
     s.manuali = s.manuali || [];
-    s.progetti = (s.progetti || []).map((p) => ({ ...p, contratti: p.contratti || [] }));
+    // Ogni progetto ha i suoi livelli (uno scenario /1 diventa una macro col nome del progetto) e i pagamenti
+    // che il calcolo legge si derivano da lì: stessa cassa al centesimo di prima.
+    s.progetti = (s.progetti || []).map((p) => {
+      let q = { ...p, contratti: p.contratti || [] };
+      if (!q.livelli) q = FORMATO.consolidaContratti({ ...q, livelli: FORMATO.livelliDaPagamenti(q) });
+      q.pagamenti = FORMATO.derivaPagamenti(q, ORIZ());
+      return q;
+    });
     s.finanziamenti = (s.finanziamenti || []).map((f) => ({ ...f, erogazioni: f.erogazioni || {}, rate: f.rate || {} }));
     s.canone = s.canone || null;
     s.soglia = s.soglia || 0;
@@ -1317,15 +1824,17 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     fogli.push({ nome: "Fonti", colonne: ["cosa", "valore"], righe: fonti });
     return fogli;
   }
-  function esportaExcel() {
-    const bytes = EXCEL.costruisci(fogliExcel());
+  function scaricaXlsx(bytes, nome) {
     const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `cassa-${(stato.nome || "scenario").replace(/[^\w.-]+/g, "_")}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.download = nome;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  function esportaExcel() {
+    scaricaXlsx(EXCEL.costruisci(fogliExcel()), `cassa-${(stato.nome || "scenario").replace(/[^\w.-]+/g, "_")}-${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
   function esporta() {
     const doc = { schema: D.schema, nome: stato.nome, salvato_il: new Date().toISOString(), base: D.base, scenario: { ...stato.scenario, nome: stato.nome } };
@@ -1848,12 +2357,15 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   }
   function bloccoContratto(p, c, ci) {
     const F = String(c.fornitore || "").trim();
-    const fatti = p.pagamenti.filter((g) => F && g.fornitore_id === F).reduce((t, g) => t + somma(g.mesi), 0);
+    // si confrontano i pagamenti della sottovoce legata; senza legame, quelli di F nel progetto
+    const vid = voceDeiPatti(p, c);
+    const suoi = p.pagamenti.filter((g) => (vid ? g.voce_id === vid : F && g.fornitore_id === F));
+    const fatti = suoi.reduce((t, g) => t + somma(g.mesi), 0);
     const diff = fatti - (c.totale || 0);
     // Verifica mese per mese: i pagamenti verso F seguono i patti scritti qui sopra?
     const perMese = (lista) => { const o = {}; for (const g of lista) for (const [m, v] of Object.entries(g.mesi)) o[m] = (o[m] || 0) + v; return JSON.stringify(Object.entries(o).filter(([, v]) => v).sort()); };
     let seguono = false;
-    try { seguono = perMese(FORMATO.pagamentiDaContratto(c, ORIZ())) === perMese(p.pagamenti.filter((g) => g.fornitore_id === F)); } catch (e) { seguono = false; }
+    try { seguono = perMese(FORMATO.pagamentiDaContratto(c, ORIZ())) === perMese(suoi); } catch (e) { seguono = false; }
     const verifica = !F ? "" : seguono
       ? `<span class="ok-t">✓ i pagamenti verso ${esc(F)} seguono questi patti: ${fmt(c.totale, false)} netto</span>`
       : diff !== 0
@@ -1871,14 +2383,14 @@ if (typeof module !== "undefined") module.exports = EXCEL;
           dal ${selMeseA(c.sal_da, 'data-cc="sal_da"')}</div>`;
     return `<div class="contratto" data-c="${ci}">
       <div class="c-testa"><strong>Come paghi ${esc(F || "questo fornitore")}</strong><span class="piccolo">${esc(riassuntoContratto(c))}</span></div>
-      <div class="nota">I patti con il fornitore: anticipo, SAL, ritenuta. «Genera i pagamenti» li traduce nelle righe di pagamento qui sotto; il calcolo legge solo quelle.</div>
+      <div class="nota">I patti con il fornitore: anticipo, SAL, ritenuta. «Genera i pagamenti» li traduce nei mesi della sottovoce di ${esc(F || "questo fornitore")}; il calcolo legge solo quelle.</div>
       <div class="riga">fornitore <input type="text" class="n" style="width:110px" data-cc="fornitore" value="${esc(F)}">
         totale <input type="text" class="eur" data-cc-eur="totale" value="${fmt(c.totale || 0)}"> netto
         <select data-cc-int="aliquota_iva">${iva.map((a) => `<option value="${a}" ${a === c.aliquota_iva ? "selected" : ""}>IVA ${a}%</option>`).join("")}</select>
         <select data-cc="modo"><option value="sal" ${c.modo !== "percentuali" ? "selected" : ""}>anticipo + SAL + ritenuta</option><option value="percentuali" ${c.modo === "percentuali" ? "selected" : ""}>a percentuali</option></select></div>
       ${patti}
       <div class="riga"><button class="primario" data-genera>Genera i pagamenti</button> ${verifica} <span class="errore-r" data-errore-c></span></div>
-      <div class="riga"><span class="nota">«Genera i pagamenti» sostituisce i pagamenti di questo progetto verso ${esc(F || "il fornitore")}; gli altri restano.</span> <button class="mini" data-togli-c>togli i patti</button></div>
+      <div class="riga"><span class="nota">«Genera i pagamenti» riscrive i mesi di ${vid ? "questa sottovoce" : `una sottovoce di ${esc(F || "questo fornitore")} (la crea se non c'è)`}; le altre righe non si muovono.</span> <button class="mini" data-togli-c>togli i patti</button></div>
       ${F ? `<div class="riga"><button type="button" class="mini" data-ricorda-patti title="la forma di questi patti, senza mesi né totale, nella scheda del fornitore">ricorda come patti abituali di ${esc(F)}</button>${pattiDi(F) ? `<button type="button" class="mini" data-usa-patti title="${esc(riassuntoPatti(pattiDi(F)))}">usa i patti abituali di ${esc(F)}</button><span class="piccolo">${esc(riassuntoPatti(pattiDi(F)))}</span>` : ""}</div>` : ""}
     </div>`;
   }
@@ -1888,6 +2400,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       c[x.dataset.cc] = x.value;
       // un contratto ancora vuoto eredita i patti abituali del fornitore appena scritto; uno già scritto no
       if (x.dataset.cc === "fornitore" && pattiDi(x.value) && contrattoVuoto(c)) Object.assign(c, contrattoDaPatti(pattiDi(x.value), c.anticipo_mese || c.sal_da || D.mesi[0], String(x.value).trim(), c.totale));
+      if (x.dataset.cc === "fornitore") mostraPatti(p, c);
       renderLeve();
     }; });
     const ric = root.querySelector("[data-ricorda-patti]");
@@ -1906,19 +2419,19 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     root.querySelector("[data-togli-c]").onclick = () => { sc.splice(sc.indexOf(c), 1); renderLeve(); };
     root.querySelector("[data-genera]").onclick = () => {
       try {
-        const nuovi = FORMATO.pagamentiDaContratto(c, ORIZ());
-        const F = String(c.fornitore).trim();
-        const i = p.pagamenti.findIndex((g) => g.fornitore_id === F);
-        const altri = p.pagamenti.filter((g) => g.fornitore_id !== F);
-        altri.splice(i < 0 ? altri.length : i, 0, ...nuovi);
-        p.pagamenti = altri;
-        ricalcola();
+        const r = FORMATO.generaPatti(p, p.contratti.indexOf(c), ORIZ());
+        if (r.errore) { root.querySelector("[data-errore-c]").textContent = r.errore; return; }
+        p.livelli = r.progetto.livelli;
+        p.contratti = r.progetto.contratti;
+        chiuse.delete(`${p.id}:${r.macro_id}`);
+        aperte.add(`vd:${p.id}:${r.macro_id}:${r.voce_id}`);
+        aggiornaProgetto(p);
       } catch (e) { root.querySelector("[data-errore-c]").textContent = e.message; }
     };
   }
-  function collegaRate(root, leggi, scrivi, aliquota) {
+  function collegaRate(root, leggi, scrivi, aliquota, dopo = ricalcola) {
     const err = root.querySelector("[data-errore-spalma]");
-    const prova = (fn) => { try { scrivi(fn()); ricalcola(); } catch (e) { err.textContent = e.message; } };
+    const prova = (fn) => { try { scrivi(fn()); dopo(); } catch (e) { err.textContent = e.message; } };
     // Una rata sola è una tantum: la cadenza non ha senso e non si mostra; «prima rata» diventa «mese».
     const nIn = root.querySelector("input[data-spalma-n]"), passoSel = root.querySelector("select[data-spalma-passo]"), quando = root.querySelector("[data-spalma-quando]");
     const aggiornaCadenza = () => { const uno = !(parseInt(nIn.value, 10) > 1); passoSel.hidden = uno; if (quando) quando.textContent = uno ? "mese" : "prima rata"; };
@@ -1958,6 +2471,440 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     return `<span class="peso ${d < 0 ? "neg" : ""}">${pre}${acceso ? "pesa " : ""}${segno(d, false)} sul minimo ${soc}</span>`;
   }
 
+  // ── Progetti a livelli: budget del progetto → macro → sottovoci, in una tabella come Excel ──
+  // Si scrive nelle celle; si aggiunge scrivendo nell'ultima riga vuota di una macro (una sottovoce) o del
+  // progetto (una macro). Il calcolo legge solo i pagamenti: si derivano dai livelli a ogni modifica.
+  const AREE = ["Opere", "Fornitura e posa", "Da comprare"];
+  const eu = (c) => fmt(c, c % 100 !== 0);
+  const conMesi = (pesi) => Object.values(pesi || {}).some((w) => w > 0);
+  const mesiDi = (lista) => { const o = {}; for (const g of lista) for (const [m, v] of Object.entries(g.mesi || {})) o[m] = (o[m] || 0) + v; return o; };
+  const ivaMacro = (L, m) => m.aliquota_iva ?? L.aliquota_iva ?? 22;
+  const nettoVoce = (v) => (Object.keys(v.mesi || {}).length ? somma(v.mesi) : v.netto || 0);
+  // `totale` sugli stessi mesi in proporzione (mesi tutti a zero: parti uguali); l'ultimo prende il resto.
+  function riscala(mesi, totale) {
+    const ks = Object.keys(mesi || {});
+    if (!ks.length) return {};
+    return FORMATO.perPesi(totale, somma(mesi) > 0 ? mesi : Object.fromEntries(ks.map((m) => [m, 1])), ks);
+  }
+  // I pesi di un budget letti come «quando»: gli importi che si pagherebbero, nel testo dell'Excel.
+  const quandoBudget = (budget, pesi) => (conMesi(pesi) ? FORMATO.quandoTesto(FORMATO.perPesi(budget || 10000, pesi, Object.keys(pesi))) : "");
+  const nuovoId = (pre, usati) => { let k = usati.length + 1; while (usati.includes(`${pre}${k}`)) k += 1; return `${pre}${k}`; };
+  const aggiungi = (lista, x) => { lista.push(x); return x; };
+  const idVoci = (L) => L.macro.flatMap((m) => (m.voci || []).map((v) => v.id));
+  const nuovaMacro = (L, nome = "") => ({ id: nuovoId("m", L.macro.map((m) => m.id)), nome: nome || `Macro ${L.macro.length + 1}`, budget_netto: null, mesi_budget: null, aliquota_iva: null, area: null, voci: [] });
+  const nuovaVoce = (L, nome = "") => ({ id: nuovoId("v", idVoci(L)), nome, fornitore_id: null, area: null, netto: 0, mesi: {}, aliquota_iva: null, stato: null, documenti: [], note: "" });
+  const livelliVuoti = () => ({ budget_netto: null, mesi_budget: null, aliquota_iva: 22, macro: [] });
+
+  // Ogni modifica passa da qui: i pagamenti si derivano dai livelli, poi si ricalcola tutto.
+  // La cella che aveva il fuoco lo ritrova dopo il ridisegno (Tab porta alla cella dopo, come in Excel).
+  let rinomina = null;   // la riga vuota appena diventata una riga vera: il fuoco la segue
+  function aggiornaProgetto(p) {
+    p.pagamenti = FORMATO.derivaPagamenti(p, ORIZ());
+    const f = fuocoLivelli();
+    ricalcola();
+    rimettiFuoco(f);
+    rinomina = null;
+  }
+  function fuocoLivelli() {
+    const a = document.activeElement;
+    const tr = a && a.closest ? a.closest("table.livelli tr[data-riga]") : null;
+    if (!tr || !a.dataset.col) return null;
+    const leva = tr.closest("details.leva[data-k]");
+    const testo = a.tagName === "INPUT";
+    return { k: leva.dataset.k, riga: tr.dataset.riga, col: a.dataset.col, inizio: testo ? a.selectionStart : null, fine: testo ? a.selectionEnd : null, tutto: testo && a.selectionStart === 0 && a.selectionEnd === a.value.length };
+  }
+  function rimettiFuoco(f) {
+    if (!f) return;
+    const riga = rinomina && rinomina.k === f.k && rinomina.da === f.riga ? rinomina.a : f.riga;
+    const x = document.querySelector(`details.leva[data-k="${f.k}"] tr[data-riga="${riga}"] [data-col="${f.col}"]`);
+    if (!x) return;
+    x.focus({ preventScroll: true });
+    if (x.tagName === "INPUT") { if (f.tutto) x.select(); else if (f.inizio !== null) try { x.setSelectionRange(f.inizio, f.fine); } catch (e) { /* campo senza selezione */ } }
+  }
+
+  // Una cella scritta: la legge, la valida e la scrive nel suo nodo. Ritorna un messaggio se non va.
+  function scriviCella(p, tipo, nodo, m, col, valore) {
+    const L = p.livelli, raw = String(valore).trim();
+    const fuori = (mesi) => { const o = ORIZ(); return Object.keys(mesi).filter((x) => !o.includes(x)); };
+    if (col === "nome") { if (!raw) return "il nome non può restare vuoto"; nodo.nome = raw; return null; }
+    if (col === "fornitore") { nodo.fornitore_id = raw || null; return null; }
+    if (col === "area") { nodo.area = raw || null; return null; }
+    if (col === "iva") { nodo.aliquota_iva = raw === "" ? null : parseInt(raw, 10); return null; }
+    if (col === "netto" && tipo === "voce") {
+      const v = parseEuro(raw);
+      if (v === null || v < 0) return "scrivi un importo netto, es. 30.000";
+      // stessi mesi in proporzione; una sottovoce senza mesi prende quelli della sua macro, o del progetto
+      const pesi = Object.keys(nodo.mesi || {}).length ? null : conMesi(m.mesi_budget) ? m.mesi_budget : conMesi(L.mesi_budget) ? L.mesi_budget : null;
+      nodo.mesi = pesi ? FORMATO.perPesi(v, pesi, Object.keys(pesi).filter((x) => ORIZ().includes(x))) : riscala(nodo.mesi, v);
+      nodo.netto = v;
+      return null;
+    }
+    if (col === "netto") {   // il budget del progetto o della macro; vuoto = nessun budget
+      const v = raw === "" ? null : parseEuro(raw);
+      if (v === null && raw !== "") return "scrivi il budget netto, es. 165.000 (vuoto = nessun budget)";
+      if (v !== null && v < 0) return "il budget non può essere negativo";
+      // la prima volta, i mesi del budget sono quelli dei pagamenti che ha sotto (pesi = importi)
+      if (v !== null && nodo.budget_netto == null && !conMesi(nodo.mesi_budget)) {
+        const sotto = tipo === "progetto" ? mesiDi(p.pagamenti) : mesiDi(nodo.voci || []);
+        nodo.mesi_budget = conMesi(sotto) ? sotto : tipo === "macro" && conMesi(L.mesi_budget) ? { ...L.mesi_budget } : null;
+      }
+      nodo.budget_netto = v;
+      return null;
+    }
+    if (col === "quando") {
+      if (tipo === "voce") {
+        const tot = nettoVoce(nodo);
+        const mesi = raw ? FORMATO.quandoParse(raw, tot) : {};
+        if (!mesi) return `non capisco «${raw}»: es. «mar 27», «gen 27–mar 27 ×3», «ott 26 15% · nov 26–mar 27 ×5»`;
+        if (fuori(mesi).length) return `${fuori(mesi).map(meseIt).join(", ")} fuori dall'orizzonte (${meseIt(D.mesi[0])} – ${meseIt(ORIZ().pop())})`;
+        nodo.mesi = mesi;
+        nodo.netto = tot;
+        return null;
+      }
+      // i mesi di un budget sono pesi: si leggono sul budget (o su 100, se il budget non c'è ancora)
+      const mesi = raw ? FORMATO.quandoParse(raw, nodo.budget_netto || 10000) : null;
+      if (raw && !mesi) return `non capisco «${raw}»: es. «gen 27–mar 27 ×3», «feb 27 40% · mar 27 60%»`;
+      if (mesi && fuori(mesi).length) return `${fuori(mesi).map(meseIt).join(", ")} fuori dall'orizzonte (${meseIt(D.mesi[0])} – ${meseIt(ORIZ().pop())})`;
+      nodo.mesi_budget = mesi && conMesi(mesi) ? mesi : null;
+      return null;
+    }
+    return null;
+  }
+
+  const AIUTO_QUANDO = "es. «mar 27», «gen 27–mar 27 ×3», «ott 26 15% · nov 26–mar 27 ×5»";
+  function selArea(val, eredita) {
+    const opz = ["", ...AREE, ...(val && !AREE.includes(val) ? [val] : [])];
+    return `<select data-col="area" aria-label="area">${opz.map((a) => `<option value="${esc(a)}" ${a === (val || "") ? "selected" : ""}>${a ? esc(a) : eredita ? `(${esc(eredita)})` : "—"}</option>`).join("")}</select>`;
+  }
+  function selIvaL(val, eredita) {
+    const opz = [0, 10, 22, ...(val != null && ![0, 10, 22].includes(val) ? [val] : [])];
+    return `<select data-col="iva" aria-label="IVA" title="IVA; «↑» = la stessa del livello sopra">${eredita !== undefined ? `<option value="" ${val == null ? "selected" : ""}>${eredita}% ↑</option>` : ""}${opz.map((a) => `<option value="${a}" ${a === val ? "selected" : ""}>${a}%</option>`).join("")}</select>`;
+  }
+  // La busta di un livello: budget · assegnati · da assegnare. Oltre budget si dice «oltre di X ⚠», mai un negativo.
+  function testoBusta(b, vuota = false) {
+    if (b.budget === null) return vuota ? "nessun budget" : `${fmt(b.assegnato, false)} nelle sottovoci · nessun budget`;
+    if (b.oltre) return `assegnati ${fmt(b.assegnato, false)} · <span class="oltre">oltre di ${fmt(b.oltre, false)} ⚠</span>`;
+    return `assegnati ${fmt(b.assegnato, false)} · <span class="${b.da_assegnare ? "resta" : "ok-t"}">da assegnare ${fmt(b.da_assegnare, false)}</span>`;
+  }
+  const chiuse = new Set();     // macro richiuse: "<progetto>:<macro>"
+  let conferma = null;          // la macro con sottovoci di cui si sta chiedendo «elimino?»
+
+  function bloccoLivelli(p) {
+    const L = p.livelli, B = FORMATO.buste(L);
+    const ivaP = L.aliquota_iva ?? 22;
+    const avvisi = [...FORMATO.avvisiLivelli(p.livelli, ORIZ()),
+      ...L.macro.flatMap((m) => (m.voci || []).filter((v) => v.netto && !Object.keys(v.mesi || {}).length).map((v) => `${v.nome}: ${eu(v.netto)} senza «quando»: non conta finché non scrivi i mesi`))];
+    const quandoIn = (val, ph, err = false) => `<input type="text" class="quando${err ? " invalid" : ""}" data-col="quando" value="${esc(val)}" placeholder="${esc(ph)}" title="${val ? `${esc(val)} · ` : ""}quando si paga: ${esc(AIUTO_QUANDO)}">`;
+    const fornIn = (val, ph = "fornitore") => `<input type="text" data-col="fornitore" value="${esc(val || "")}" placeholder="${esc(ph)}" list="lista-fornitori-id" title="id del fornitore: lo stesso in ogni progetto, lo trovi nella scheda Fornitori">`;
+    const nettoIn = (val, ph, attr = "") => `<input type="text" class="eur" data-col="netto" ${attr} value="${val === null ? "" : eu(val)}" placeholder="${esc(ph)}">`;
+    const voceRiga = (m, v, nuova = false) => {
+      const riga = nuova ? `nv:${m.id}` : `v:${m.id}:${v.id}`;
+      const kd = `vd:${p.id}:${m.id}:${v.id}`;
+      const netto = nettoVoce(v);
+      const ndoc = (v.documenti || []).length;
+      const patti = !nuova && (p.contratti || []).some((c) => voceDeiPatti(p, c) === v.id);
+      return `<tr class="liv-voce${nuova ? " liv-nuova" : ""}" data-riga="${riga}" ${nuova ? `data-nuova-voce="${esc(m.id)}"` : ""}>
+        <td class="nome-l"><input type="text" data-col="nome" value="${esc(nuova ? "" : v.nome)}" placeholder="${nuova ? "scrivi qui una sottovoce…" : "nome"}" aria-label="sottovoce di ${esc(m.nome)}"></td>
+        <td>${fornIn(v.fornitore_id, nuova && !(m.voci || []).length && m.fornitore_id ? m.fornitore_id : "fornitore")}</td>
+        <td>${selArea(v.area, m.area)}</td>
+        <td>${nettoIn(nuova ? null : netto, "netto")}</td>
+        <td>${quandoIn(nuova ? "" : FORMATO.quandoTesto(v.mesi), nuova ? "quando" : "quando?", !nuova && netto > 0 && !Object.keys(v.mesi || {}).length)}</td>
+        <td>${selIvaL(v.aliquota_iva ?? null, ivaMacro(L, m))}</td>
+        <td class="az">${nuova ? "" : `<button type="button" class="mini" data-dett="${esc(m.id)}:${esc(v.id)}" aria-expanded="${aperte.has(kd)}" title="rate mese per mese, stato, note, documenti e patti col fornitore">${aperte.has(kd) ? "▴" : "⋯"}${patti ? " patti" : ""}${ndoc ? ` 📄${ndoc}` : ""}</button><button type="button" class="mini" data-elimina-voce="${esc(m.id)}:${esc(v.id)}" title="togli la sottovoce" aria-label="togli ${esc(v.nome)}">×</button>`}</td></tr>
+        ${!nuova && aperte.has(kd) ? dettaglioVoce(p, m, v) : ""}`;
+    };
+    const macroRighe = L.macro.map((m, i) => {
+      const b = B.macro[i], voci = m.voci || [], km = `${p.id}:${m.id}`, chiusa = chiuse.has(km);
+      const proprio = quandoBudget(m.budget_netto, m.mesi_budget);
+      const daProgetto = conMesi(L.mesi_budget) ? `come il progetto: ${quandoBudget(L.budget_netto, L.mesi_budget)}` : "quando?";
+      const lordoV = voci.reduce((t, v) => t + nettoVoce(v), 0);
+      return `<tr class="liv-macro" data-riga="m:${esc(m.id)}">
+        <td class="nome-l"><div class="nome-macro"><button type="button" class="mini piega" data-piega="${esc(m.id)}" aria-expanded="${!chiusa}" title="${chiusa ? "apri" : "chiudi"} la macro">${chiusa ? "▸" : "▾"}</button><input type="text" data-col="nome" value="${esc(m.nome)}" aria-label="nome della macro"></div>
+          <div class="piccolo">${voci.length ? `${voci.length} ${voci.length === 1 ? "sottovoce" : "sottovoci"} · ` : ""}${testoBusta(b, !voci.length)}</div></td>
+        <td>${voci.length ? "" : fornIn(m.fornitore_id)}</td>
+        <td>${selArea(m.area)}</td>
+        <td>${nettoIn(m.budget_netto ?? null, voci.length ? eu(b.assegnato) : "budget", `data-budget-macro="${esc(m.id)}" title="il budget della macro; vuoto = vale la somma delle sottovoci"`)}</td>
+        <td>${quandoIn(proprio, m.budget_netto == null && !voci.length ? "quando" : daProgetto, m.budget_netto != null && b.da_assegnare > 0 && !conMesi(m.mesi_budget) && !conMesi(L.mesi_budget))}</td>
+        <td>${selIvaL(m.aliquota_iva ?? null, ivaP)}</td>
+        <td class="az"><button type="button" class="mini" data-elimina-macro="${esc(m.id)}" title="togli la macro" aria-label="togli la macro ${esc(m.nome)}">×</button></td></tr>
+        ${conferma === km ? `<tr class="liv-conferma" data-riga="c:${esc(m.id)}"><td colspan="7">Togliere «${esc(m.nome)}» con ${voci.length === 1 ? "la sua sottovoce" : `le sue ${voci.length} sottovoci`} (${fmt(lordoV, false)} netto)?
+          <button type="button" class="mini primario" data-conferma-macro="${esc(m.id)}">sì, togli</button> <button type="button" class="mini" data-annulla-macro>no</button></td></tr>` : ""}
+        ${chiusa ? "" : voci.map((v) => voceRiga(m, v)).join("") + voceRiga(m, nuovaVoce(L), true)}`;
+    }).join("");
+    const nuovaM = nuovaMacro(L, "");
+    return `<div class="livelli-testa"><strong>Budget, macro e sottovoci</strong> <span class="piccolo">scrivi nelle celle; per aggiungere, scrivi nell'ultima riga vuota</span><span class="excel-progetto"><button type="button" class="mini" data-esporta-progetto title="il progetto in un foglio Excel: una riga per sottovoce, budget in testa; si corregge in Excel e si reimporta">Esporta (.xlsx)</button><button type="button" class="mini" data-esporta-vuoto title="solo l'intestazione e il budget del progetto: da riempire in Excel">Esporta vuoto</button><button type="button" class="mini" data-importa-progetto title="un foglio Excel sostituisce il progetto (o una sua macro): prima vedi cosa entra, cambia e sparisce">Importa (.xlsx/.csv)</button><input type="file" data-importa-file accept=".xlsx,.csv,.txt" hidden></span></div>
+      ${imp.p === p.id && imp.fogli ? pannelloImport(p) : ""}
+      ${avvisi.length ? `<div class="avvisi-livelli">${avvisi.map((a) => `<div>⚠ ${esc(a)}</div>`).join("")}</div>` : ""}
+      <div class="livelli-wrap"><table class="livelli">
+        <colgroup><col class="c-nome"><col class="c-forn"><col class="c-area"><col class="c-netto"><col class="c-quando"><col class="c-iva"><col class="c-az"></colgroup>
+        <thead><tr><th>macro / sottovoce</th><th>fornitore</th><th>area</th><th class="num">netto €</th><th>quando</th><th>IVA</th><th></th></tr></thead>
+        <tbody>
+        <tr class="liv-progetto" data-riga="P"><td class="nome-l"><strong>Budget del progetto</strong><div class="piccolo">${L.budget_netto == null ? `nessun budget: vale la somma delle macro, ${fmt(B.progetto.assegnato, false)}` : testoBusta(B.progetto)}</div></td><td></td><td></td>
+          <td>${nettoIn(L.budget_netto ?? null, "budget", 'data-budget-progetto title="il budget netto del progetto; vuoto = vale la somma delle macro"')}</td>
+          <td>${quandoIn(quandoBudget(L.budget_netto, L.mesi_budget), "quando", L.budget_netto != null && B.progetto.da_assegnare > 0 && !conMesi(L.mesi_budget))}</td>
+          <td>${selIvaL(ivaP)}</td><td></td></tr>
+        ${macroRighe}
+        <tr class="liv-macro liv-nuova" data-riga="nm" data-nuova-macro>
+          <td class="nome-l"><input type="text" data-col="nome" value="" placeholder="scrivi qui una nuova macro…" aria-label="nuova macro"></td>
+          <td>${fornIn("")}</td><td>${selArea(nuovaM.area)}</td><td>${nettoIn(null, "budget")}</td><td>${quandoIn("", "quando")}</td><td>${selIvaL(null, ivaP)}</td><td></td></tr>
+        </tbody></table></div>
+      <div class="nota">Le sottovoci consumano la macro, le macro consumano il budget del progetto. Quello che non è assegnato si paga nei mesi del budget, IVA compresa: aggiungere una riga non cambia il totale, finché non si va oltre.</div>`;
+  }
+  // Il dettaglio di una sottovoce: le rate mese per mese, stato, note, documenti e i patti col fornitore.
+  function dettaglioVoce(p, m, v) {
+    const iva = v.aliquota_iva ?? ivaMacro(p.livelli, m);
+    const F = String(v.fornitore_id || "").trim();
+    const contratti = (p.contratti || []).map((c, ci) => [c, ci]).filter(([c]) => voceDeiPatti(p, c) === v.id);
+    return `<tr class="liv-dett" data-riga="d:${esc(m.id)}:${esc(v.id)}"><td colspan="7"><div class="pag">
+      <div class="frase">${esc(comeSiPaga(v.mesi, iva))}</div>
+      <div class="riga"><label class="piccolo">stato <input type="text" class="n" style="width:110px" data-vcampo="stato" value="${esc(v.stato || "")}" placeholder="${esc(p.stato || "ipotesi")}"></label>
+        <label class="piccolo" style="flex:1 1 200px;display:flex;gap:6px;align-items:center">note <input type="text" class="nome" data-vcampo="note" value="${esc(v.note || "")}"></label></div>
+      ${bloccoRate(v.mesi, iva)}
+      ${grigliaMesi(v.mesi, "mese")}
+      <div class="documenti"><div class="piccolo">documenti (preventivo, contratto, fattura: link Drive)</div>
+        ${(v.documenti || []).map((d, di) => `<div class="riga" data-doc="${di}"><input type="text" class="nome" style="flex:1 1 120px" data-doc-titolo value="${esc(d.titolo || "")}" placeholder="titolo, es. preventivo 0066/26"><input type="url" class="nome" style="flex:2 1 200px" data-doc-url value="${esc(d.url || "")}" placeholder="https://drive.google.com/…"><button type="button" class="mini" data-elimina-doc title="togli il documento" aria-label="togli il documento ${esc(d.titolo || "")}">×</button></div>`).join("")}
+        <div class="riga"><button type="button" class="mini" data-aggiungi-doc>+ documento</button></div></div>
+      ${contratti.map(([c, ci]) => bloccoContratto(p, c, ci)).join("")}
+      ${contratti.length ? "" : F ? `<div class="riga"><button type="button" class="mini" data-patti-voce title="anticipo, SAL, ritenuta: generano i mesi di questa sottovoce">+ come paghi ${esc(F)}</button></div>` : '<div class="nota">scrivi il fornitore per mettere i patti (anticipo, SAL, ritenuta)</div>'}
+    </div></td></tr>`;
+  }
+  function collegaLivelli(div, p) {
+    const L = p.livelli;
+    div.querySelector("button[data-esporta-progetto]").onclick = () => esportaProgetto(p, false);
+    div.querySelector("button[data-esporta-vuoto]").onclick = () => esportaProgetto(p, true);
+    const fi = div.querySelector("input[data-importa-file]");
+    div.querySelector("button[data-importa-progetto]").onclick = () => fi.click();
+    fi.onchange = async (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) await apriImport(p, f); };
+    const box = div.querySelector("#progetto-import-pannello");
+    if (box) collegaImport(box, p);
+    const tab = div.querySelector("table.livelli");
+    if (!tab) return;
+    const k = div.dataset.k;
+    // si ridisegna dopo che il fuoco è passato alla cella dopo (Tab), così la ritrova
+    const poi = () => setTimeout(() => aggiornaProgetto(p), 0);
+    const macroDi = (id) => L.macro.find((m) => m.id === id);
+    const voceDi = (m, id) => (m.voci || []).find((v) => v.id === id);
+    tab.querySelectorAll("tr[data-riga]").forEach((tr) => {
+      const r = tr.dataset.riga;
+      let tipo, nodo, m = null, crea = null;
+      if (r === "P") { tipo = "progetto"; nodo = L; }
+      else if (r === "nm") { tipo = "macro"; crea = () => { const x = aggiungi(L.macro, nuovaMacro(L)); rinomina = { k, da: r, a: `m:${x.id}` }; return x; }; }
+      else if (r.startsWith("m:")) { tipo = "macro"; nodo = macroDi(r.slice(2)); }
+      else if (r.startsWith("nv:")) {
+        tipo = "voce"; m = macroDi(r.slice(3));
+        crea = () => {
+          const x = aggiungi(m.voci, nuovaVoce(L, `sottovoce ${m.voci.length + 1}`));
+          if (m.voci.length === 1 && m.fornitore_id) x.fornitore_id = m.fornitore_id;   // la prima sottovoce eredita il fornitore della macro
+          rinomina = { k, da: r, a: `v:${m.id}:${x.id}` };
+          return x;
+        };
+      } else if (r.startsWith("v:")) { tipo = "voce"; const [mid, vid] = r.slice(2).split(":"); m = macroDi(mid); nodo = voceDi(m, vid); }
+      else return;
+      tr.querySelectorAll("[data-col]").forEach((inp) => {
+        inp.onchange = () => {
+          if (!nodo && !inp.value.trim()) return;
+          // una riga vuota diventa vera solo se quello che hai scritto è valido
+          const x = nodo || (tipo === "macro" ? nuovaMacro(L) : nuovaVoce(L, "sottovoce"));
+          const prova = copia(x);
+          const err = scriviCella(p, tipo, prova, m, inp.dataset.col, inp.value);
+          inp.classList.toggle("invalid", !!err);
+          inp.title = err || (inp.dataset.col === "quando" ? `quando si paga: ${AIUTO_QUANDO}` : "");
+          if (err) return;
+          const vero = nodo || crea();
+          if (!nodo && inp.dataset.col === "nome") vero.nome = "";
+          scriviCella(p, tipo, vero, m, inp.dataset.col, inp.value);
+          poi();
+        };
+      });
+    });
+    tab.querySelectorAll("button[data-piega]").forEach((b) => { b.onclick = () => { const km = `${p.id}:${b.dataset.piega}`; if (chiuse.has(km)) chiuse.delete(km); else chiuse.add(km); renderLeve(); }; });
+    tab.querySelectorAll("button[data-dett]").forEach((b) => { b.onclick = () => { const kd = `vd:${p.id}:${b.dataset.dett}`; if (aperte.has(kd)) aperte.delete(kd); else aperte.add(kd); renderLeve(); }; });
+    tab.querySelectorAll("button[data-elimina-voce]").forEach((b) => {
+      b.onclick = () => {
+        const [mid, vid] = b.dataset.eliminaVoce.split(":"), mm = macroDi(mid), v = voceDi(mm, vid), i = mm.voci.indexOf(v);
+        mm.voci.splice(i, 1);
+        aggiornaProgetto(p);
+        avvisa(`«${v.nome}» tolta da ${mm.nome}: ${fmt(nettoVoce(v), false)} tornano nel da assegnare, se c'è un budget`, () => { mm.voci.splice(i, 0, v); aggiornaProgetto(p); });
+      };
+    });
+    const togliMacro = (mm) => {
+      const i = L.macro.indexOf(mm);
+      L.macro.splice(i, 1);
+      conferma = null;
+      aggiornaProgetto(p);
+      avvisa(`macro «${mm.nome}» tolta`, () => { L.macro.splice(i, 0, mm); aggiornaProgetto(p); });
+    };
+    // una macro con sottovoci chiede conferma qui, nella riga; una vuota si toglie (e si può annullare)
+    tab.querySelectorAll("button[data-elimina-macro]").forEach((b) => {
+      b.onclick = () => { const mm = macroDi(b.dataset.eliminaMacro); if ((mm.voci || []).length) { conferma = `${p.id}:${mm.id}`; renderLeve(); } else togliMacro(mm); };
+    });
+    tab.querySelectorAll("button[data-conferma-macro]").forEach((b) => { b.onclick = () => togliMacro(macroDi(b.dataset.confermaMacro)); });
+    tab.querySelectorAll("button[data-annulla-macro]").forEach((b) => { b.onclick = () => { conferma = null; renderLeve(); }; });
+    tab.querySelectorAll("tr.liv-dett").forEach((tr) => {
+      const [mid, vid] = tr.dataset.riga.slice(2).split(":"), mm = macroDi(mid), v = voceDi(mm, vid);
+      const iva = v.aliquota_iva ?? ivaMacro(L, mm);
+      tr.querySelectorAll("[data-vcampo]").forEach((inp) => { inp.onchange = () => { v[inp.dataset.vcampo] = inp.value.trim() || (inp.dataset.vcampo === "note" ? "" : null); poi(); }; });
+      const dopoMesi = () => { v.netto = somma(v.mesi); aggiornaProgetto(p); };
+      leggiMesi(tr, "mese", v.mesi, dopoMesi);
+      collegaRate(tr.querySelector(".come"), () => v.mesi, (mesi) => { v.mesi = mesi; }, iva, dopoMesi);
+      tr.querySelectorAll(".documenti .riga[data-doc]").forEach((rd) => {
+        const d = v.documenti[parseInt(rd.dataset.doc, 10)];
+        rd.querySelector("input[data-doc-titolo]").onchange = (e) => { d.titolo = e.target.value.trim(); aggiornaProgetto(p); };
+        rd.querySelector("input[data-doc-url]").onchange = (e) => { d.url = e.target.value.trim(); aggiornaProgetto(p); };
+        rd.querySelector("button[data-elimina-doc]").onclick = () => { v.documenti.splice(v.documenti.indexOf(d), 1); aggiornaProgetto(p); };
+      });
+      tr.querySelector("button[data-aggiungi-doc]").onclick = () => { v.documenti = v.documenti || []; v.documenti.push({ titolo: "", url: "" }); renderLeve(); };
+      const pv = tr.querySelector("button[data-patti-voce]");
+      if (pv) pv.onclick = () => {
+        const F = String(v.fornitore_id).trim();
+        p.contratti = p.contratti || [];
+        p.contratti.push({ ...FORMATO.contrattoDaPagamenti(p.pagamenti.filter((g) => g.voce_id === v.id), F, ORIZ()), voce_id: v.id });
+        renderLeve();
+      };
+    });
+  }
+  // ── Il giro Excel del progetto: esporta, correggi in Excel, reimporta. L'import sostituisce: un file con la
+  // colonna «Macro» tutto il progetto, uno senza solo la macro scelta qui. Prima di applicare si vede, riga per
+  // riga, cosa entra, cambia e sparisce, il totale prima → dopo e il minimo della società; ogni riga si spegne. ──
+  const imp = { p: null, file: "", fogli: null, foglio: 0, testa: 0, colonne: {}, macro: "", mese: null, iva: null, spente: new Set() };
+  const nomeDaFile = () => imp.file.replace(/\.(xlsx|csv|txt)$/i, "").slice(0, 60);
+  function esportaProgetto(p, vuoto) {
+    const bytes = EXCEL.costruisci([{ nome: p.nome, colonne: FORMATO.TESTA_PROGETTO, righe: FORMATO.righeProgetto(p, vuoto), euro: [4] }]);
+    scaricaXlsx(bytes, `${String(p.nome || "progetto").replace(/[^\w.-]+/g, "_")}-${new Date().toISOString().slice(0, 10)}${vuoto ? "-vuoto" : ""}.xlsx`);
+  }
+  async function apriImport(p, file) {
+    let fogli;
+    try { fogli = await EXCEL.leggi(file); } catch (e) { mostraErrore(`Importa in «${p.nome}» il file «${file.name}»: ${e.message}`); return; }
+    // senza «Quando» una rata al primo mese in cui il progetto paga già (o al primo dell'orizzonte)
+    const primo = Object.keys(mesiDi(p.pagamenti)).sort().find((m) => D.mesi.includes(m)) || D.mesi[0];
+    Object.assign(imp, { p: p.id, file: file.name, fogli, mese: primo, iva: null, spente: new Set() });
+    imp.macro = nomeDaFile();   // di default una macro nuova col nome del file
+    scegliFoglioImport(foglioMigliore(fogli));
+    renderLeve();
+    const box = el("progetto-import-pannello");
+    if (box) box.scrollIntoView({ behavior: ridotto() ? "auto" : "smooth", block: "nearest" });
+  }
+  function scegliFoglioImport(i) {
+    const g = FORMATO.indovinaColonne(imp.fogli[i].righe);
+    Object.assign(imp, { foglio: i, testa: g.testa, colonne: g.colonne, spente: new Set() });
+  }
+  // Il file letto contro il progetto: differenze, righe da sistemare e il progetto come sarebbe (righe spente escluse).
+  function anteprimaImport(p) {
+    const sc = stato.scenario, c = imp.colonne, scelta = c.macro >= 0 ? null : imp.macro;
+    // i fornitori: un id già in uso resta quello (il giro Excel scrive gli id); gli altri si riconoscono come in «Importa budget»
+    const ids = new Set([...Object.keys(sc.fornitori || {}), ...sc.progetti.flatMap((q) => q.pagamenti.map((g) => g.fornitore_id)).filter(Boolean)]);
+    const ric = {};
+    const fornitore = (nome) => { if (ids.has(nome)) return nome; const r = riconosciFornitoreBudget(nome); if (r.id) ric[r.id] = r; return r.id || null; };
+    const { livelli, da_sistemare } = FORMATO.livelliDaFoglio(imp.fogli[imp.foglio].righe, c, { testa: imp.testa, macro_scelta: scelta, mese_default: imp.mese, iva_default: imp.iva, fornitore });
+    // con una macro scelta si confronta quella sola, senza il suo budget: lo stesso confronto che fa applicaLivelli
+    const base = scelta === null ? p.livelli : { macro: p.livelli.macro.filter((m) => m.nome === scelta).map((m) => ({ ...m, budget_netto: null })) };
+    const diff = FORMATO.diffLivelli(base, livelli, FORMATO.contrattiToccati(p, scelta));
+    const dopo = FORMATO.applicaLivelli(p, FORMATO.filtraLivelli(base, livelli, imp.spente), { macro_scelta: scelta });
+    dopo.pagamenti = FORMATO.derivaPagamenti(dopo, ORIZ());
+    const usati = new Set(dopo.livelli.macro.flatMap((m) => (m.voci || []).map((v) => v.fornitore_id)));
+    return { diff, da_sistemare, dopo, scelta, nuovi: Object.values(ric).filter((r) => usati.has(r.id) && !(sc.fornitori || {})[r.id]) };
+  }
+  const nettoPag = (p) => p.pagamenti.reduce((t, g) => t + somma(g.mesi), 0);
+  const lordoPag = (p) => p.pagamenti.reduce((t, g) => t + Object.values(g.mesi).reduce((a, v) => a + MOTORE.iva(v, g.aliquota_iva), 0), 0);
+  const eMacroRiga = (d) => /\|#macro(#\d+)?$/.test(d.chiave);
+  function pannelloImport(p) {
+    const a = anteprimaImport(p), c = imp.colonne, soc = p.societa, sc = stato.scenario;
+    imp.diff = a.diff;   // le caselle dell'anteprima puntano a queste righe
+    const testa = imp.fogli[imp.foglio].righe[imp.testa] || [];
+    const ruoli = [["macro", "macro"], ["sottovoce", "sottovoce"], ["opera", "sottovoce"], ["fornitore", "fornitore"], ["area", "area"], ["importo", "netto"], ["quando", "quando"], ["iva", "IVA"], ["note", "note"]];
+    const lette = ruoli.filter(([k]) => c[k] >= 0 && !(k === "opera" && c.sottovoce >= 0)).map(([k, r]) => `${r} «${esc(String(testa[c[k]] ?? ""))}»`);
+    // una macro che entra o sparisce porta con sé le sue righe: si spegne tutta insieme
+    const capo = (d) => (eMacroRiga(d) ? null : a.diff.find((x) => eMacroRiga(x) && x.macro === d.macro && x.tipo === d.tipo) || null);
+    const accesa = (d) => !imp.spente.has((capo(d) || d).chiave);
+    const val = (v) => (v ? `${v.netto == null ? "" : eu(v.netto)}${Object.keys(v.mesi || {}).length ? ` · ${esc(FORMATO.quandoTesto(v.mesi))}` : ""}` : "");
+    const altro = (x, y) => [x.area !== y.area ? `area ${esc(x.area || "—")} → ${esc(y.area || "—")}` : "", x.aliquota_iva !== y.aliquota_iva ? `IVA ${x.aliquota_iva ?? "↑"} → ${y.aliquota_iva ?? "↑"}` : "", x.note !== y.note ? "note cambiate" : ""].filter(Boolean).join(" · ");
+    const righe = a.diff.map((d, i) => {
+      const k = capo(d), on = accesa(d), macro = eMacroRiga(d);
+      const cosa = macro ? `macro «${esc(d.macro)}»` : d.macro === "budget progetto" ? "budget del progetto" : `${esc(d.macro)} › ${esc(d.sottovoce)}`;
+      const nota = macro ? (d.tipo === "entra" ? "macro nuova, con le sue righe" : "la macro esce, con le sue righe") : d.tipo === "cambia" ? altro(d.prima, d.dopo) : "";
+      return `<tr class="${on ? "" : "salta"}"><td><input type="checkbox" data-imp-riga="${i}" ${on ? "checked" : ""} ${k ? `disabled title="segue la macro «${esc(d.macro)}»"` : ""} aria-label="${esc(d.tipo)} ${cosa}"></td>
+        <td><span class="imp-tipo" data-tipo="${d.tipo}">${d.tipo}</span></td><td>${cosa}</td><td>${d.fornitore ? `<code>${esc(d.fornitore)}</code>` : macro || d.macro === "budget progetto" || d.sottovoce === "budget" ? "" : "senza fornitore"}</td>
+        <td class="num">${val(d.prima)}</td><td class="num">${val(d.dopo)}</td>
+        <td class="piccolo">${nota}${d.patti_persi ? `${nota ? " · " : ""}<span class="resta">i patti di ${esc(d.fornitore)} si perdono: le rate vengono dal file</span>` : ""}</td></tr>`;
+    }).join("");
+    const conta = (t) => a.diff.filter((d) => d.tipo === t && accesa(d)).length;
+    const n = { entra: conta("entra"), cambia: conta("cambia"), sparisce: conta("sparisce") };
+    const tot = n.entra + n.cambia + n.sparisce;
+    const i = sc.progetti.indexOf(p), variante = copia(sc);
+    variante.progetti[i] = a.dopo;
+    const r2 = calcolaSicuro(variante), m1 = ris.minimi[soc], m2 = r2 ? r2.minimi[soc] : null;
+    const ivaOpz = [["", "come la macro ↑"], ...[0, 10, 22].map((x) => [String(x), `${x}%`])];
+    return `<div id="progetto-import-pannello" class="budget">
+      <div class="riga"><strong>Importa in «${esc(p.nome)}»</strong> <span class="piccolo">${esc(imp.file)}</span>
+        ${imp.fogli.length > 1 ? `<label class="piccolo">foglio <select data-imp-foglio>${imp.fogli.map((x, j) => `<option value="${j}" ${j === imp.foglio ? "selected" : ""}>${esc(x.nome)}</option>`).join("")}</select></label>` : ""}
+        <button type="button" class="mini" data-imp-chiudi>chiudi</button></div>
+      <div class="riga piccolo">colonne lette: ${lette.join(" · ") || "nessuna"}</div>
+      <div class="riga piccolo">${a.scelta === null ? "il file ha la colonna «Macro»: <strong>sostituisce tutto il progetto</strong>"
+        : `il file non ha la colonna «Macro»: sostituisce solo la macro <select data-imp-macro>${p.livelli.macro.map((m) => `<option value="${esc(m.nome)}" ${m.nome === imp.macro ? "selected" : ""}>${esc(m.nome)}</option>`).join("")}${p.livelli.macro.some((m) => m.nome === nomeDaFile()) ? "" : `<option value="${esc(nomeDaFile())}" ${imp.macro === nomeDaFile() ? "selected" : ""}>nuova: ${esc(nomeDaFile())}</option>`}</select>`}
+        ${c.quando >= 0 ? "" : ` · senza «Quando»: una rata a ${selMesi(imp.mese, "sel-imp-mese")}`}
+        ${c.iva >= 0 ? "" : ` · IVA <select data-imp-iva>${ivaOpz.map(([v, t]) => `<option value="${v}" ${v === (imp.iva === null ? "" : String(imp.iva)) ? "selected" : ""}>${t}</option>`).join("")}</select>`}</div>
+      ${a.diff.length ? `<div class="wrap"><table><thead><tr><th></th><th></th><th>riga</th><th>fornitore</th><th class="num">prima</th><th class="num">dopo</th><th></th></tr></thead><tbody>${righe}</tbody></table></div>`
+        : '<div class="riga"><strong>nessuna differenza</strong> <span class="piccolo">il file è uguale al progetto</span></div>'}
+      ${a.da_sistemare.length ? `<div class="avvisi-livelli">${a.da_sistemare.map((x) => `<div>⚠ riga ${x.n}: ${esc(x.motivo)}, non entra</div>`).join("")}</div>` : ""}
+      <div class="imp-esito"><span>progetto: lordo in cassa <span class="num">${fmt(lordoPag(p), false)} → <strong>${fmt(lordoPag(a.dopo), false)}</strong></span> <span class="piccolo">(netto ${fmt(nettoPag(p), false)} → ${fmt(nettoPag(a.dopo), false)})</span></span>
+        <span>minimo ${esc(soc)}: <span class="num">${fmt(m1.saldo, false)} <span class="piccolo">${meseIt(m1.mese)}</span> → ${m2 ? `<strong>${fmt(m2.saldo, false)}</strong> <span class="piccolo">${meseIt(m2.mese)}</span> <span class="peso ${m2.saldo < m1.saldo ? "neg" : ""}">${m2.saldo === m1.saldo ? "invariato" : segno(m2.saldo - m1.saldo, false)}</span>` : "non calcolabile"}</span>${p.acceso ? "" : ' <span class="piccolo">(progetto spento: non conta)</span>'}</span></div>
+      ${a.nuovi.length ? `<div class="riga piccolo">schede fornitore nuove: ${a.nuovi.map((r) => `<code>${esc(r.id)}</code>`).join(", ")}</div>` : ""}
+      ${a.diff.length ? `<div class="riga"><button type="button" class="primario" data-imp-applica ${tot ? "" : "disabled"}>Sostituisci · ${n.entra} ${n.entra === 1 ? "entra" : "entrano"} · ${n.cambia} ${n.cambia === 1 ? "cambia" : "cambiano"} · ${n.sparisce} ${n.sparisce === 1 ? "sparisce" : "spariscono"}</button>
+        <span class="piccolo">le righe spente restano come sono; documenti e stato delle sottovoci ritrovate restano</span></div>` : ""}
+    </div>`;
+  }
+  function collegaImport(box, p) {
+    const sf = box.querySelector("select[data-imp-foglio]");
+    if (sf) sf.onchange = () => { scegliFoglioImport(parseInt(sf.value, 10)); renderLeve(); };
+    const sm = box.querySelector("select[data-imp-macro]");
+    if (sm) sm.onchange = () => { imp.macro = sm.value; imp.spente = new Set(); renderLeve(); };
+    const ms = box.querySelector("select.sel-imp-mese");
+    if (ms) ms.onchange = () => { imp.mese = ms.value; renderLeve(); };
+    const si = box.querySelector("select[data-imp-iva]");
+    if (si) si.onchange = () => { imp.iva = si.value === "" ? null : parseInt(si.value, 10); renderLeve(); };
+    box.querySelectorAll("input[data-imp-riga]").forEach((cb) => {
+      cb.onchange = () => { const k = imp.diff[+cb.dataset.impRiga].chiave; if (cb.checked) imp.spente.delete(k); else imp.spente.add(k); renderLeve(); };
+    });
+    box.querySelector("button[data-imp-chiudi]").onclick = () => { imp.p = null; imp.fogli = null; renderLeve(); };
+    const ap = box.querySelector("button[data-imp-applica]");
+    if (ap) ap.onclick = () => applicaImport(p);
+  }
+  function applicaImport(p) {
+    const a = anteprimaImport(p), sc = stato.scenario, file = imp.file;
+    const schede = a.nuovi.filter((r) => schedaFornitore(sc, r)).map((r) => r.id);
+    sc.progetti[sc.progetti.indexOf(p)] = a.dopo;
+    imp.p = null; imp.fogli = null;
+    aggiornaProgetto(a.dopo);
+    avvisa(`«${p.nome}»: ${a.scelta === null ? "progetto sostituito" : `macro «${a.scelta}» sostituita`} dal file ${file}`, () => {
+      sc.progetti[sc.progetti.indexOf(a.dopo)] = p;
+      schede.forEach((id) => delete sc.fornitori[id]);
+      aggiornaProgetto(p);
+    });
+  }
+  // La sottovoce dei patti: quella legata (dalla conversione, da «+ come paghi», da «Genera»); null = nessuna.
+  function voceDeiPatti(p, c) {
+    const voci = p.livelli.macro.flatMap((m) => m.voci || []);
+    const v = c.voce_id && voci.find((x) => x.id === c.voce_id);
+    return v ? v.id : null;
+  }
+  // I patti stanno nel dettaglio della loro sottovoce: si apre (e si apre la sua macro) per farli vedere.
+  function mostraPatti(p, c) {
+    const vid = voceDeiPatti(p, c), m = vid && p.livelli.macro.find((x) => (x.voci || []).some((v) => v.id === vid));
+    if (!m) return;
+    chiuse.delete(`${p.id}:${m.id}`);
+    aperte.add(`vd:${p.id}:${m.id}:${vid}`);
+  }
+  // Il calendario sposta le rate dei pagamenti derivati: qui tornano nel loro nodo.
+  // Sottovoce: i suoi mesi. «Da assegnare» di una macro o del progetto: i mesi diventano i pesi del suo budget.
+  function scriviMesiDerivati(p, g, mesi) {
+    const L = p.livelli, m = L.macro.find((x) => x.id === g.macro_id);
+    const v = m && g.voce_id ? (m.voci || []).find((x) => x.id === g.voce_id) : null;
+    if (v) { v.mesi = mesi; v.netto = somma(mesi); }
+    else if (m) m.mesi_budget = { ...mesi };
+    else L.mesi_budget = { ...mesi };
+    p.pagamenti = FORMATO.derivaPagamenti(p, ORIZ());
+  }
+
   function renderLeve() {
     sincronizzaAperte();
     const sc = stato.scenario;
@@ -1966,38 +2913,23 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       const netto = p.pagamenti.reduce((s, g) => s + somma(g.mesi), 0);
       const lordo = p.pagamenti.reduce((s, g) => s + Object.values(g.mesi).reduce((a, b) => a + MOTORE.iva(b, g.aliquota_iva), 0), 0);
       const tuttiMesi = Object.assign({}, ...p.pagamenti.map((g) => g.mesi));
+      const bp = FORMATO.buste(p.livelli).progetto;
       const variante = copia(sc); variante.progetti[i].acceso = !p.acceso;
       return `<details class="leva ${p.acceso ? "" : "spento"}" data-k="${k}" data-p="${i}" ${aperte.has(k) ? "open" : ""}>
       <summary><label class="sw" onclick="event.stopPropagation()" title="${p.acceso ? "acceso: conta in cassa" : "spento: non conta"}"><input type="checkbox" data-acceso ${p.acceso ? "checked" : ""} aria-label="accendi ${esc(p.nome)}"></label>
         <span class="nome">${esc(p.nome)}</span>
         <span class="badge">${esc(p.societa)}</span><span class="badge ${badgeStato(p.stato)}">${statoIt(p.stato)}</span>
-        <span class="num tot">${fmt(lordo, false)} €</span><span class="piccolo num">lordo in cassa · netto ${fmt(netto, false)} · ${periodoDi(tuttiMesi)}</span>
+        <span class="num tot">${fmt(lordo, false)} €</span><span class="piccolo num">lordo in cassa · netto ${fmt(netto, false)} · ${periodoDi(tuttiMesi)}${bp.budget === null ? "" : ` · budget ${fmt(bp.budget, false)}, ${bp.oltre ? `<span class="oltre">oltre di ${fmt(bp.oltre, false)} ⚠</span>` : `da assegnare ${fmt(bp.da_assegnare, false)}`}`}</span>
         ${peso(variante, p.societa, p.acceso)}<button type="button" class="mini apri-leva" data-apri-foglio aria-label="apri">apri ›</button></summary>
       <div class="corpo">
         <div class="riga"><input type="text" class="nome" style="flex:1 1 140px;font-weight:600" data-campo="nome" value="${esc(p.nome)}">
           ${selSoc(p.societa)} <input type="text" class="n" style="width:110px" data-campo="stato" value="${esc(p.stato)}" title="stato">
           <button data-elimina-p title="elimina progetto">× elimina</button></div>
         <div class="riga"><label class="piccolo" style="flex:1 1 220px;display:flex;gap:6px;align-items:center">cartella Drive <input type="url" class="nome" style="flex:1 1 160px" data-campo="drive_url" value="${esc(p.drive_url || "")}" placeholder="https://drive.google.com/…"></label>${p.drive_url ? `<a class="doc" href="${esc(p.drive_url)}" target="_blank" rel="noopener">apri la cartella</a>` : ""}</div>
-        ${(p.contratti || []).map((c, ci) => bloccoContratto(p, c, ci)).join("")}
-        ${p.pagamenti.map((g, j) => { const kg = `g:${p.id}:${j}`; return `<div class="pag" data-g="${j}">
-          <div class="pag-testa"><input type="text" class="pag-nome nome" data-campo="nome" value="${esc(g.nome)}" aria-label="nome del pagamento" title="scrivi qui il nome del pagamento">${g.fornitore_id ? `<span class="badge">${esc(g.fornitore_id)}</span>` : ""}${(g.documenti || []).filter((d) => d.url).map((d) => `<a class="doc" href="${esc(d.url)}" target="_blank" rel="noopener" title="${esc(d.url)}">📄 ${esc(d.titolo || "documento")}</a>`).join("")}
-            <span class="num pag-tot">${fmt(Object.values(g.mesi).reduce((a, b) => a + MOTORE.iva(b, g.aliquota_iva), 0), false)} €</span>
-            <button class="mini" data-elimina-g title="elimina questo pagamento dal progetto" aria-label="elimina il pagamento ${esc(g.nome)}">× elimina</button></div>
-          ${bloccoRate(g.mesi, g.aliquota_iva)}
-          <div class="frase">${esc(comeSiPaga(g.mesi, g.aliquota_iva))}</div>
-          <details class="sotto" data-k="${kg}" ${aperte.has(kg) ? "open" : ""}><summary>dettagli: IVA, fornitore, mese per mese, documenti</summary>
-            <div class="riga">${selIva(g.aliquota_iva)}
-              <input type="text" class="n" style="width:90px" data-campo="stato" value="${esc(g.stato)}" title="stato">
-              <input type="text" class="n" style="width:110px" data-campo="fornitore_id" value="${esc(g.fornitore_id || "")}" placeholder="fornitore" list="lista-fornitori-id" title="id del fornitore: lo stesso in ogni pagamento, lo trovi nella scheda Fornitori"></div>
-            <div class="piccolo">mese per mese (puoi correggere ogni importo)</div>
-            ${grigliaMesi(g.mesi, "mese")}
-            <div class="documenti"><div class="piccolo">documenti (preventivo, contratto, fattura: link Drive)</div>
-              ${(g.documenti || []).map((d, di) => `<div class="riga" data-doc="${di}"><input type="text" class="nome" style="flex:1 1 120px" data-doc-titolo value="${esc(d.titolo || "")}" placeholder="titolo, es. preventivo 0066/26"><input type="url" class="nome" style="flex:2 1 200px" data-doc-url value="${esc(d.url || "")}" placeholder="https://drive.google.com/…"><button type="button" class="mini" data-elimina-doc title="togli il documento" aria-label="togli il documento ${esc(d.titolo || "")}">×</button></div>`).join("")}
-              <div class="riga"><button type="button" class="mini" data-aggiungi-doc>+ documento</button></div></div>
-          </details>
-          ${p.acceso ? "" : '<div class="nota">non conta finché il progetto è spento</div>'}
-        </div>`; }).join("")}
-        <div class="riga"><button data-aggiungi-g title="una riga con i suoi mesi: è quello che il calcolo legge">+ pagamento</button><button data-aggiungi-c title="i patti con un fornitore (anticipo, SAL, ritenuta): generano i pagamenti">+ come paghi un fornitore</button></div>
+        ${bloccoLivelli(p)}
+        ${(p.contratti || []).map((c, ci) => [c, ci]).filter(([c]) => !voceDeiPatti(p, c)).map(([c, ci]) => bloccoContratto(p, c, ci)).join("")}
+        ${p.acceso ? "" : '<div class="nota">non conta finché il progetto è spento</div>'}
+        <div class="riga"><button data-aggiungi-c title="i patti con un fornitore (anticipo, SAL, ritenuta): generano i mesi della sua sottovoce">+ come paghi un fornitore</button></div>
       </div></details>`;
     }).join("");
     el("progetti").innerHTML = `${progetti || '<div class="nota">nessun progetto nello scenario</div>'}
@@ -2066,6 +2998,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     renderFornitori();
     collegaLeve();
     ricordaBozza();  // anche le modifiche ai patti (che ridisegnano senza ricalcolare) finiscono nella bozza
+    applicaVista();  // a tutto schermo il pannello aperto resta aperto anche quando si ridisegnano solo le leve
   }
 
   // ── Importa budget (brief UI, punto 8, ultimo passo): «ti metto il budget, tu riconosci i fornitori» ──
@@ -2074,30 +3007,20 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   // abituali se ci sono, altrimenti una rata al mese scelto. Si vede tutto PRIMA di applicare; ogni riga si
   // può spegnere; le righe di totale e IVA si saltano da sole. Stato «ipotesi»: è un budget, non un impegno.
   const budget = { file: "", fogli: null, foglio: 0, testa: 0, colonne: {}, progetto: "", mese: null, iva: 22, righe: [] };
-  const PAROLE_SALTA = /^(totale|subtotale|imprevisti|iva\b|cuscinetto|media|controllo|camera tipo|lettura)/i;
-  const normTesta = (s) => String(s ?? "").toLowerCase().replace(/[^a-zà-ù0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
-  function indovinaColonne(righe) {
-    // la riga di testa è la prima con almeno tre celle di testo; le colonne si riconoscono dalle parole
-    let testa = 0;
-    for (let i = 0; i < Math.min(righe.length, 30); i++) { if ((righe[i] || []).filter((c) => typeof c === "string" && c.trim()).length >= 3) { testa = i; break; } }
-    const t = (righe[testa] || []).map(normTesta);
-    const trova = (...parole) => { for (const p of parole) { const i = t.findIndex((x) => x === p || x.includes(p)); if (i >= 0) return i; } return -1; };
-    return { testa, colonne: {
-      fornitore: trova("fornitore", "ditta", "impresa", "beneficiario"),
-      opera: trova("area di intervento", "opera", "lavorazione", "descrizione", "voce", "articolo", "oggetto"),
-      importo: trova("totale", "importo", "netto", "budget", "prezzo"),
-      note: trova("note", "nota"),
-    } };
+  // parole di salto, «senza fornitore» e colonne indovinate: in FORMATO, uguali per «Importa budget» e per il giro Excel
+  const { PAROLE_SALTA, senzaFornitore, indovinaColonne } = FORMATO;
+  // il foglio buono è quello con più righe che hanno un numero in una colonna «totale/importo»
+  function foglioMigliore(fogli) {
+    let migliore = 0, punti = -1;
+    fogli.forEach((f, i) => { const g = indovinaColonne(f.righe); const n = f.righe.filter((r) => typeof r[g.colonne.importo] === "number").length; if (g.colonne.importo >= 0 && n > punti) { punti = n; migliore = i; } });
+    return migliore;
   }
   async function apriBudget(file) {
     try {
       budget.fogli = await EXCEL.leggi(file);
     } catch (e) { mostraErrore(`Importa budget «${file.name}»: ${e.message}`); return; }
     budget.file = file.name;
-    // il foglio buono è quello con più righe che hanno un numero in una colonna «totale/importo»
-    let migliore = 0, punti = -1;
-    budget.fogli.forEach((f, i) => { const g = indovinaColonne(f.righe); const n = f.righe.filter((r) => typeof r[g.colonne.importo] === "number").length; if (g.colonne.importo >= 0 && n > punti) { punti = n; migliore = i; } });
-    scegliFoglioBudget(migliore);
+    scegliFoglioBudget(foglioMigliore(budget.fogli));
     budget.progetto = budget.progetto || (stato.scenario.progetti[0] || {}).id || "";
     budget.mese = budget.mese || D.mesi[0];
     renderBudget();
@@ -2112,7 +3035,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   const slugId = (nome) => String(nome || "").toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 24);
   function riconosciFornitoreBudget(nome) {
     const n = String(nome || "").trim();
-    if (!n || /^(tbd|n\.?d\.?|da definire|da assegnare|-|—)$/i.test(n)) return { id: "", nome: n, stato: "non_registrato", perche: "fornitore non indicato nel budget" };
+    if (senzaFornitore(n)) return { id: "", nome: n, stato: "non_registrato", perche: "fornitore non indicato nel budget" };
     const mappa = stato.scenario.fornitori || {};
     const cNome = n.toLowerCase().replace(/[^a-z0-9]+/g, "");
     const gia = Object.entries(mappa).find(([id, f]) => id === slugId(n) || String(f.nome || "").toLowerCase().replace(/[^a-z0-9]+/g, "") === cNome);
@@ -2122,6 +3045,14 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const r = riconosci(n);
     if (r) return { id: slugId(n), nome: n, stato: "da_verificare", perche: `in anagrafica Esolver: ${r.nome} (${r.codice})`, codice: r.codice, societa: r.societa };
     return { id: slugId(n), nome: n, stato: "dichiarato", perche: "nuovo: nessuna corrispondenza in anagrafica" };
+  }
+  // Un fornitore riconosciuto (riconosciFornitoreBudget) senza scheda nello scenario la riceve, col codice Esolver se c'è.
+  function schedaFornitore(sc, ric) {
+    sc.fornitori = sc.fornitori || {};
+    if (!ric.id || sc.fornitori[ric.id]) return false;
+    sc.fornitori[ric.id] = { nome: ric.nome };
+    if (ric.codice) { sc.fornitori[ric.id].codice_esolver = ric.codice; if (ric.societa) sc.fornitori[ric.id].societa = ric.societa; }
+    return true;
   }
   function preparaRigheBudget() {
     const f = budget.fogli[budget.foglio]; const c = budget.colonne;
@@ -2183,18 +3114,23 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     let p = sc.progetti.find((x) => x.id === budget.progetto);
     if (!p) {
       const id = `P${Date.now().toString(36)}`;
-      p = { id, nome: `Budget · ${budget.file.replace(/\.(xlsx|csv|txt)$/i, "")}`.slice(0, 60), societa: "INTUR", acceso: false, stato: "ipotesi", pagamenti: [], contratti: [] };
+      p = { id, nome: `Budget · ${budget.file.replace(/\.(xlsx|csv|txt)$/i, "")}`.slice(0, 60), societa: "INTUR", acceso: false, stato: "ipotesi", pagamenti: [], contratti: [], livelli: livelliVuoti() };
       sc.progetti.push(p);
       aperte.add(`p:${id}`);
     }
+    // le righe del foglio diventano sottovoci di una macro nuova col nome del file (i mesi dai patti o dalla rata unica)
+    const L = p.livelli;
+    const m = aggiungi(L.macro, nuovaMacro(L, budget.file.replace(/\.(xlsx|csv|txt)$/i, "").slice(0, 60)));
     let n = 0;
     for (const r of budget.righe.filter((x) => x.attiva)) {
-      if (r.ric.id && !sc.fornitori[r.ric.id]) { sc.fornitori[r.ric.id] = { nome: r.ric.nome }; if (r.ric.codice) { sc.fornitori[r.ric.id].codice_esolver = r.ric.codice; if (r.ric.societa) sc.fornitori[r.ric.id].societa = r.ric.societa; } }
-      for (const g of pianoRigaBudget(r).pagamenti) { const riga = Object.assign({}, g, { documenti: [] }); p.pagamenti.push(riga); n += 1; }
+      schedaFornitore(sc, r.ric);
+      const pag = pianoRigaBudget(r).pagamenti, mesi = mesiDi(pag);
+      Object.assign(aggiungi(m.voci, nuovaVoce(L, (r.opera || r.fornitore).slice(0, 80))), { fornitore_id: r.ric.id || null, mesi, netto: somma(mesi), aliquota_iva: pag[0].aliquota_iva, stato: "ipotesi", note: r.note || "" });
+      n += 1;
     }
-    avvisa(`${n} ${n === 1 ? "pagamento aggiunto" : "pagamenti aggiunti"} a «${p.nome}» dal budget ${budget.file}`);
+    avvisa(`${n} ${n === 1 ? "sottovoce aggiunta" : "sottovoci aggiunte"} a «${p.nome}», macro «${m.nome}», dal budget ${budget.file}`);
     budget.fogli = null;
-    ricalcola();
+    aggiornaProgetto(p);
   }
 
   // ── Il fornitore come oggetto (brief UI, punto 8) ──
@@ -2327,13 +3263,13 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     delete mesi[dopo];
     return true;
   }
-  function leggiMesi(root, pref, mesi) {
+  function leggiMesi(root, pref, mesi, dopo = ricalcola) {
     root.querySelectorAll(`input[data-${pref}]`).forEach((inp) => {
-      inp.onchange = () => { const v = euroDa(inp); if (v === null) return; if (v) mesi[inp.dataset[pref]] = v; else delete mesi[inp.dataset[pref]]; ricalcola(); };
+      inp.onchange = () => { const v = euroDa(inp); if (v === null) return; if (v) mesi[inp.dataset[pref]] = v; else delete mesi[inp.dataset[pref]]; dopo(); };
     });
     const camel = pref.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-    root.querySelectorAll(`button[data-${pref}-dividi]`).forEach((b) => { b.onclick = (e) => { e.preventDefault(); if (dividiRata(mesi, b.dataset[`${camel}Dividi`])) ricalcola(); }; });
-    root.querySelectorAll(`button[data-${pref}-unisci]`).forEach((b) => { b.onclick = (e) => { e.preventDefault(); if (unisciRata(mesi, b.dataset[`${camel}Unisci`])) ricalcola(); }; });
+    root.querySelectorAll(`button[data-${pref}-dividi]`).forEach((b) => { b.onclick = (e) => { e.preventDefault(); if (dividiRata(mesi, b.dataset[`${camel}Dividi`])) dopo(); }; });
+    root.querySelectorAll(`button[data-${pref}-unisci]`).forEach((b) => { b.onclick = (e) => { e.preventDefault(); if (unisciRata(mesi, b.dataset[`${camel}Unisci`])) dopo(); }; });
     const nuovo = root.querySelector(`select[data-${pref}-nuovo]`);
     if (nuovo) nuovo.onchange = () => { if (nuovo.value) { mesi[nuovo.value] = 0; renderLeve(); } };
   }
@@ -2348,43 +3284,33 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       const p = sc.progetti[parseInt(div.dataset.p, 10)];
       div.querySelector("input[data-acceso]").onchange = (e) => { p.acceso = e.target.checked; ricalcola(); };
       div.querySelectorAll(".corpo > .riga [data-campo]").forEach((inp) => {
-        inp.onchange = () => { const v = inp.value.trim(); if (inp.dataset.campo === "drive_url" && !v) delete p.drive_url; else p[inp.dataset.campo] = inp.dataset.campo === "drive_url" ? v : inp.value; ricalcola(); };
+        inp.onchange = () => {
+          const v = inp.value.trim();
+          // un progetto con una sola macro col suo nome (scenario /1): la macro segue il nome
+          const sola = p.livelli.macro.length === 1 && p.livelli.macro[0].nome === p.nome ? p.livelli.macro[0] : null;
+          if (inp.dataset.campo === "drive_url" && !v) delete p.drive_url; else p[inp.dataset.campo] = inp.dataset.campo === "drive_url" ? v : inp.value;
+          if (sola && inp.dataset.campo === "nome") sola.nome = p.nome;
+          aggiornaProgetto(p);
+        };
       });
       div.querySelector("button[data-elimina-p]").onclick = () => { sc.progetti.splice(sc.progetti.indexOf(p), 1); ricalcola(); };
       div.querySelectorAll(".contratto").forEach((box) => collegaContratto(box, p, p.contratti[+box.dataset.c]));
       div.querySelector("button[data-aggiungi-c]").onclick = () => {
         p.contratti = p.contratti || [];
+        // una sottovoce sola di un fornitore che non ha ancora patti: i patti nascono dai suoi mesi e restano legati a lei
         const usati = new Set(p.contratti.map((c) => String(c.fornitore).trim()));
-        const F = (p.pagamenti.find((g) => g.fornitore_id && !usati.has(g.fornitore_id)) || {}).fornitore_id;
-        p.contratti.push(F ? FORMATO.contrattoDaPagamenti(p.pagamenti, F, D.mesi)
+        const voci = p.livelli.macro.flatMap((m) => m.voci || []);
+        const v = voci.find((x) => x.fornitore_id && !usati.has(x.fornitore_id) && voci.filter((y) => y.fornitore_id === x.fornitore_id).length === 1);
+        p.contratti.push(v ? { ...FORMATO.contrattoDaPagamenti(p.pagamenti.filter((g) => g.voce_id === v.id), v.fornitore_id, ORIZ()), voce_id: v.id }
           : { fornitore: "", totale: 0, aliquota_iva: 22, stato: "contratto", modo: "sal", anticipo_pct: 0, anticipo_mese: D.mesi[0], ritenuta_pct: 0,
               svincolo_mese: D.mesi[D.mesi.length - 1], sal_modo: "n", sal_n: 1, sal_ogni: 0, sal_da: D.mesi[0], sal_passo: 1, quote: [] });
+        mostraPatti(p, p.contratti[p.contratti.length - 1]);
         renderLeve();
       };
-      div.querySelector("button[data-aggiungi-g]").onclick = () => { p.pagamenti.push({ nome: "Nuovo pagamento", mesi: {}, aliquota_iva: 22, stato: "ipotesi", fornitore_id: null }); aperte.add(`g:${p.id}:${p.pagamenti.length - 1}`); renderLeve(); };
-      div.querySelectorAll(".pag").forEach((pg) => {
-        const g = p.pagamenti[parseInt(pg.dataset.g, 10)];
-        pg.querySelectorAll(".pag-testa > [data-campo], .sotto > .riga [data-campo]").forEach((inp) => {
-          inp.onchange = () => {
-            const v = inp.value;
-            g[inp.dataset.campo] = inp.dataset.campo === "aliquota_iva" ? parseInt(v, 10) : inp.dataset.campo === "fornitore_id" ? (v || null) : v;
-            ricalcola();
-          };
-        });
-        pg.querySelector("button[data-elimina-g]").onclick = () => { p.pagamenti.splice(p.pagamenti.indexOf(g), 1); ricalcola(); };
-        leggiMesi(pg, "mese", g.mesi);
-        collegaRate(pg.querySelector(".come"), () => g.mesi, (m) => { g.mesi = m; }, g.aliquota_iva);
-        pg.querySelectorAll(".documenti .riga[data-doc]").forEach((r) => {
-          const d = g.documenti[parseInt(r.dataset.doc, 10)];
-          r.querySelector("input[data-doc-titolo]").onchange = (e) => { d.titolo = e.target.value.trim(); ricalcola(); };
-          r.querySelector("input[data-doc-url]").onchange = (e) => { d.url = e.target.value.trim(); ricalcola(); };
-          r.querySelector("button[data-elimina-doc]").onclick = () => { g.documenti.splice(g.documenti.indexOf(d), 1); if (!g.documenti.length) delete g.documenti; ricalcola(); };
-        });
-        pg.querySelector("button[data-aggiungi-doc]").onclick = () => { g.documenti = g.documenti || []; g.documenti.push({ titolo: "", url: "" }); aperte.add(`g:${p.id}:${pg.dataset.g}`); renderLeve(); };
-      });
+      collegaLivelli(div, p);
     });
-    el("aggiungi-p").onclick = () => { const id = `P${Date.now().toString(36)}`; sc.progetti.push({ id, nome: "Nuovo progetto", societa: "INTUR", acceso: true, stato: "ipotesi", pagamenti: [{ nome: "Pagamento", mesi: {}, aliquota_iva: 22, stato: "ipotesi", fornitore_id: null }] }); aperte.add(`p:${id}`); ricalcola();
-      // il progetto nuovo si apre col nome selezionato: si scrive subito il nome, poi il prezzo qui sotto
+    el("aggiungi-p").onclick = () => { const id = `P${Date.now().toString(36)}`; sc.progetti.push({ id, nome: "Nuovo progetto", societa: "INTUR", acceso: true, stato: "ipotesi", pagamenti: [], contratti: [], livelli: { budget_netto: null, mesi_budget: null, aliquota_iva: 22, macro: [] } }); aperte.add(`p:${id}`); ricalcola();
+      // il progetto nuovo si apre col nome selezionato: si scrive subito il nome
       const campo = el("progetti").querySelector(`details[data-k="p:${id}"] .corpo input[data-campo="nome"]`);
       if (campo) { campo.scrollIntoView({ block: "center" }); campo.focus(); campo.select(); } };
     // finanziamenti
@@ -2484,7 +3410,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const sc = stato.scenario, out = [];
     sc.progetti.forEach((p, pi) => p.pagamenti.forEach((g, gi) => out.push({
       id: `p:${pi}:${gi}`, gruppo: `${p.nome} · ${p.societa}`, nome: g.nome, spento: !p.acceso, tipo: "uscita",
-      mesi: () => g.mesi, scrivi: (m) => { g.mesi = m; }, lordo: (v) => MOTORE.iva(v, g.aliquota_iva), soc: p.societa,
+      mesi: () => g.mesi, scrivi: (m) => scriviMesiDerivati(p, g, m), lordo: (v) => MOTORE.iva(v, g.aliquota_iva), soc: p.societa,
     })));
     sc.finanziamenti.forEach((f, fi) => {
       out.push({ id: `e:${fi}`, gruppo: `Finanziamenti · ${f.societa}`, nome: `${f.nome} · erogazioni`, tipo: "entrata",

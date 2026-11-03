@@ -2,7 +2,7 @@ import json
 import re
 import shutil
 import subprocess
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import date, datetime
 from pathlib import Path
 
@@ -429,6 +429,36 @@ def test_js_uguale_a_python(tmp_path):
     assert out == to_dict(calcola(input_da_snapshot(snap, sc)))
 
 
+def test_js_residuo_uguale_a_python(tmp_path):
+    snap = snapshot_sintetico()
+    p = build_payload(snap, [])
+    pag = Pagamento(
+        "da assegnare",
+        {"2026-10": to_cent(1_000), "2026-11": to_cent(1_000)},
+        0,
+        residuo=True,
+    )
+    sc = Scenario("r", [Progetto("p", "P", "INTUR", True, "ipotesi", [pag])], [])
+    fatti = [Fatto("INTUR", "p", "AMCN", "2026-10", to_cent(1_500), "ev")]
+    atteso = calcola(replace(input_da_snapshot(snap, sc), fatti=fatti))
+    assert atteso.non_riconciliati == []
+    (tmp_path / "scenario.json").write_text(
+        scenario_to_json(sc, p["base"]), encoding="utf-8"
+    )
+    (tmp_path / "fatti.json").write_text(
+        json.dumps([asdict(f) for f in fatti]), encoding="utf-8"
+    )
+    out = esegui_node_fn(
+        tmp_path,
+        render_html(p),
+        "JSON.stringify(M.calcola({...D, fatti: require('./fatti.json')}, "
+        "require('./scenario.json').scenario))",
+    )
+    js = json.loads(out)
+    assert js["non_riconciliati"] == []
+    assert js["righe"] == to_dict(atteso)["righe"]
+
+
 def test_js_baseline_uguale_a_python(tmp_path):
     p = build_payload(snapshot_sintetico(), [])
     vuoto = Scenario("v", [], [])
@@ -706,13 +736,13 @@ def test_js_leggi_documento_importato(tmp_path):
     out = esegui_node_formato(
         tmp_path,
         html,
-        "(() => { const fs = require('fs'); const t = fs.readFileSync('./doc.json', 'utf8');"
-        " const ok = F.leggiDocumento(t, 'cdg-cassa-scenario/1');"
-        " const rotto = JSON.parse(t); rotto.scenario.progetti[0].pagamenti[0].mesi = {'2027-1': 5};"
-        " return JSON.stringify([ok.errore || null, ok.nome, ok.scenario.progetti.length,"
-        " F.leggiDocumento('non json', 'cdg-cassa-scenario/1').errore,"
-        " F.leggiDocumento(JSON.stringify({schema: 'altro/1'}), 'cdg-cassa-scenario/1').errore,"
-        " F.leggiDocumento(JSON.stringify(rotto), 'cdg-cassa-scenario/1').errore]); })()",
+        f"(() => {{ const fs = require('fs'); const t = fs.readFileSync('./doc.json', 'utf8');"
+        f" const ok = F.leggiDocumento(t, '{SCHEMA}');"
+        f" const rotto = JSON.parse(t); rotto.scenario.progetti[0].pagamenti[0].mesi = {{'2027-1': 5}};"
+        f" return JSON.stringify([ok.errore || null, ok.nome, ok.scenario.progetti.length,"
+        f" F.leggiDocumento('non json', '{SCHEMA}').errore,"
+        f" F.leggiDocumento(JSON.stringify({{schema: 'altro/1'}}), '{SCHEMA}').errore,"
+        f" F.leggiDocumento(JSON.stringify(rotto), '{SCHEMA}').errore]); }})()",
     )
     errore, nome, n_prog, e_json, e_schema, e_mese = json.loads(out)
     assert errore is None and nome and n_prog >= 1
@@ -823,7 +853,8 @@ def test_documento_esportato_dalla_pagina_rientra_in_python(tmp_path: Path):
     """La pagina esporta `{schema, nome, salvato_il, base, scenario}` con lo scenario così come lo
     tiene in memoria (copia del seme, MAI `MOTORE.normalizza`, che riscrive i manuali in `importo`
     e romperebbe `scenario_from_json`) più i progetti e i finanziamenti nuovi creati con i default
-    letterali del template («+ progetto», «+ finanziamento», «+ pagamento»). Tutto deve rientrare
+    letterali del template («+ progetto», «+ finanziamento») e una sottovoce scritta nella tabella a livelli,
+    con i pagamenti derivati come fa la pagina. Tutto deve rientrare
     in `scenario_from_json` senza perdere nulla: è l'unico ponte browser → BigQuery."""
     import json as _json
 
@@ -835,11 +866,14 @@ def test_documento_esportato_dalla_pagina_rientra_in_python(tmp_path: Path):
     # cambia con loro (e non mente).
     nuovo_p = re.search(r"sc\.progetti\.push\((\{.*?\})\);", html).group(1)
     nuovo_f = re.search(r"sc\.finanziamenti\.push\((\{.*?\})\);", html).group(1)
-    nuovo_g = re.search(r"p\.pagamenti\.push\((\{.*?\})\);", html).group(1)
     espr = (
         "(() => { const sc = JSON.parse(JSON.stringify(D.seme.scenario)); const id = 'P1'; "
         f"sc.progetti.push({nuovo_p}); const p = sc.progetti[sc.progetti.length - 1]; "
-        f"p.pagamenti.push({nuovo_g}); p.pagamenti[1].mesi = M.distribuisci(12000000, D.mesi[1], 3, D.mesi); "
+        "const F = require('./formato.js'); "
+        "p.livelli.macro.push({ id: 'm1', nome: 'Lavori', budget_netto: null, mesi_budget: null, aliquota_iva: null, area: 'Opere', voci: ["
+        " { id: 'v1', nome: 'Pagamento', fornitore_id: null, area: null, netto: 0, mesi: {}, aliquota_iva: null, stato: null, documenti: [], note: '' },"
+        " { id: 'v2', nome: 'Nuovo pagamento', fornitore_id: null, area: null, netto: 12000000, mesi: M.distribuisci(12000000, D.mesi[1], 3, D.mesi), aliquota_iva: null, stato: null, documenti: [], note: '' }] }); "
+        "p.pagamenti = F.derivaPagamenti(p, D.mesi); "
         f"sc.finanziamenti.push({nuovo_f}); const f = sc.finanziamenti[sc.finanziamenti.length - 1]; "
         "f.erogazioni[D.mesi[0]] = 10000000; f.rate[D.mesi[2]] = 500000; "
         "sc.canone = { netto_per_anno: { '2026': 30000000 }, rate_n: 2, da_mese: D.mesi[0], calendario: null, aliquota_iva: 22 }; "
@@ -854,6 +888,8 @@ def test_documento_esportato_dalla_pagina_rientra_in_python(tmp_path: Path):
     nuovo = sc.progetti[-1]
     assert nuovo.id == "P1" and nuovo.acceso is True and len(nuovo.pagamenti) == 2
     assert sum(nuovo.pagamenti[1].mesi.values()) == 12_000_000
+    assert nuovo.pagamenti[1].macro == "Lavori" and nuovo.pagamenti[1].area == "Opere"
+    assert [v["id"] for v in nuovo.livelli["macro"][0]["voci"]] == ["v1", "v2"]
     fin = sc.finanziamenti[-1]
     assert fin.erogazioni == {p["mesi"][0]: 10_000_000} and fin.rate == {p["mesi"][2]: 500_000}
     # il giro completo: il documento riletto e riserializzato è identico nel contenuto
@@ -934,9 +970,9 @@ def test_template_brief_ui_1_3_parole_stati_e_finanziamenti():
     assert "quadra con i movimenti</span>" not in html and "solo dichiarato" not in html
     # bozze finte: il documento si completa all'apertura e una bozza nasce solo se è diversa da tutto il menu
     assert "function completa(scenario)" in html and "data-scarta=" in html
-    # il «× elimina» di un pagamento sta in testa alla riga, non dentro la tendina; il nuovo nasce aperto
-    assert html.index('<span class="num pag-tot">') < html.index("data-elimina-g") < html.index('<details class="sotto" data-k="${kg}"')
-    assert "aperte.add(`g:${p.id}:${p.pagamenti.length - 1}`)" in html
+    # il «×» di una sottovoce sta sulla sua riga, non dentro il dettaglio; la riga nuova tiene il fuoco
+    assert html.index("data-elimina-voce=") < html.index("function dettaglioVoce(p, m, v)")
+    assert "rinomina = { k, da: r, a: `v:${m.id}:${x.id}` };" in html
 
 
 def test_template_vista_scenario_a_tutto_schermo():
@@ -1053,12 +1089,14 @@ def test_template_importa_budget_e_lettore_xlsx():
     for pezzo in ("async function leggiXlsx(buf)", "function leggiCsv(testo)", 'new DecompressionStream("deflate-raw")', "xl/sharedStrings.xml", "leggi, leggiCsv, leggiXlsx, colIndice"):
         assert pezzo in html, pezzo
     # l'import: bottone, pannello, colonne indovinate dalle parole, righe di totale saltate, anteprima prima di applicare
-    for pezzo in ('id="importa-budget"', 'id="budget-pannello"', "function indovinaColonne(righe)", "const PAROLE_SALTA", "function riconosciFornitoreBudget(nome)", "function pianoRigaBudget(riga)", 'id="budget-applica"'):
+    for pezzo in ('id="importa-budget"', 'id="budget-pannello"', "function indovinaColonne(righe)", "const PAROLE_SALTA", "function riconosciFornitoreBudget(nome)", "function pianoRigaBudget(riga)", 'id="budget-applica"',
+                  # colonne, salti e «senza fornitore» vivono in FORMATO: l'app li prende da lì (un solo regex)
+                  "const { PAROLE_SALTA, senzaFornitore, indovinaColonne } = FORMATO;", "if (senzaFornitore(n)) return"):
         assert pezzo in html, pezzo
     # i mesi dai patti abituali se ci sono, altrimenti una rata al mese scelto; stato «ipotesi»
     assert "contrattoDaPatti(p, budget.mese, riga.ric.id, riga.importo)" in html and 'stato: "ipotesi", fornitore_id: riga.ric.id || null' in html
     # «Da assegnare» (foglio «Per fornitore» di hpan26-soft) = senza fornitore, non una scheda finta
-    assert "/^(tbd|n\\.?d\\.?|da definire|da assegnare|-|—)$/i" in html
+    assert "/^(tbd|n\\.?d\\.?|da definire|da assegnare|-|—)?$/i" in html
 
 
 def test_lettore_csv_e_colonne_xlsx_in_node(tmp_path):
@@ -1113,6 +1151,702 @@ def test_js_sostituzione_uguale_a_python(tmp_path):
         assert r_js["fin"] == r_py.fin, (r_js["mese"], r_js["societa"])
         assert r_js["uscite"]["pf"] == r_py.uscite["pf"]
     assert js["minimi"]["ORTI"]["saldo"] == py.minimi["ORTI"].saldo
+
+
+# ── livelli: totalone → macro → sottovoci, i pagamenti si derivano ──
+
+TRE_MESI = {"2027-01": 1, "2027-02": 1, "2027-03": 1}
+
+
+def _livelli(budget, mesi_budget, macro, aliquota_iva=22):
+    return {
+        "budget_netto": budget,
+        "mesi_budget": mesi_budget,
+        "aliquota_iva": aliquota_iva,
+        "macro": macro,
+    }
+
+
+def _macro(id_, nome, voci, budget=None, mesi_budget=None, **extra):
+    return {
+        "id": id_,
+        "nome": nome,
+        "budget_netto": budget,
+        "mesi_budget": mesi_budget,
+        "aliquota_iva": None,
+        "area": None,
+        "voci": voci,
+        **extra,
+    }
+
+
+def _voce(id_, nome, mesi, fornitore=None, **extra):
+    return {
+        "id": id_,
+        "nome": nome,
+        "fornitore_id": fornitore,
+        "area": None,
+        "netto": sum(mesi.values()),
+        "mesi": mesi,
+        "aliquota_iva": None,
+        "stato": "ipotesi",
+        "documenti": [],
+        "note": "",
+        **extra,
+    }
+
+
+def _deriva(tmp_path, livelli, nome="Soft restyling"):
+    p = {"id": "S", "nome": nome, "stato": "ipotesi", "pagamenti": [], "livelli": livelli}
+    out = esegui_node_formato(
+        tmp_path,
+        render_html(build_payload(snapshot_sintetico(), [])),
+        f"(() => {{ const p = {json.dumps(p)}; const prima = JSON.stringify(p);"
+        f" const g = F.derivaPagamenti(p, {ORIZ_JS});"
+        " if (JSON.stringify(p) !== prima) throw new Error('p mutato');"
+        f" return JSON.stringify({{g, b: F.buste(p.livelli), a: F.avvisiLivelli(p.livelli, {ORIZ_JS})}}); }})()",
+    )
+    r = json.loads(out)
+    return r["g"], r["b"], r["a"]
+
+
+def _somma(pagamenti):
+    return sum(v for g in pagamenti for v in g["mesi"].values())
+
+
+def test_busta_consuma_senza_spostare_il_totale(tmp_path):
+    amcn = _voce("v1", "pitture camere", {"2027-02": 3_000_000}, "AMCN")
+    g, b, _ = _deriva(tmp_path, _livelli(16_500_000, TRE_MESI, [_macro("m1", "Pitture", [amcn])]))
+    assert _somma(g) == 16_500_000
+    assert [x["nome"] for x in g] == ["Pitture · pitture camere", "da assegnare"]
+    assert g[0]["fornitore_id"] == "AMCN" and g[0]["macro"] == "Pitture"
+    assert g[1]["residuo"] is True and "residuo" not in g[0]
+    assert (g[0]["macro_id"], g[0]["voce_id"]) == ("m1", "v1")
+    assert (g[1]["macro"], g[1]["macro_id"], g[1]["voce_id"]) == (None, None, None)
+    assert g[1]["mesi"] == {"2027-01": 4_500_000, "2027-02": 4_500_000, "2027-03": 4_500_000}
+    assert b["progetto"] == {
+        "budget": 16_500_000,
+        "assegnato": 3_000_000,
+        "da_assegnare": 13_500_000,
+        "oltre": 0,
+    }
+
+
+def test_sforamento_macro_assorbito_dal_progetto(tmp_path):
+    voci = [
+        _voce("v1", "tende", {"2027-01": 2_500_000}),
+        _voce("v2", "testate", {"2027-02": 2_500_000}),
+    ]
+    g, b, a = _deriva(tmp_path, _livelli(16_500_000, TRE_MESI, [_macro("A", "A", voci, 4_000_000)]))
+    assert b["macro"] == [
+        {"id": "A", "budget": 4_000_000, "assegnato": 5_000_000, "da_assegnare": 0, "oltre": 1_000_000}
+    ]
+    assert b["progetto"]["da_assegnare"] == 11_500_000 and b["progetto"]["oltre"] == 0
+    assert _somma(g) == 16_500_000
+    assert "A: oltre di 10.000" in a
+
+
+def test_sforamento_oltre_il_progetto_fa_crescere_il_totale(tmp_path):
+    voci = [_voce("v1", "lavori", {"2027-01": 12_000_000})]
+    g, b, a = _deriva(tmp_path, _livelli(10_000_000, TRE_MESI, [_macro("m1", "Opere", voci)]))
+    assert b["progetto"]["oltre"] == 2_000_000 and b["progetto"]["da_assegnare"] == 0
+    assert _somma(g) == 12_000_000
+    assert not any(x.get("residuo") for x in g)
+    assert any("oltre di 20.000" in x for x in a)
+
+
+def test_residui_pesi_resto_iva_e_mesi_del_progetto(tmp_path):
+    """Pesi proporzionali, resto sull'ultimo mese; la macro senza mesi usa quelli del progetto."""
+    tessili = _macro(
+        "m1", "Tessili", [_voce("v1", "tende", {"2027-01": 1_000})], 2_000, aliquota_iva=10
+    )
+    tessili["area"] = "Fornitura e posa"
+    pitture = _macro("m2", "Pitture", [], 900, {"2026-12": 1, "2027-01": 2})
+    pesi = {"2027-01": 1, "2027-02": 1, "2027-03": 1}
+    g, b, _ = _deriva(tmp_path, _livelli(10_000, pesi, [tessili, pitture], aliquota_iva=4))
+    per_nome = {x["nome"]: x for x in g}
+    assert list(per_nome) == ["Tessili · tende", "Pitture", "Tessili · da assegnare", "da assegnare"]
+    assert per_nome["Pitture"]["mesi"] == {"2026-12": 300, "2027-01": 600}
+    # una macro senza sottovoci è denaro non assegnato: un fatto la consuma come ogni «da assegnare»
+    assert per_nome["Pitture"]["residuo"] is True
+    assert (per_nome["Pitture"]["macro_id"], per_nome["Pitture"]["voce_id"]) == ("m2", None)
+    assert (per_nome["Tessili · tende"]["macro_id"], per_nome["Tessili · tende"]["voce_id"]) == ("m1", "v1")
+    r = per_nome["Tessili · da assegnare"]
+    assert (r["macro_id"], r["voce_id"]) == ("m1", None)
+    assert r["mesi"] == {"2027-01": 333, "2027-02": 333, "2027-03": 334}
+    assert (r["aliquota_iva"], r["area"], r["residuo"]) == (10, "Fornitura e posa", True)
+    assert per_nome["Tessili · tende"]["aliquota_iva"] == 10
+    assert per_nome["Tessili · tende"]["area"] == "Fornitura e posa"
+    assert per_nome["da assegnare"]["aliquota_iva"] == 4
+    assert per_nome["da assegnare"]["mesi"] == {"2027-01": 2366, "2027-02": 2366, "2027-03": 2368}
+    assert _somma(g) == 10_000 == b["progetto"]["budget"]
+
+
+def test_conversione_v1_cassa_identica(tmp_path):
+    sc, base = _scenario_base()
+    p0 = sc.progetti[0]
+    doc = [{"titolo": "preventivo", "url": "https://x/p.pdf"}]
+    pag = [replace(p0.pagamenti[0], documenti=doc, stato="contratto", aliquota_iva=10)]
+    sc = replace(sc, progetti=[replace(p0, pagamenti=pag + p0.pagamenti[1:])])
+    payload = build_payload(snapshot_sintetico(), [], seme=(sc, base))
+    (tmp_path / "scenario.json").write_text(scenario_to_json(sc, base), encoding="utf-8")
+    out = esegui_node_fn(
+        tmp_path,
+        render_html(payload),
+        "(() => { const F = require('./formato.js'); const sc = require('./scenario.json').scenario;"
+        " const nuovo = JSON.parse(JSON.stringify(sc));"
+        " nuovo.progetti = nuovo.progetti.map((p) => ({...p, pagamenti: F.derivaPagamenti("
+        "{...p, livelli: F.livelliDaPagamenti(p)}, D.mesi)}));"
+        " return JSON.stringify({prima: sc.progetti[0].pagamenti, dopo: nuovo.progetti[0].pagamenti,"
+        " livelli: F.livelliDaPagamenti(sc.progetti[0]),"
+        " r1: M.calcola(D, sc).righe, r2: M.calcola(D, nuovo).righe}); })()",
+    )
+    r = json.loads(out)
+    campi = ("nome", "mesi", "aliquota_iva", "fornitore_id", "stato")
+    assert [{k: g[k] for k in campi} for g in r["dopo"]] == [
+        {k: g[k] for k in campi} for g in r["prima"]
+    ]
+    assert r["dopo"][0]["documenti"] == doc and "documenti" not in r["dopo"][1]
+    assert all(g["macro"] == "Camere" and "residuo" not in g for g in r["dopo"])
+    assert r["livelli"]["budget_netto"] is None and r["livelli"]["aliquota_iva"] == 22
+    (m,) = r["livelli"]["macro"]
+    assert (m["id"], m["nome"], m["budget_netto"]) == ("m1", "Camere", None)
+    assert m["voci"][0]["netto"] == sum(pag[0].mesi.values())
+    assert r["r1"] == r["r2"]
+
+
+def test_nomi_derivati_unici(tmp_path):
+    m = TRE_MESI
+    macro = [
+        _macro("m1", "Tessili", [_voce("v1", "tende", {"2027-01": 100})]),
+        _macro(
+            "m2",
+            "Camere",
+            [_voce("v2", "tende", {"2027-01": 100}), _voce("v3", "tende", {"2027-02": 100})],
+        ),
+    ]
+    g, _, _ = _deriva(tmp_path, _livelli(None, m, macro))
+    assert [x["nome"] for x in g] == ["Tessili · tende", "Camere · tende", "Camere · tende (2)"]
+
+
+def test_budget_senza_mesi_segnalato(tmp_path):
+    g, b, a = _deriva(tmp_path, _livelli(16_500_000, None, []))
+    assert g == []
+    assert b["progetto"]["da_assegnare"] == 16_500_000
+    assert any("senza mesi" in x for x in a)
+    assert "budget 165.000 senza mesi: non entra in cassa" in a
+
+
+def test_mesi_budget_in_parte_fuori_orizzonte_vanno_sugli_altri(tmp_path):
+    """Uno scenario salvato prima: i mesi usciti dall'orizzonte cadono, il totale resta esatto."""
+    pitture = _macro("m1", "Pitture", [], 1_000, {"2026-09": 5, "2027-01": 1, "2027-02": 2})
+    pesi = {"2026-08": 1, "2027-03": 1, "2027-04": 1}
+    g, _, a = _deriva(tmp_path, _livelli(10_000, pesi, [pitture]))
+    per_nome = {x["nome"]: x["mesi"] for x in g}
+    assert per_nome == {
+        "Pitture": {"2027-01": 333, "2027-02": 667},
+        "da assegnare": {"2027-03": 4_500, "2027-04": 4_500},
+    }
+    assert _somma(g) == 10_000
+    assert "Pitture: mesi del budget fuori orizzonte (set 26)" in a
+    assert "progetto: mesi del budget fuori orizzonte (ago 26)" in a
+
+
+def test_mesi_budget_tutti_fuori_orizzonte_nessun_pagamento(tmp_path):
+    tessili = _macro("m1", "Tessili", [_voce("v1", "tende", {"2027-01": 100})], 1_000)
+    g, _, a = _deriva(tmp_path, _livelli(5_000, {"2026-08": 1, "2026-09": 1}, [tessili]))
+    assert [x["nome"] for x in g] == ["Tessili · tende"]
+    assert "progetto: mesi del budget fuori orizzonte (ago 26, set 26)" in a
+
+
+# ── Task 4: Excel del progetto — righe, «Quando», import e differenze ──
+
+
+def _formato(tmp_path, espressione):
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    return json.loads(esegui_node_formato(tmp_path, html, espressione))
+
+
+def test_quando_giro_testo(tmp_path):
+    calendari = [
+        {"2027-03": 1_234_567},
+        {"2027-01": 333, "2027-03": 333, "2027-05": 334},
+        {"2026-10": 7_230_000, "2026-12": 1_000_050, "2027-05": 500},
+    ]
+    r = _formato(
+        tmp_path,
+        "JSON.stringify({tre: F.quandoParse('gen 27–mar 27 ×3', 16500000),"
+        " misto: F.quandoParse('ott 26 15% · nov 26–mar 27 ×5 · mag 27 10%', 48200000),"
+        " quota: F.quandoParse('mar 27 30% · giu 27', 1000), importo: F.quandoParse('mar 27 12.000 · giu 27', 2000000),"
+        " cal: F.quandoParse('2027-03=12.000,00; 2027-06=8.000,00', 2000000),"
+        f" giro: {json.dumps(calendari)}.map((m) => {{ const t = F.quandoTesto(m);"
+        " return [t, F.quandoParse(t, Object.values(m).reduce((a, b) => a + b, 0))]; }),"
+        " boh: F.quandoParse('boh', 100), troppo: F.quandoParse('mar 27 12.000', 100)})",
+    )
+    assert r["tre"] == {"2027-01": 5_500_000, "2027-02": 5_500_000, "2027-03": 5_500_000}
+    assert sum(r["misto"].values()) == 48_200_000
+    assert r["misto"]["2026-10"] == 7_230_000 and r["misto"]["2027-05"] == 4_820_000
+    assert [r["misto"][m] for m in ("2026-11", "2026-12", "2027-01", "2027-02", "2027-03")] == [7_230_000] * 5
+    assert r["quota"] == {"2027-03": 300, "2027-06": 700}
+    assert r["importo"] == {"2027-03": 1_200_000, "2027-06": 800_000}
+    assert r["cal"] == {"2027-03": 1_200_000, "2027-06": 800_000}
+    for (testo, riletto), m in zip(r["giro"], calendari):
+        assert riletto == m, testo
+    assert r["giro"][0][0] == "mar 27" and r["giro"][1][0] == "gen 27–mag 27 ×3"
+    assert r["boh"] is None and r["troppo"] is None
+
+
+def _progetto_tre_righe():
+    amcn = _voce("v1", "pitture camere", {"2027-02": 3_000_000}, "AMCN", aliquota_iva=22)
+    amcn["documenti"] = [{"titolo": "preventivo", "url": "https://x/p.pdf"}]
+    tende = _voce("v2", "tende", {"2027-01": 1_000_000, "2027-03": 1_200_000}, "PRISCO", aliquota_iva=10)
+    tende["area"], tende["note"] = "Fornitura e posa", "testate comprese"
+    tessili = _macro("m1", "Tessili", [tende], 4_000_000, {"2027-01": 1, "2027-03": 2})
+    pitture = _macro("m2", "Pitture", [amcn])
+    return {
+        "id": "S",
+        "nome": "Soft restyling",
+        "stato": "ipotesi",
+        "pagamenti": [],
+        "contratti": [{"fornitore": "AMCN", "totale": 3_000_000}],
+        "livelli": _livelli(16_500_000, TRE_MESI, [tessili, pitture]),
+    }
+
+
+def _giro(p, modifica=""):
+    """Esporta p con righeProgetto, applica `modifica` (JS su `r`), reimporta: diff e progetto applicato."""
+    return (
+        f"(() => {{ const p = {json.dumps(p)}; const r = [F.TESTA_PROGETTO, ...F.righeProgetto(p)]; {modifica}"
+        " const g = F.indovinaColonne(r);"
+        " const L = F.livelliDaFoglio(r, g.colonne, {testa: g.testa, mese_default: '2027-01', iva_default: 22});"
+        " const d = F.diffLivelli(p.livelli, L.livelli, p.contratti);"
+        " return JSON.stringify({r, colonne: g.colonne, L, d, dopo: F.applicaLivelli(p, L.livelli),"
+        " vuoto: F.righeProgetto(p, true)}); })()"
+    )
+
+
+def test_giro_excel_identita(tmp_path):
+    p = _progetto_tre_righe()
+    p["livelli"]["macro"].append(_macro("m3", "Arredi", [], aliquota_iva=10))  # macro vuota: niente budget né voci
+    r = _formato(tmp_path, _giro(p))
+    assert r["r"][0] == ["Macro", "Sottovoce", "Fornitore", "Area", "Totale netto €", "Quando", "IVA %", "Note"]
+    assert r["r"][1] == ["budget progetto", "", "", "", 165000, "gen 27–mar 27 ×3", 22, ""]
+    assert r["r"][2] == ["Tessili", "budget", "", "", 40000, "gen 27 13.333,33 · mar 27", "", ""]
+    assert r["r"][3] == ["Tessili", "tende", "PRISCO", "Fornitura e posa", 22000, "gen 27 10.000 · mar 27", 10, "testate comprese"]
+    assert r["r"][4] == ["Pitture", "pitture camere", "AMCN", "", 30000, "feb 27", 22, ""]
+    assert r["r"][5] == ["Arredi", "", "", "", "", "", 10, ""]
+    assert r["vuoto"] == [r["r"][1]]
+    c = r["colonne"]
+    assert (c["macro"], c["sottovoce"], c["opera"], c["area"], c["importo"], c["quando"], c["iva"], c["note"]) == (0, 1, 1, 3, 4, 5, 6, 7)
+    assert r["L"]["da_sistemare"] == []
+    assert r["d"] == []
+    dopo = r["dopo"]
+    assert dopo["contratti"] == p["contratti"]
+    voci = {v["nome"]: v for m in dopo["livelli"]["macro"] for v in m["voci"]}
+    assert voci["pitture camere"]["documenti"] == p["livelli"]["macro"][1]["voci"][0]["documenti"]
+    assert (voci["pitture camere"]["id"], voci["tende"]["id"]) == ("v1", "v2")
+    assert [m["id"] for m in dopo["livelli"]["macro"]] == ["m1", "m2", "m3"]
+    assert dopo["livelli"]["macro"][2] == p["livelli"]["macro"][2]
+    assert dopo["livelli"]["budget_netto"] == 16_500_000
+
+
+def test_import_per_fornitore_hpan26(tmp_path):
+    righe = [
+        ["Struttura", "Fornitore", "Area di intervento", "Totale netto €", "Note"],
+        ["Hotel", "AMCN", "Opere", 12263.79, "pitture e cartongessi"],
+        ["Hotel", "Da assegnare", "Opere", 0, "da prezzare"],
+        ["Hotel", "Da assegnare", "Fornitura e posa", 2400, "tende"],
+        ["Hotel", "Flab", "Da comprare", 1650, "lampade"],
+        ["TOTALE", None, None, 13913.79, None],
+    ]
+    r = _formato(
+        tmp_path,
+        f"(() => {{ const r = {json.dumps(righe)}; const g = F.indovinaColonne(r);"
+        " return JSON.stringify({g, L: F.livelliDaFoglio(r, g.colonne,"
+        " {testa: g.testa, macro_scelta: 'Camere', mese_default: '2027-02', iva_default: 22})}); })()",
+    )
+    c = r["g"]["colonne"]
+    assert (c["fornitore"], c["opera"], c["area"], c["importo"], c["note"]) == (1, 2, 2, 3, 4)
+    assert (c["macro"], c["sottovoce"], c["quando"], c["iva"]) == (-1, -1, -1, -1)
+    (m,) = r["L"]["livelli"]["macro"]
+    assert m["nome"] == "Camere"
+    assert [(v["nome"], v["fornitore_id"], v["area"], v["netto"]) for v in m["voci"]] == [
+        ("Opere", "AMCN", "Opere", 1_226_379),
+        ("Fornitura e posa", None, "Fornitura e posa", 240_000),
+        ("Da comprare", "Flab", "Da comprare", 165_000),
+    ]
+    assert m["voci"][0]["mesi"] == {"2027-02": 1_226_379} and m["voci"][0]["aliquota_iva"] == 22
+    assert m["voci"][0]["note"] == "pitture e cartongessi"
+    assert r["L"]["da_sistemare"] == []
+
+
+def test_import_righe_sporche(tmp_path):
+    righe = [
+        ["Macro", "Sottovoce", "Fornitore", "Totale netto €", "Quando"],
+        ["Opere", "pitture", "AMCN", "30.000,00", "feb 27"],
+        [None, "", None, None, ""],
+        ["Opere", "cartongessi", "TBD", 5000, "boh"],
+        ["Opere", "rasature", "-", "12.5x", ""],
+        ["Opere", "TOTALE", "", 35000, ""],
+    ]
+    r = _formato(
+        tmp_path,
+        f"(() => {{ const r = {json.dumps(righe)}; const g = F.indovinaColonne(r);"
+        " return JSON.stringify(F.livelliDaFoglio(r, g.colonne, {testa: g.testa, mese_default: '2027-01'})); })()",
+    )
+    (m,) = r["livelli"]["macro"]
+    assert [(v["nome"], v["netto"], v["mesi"]) for v in m["voci"]] == [("pitture", 3_000_000, {"2027-02": 3_000_000})]
+    assert r["da_sistemare"] == [{"n": 4, "motivo": "quando illeggibile"}, {"n": 5, "motivo": "importo illeggibile"}]
+
+
+def test_diff_sostituisce_e_segnala(tmp_path):
+    p = _progetto_tre_righe()
+    # riga 3 (tende): cifra cambiata; riga 4 (AMCN) cancellata
+    r = _formato(tmp_path, _giro(p, "r[3][4] = 25000; r.splice(4, 1);"))
+    assert [(d["tipo"], d["macro"], d["sottovoce"]) for d in r["d"]] == [
+        ("cambia", "Tessili", "tende"),
+        ("sparisce", "Pitture", ""),
+        ("sparisce", "Pitture", "pitture camere"),
+    ]
+    assert r["d"][0]["prima"]["netto"] == 2_200_000 and r["d"][0]["dopo"]["netto"] == 2_500_000
+    assert "patti_persi" not in r["d"][0]
+    # «Quando» cambiato su una voce con patti: i patti di quel fornitore cadono, i documenti restano
+    r = _formato(tmp_path, _giro(p, "r[4][5] = 'mar 27';"))
+    (d,) = r["d"]
+    assert (d["tipo"], d["fornitore"], d["patti_persi"]) == ("cambia", "AMCN", True)
+    assert r["dopo"]["contratti"] == []
+    amcn = r["dopo"]["livelli"]["macro"][1]["voci"][0]
+    assert amcn["mesi"] == {"2027-03": 3_000_000} and amcn["documenti"] == p["livelli"]["macro"][1]["voci"][0]["documenti"]
+    assert amcn["id"] == "v1"
+
+
+def test_import_in_una_macro_tocca_solo_quella(tmp_path):
+    p = _progetto_tre_righe()
+    righe = [["Fornitore", "Area di intervento", "Totale netto €"], ["AMCN", "Opere", 12000], ["Da assegnare", "Opere", 500]]
+    r = _formato(
+        tmp_path,
+        f"(() => {{ const p = {json.dumps(p)}; const r = {json.dumps(righe)}; const g = F.indovinaColonne(r);"
+        " const L = F.livelliDaFoglio(r, g.colonne, {testa: g.testa, macro_scelta: 'Tessili', mese_default: '2027-02', iva_default: 22});"
+        " return JSON.stringify(F.applicaLivelli(p, L.livelli, {macro_scelta: 'Tessili'}).livelli); })()",
+    )
+    tessili, pitture = r["macro"]
+    assert pitture == p["livelli"]["macro"][1]
+    assert (tessili["id"], tessili["budget_netto"]) == ("m1", 4_000_000)
+    assert [(v["nome"], v["fornitore_id"], v["netto"]) for v in tessili["voci"]] == [("Opere", "AMCN", 1_200_000), ("Opere", None, 50_000)]
+    assert len({v["id"] for m in r["macro"] for v in m["voci"]}) == 3
+    assert r["budget_netto"] == 16_500_000
+
+
+def test_macro_cancellata_si_vede_nel_diff(tmp_path):
+    p = _progetto_tre_righe()
+    p["livelli"]["macro"].append(_macro("m3", "Arredi", []))
+    r = _formato(tmp_path, _giro(p, "r.splice(5, 1);"))
+    assert [(d["tipo"], d["macro"]) for d in r["d"]] == [("sparisce", "Arredi")]
+
+
+def test_import_in_una_macro_senza_voci_tiene_la_macro(tmp_path):
+    p = _progetto_tre_righe()
+    righe = [["Fornitore", "Area di intervento", "Totale netto €"], ["Da assegnare", "Opere", 0]]
+    r = _formato(
+        tmp_path,
+        f"(() => {{ const p = {json.dumps(p)}; const r = {json.dumps(righe)}; const g = F.indovinaColonne(r);"
+        " const L = F.livelliDaFoglio(r, g.colonne, {testa: g.testa, macro_scelta: 'Tessili', mese_default: '2027-02'});"
+        " return JSON.stringify({d: F.diffLivelli({macro: [{...p.livelli.macro[0], budget_netto: null}]}, L.livelli),"
+        " L: F.applicaLivelli(p, L.livelli, {macro_scelta: 'Tessili'}).livelli}); })()",
+    )
+    tessili = r["L"]["macro"][0]
+    vecchia = p["livelli"]["macro"][0]
+    assert tessili == {**vecchia, "voci": []}
+    assert (tessili["budget_netto"], tessili["mesi_budget"]) == (4_000_000, {"2027-01": 1, "2027-03": 2})
+    assert [(d["tipo"], d["sottovoce"]) for d in r["d"]] == [("sparisce", "tende")]
+
+
+def test_quando_percentuali_che_non_fanno_cento(tmp_path):
+    r = _formato(
+        tmp_path,
+        "JSON.stringify([F.quandoParse('mar 27 30% · giu 27 60%', 1000000),"
+        " F.quandoParse('mar 27 33,33% · giu 27 33,33% · set 27 33,34%', 100),"
+        " F.quandoParse('mar 27 33% · giu 27 33% · set 27 33%', 100)])",
+    )
+    assert r[0] is None
+    assert r[1] == {"2027-03": 33, "2027-06": 33, "2027-09": 34}
+    assert r[2] is None
+
+
+def test_iva_solo_aliquote_valide_e_colonna_iva_importo(tmp_path):
+    netto_iva_lordo = [["Fornitore", "Descrizione", "Netto", "IVA", "Lordo"], ["AMCN", "pitture", 1000, 220, 1220]]
+    con_aliquota = [
+        ["Fornitore", "Descrizione", "Totale netto €", "IVA %"],
+        ["AMCN", "pitture", 1000, 22],
+        ["STE", "impianti", 2000, 21],
+        ["Flab", "lampade", 300, "10%"],
+    ]
+    r = _formato(
+        tmp_path,
+        f"(() => {{ const a = {json.dumps(netto_iva_lordo)}, b = {json.dumps(con_aliquota)};"
+        " const ga = F.indovinaColonne(a), gb = F.indovinaColonne(b);"
+        " const opz = {macro_scelta: 'Opere', mese_default: '2027-02', iva_default: 22};"
+        " return JSON.stringify({ga: ga.colonne, gb: gb.colonne, A: F.livelliDaFoglio(a, ga.colonne, opz),"
+        " B: F.livelliDaFoglio(b, gb.colonne, opz),"
+        " intest: ['IVA %', 'iva%', 'Aliquota', 'IVA % applicata', 'IVA', 'Totale IVA'].map((h) =>"
+        " F.indovinaColonne([['Fornitore', 'Voce', h]]).colonne.iva)}); })()",
+    )
+    assert r["ga"]["iva"] == -1 and r["ga"]["importo"] == 2
+    assert r["A"]["livelli"]["macro"][0]["voci"][0]["aliquota_iva"] == 22  # iva_default, non 220
+    assert r["gb"]["iva"] == 3
+    voci = r["B"]["livelli"]["macro"][0]["voci"]
+    assert [(v["fornitore_id"], v["aliquota_iva"]) for v in voci] == [("AMCN", 22), ("Flab", 10)]
+    assert r["B"]["da_sistemare"] == [{"n": 3, "motivo": "IVA illeggibile"}]
+    assert r["intest"] == [2, 2, 2, 2, -1, -1]
+
+
+def test_budget_senza_quando_prende_il_mese_scelto(tmp_path):
+    righe = [
+        ["Macro", "Sottovoce", "Fornitore", "Totale netto €", "Quando"],
+        ["budget progetto", "", "", 165000, ""],
+        ["Tessili", "budget", "", 40000, ""],
+    ]
+    r = _formato(
+        tmp_path,
+        f"(() => {{ const r = {json.dumps(righe)}; const g = F.indovinaColonne(r);"
+        " return JSON.stringify([F.livelliDaFoglio(r, g.colonne, {testa: g.testa, mese_default: '2027-01'}),"
+        " F.livelliDaFoglio(r, g.colonne, {testa: g.testa})]); })()",
+    )
+    con, senza = r
+    assert (con["livelli"]["budget_netto"], con["livelli"]["mesi_budget"]) == (16_500_000, {"2027-01": 16_500_000})
+    assert con["livelli"]["macro"][0]["mesi_budget"] == {"2027-01": 4_000_000}
+    assert con["da_sistemare"] == []
+    assert senza["da_sistemare"] == [{"n": 2, "motivo": "budget senza mesi"}, {"n": 3, "motivo": "budget senza mesi"}]
+    assert senza["livelli"]["budget_netto"] is None
+
+
+def test_template_progetti_a_livelli():
+    # Dentro il progetto una tabella a livelli: budget del progetto, macro, sottovoci; si aggiunge scrivendo
+    # nell'ultima riga vuota. Ogni modifica rideriva i pagamenti (il calcolo legge solo quelli).
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    for pezzo in ("function aggiornaProgetto(p)", "p.pagamenti = FORMATO.derivaPagamenti(p, ORIZ());", "data-nuova-macro", "data-nuova-voce",
+                  "data-budget-progetto", "data-budget-macro", '"cdg-cassa-scenario/2"', "FORMATO.avvisiLivelli(p.livelli, ORIZ())",
+                  'class="livelli"', "data-elimina-macro", "data-conferma-macro"):
+        assert pezzo in html, pezzo
+    # il vecchio «+ pagamento» sparisce: si scrive nella riga vuota
+    assert "button[data-aggiungi-g]" not in html and "data-aggiungi-g" not in html
+    # all'apertura ogni progetto ha i suoi livelli (un progetto /1 diventa una macro col suo nome)
+    assert "FORMATO.livelliDaPagamenti(q)" in html
+    # oltre budget: «oltre di X ⚠», mai un «da assegnare» negativo
+    assert "oltre di ${fmt(b.oltre, false)} ⚠" in html
+    # le aree di hpan26-soft
+    assert '"Opere", "Fornitura e posa", "Da comprare"' in html
+
+
+def test_js_leggi_documento_accetta_scenario_1_e_2(tmp_path):
+    # Un file esportato prima dei livelli (/1) si apre ancora; uno di un altro tipo no.
+    p = build_payload(snapshot_sintetico(), [])
+    html = render_html(p)
+    sc, _ = scenario_sintetico()
+    doc = json.loads(scenario_to_json(sc, p["base"]))
+    vecchio = dict(doc, schema="cdg-cassa-scenario/1")
+    (tmp_path / "doc1.json").write_text(json.dumps(vecchio), encoding="utf-8")
+    (tmp_path / "doc2.json").write_text(json.dumps(doc), encoding="utf-8")
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        "(() => { const fs = require('fs');"
+        " const a = F.leggiDocumento(fs.readFileSync('./doc1.json', 'utf8'), 'cdg-cassa-scenario/2');"
+        " const b = F.leggiDocumento(fs.readFileSync('./doc2.json', 'utf8'), 'cdg-cassa-scenario/2');"
+        " const c = F.leggiDocumento(JSON.stringify({schema: 'cdg-cassa-scenario/3'}), 'cdg-cassa-scenario/2');"
+        " return JSON.stringify([a.errore || null, b.errore || null, c.errore || null]); })()",
+    )
+    a, b, c = json.loads(out)
+    assert a is None and b is None
+    assert c and "cdg-cassa-scenario/3" in c
+
+
+# Un progetto come il terzo piano scritto prima dei livelli: anticipo, 5 SAL e ritenuta AMCN una riga ciascuno,
+# i patti da 482.000 e un altro fornitore. IVA 10% per vedere anche l'IVA.
+PIANO3_JS = (
+    "(() => { const m = D.mesi, r = (nome, mese, cent) => ({ nome, mesi: { [mese]: cent }, aliquota_iva: 10, stato: 'contratto', fornitore_id: 'AMCN' });"
+    " return { id: 'P3', nome: 'Terzo piano', societa: 'INTUR', acceso: true, stato: 'contratto',"
+    " pagamenti: [r('AMCN · anticipo 15%', m[0], 7230000), ...[1, 2, 3, 4, 5].map((k) => r(`AMCN · SAL ${k}/5`, m[k], 7230000)),"
+    " r('AMCN · svincolo ritenuta 10%', m[7], 4820000),"
+    " { nome: 'Impianti STE', mesi: { [m[2]]: 5000000 }, aliquota_iva: 22, stato: 'ipotesi', fornitore_id: 'STE' }],"
+    " contratti: [{ fornitore: 'AMCN', totale: 48200000, aliquota_iva: 10, stato: 'contratto', modo: 'sal', anticipo_pct: 15, anticipo_mese: m[0],"
+    " ritenuta_pct: 10, svincolo_mese: m[7], sal_modo: 'n', sal_n: 5, sal_ogni: 0, sal_da: m[1], sal_passo: 1, quote: [] }] }; })()"
+)
+
+
+def test_js_conversione_consolida_le_rate_dei_patti(tmp_path):
+    # Alla conversione le 7 righe AMCN tornano una sottovoce legata ai patti: cassa identica al centesimo.
+    # Se i totali non tornano, o due righe cadono nello stesso mese, non si tocca niente e i patti restano slegati.
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_fn(
+        tmp_path,
+        html,
+        "(() => { const F = require('./formato.js'); const P = " + PIANO3_JS + ";"
+        " const conv = (p) => { const q = F.consolidaContratti({ ...p, livelli: F.livelliDaPagamenti(p) }); q.pagamenti = F.derivaPagamenti(q, D.mesi); return q; };"
+        " const sc = (p) => ({ ...D.seme.scenario, progetti: [p] });"
+        " const q = conv(P), a = M.calcola(D, sc(P)), b = M.calcola(D, sc(q));"
+        " const storto = conv({ ...P, contratti: [{ ...P.contratti[0], totale: 48199999 }] });"
+        " const doppio = conv({ ...P, pagamenti: P.pagamenti.map((g, i) => (i === 1 ? { ...g, mesi: { [D.mesi[2]]: 7230000 } } : g)) });"
+        " return JSON.stringify({ voci: q.livelli.macro[0].voci.map((v) => [v.nome, v.fornitore_id, v.netto, Object.keys(v.mesi).length]),"
+        " legata: q.contratti[0].voce_id, idVoce: q.livelli.macro[0].voci[0].id, uguali: JSON.stringify(a.righe) === JSON.stringify(b.righe),"
+        " storto: [storto.livelli.macro[0].voci.length, storto.contratti[0].voce_id || null],"
+        " doppio: [doppio.livelli.macro[0].voci.length, doppio.contratti[0].voce_id || null] }); })()",
+    )
+    r = json.loads(out)
+    assert r["voci"] == [["AMCN", "AMCN", 48200000, 7], ["Impianti STE", "STE", 5000000, 1]]
+    assert r["legata"] == r["idVoce"] and r["uguali"] is True
+    assert r["storto"] == [8, None] and r["doppio"] == [8, None]
+
+
+def test_js_genera_scrive_solo_la_sottovoce_dei_patti(tmp_path):
+    # «Genera» con patti diversi ma stesso totale: cambiano solo i mesi della sottovoce legata, il totale del
+    # progetto no; le altre sottovoci restano identiche. Mai unire: un fornitore con due sottovoci e patti
+    # slegati dà un errore leggibile invece di scegliere.
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_fn(
+        tmp_path,
+        html,
+        "(() => { const F = require('./formato.js'); const P = " + PIANO3_JS + ";"
+        " const q = F.consolidaContratti({ ...P, livelli: F.livelliDaPagamenti(P) }); q.pagamenti = F.derivaPagamenti(q, D.mesi);"
+        " q.contratti[0] = { ...q.contratti[0], sal_n: 3, sal_passo: 2 };"
+        " const r = F.generaPatti(q, 0, D.mesi), g = r.progetto; g.pagamenti = F.derivaPagamenti(g, D.mesi);"
+        " const lordo = (p) => p.pagamenti.reduce((t, x) => t + Object.values(x.mesi).reduce((s, v) => s + M.iva(v, x.aliquota_iva), 0), 0);"
+        " const v0 = q.livelli.macro[0].voci, v1 = g.livelli.macro[0].voci;"
+        " const slegato = { ...P, livelli: F.livelliDaPagamenti(P) };"
+        " return JSON.stringify({ voce: r.voce_id === v0[0].id, mesiPrima: Object.keys(v0[0].mesi).length, mesiDopo: Object.keys(v1[0].mesi).length,"
+        " netto: [v0[0].netto, v1[0].netto], altra: JSON.stringify(v0[1]) === JSON.stringify(v1[1]), nVoci: v1.length,"
+        " lordo: [lordo(q), lordo(g)], errore: F.generaPatti(slegato, 0, D.mesi).errore || null }); })()",
+    )
+    r = json.loads(out)
+    assert r["voce"] and r["nVoci"] == 2 and r["altra"]
+    assert r["mesiPrima"] == 7 and r["mesiDopo"] != 7 and r["netto"] == [48200000, 48200000]
+    assert r["lordo"][0] == r["lordo"][1]
+    assert r["errore"] and "7 sottovoci" in r["errore"]
+
+
+def test_template_giro_excel_progetto():
+    # In ogni progetto: esporta, esporta vuoto, importa; l'anteprima prima di sostituire.
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    for pezzo in ("data-esporta-progetto", "data-esporta-vuoto", "data-importa-progetto", 'id="progetto-import-pannello"',
+                  "FORMATO.righeProgetto(p, vuoto)", "FORMATO.livelliDaFoglio(", "FORMATO.diffLivelli(", "FORMATO.applicaLivelli(",
+                  "FORMATO.filtraLivelli(", "EXCEL.leggi(file)"):
+        assert pezzo in html, pezzo
+    # nome del file: <progetto>-<YYYY-MM-DD>.xlsx, «-vuoto» per la struttura
+    assert '${vuoto ? "-vuoto" : ""}.xlsx' in html
+
+
+def test_filtra_livelli_spegne_righe(tmp_path):
+    # Ogni riga dell'anteprima si spegne: entra spenta non entra, cambia spenta resta com'era,
+    # sparisce spenta resta; una macro spenta resta tutta com'era (o non entra).
+    p = _progetto_tre_righe()
+    modifica = (
+        "r[3][4] = 25000; r.splice(4, 1); r.push(['Arredi', 'sedie', 'FLAB', '', 1000, 'mar 27', 22, '']);"
+    )
+    espr = (
+        f"(() => {{ const p = {json.dumps(p)}; const r = [F.TESTA_PROGETTO, ...F.righeProgetto(p)]; {modifica}"
+        " const g = F.indovinaColonne(r);"
+        " const N = F.livelliDaFoglio(r, g.colonne, {testa: g.testa, mese_default: '2027-01'}).livelli;"
+        " const d = F.diffLivelli(p.livelli, N, p.contratti);"
+        " const k = (tipo, sv) => d.find((x) => x.tipo === tipo && x.sottovoce === sv).chiave;"
+        " const voci = (L) => L.macro.map((m) => [m.nome, m.voci.map((v) => [v.nome, v.netto])]);"
+        " const via = (...ks) => F.filtraLivelli(p.livelli, N, new Set(ks));"
+        " const macroArredi = d.find((x) => x.tipo === 'entra' && x.macro === 'Arredi' && x.sottovoce === '').chiave;"
+        " const macroPitture = d.find((x) => x.tipo === 'sparisce' && x.macro === 'Pitture' && x.sottovoce === '').chiave;"
+        " return JSON.stringify({ tutto: voci(via()), cambia: voci(via(k('cambia', 'tende'))),"
+        " sparisce: voci(via(macroPitture)), entra: voci(via(macroArredi)),"
+        " stessi: JSON.stringify(F.filtraLivelli(p.livelli, N, new Set())) === JSON.stringify(N),"
+        " niente: F.diffLivelli(p.livelli, via(...d.map((x) => x.chiave))).length }); })()"
+    )
+    r = _formato(tmp_path, espr)
+    assert r["tutto"] == [["Tessili", [["tende", 2_500_000]]], ["Arredi", [["sedie", 100_000]]]]
+    assert r["cambia"] == [["Tessili", [["tende", 2_200_000]]], ["Arredi", [["sedie", 100_000]]]]
+    assert r["sparisce"] == [["Tessili", [["tende", 2_500_000]]], ["Arredi", [["sedie", 100_000]]], ["Pitture", [["pitture camere", 3_000_000]]]]
+    assert r["entra"] == [["Tessili", [["tende", 2_500_000]]]]
+    assert r["stessi"] is True
+    # tutte spente = nessuna differenza dal progetto
+    assert r["niente"] == 0
+
+
+def test_quando_percentuali_esatte_con_arrotondamento_in_eccesso(tmp_path):
+    # 50% di 1.234.567 arrotonda a 617.284: due parti sforano di un centesimo, l'ultima lo restituisce
+    r = _formato(
+        tmp_path,
+        "JSON.stringify([F.quandoParse('gen 27 50% · feb 27 50%', 1234567),"
+        " F.quandoParse('gen 27 50% · feb 27 50%', 1234568),"
+        " F.quandoParse('gen 27 30% · feb 27 60%', 1234567)])",
+    )
+    assert r[0] == {"2027-01": 617_284, "2027-02": 617_283}
+    assert r[1] == {"2027-01": 617_284, "2027-02": 617_284}
+    assert r[2] is None
+
+
+def test_budget_ripetuto_va_da_sistemare(tmp_path):
+    righe = [
+        ["Macro", "Sottovoce", "Fornitore", "Totale netto €", "Quando"],
+        ["budget progetto", "", "", 165000, "gen 27"],
+        ["Tessili", "budget", "", 40000, "gen 27"],
+        ["Tessili", "budget", "", 50000, "feb 27"],
+        ["budget progetto", "", "", 200000, "feb 27"],
+    ]
+    r = _formato(
+        tmp_path,
+        f"(() => {{ const r = {json.dumps(righe)}; const g = F.indovinaColonne(r);"
+        " return JSON.stringify(F.livelliDaFoglio(r, g.colonne, {testa: g.testa})); })()",
+    )
+    assert r["livelli"]["budget_netto"] == 16_500_000
+    assert r["livelli"]["macro"][0]["budget_netto"] == 4_000_000
+    assert r["da_sistemare"] == [{"n": 4, "motivo": "budget ripetuto"}, {"n": 5, "motivo": "budget ripetuto"}]
+
+
+def test_voce_senza_mesi_esporta_il_suo_netto(tmp_path):
+    p = _progetto_tre_righe()
+    senza = _voce("v9", "tappezzeria", {}, "TAPP")
+    senza["netto"] = 500_000
+    p["livelli"]["macro"][0]["voci"].append(senza)
+    r = _formato(tmp_path, _giro(p))
+    riga = next(x for x in r["r"] if x[1] == "tappezzeria")
+    assert riga[4] == 5000 and riga[5] == ""
+    # al reimport (mese_default) la voce torna con il suo netto nel mese scelto: cambia, non sparisce
+    assert [(d["tipo"], d["sottovoce"]) for d in r["d"]] == [("cambia", "tappezzeria")]
+    d = r["d"][0]
+    assert d["prima"]["netto"] == d["dopo"]["netto"] == 500_000
+    assert d["dopo"]["mesi"] == {"2027-01": 500_000}
+    tessili = r["dopo"]["livelli"]["macro"][0]
+    assert [(v["id"], v["netto"]) for v in tessili["voci"] if v["nome"] == "tappezzeria"] == [("v9", 500_000)]
+
+
+def test_applica_livelli_macro_che_differiscono_per_maiuscole(tmp_path):
+    p = _progetto_tre_righe()
+    nuovi = {
+        "budget_netto": None, "mesi_budget": None, "aliquota_iva": 22,
+        "macro": [_macro("x1", "Tessili", []), _macro("x2", "tessili", []), _macro("x3", "Pitture", [])],
+    }
+    r = _formato(
+        tmp_path,
+        f"JSON.stringify(F.applicaLivelli({json.dumps(p)}, {json.dumps(nuovi)}).livelli.macro.map((m) => m.id))",
+    )
+    assert r[0] == "m1" and r[2] == "m2"
+    assert len(set(r)) == 3 and r[1] not in ("m1", "m2")
+
+
+def test_import_in_una_macro_toglie_solo_i_patti_di_quella_macro(tmp_path):
+    p = _progetto_tre_righe()
+    p["livelli"]["macro"][0]["voci"].append(_voce("v3", "Opere", {"2027-02": 1_200_000}, "AMCN"))
+    p["contratti"] = [
+        {"fornitore": "AMCN", "totale": 3_000_000, "voce_id": "v1"},  # Pitture
+        {"fornitore": "AMCN", "totale": 1_200_000, "voce_id": "v3"},  # Tessili
+    ]
+    righe = [["Fornitore", "Area di intervento", "Totale netto €"], ["AMCN", "Opere", 12000]]
+    r = _formato(
+        tmp_path,
+        f"(() => {{ const p = {json.dumps(p)}; const r = {json.dumps(righe)}; const g = F.indovinaColonne(r);"
+        " const L = F.livelliDaFoglio(r, g.colonne, {testa: g.testa, macro_scelta: 'Tessili', mese_default: '2027-03', iva_default: 22});"
+        " const base = {macro: [{...p.livelli.macro[0], budget_netto: null}]};"
+        " return JSON.stringify({d: F.diffLivelli(base, L.livelli, F.contrattiToccati(p, 'Tessili')),"
+        " c: F.applicaLivelli(p, L.livelli, {macro_scelta: 'Tessili'}).contratti}); })()",
+    )
+    assert any(d.get("patti_persi") and d["fornitore"] == "AMCN" for d in r["d"])
+    assert r["c"] == [{"fornitore": "AMCN", "totale": 3_000_000, "voce_id": "v1"}]
 
 
 # ── mesi non pianificati: colonna nel file, nessuna riga; mai zero ──
@@ -1252,8 +1986,3 @@ def test_la_pagina_allunga_l_orizzonte_invece_di_rifiutare():
     assert "FORMATO.pagamentiDaContratto(c, D.mesi)" not in html
     # il solo PF si ricalcola sui mesi nuovi (prima: «reading 'fin'» sul primo mese aggiunto)
     assert "D.baseline = MOTORE.calcola(D, { nome: \"solo PF\"" in html
-def test_il_nome_del_pagamento_si_scrive_nella_testata():
-    html = render_html(build_payload(snapshot_sintetico(), []))
-    assert '<input type="text" class="pag-nome nome" data-campo="nome"' in html
-    assert "modifica nome, IVA e rate" not in html and "<summary>dettagli: IVA, fornitore, mese per mese, documenti</summary>" in html
-    assert '.pag-testa > [data-campo], .sotto > .riga [data-campo]' in html

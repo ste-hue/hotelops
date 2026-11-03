@@ -494,3 +494,47 @@ def test_manuale_normale_si_aggiunge_al_pf_come_prima():
     b_dic = next(x for x in base.righe if x.societa == "ORTI" and x.mese == "2026-12")
     assert dic.uscite["pf"] == eur(20_000) and dic.uscite["manuale"] == eur(35_000)
     assert dic.fin - b_dic.fin == -eur(35_000)
+
+
+def test_fatto_senza_sottovoce_consuma_il_residuo():
+    p = Progetto(
+        "p",
+        "P",
+        "INTUR",
+        True,
+        "ipotesi",
+        [
+            Pagamento(
+                "da assegnare",
+                {"2026-10": eur(1_000), "2026-11": eur(1_000)},
+                0,
+                residuo=True,
+            ),
+        ],
+    )
+    f = Fatto("INTUR", "p", "AMCN", "2026-10", eur(1_500), "ev")
+    ris = calcola(inp9(progetti=[p], fatti=[f]))
+    assert ris.non_riconciliati == []
+    assert _riga(ris, "INTUR", "2026-10").uscite["progetto"] == 0
+    assert _riga(ris, "INTUR", "2026-11").uscite["progetto"] == eur(500)
+
+
+def test_fatto_con_sottovoce_non_tocca_il_residuo():
+    p = Progetto(
+        "p",
+        "P",
+        "INTUR",
+        True,
+        "ipotesi",
+        [
+            Pagamento("AMCN", {"2026-10": eur(1_000)}, 0, fornitore_id="AMCN"),
+            Pagamento("da assegnare", {"2026-10": eur(1_000)}, 0, residuo=True),
+        ],
+    )
+    ris = calcola(
+        inp9(
+            progetti=[p],
+            fatti=[Fatto("INTUR", "p", "AMCN", "2026-10", eur(400), "ev")],
+        )
+    )
+    assert _riga(ris, "INTUR", "2026-10").uscite["progetto"] == eur(1_600)
