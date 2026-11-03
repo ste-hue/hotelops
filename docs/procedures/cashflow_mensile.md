@@ -284,16 +284,28 @@ PRECED.» = la loro somma nella colonna del primo mese aperto). Prima di promuov
 **conto per conto** con `f_saldi_banca_chiusura_mensile` alla data di fine N e con i valori noti
 sbagliati del foglio dei saldi (subtotali incollati nelle righe banca, saldi copiati da un'altra
 società). **Rosso = la promozione si ferma**: si scrive nel verbale cosa porta il file, la
-correzione la fa Rosa nel foglio, non noi in BigQuery. Lo script usato nella finestra di ottobre
-2026 (`controllo_ancora_3009.py`, con il riferimento BigQuery salvato in un JSON) vive nel dossier
-locale della finestra, fuori dal repository; la regola è questa, lo script la applica.
+correzione la fa Rosa nel foglio, non noi in BigQuery. Lo strumento:
+
+    python -m verticals.condges.pf_rotate.controllo_ancora <PF ORTI> <PF INTUR> --riferimento <json fuori repo>
+
+(oppure `HOTELOPS_ANCORA_RIFERIMENTO=<json>`): il JSON con i valori attesi e vietati sta **fuori dal
+repository** (le cifre non si versionano); uscita 1 = rosso. **Nessun passo automatico lo lancia**:
+è uno strumento a mano, e versionarlo non lo fa girare. Per questo la ricevuta è l'**esito**, non il
+percorso: nel verbale della finestra una riga «C5 · comando + ora + uscita» con stato **passato /
+fallito / non girato** («non girato» è uno stato scrivibile, non un'assenza).
 
 ### C6. Quadratura e i quattro controlli
 **Quadratura al centesimo** (file per file, prima del carico): per ogni colonna-mese del master,
 somma delle voci parsate = riga TOTALE ENTRATE e riga TOTALE USCITE del foglio; le differenze si
-dichiarano con mese e importo, non si «sistemano». Lo script della finestra (`pf_quadratura.py`,
-dossier locale) legge il master con i valori in cache: **non vede i totali di riga dei fogli di
-dettaglio** (colonna C), che il loader non usa.
+dichiarano con mese e importo, non si «sistemano».
+
+    python -m verticals.condges.pf_rotate.pf_quadratura <file.xlsx o cartella> [...]
+
+Cosa NON guarda: legge solo il master «Piano Finanziario» con i valori in cache e confronta i
+totali per colonna-mese; **i totali di riga dei fogli di dettaglio (colonna C) le sono invisibili
+per costruzione** (il loader non li usa), e un file senza valori in cache quadra zero contro zero:
+C1 viene prima. Come C5, **nessun passo automatico lo lancia** e la ricevuta è l'esito: riga
+«C6 · comando + ora + uscita», stato passato / fallito / non girato.
 
 I quattro controlli operativi sul file, prima di passarlo a Rosa (e dopo, prima di promuovere):
 1. **Eyeball di 3–5 fornitori chiave** (es. Le Croissant, Ausino, fitto INTUR): nel foglio di
