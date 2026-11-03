@@ -22,7 +22,15 @@ from core.config import (
     P_SCENARI,
     P_SCENARIO_FLUSSI,
 )
-from verticals.condges.cassa_motore import Ancora, Conto, Fatto, Flusso, Riga, to_cent
+from verticals.condges.cassa_motore import (
+    SOCIETA,
+    Ancora,
+    Conto,
+    Fatto,
+    Flusso,
+    Riga,
+    to_cent,
+)
 from verticals.condges.cassa_scenario import Base, scenario_da_righe
 
 Query = Callable[[str], list[dict]]
@@ -361,6 +369,29 @@ def leggi_scenari(query: Query):
         [r for r in flussi if del_vincente(r)],
         [r for r in pagamenti if del_vincente(r)],
     )
+
+
+# ── mesi non pianificati ──
+
+
+def mesi_non_pianificati(
+    righe: list[Riga], flussi: list[Flusso], mesi: list[str]
+) -> dict[str, list[str]]:
+    """Per società, i mesi dell'orizzonte PF senza nessuna riga né flusso: il file arriva
+    fin lì (o oltre, per l'altra società) ma la colonna è vuota. È una misura sul foglio
+    («qui non c'è scritto niente»), non un'inferenza: la pagina li chiama «non pianificati»
+    e il motore li tratta come mesi senza PF, mai come zero."""
+    pieni: dict[str, set[str]] = defaultdict(set)
+    for r in righe:
+        pieni[r.societa].add(r.mese)
+    for f in flussi:
+        for soc in (f.da, f.a):
+            pieni[soc].add(f.mese)
+    return {
+        soc: [m for m in mesi if m not in pieni[soc]]
+        for soc in SOCIETA
+        if any(m not in pieni[soc] for m in mesi)
+    }
 
 
 # ── orizzonte ipotetico ──

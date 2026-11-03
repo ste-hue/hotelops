@@ -15,6 +15,7 @@ from verticals.condges.cassa_fonti import (
     leggi_fornitori,
     leggi_scenari,
     mesi_ipotetici,
+    mesi_non_pianificati,
     salva_snapshot,
 )
 from verticals.condges.cassa_motore import Fatto, Flusso, Riga
@@ -509,3 +510,25 @@ def test_fornitori_anagrafica_esolver_senza_intercompany_ne_esclusi():
         },
         {"codice": 121, "nome": "SANTELIA LUIGI", "societa": "INTUR"},
     ]
+
+
+# ── mesi non pianificati ──
+
+
+def test_mesi_non_pianificati_per_societa_e_mai_zero():
+    # Il file arriva a dicembre ma ORTI ha righe solo fino a ottobre, INTUR fino a novembre:
+    # per ORTI nov e dic sono «non pianificati», per INTUR solo dic. Un flusso (canone,
+    # godimento) riempie il mese per entrambe le gambe. Senza vuoti la mappa è vuota.
+    mesi = ["2026-10", "2026-11", "2026-12"]
+    righe = [
+        Riga("ORTI", "USCITE_SALARI", "2026-10", 100, "U", "pf"),
+        Riga("INTUR", "USCITE_TASSE", "2026-10", 100, "U", "pf"),
+        Riga("INTUR", "USCITE_TASSE", "2026-11", 100, "U", "pf"),
+    ]
+    assert mesi_non_pianificati(righe, [], mesi) == {
+        "ORTI": ["2026-11", "2026-12"],
+        "INTUR": ["2026-12"],
+    }
+    flussi = [Flusso("Fitto Hotel", "ORTI", "INTUR", "2026-12", 244_000_00, "pf")]
+    assert mesi_non_pianificati(righe, flussi, mesi) == {"ORTI": ["2026-11"]}
+    assert mesi_non_pianificati(righe, flussi, ["2026-10"]) == {}

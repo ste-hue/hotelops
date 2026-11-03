@@ -171,6 +171,9 @@ class Input:
     intercompany: list[Flusso]
     fatti: list[Fatto]
     scenario: Scenario
+    # Mesi dentro l'orizzonte del file ma senza nessuna riga per quella società: il foglio
+    # c'è, la colonna è vuota. Non è zero: per il minimo contano come i mesi senza PF.
+    mesi_non_pianificati: dict[str, frozenset[str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -353,8 +356,9 @@ def calcola(inp: Input) -> Risultato:
     minimi = {}
     for soc in SOCIETA:
         mie = [r for r in righe if r.societa == soc]
-        pf = [r for r in mie if r.mese not in inp.mesi_ipotetici]
-        coda = [r for r in mie if r.mese in inp.mesi_ipotetici]
+        senza = inp.mesi_ipotetici | inp.mesi_non_pianificati.get(soc, frozenset())
+        pf = [r for r in mie if r.mese not in senza]
+        coda = [r for r in mie if r.mese in senza]
         # Tutti i mesi ipotetici: nessun mese PF, il minimo e' quello della coda.
         m = min(pf or coda, key=lambda r: r.fin)
         c = min(coda, key=lambda r: r.fin) if coda else None

@@ -48,6 +48,7 @@ CANONE_PATH = cf.SNAPSHOT_HOME / "canone_dichiarato.json"
 # Il PF corretto: voci che una persona ha dichiarato diverse dal file di Rosa (le tasse del 31/10).
 # Valgono per tutti gli scenari, Solo PF compreso; spariscono da sole quando il PF le porta.
 PF_CORRETTO_PATH = cf.SNAPSHOT_HOME / "pf_corretto.json"
+BANDA_PATH = cf.SNAPSHOT_HOME / "banda_pf.json"
 TEMPLATE = Path(__file__).with_name("cassa_template.html")
 
 KV_KEY = "cassa_html"
@@ -77,10 +78,16 @@ def snapshot_da_fonti(
     scenari: list[tuple[Scenario, Base, dict]],
     acquisito_il: datetime | None = None,
     fornitori: list[dict] | None = None,
+    mesi_non_pianificati: dict[str, list[str]] | None = None,
 ) -> dict:
     """Forma JSON dello snapshot (date ISO, frozenset -> lista ordinata, dataclass -> dict)."""
     return {
         "fornitori": list(fornitori or []),
+        "mesi_non_pianificati": {
+            s: [m for m in mesi if m in set(v)]
+            for s, v in sorted((mesi_non_pianificati or {}).items())
+            if v
+        },
         "acquisito_il": (acquisito_il or datetime.now()).isoformat(timespec="minutes"),
         "mesi": list(mesi),
         "mesi_ipotetici": [m for m in mesi if m in mesi_ipotetici],
@@ -114,6 +121,9 @@ def input_da_snapshot(snapshot: dict, scenario: Scenario) -> Input:
         intercompany=[Flusso(**f) for f in snapshot["intercompany"]],
         fatti=[Fatto(**f) for f in snapshot["fatti"]],
         scenario=scenario,
+        mesi_non_pianificati={
+            s: frozenset(v) for s, v in (snapshot.get("mesi_non_pianificati") or {}).items()
+        },
     )
 
 
@@ -139,6 +149,7 @@ def acquisisci(query=cf.query_bq) -> dict:
     mesi_tutti, coda = cf.mesi_ipotetici(mesi)
     return snapshot_da_fonti(
         ancore=ancore,
+        mesi_non_pianificati=cf.mesi_non_pianificati(righe, flussi, mesi),
         pf=righe,
         intercompany=flussi,
         base=base,
@@ -299,6 +310,13 @@ def _limiti(snapshot: dict, seme: Scenario, baseline: dict) -> list[str]:
                 f"{soc} · saldi di fine mese al {_data_it(str(a['data']))}. {verificati} "
                 f"Da verificare: {', '.join(no)}."
             )
+    for soc, vuoti in sorted((snapshot.get("mesi_non_pianificati") or {}).items()):
+        if vuoti:
+            out.append(
+                f"{soc}: da {_mese_it(vuoti[0])} a {_mese_it(vuoti[-1])} il file del PF ha la "
+                "colonna ma nessuna riga: non pianificato, non zero (per il minimo conta come "
+                "senza PF)."
+            )
     coda = snapshot["mesi_ipotetici"]
     if coda:
         out.append(
@@ -425,6 +443,15 @@ def _limiti_pf_corretto(correzioni: list[dict]) -> list[str]:
     return [testo]
 
 
+# Banda d'errore del PF per orizzonte h (mesi dall'ancora): vive nel file locale
+# `banda_pf.json` accanto al seme (repo pubblico: le misure restano fuori da git), forma
+# {"misurata_il", "finestra", "societa": {SOC: {"segno", "crescita_mese", "h": {"1": {"medio",
+# "banda", "n"}, ...}}}} in centesimi; `medio` = previsto − consuntivo sul saldo proiettato
+# (positivo = PF ottimista), `banda` = metà della distanza p10–p90. Oltre l'ultimo h misurato
+# la pagina usa solo il segno e `crescita_mese`. Senza file: nessuna banda, la pagina lo dice.
+BANDA_VUOTA = {"societa": {}}
+
+
 def build_payload(
     snapshot: dict,
     scenari: list[tuple[Scenario, Base, dict]],
@@ -434,6 +461,7 @@ def build_payload(
     canone_dichiarato: dict | None = None,
     scenari_ritirati: list[str] | None = None,
     pf_corretto: dict | None = None,
+    banda_pf: dict | None = None,
 ) -> dict:
     snapshot = senza_coda(snapshot)
     snapshot, pf_correzioni = applica_pf_corretto(snapshot, pf_corretto)
@@ -471,6 +499,8 @@ def build_payload(
         "acquisito_il": snapshot.get("acquisito_il"),
         "mesi": list(snapshot["mesi"]),
         "mesi_ipotetici": list(snapshot["mesi_ipotetici"]),
+        "mesi_non_pianificati": dict(snapshot.get("mesi_non_pianificati") or {}),
+        "banda_pf": banda_pf or BANDA_VUOTA,
         "ancore": snapshot["ancore"],
         "base": base,
         "pf": snapshot["pf"],
@@ -558,6 +588,9 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
         if PF_CORRETTO_PATH.exists()
         else None
     )
+    banda_pf = (
+        json.loads(BANDA_PATH.read_text(encoding="utf-8")) if BANDA_PATH.exists() else None
+    )
     payload = build_payload(
         snapshot,
         scenari_da_snapshot(snapshot),
@@ -566,7 +599,9 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
         canone_dichiarato=canone_dichiarato,
         scenari_ritirati=scenari_ritirati,
         pf_corretto=pf_corretto,
+        banda_pf=banda_pf,
     )
+    print(f"  banda d'errore: {'dal file locale' if banda_pf else 'assente (nessun banda_pf.json)'}")
     for c in payload["pf_correzioni"]:
         print(
             f"  PF corretto: {c['societa']} {c['voce_id']} {c['mese']} {_eur(c['corretto'])} "

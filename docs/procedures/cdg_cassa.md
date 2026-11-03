@@ -143,6 +143,19 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
     riga si accende o spegne. «Aggiungi N pagamenti» li mette nel progetto scelto (o in uno nuovo, spento)
     con stato «ipotesi», crea le schede dei fornitori nuovi col codice se riconosciuto, e la bozza resta nel
     browser come sempre. Il foglio di Drive «Budget interno terzo piano» (per opera) si importa così com'è.
+15. **Orizzonte lungo: «non pianificato» non è zero, e la banda cresce con h.** Il PF vivo è un file solo
+    su due anni (colonne datate per anno dall'ingest, wrap dicembre→gennaio); si allunga con
+    `pf-extend --to AAAA-MM` sul master, alla finestra, come atto dichiarato nel verbale. L'ingest non
+    emette celle a zero, quindi un mese con la colonna ma senza righe per una società è **non
+    pianificato** (`mesi_non_pianificati` per società nello snapshot, calcolato in `cassa_fonti`): il
+    motore (Python e JS, in parità) lo tratta come un mese senza PF per il minimo, la pagina lo marca
+    «non pianificato» (§A non registrato) nella tabella, nella scheda del minimo e nel grafico, mai
+    con uno 0; l'Excel e `cdg tabelle` portano la colonna accanto a «senza PF». Sotto ogni minimo la
+    **banda d'errore per h** (mesi dall'ancora): misurata fino a 3 mesi (file locale `banda_pf.json`
+    accanto al seme, dal rapporto del 30/10: INTUR ottimista, ORTI pessimista; le misure non stanno
+    nel repo), oltre solo il segno e la crescita; nel
+    grafico un corridoio fino a h 3 e la deriva tratteggiata oltre. Se il PF arriva oltre 12 mesi
+    dall'ancora, in testa compare «documento di pianificazione, non previsione».
 
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 
