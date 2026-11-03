@@ -923,7 +923,7 @@ def test_template_brief_ui_1_3_parole_stati_e_finanziamenti():
     # 1. il bottone dice il risultato; nessuna parola con due significati; via il doppione della pillola
     assert "Salva scenario (.json)" in html and "Excel (.xlsx)" in html and "Apri scenario (.json)" in html
     assert "Esporta scenario" not in html and "Esporta Excel" not in html and 'id="nessuna"' not in html
-    assert ">Genera le rate<" in html and ">Rateizza<" not in html
+    assert '${f.n ? "Rifai le rate" : "Metti in cassa"}' in html and ">Rateizza<" not in html
     # 2. finanziamenti: due riquadri nelle parole di Stefano, generatore delle tranche, controllo «erogato X di Y»
     assert "Quando la banca ti dà i soldi" in html and "Quando li restituisci" in html
     assert "data-genera-tranche" in html and "erogato ${fmt(erogato, false)} di ${fmt(f.importo, false)}" in html
@@ -1250,3 +1250,8 @@ def test_la_pagina_allunga_l_orizzonte_invece_di_rifiutare():
     assert "FORMATO.pagamentiDaContratto(c, D.mesi)" not in html
     # il solo PF si ricalcola sui mesi nuovi (prima: «reading 'fin'» sul primo mese aggiunto)
     assert "D.baseline = MOTORE.calcola(D, { nome: \"solo PF\"" in html
+def test_il_nome_del_pagamento_si_scrive_nella_testata():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert '<input type="text" class="pag-nome nome" data-campo="nome"' in html
+    assert "modifica nome, IVA e rate" not in html and "<summary>dettagli: IVA, fornitore, mese per mese, documenti</summary>" in html
+    assert '.pag-testa > [data-campo], .sotto > .riga [data-campo]' in html
