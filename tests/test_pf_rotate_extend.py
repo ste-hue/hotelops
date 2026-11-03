@@ -185,6 +185,43 @@ def test_extend_salta_marker_anno_su_cella_merged(minimal_pf_orti_bytes):
     )
 
 
+def test_extend_ripunta_il_totale_di_riga_a_sinistra_nei_dettagli(minimal_pf_orti_bytes):
+    """Difetto misurato il 03/11/2026 sul PF INTUR generato: i fogli di dettaglio hanno il
+    totale di riga a SINISTRA dei mesi (C, mesi da D): `=SUM(D3:Y3)` restava a Y mentre il
+    foglio arrivava a col 55, e trenta colonne nuove uscivano dal totale. Rosso prima della
+    correzione. Le colonne nuove non vanno ripuntate due volte; i valori in C restano."""
+    wb = _wb(minimal_pf_orti_bytes)
+    ut = wb.create_sheet("Utenze dettaglio")
+    ut["D1"] = 2026
+    ut["A2"] = "CODICE"
+    for i, m in enumerate(_MESI_ORDINATI[3:12]):  # APRILE..DICEMBRE in D..L
+        ut.cell(2, 4 + i, m)
+    ut["A3"] = 1078
+    ut["B3"] = "Enel"
+    ut["C3"] = "=SUM(D3:L3)"  # totale di riga a sinistra: deve seguire l'ultimo mese
+    ut["A4"] = 1079
+    ut["B4"] = "Acqua"
+    ut["C4"] = 123.45  # un valore in C non si tocca
+    ut["C5"] = "=SUM(D5:E5)"  # un range che NON arriva all'ultimo mese resta com'è
+    for i in range(9):
+        cl = get_column_letter(4 + i)
+        ut.cell(3, 4 + i, f"=SUM({cl}6:{cl}50)")
+
+    extend_to(wb, periodo(2027, 6))  # +6 mesi: L (12) -> R (18)
+
+    assert max(find_month_periods(ut)) == periodo(2027, 6)
+    assert ut["C3"].value == "=SUM(D3:R3)"
+    assert ut["C4"].value == 123.45 and ut["C5"].value == "=SUM(D5:E5)"
+    # colonne nuove: tradotte dal Translator UNA volta sola (M..R), non ripuntate di nuovo
+    for col in range(13, 19):
+        cl = get_column_letter(col)
+        assert ut.cell(3, col).value == f"=SUM({cl}6:{cl}50)"
+    # il master non regredisce: TOTALI a destra, esteso, e Cash Flow TOTALI ripuntato
+    pf = wb["Piano Finanziario"]
+    assert pf["R2"].value == "TOTALI" and pf["R12"].value == "=SUM(C12:Q12)"
+    assert pf["R29"].value == "=R12-R27"
+
+
 # ── trim_before ──────────────────────────────────────────────────────────
 
 

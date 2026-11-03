@@ -72,7 +72,10 @@ def _extend_sheet(ws: Worksheet, target_periodo: int) -> list[str]:
         return []
     src_col = cols[last_p]
 
-    # TOTALI: colonna non-mese subito dopo l'ultimo mese (solo master).
+    # TOTALI: colonna non-mese subito dopo l'ultimo mese (master). I fogli di
+    # dettaglio hanno invece il totale di riga a SINISTRA dei mesi (col C, mesi da D:
+    # `=SUM(D3:Y3)`): anche quello deve seguire il nuovo ultimo mese (vedi sotto).
+    first_month_col = min(cols.values())
     totali_col = src_col + 1
     has_totali = isinstance(ws.cell(_HEADER_ROW, totali_col).value, str)
     n_new = target_periodo - last_p
@@ -111,24 +114,28 @@ def _extend_sheet(ws: Worksheet, target_periodo: int) -> list[str]:
                 ).translate_formula(dst_ref)
         changed.append(f"{ws.title}!{get_column_letter(dst_col)} ({anno}-{mese:02d})")
 
+    # Righe di formula che vivevano su src_col (vecchio ultimo mese) o su
+    # totali_col (vecchia colonna TOTALI, riferita da un'altra riga TOTALI,
+    # es. Cash Flow = TOTALE ENTRATE - TOTALE USCITE) devono ripuntare di
+    # n_new colonne: la prima diventa il nuovo ultimo mese, la seconda
+    # diventa il nuovo TOTALI. Vale per la colonna TOTALI a destra (master) e
+    # per le colonne non-mese a SINISTRA del primo mese (totale di riga dei
+    # dettagli, `=SUM(D3:Y3)` in C). Le colonne nuove (src_col+1 … src_col+n)
+    # NON si toccano: le ha già scritte il Translator, uno shift in più le
+    # ripunterebbe due volte.
+    cols_to_shift = {src_col, totali_col}
+    da_ripuntare = list(range(1, first_month_col))
     if has_totali:
-        new_totali_col = totali_col + n_new
-        # Righe di formula che vivevano su src_col (vecchio ultimo mese) o su
-        # totali_col (vecchia colonna TOTALI, riferita da un'altra riga TOTALI,
-        # es. Cash Flow = TOTALE ENTRATE - TOTALE USCITE) devono ripuntare di
-        # n_new colonne: la prima diventa il nuovo ultimo mese, la seconda
-        # diventa il nuovo TOTALI.
-        cols_to_shift = {src_col, totali_col}
+        da_ripuntare.append(totali_col + n_new)
+    for col in da_ripuntare:
         for r in range(1, ws.max_row + 1):
-            v = ws.cell(r, new_totali_col).value
+            v = ws.cell(r, col).value
             if not isinstance(v, str) or not v.startswith("="):
                 continue
             v2 = _shift_totali_formula(v, cols_to_shift, n_new)
             if v2 != v:
-                ws.cell(r, new_totali_col).value = v2
-                changed.append(
-                    f"{ws.title}!{get_column_letter(new_totali_col)}{r} (TOTALI)"
-                )
+                ws.cell(r, col).value = v2
+                changed.append(f"{ws.title}!{get_column_letter(col)}{r} (TOTALI)")
     return changed
 
 
