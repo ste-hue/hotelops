@@ -2077,7 +2077,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   const slugId = (nome) => String(nome || "").toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 24);
   function riconosciFornitoreBudget(nome) {
     const n = String(nome || "").trim();
-    if (!n || /^(tbd|n\.?d\.?|da definire|-|—)$/i.test(n)) return { id: "", nome: n, stato: "non_registrato", perche: "fornitore non indicato nel budget" };
+    if (!n || /^(tbd|n\.?d\.?|da definire|da assegnare|-|—)$/i.test(n)) return { id: "", nome: n, stato: "non_registrato", perche: "fornitore non indicato nel budget" };
     const mappa = stato.scenario.fornitori || {};
     const cNome = n.toLowerCase().replace(/[^a-z0-9]+/g, "");
     const gia = Object.entries(mappa).find(([id, f]) => id === slugId(n) || String(f.nome || "").toLowerCase().replace(/[^a-z0-9]+/g, "") === cNome);

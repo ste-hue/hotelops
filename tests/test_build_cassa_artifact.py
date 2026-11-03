@@ -1057,6 +1057,8 @@ def test_template_importa_budget_e_lettore_xlsx():
         assert pezzo in html, pezzo
     # i mesi dai patti abituali se ci sono, altrimenti una rata al mese scelto; stato «ipotesi»
     assert "contrattoDaPatti(p, budget.mese, riga.ric.id, riga.importo)" in html and 'stato: "ipotesi", fornitore_id: riga.ric.id || null' in html
+    # «Da assegnare» (foglio «Per fornitore» di hpan26-soft) = senza fornitore, non una scheda finta
+    assert "/^(tbd|n\\.?d\\.?|da definire|da assegnare|-|—)$/i" in html
 
 
 def test_lettore_csv_e_colonne_xlsx_in_node(tmp_path):
