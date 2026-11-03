@@ -129,3 +129,51 @@ def test_c1_fixed_snapshot_data_in_c1_ok(intur_pf_bytes):
     report = verifica_controlli(wb, periodo_chiuso=P(4))
     c1 = next(r for r in report.results if r.check_id == "C1")
     assert c1.outcome == CheckOutcome.OK, f"detail={c1.detail}"
+
+
+# ── C7–C16: riga del master per etichetta, colonne per mese ──
+
+
+def _wb_voce(
+    master_row: int, det_offset: int, master_val, det_val, etichetta="Salari e Stipendi"
+):
+    """Master con la voce Salari alla riga `master_row` e mesi in D..I (2026-04..09);
+    foglio di dettaglio con gli stessi mesi spostati di `det_offset` colonne."""
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    pf = wb.create_sheet("Piano Finanziario")
+    det = wb.create_sheet("Salari e Stipendi")
+    mesi = ["APRILE", "MAGGIO", "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE"]
+    pf["D1"] = 2026
+    det.cell(1, 4 + det_offset, 2026)
+    for i, m in enumerate(mesi):
+        pf.cell(2, 4 + i, m)
+        det.cell(2, 4 + det_offset + i, m)
+    pf.cell(master_row, 1, etichetta)
+    pf.cell(master_row, 4 + 5, master_val)  # SETTEMBRE
+    det.cell(4, 4 + det_offset + 5, det_val)  # SETTEMBRE nel dettaglio, riga 4
+    return wb
+
+
+def _c7(wb):
+    from verticals.condges.pf_rotate.step5_controlli import _check_voce_link
+
+    return _check_voce_link(wb, "C7", "Salari", 14, "Salari e Stipendi", 4, ["I"])
+
+
+def test_c7_riga_spostata_e_mesi_spostati_come_intur():
+    # INTUR: Salari alla riga 15, riga 14 vuota; dettaglio spostato di 5 colonne. Il
+    # master è una formula: niente da confrontare → OK, non il falso ERR di prima.
+    wb = _wb_voce(15, 5, "='Salari e Stipendi'!N3", 9393.33)
+    assert _c7(wb).outcome == CheckOutcome.OK
+
+
+def test_c7_confronta_lo_stesso_mese_anche_se_le_colonne_differiscono():
+    assert _c7(_wb_voce(14, 5, 100.0, 100.0)).outcome == CheckOutcome.OK
+    r = _c7(_wb_voce(15, 5, 100.0, 250.0))
+    assert r.outcome == CheckOutcome.ERR and "Riga 15" in r.title and "2026-09" in r.detail
+
+
+def test_c7_senza_riga_della_voce_e_indeterminato():
+    wb = _wb_voce(15, 0, 100.0, 250.0, etichetta="Altro")
+    assert _c7(wb).outcome == CheckOutcome.INDET
