@@ -112,3 +112,20 @@ def test_c1_fixed_snapshot_err_c2_vuota(intur_pf_bytes):
     c1 = next(r for r in report.results if r.check_id == "C1")
     assert c1.outcome == CheckOutcome.ERR
     assert "C2 vuota" in c1.detail
+
+
+def test_c1_fixed_snapshot_data_in_c1_ok(intur_pf_bytes):
+    """PF INTUR da settembre 2026: data della fotografia in C1, C2 vuota → OK."""
+    from datetime import datetime
+
+    wb = openpyxl.load_workbook(BytesIO(intur_pf_bytes), data_only=False)
+    pf = wb["Piano Finanziario"]
+    pf["C1"] = datetime(2026, 9, 30)
+    pf["C2"] = None
+    pf["C31"] = 49609.01
+    pf["C32"] = 376510.97
+    pf["C33"] = 1696.48
+
+    report = verifica_controlli(wb, periodo_chiuso=P(4))
+    c1 = next(r for r in report.results if r.check_id == "C1")
+    assert c1.outcome == CheckOutcome.OK, f"detail={c1.detail}"

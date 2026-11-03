@@ -107,13 +107,14 @@ def _check_C1_saldo_iniziale_hardcoded(
 ) -> CheckResult:
     pf = wb["Piano Finanziario"]
     if layout.snapshot_kind == "fixed-snapshot":
-        c2 = pf["C2"].value
+        cella = layout.data_cell or "C2"
+        c2 = pf[cella].value
         if not c2:
             return CheckResult(
                 "C1",
                 "Snapshot C: data rilevazione popolata",
                 CheckOutcome.ERR,
-                "C2 vuota",
+                f"{cella} vuota",
             )
         bad_rows = [
             f"C{r}"
