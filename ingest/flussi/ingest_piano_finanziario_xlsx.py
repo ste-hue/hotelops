@@ -694,7 +694,7 @@ def main() -> None:
     parser.add_argument(
         "--accetta-sottile",
         action="store_true",
-        help=f"scrivi anche se il file ha meno del {SOGLIA_SOTTILE:.0%} delle righe oggi in tabella "
+        help=f"scrivi anche se il file ha meno del {SOGLIA_SOTTILE * 100:.0f}%% delle righe oggi in tabella "
         "per (società, fonte) — di norma è un file con formule senza valori cached",
     )
     parser.add_argument("--output-dir", default="output")
