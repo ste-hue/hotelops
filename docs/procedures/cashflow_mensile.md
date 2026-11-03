@@ -2,144 +2,321 @@
 subsystem: condges
 code_paths:
   - verticals/condges/pf_rotate/rotate.py
+  - verticals/condges/pf_rotate/extend.py
+  - verticals/condges/pf_rotate/excel_model.py
   - verticals/condges/pf_rotate/saldi_registry.py
   - verticals/condges/pf_rotate/pf_writer.py
   - verticals/condges/scadenze_parse.py
+  - verticals/condges/guida_rosa.py
+  - ingest/flussi/ingest_piano_finanziario_xlsx.py
+  - core/bq/load/load_pf_rotazioni.py
   - core/bq/load/load_saldi_banca_chiusura_mensile.py
   - core/bq/dimensioni/d_saldi_banca_chiusura_mensile.csv
   - core/bq/dimensioni/d_fornitori.csv
-last_verified: 2026-10-26
-source: tribal knowledge (Rosa) → first written 2026-05-13
+last_verified: 2026-11-03
+source: tribal knowledge (Rosa) → first written 2026-05-13; riscritta dall'inizio il 2026-11-03 (indice A/B/C di knowledge, parola di Stefano)
 ---
 
-# Procedura: Rollover Cashflow Mensile (Piano Finanziario Rosa)
+# Procedura: il ciclo mensile del Piano Finanziario (Cashflow)
 
-> **⚠️ AGGIORNAMENTO 2026-06-23 — flusso e persistenza cambiati.**
-> Lo step 2 NON usa più `streamlit run app_scadenzario.py` (file **cancellato**): si usa
-> l'**app Cashflow** montata nel hub (`verticals/condges/app_cashflow.py`), che gira il
-> motore canonico `pf_rotate.rotate()`. Conseguenze su questo doc:
-> - **Persistenza mappatura fornitori:** NON più `st.session_state` (la nota "si perde al
->   refresh" più sotto è **superata**). "Salva mapping" fa `upsert_fornitore_bq` →
->   **MERGE su BigQuery `d_fornitori`** (chiave `codice_fornitore+societa_id`), permanente.
->   Il CSV `core/bq/dimensioni/d_fornitori.csv` è solo **seed/export**.
->   - ⚠️ **Doppia-verità (open):** gli upsert in-app NON vengono riscritti nel CSV. Il loader
->     `core/bq/load/load_fornitori.py` fa WRITE_TRUNCATE dal CSV (ora protetto da `--force`):
->     un reseed dal CSV stale **cancellerebbe** le mappature fatte in-app. Prima di QUALSIASI
->     reseed: `python -c "from verticals.condges.pf_rotate.fornitori_map import export_fornitori_to_csv, FORNITORI_CSV; export_fornitori_to_csv(FORNITORI_CSV)"` e committa il CSV.
-> - **Importo per scadenza (fix issue #47, 2026-06-23):** `parse_scadenze` ora legge la colonna
->   **Z "Saldo scadenza in UDC"** (residuo per-scadenza, col 26), non più T "Importo apertura"
->   (col 20 = fattura intera ripetuta su ogni rata → importi sballati).
+Questo file è **l'unico posto** in cui la procedura è scritta. Nel vault c'è un puntatore, non una
+copia. La sezione A è scritta per Rosa e la sua guida HTML si **genera da qui** (`hotelops` →
+`python -m verticals.condges.guida_rosa docs/procedures/cashflow_mensile.md --out <file.html>`),
+non si riscrive a mano.
 
-Ogni mese si genera un nuovo file Piano Finanziario (PF Rosa) a partire da quello del mese precedente. Il file mostra:
+Tre sezioni, tre persone: **A. Rosa** (il file), **B. Stefano** (le decisioni e le firme),
+**C. Tecnica** (carico, archivio, ancora, push: chi esegue la finestra). L'ordine del mese è
+A → B → C; dentro C nessun passo si salta.
 
-- **Mese corrente** (colonna 3 dello sheet master "Piano Finanziario"): primo mese previsionale. La sua riga 4 `SALDO MESE PRECED` = somma saldi banca a fine mese precedente (consuntivo).
-- **Mesi N+1 → N+8** (colonne 4-11): proiezione forward di entrate e uscite.
-- **Sheet dettaglio per voce USCITE** (es. `Materie Prime-Consumo `, `Utenze`, …): righe per singolo fornitore con importi per mese.
-
-Il rollover N → N+1 sostituisce la colonna N con la N+1 come nuovo "mese corrente", aggiorna i saldi banca al consuntivo di fine N, e ridistribuisce i debiti residui fornitori secondo il nuovo scadenzario Esolver.
+Storia breve: dal 2026-06-23 la rotazione non usa più `app_scadenzario.py` (file cancellato) ma
+l'**app Cashflow** nel hub (`verticals/condges/app_cashflow.py`), che gira lo stesso motore della
+CLI (`pf_rotate.rotate()`); la mappatura dei fornitori è permanente su BigQuery (`d_fornitori`,
+MERGE su `codice_fornitore + societa_id`), il CSV `core/bq/dimensioni/d_fornitori.csv` è solo
+seed/export. Il motore legge **due layout** di master: ORTI «month-closed» (saldi nella colonna
+del mese chiuso) e INTUR «fixed-snapshot» (saldi fissi in colonna C), e dal 2026-11-03 riconosce
+INTUR sia con l'intestazione «DATA RILEVAZ» in C1 sia con la **data scritta in C1** (#209).
 
 ---
 
-## Quando — il rito del giorno 1 (regola Stefano, 2026-10-26)
+## Quando — il rito del giorno 1 (regola di Stefano, 2026-10-26)
 
-**Il giorno 1 di N+1 devono esistere gli input datati all'ultimo giorno di N.** Non "tra il 5 e il 10":
-la rotation di N si fa appena il mese è chiuso, con una fotografia presa al 30/31 di N. Chiudere
-settembre con uno scadenzario del 26/09 (successo il 2026-10-26) è un debito da rifare, non una rotation.
-
-- Il contratto di freschezza di `ESOLVER_PARTITE_*_SNAPSHOT` ha `grace_day: 1`: dal 2 del mese
-  `hotelops health` segna le partite STALE finché non c'è la foto di fine mese.
-- I saldi di fine mese si prendono **dal foglio di Rosa "Saldi Banca Fine Mese"** (Drive), colonna
-  di N compilata per **tutti** i conti del registry (`pf_rotate/saldi_registry.py`): ORTI = MPS, Intesa,
-  **MPS Kross, Unicredit** (contati dal 2026-10-26); INTUR = Sella, MPS, Intesa. BCP resta fuori (D3).
-  Senza un saldo obbligatorio il motore si ferma (gate O-A), non lo salta.
+**Il giorno 1 di N+1 devono esistere gli input datati all'ultimo giorno di N**: i saldi dei sette
+conti al 30/31 di N nel foglio di Rosa, i due scadenziari Esolver esportati il 30/31 di N **o
+dopo**. La rotazione di N si fa appena il mese è chiuso, non «tra il 5 e il 10». Chiudere un mese
+con uno scadenziario di quattro giorni prima è un debito da rifare, non una rotazione.
 
 ---
 
-## Prerequisiti
+## A. Rosa — il file del mese
 
-| Input | Origine | Nota |
-|---|---|---|
-| PF mese N | Drive cartella Rosa, file col **nome semplice** `XXX_PF_YYYY-MM.xlsx` (= Rosa l'ha visto) | ORTI: layout month-closed; INTUR: fixed-snapshot (`C1="DATA RILEVAZ"`) |
-| Saldi banca al 30/31 di N | Foglio Rosa "Saldi Banca Fine Mese" (Drive) → righe in `core/bq/dimensioni/d_saldi_banca_chiusura_mensile.csv` → `python -m core.bq.load.load_saldi_banca_chiusura_mensile` (CSV = verità, WRITE_TRUNCATE) | un saldo senza data di riferimento non si registra; la nota della riga cita il foglio |
-| Scadenzario partite (×2 società) | Esolver "Situazione partite sintetica per fornitori", senza filtri, **esportato il 30/31 di N o dopo** | intake → `ESOLVER_PARTITE_<SOC>_SNAPSHOT`; attenzione: l'export "ORTI" può contenere INTUR (ragione sociale interna) |
+Questa parte è per Rosa. Niente nomi di comandi, niente codici: solo cosa fare e come capire se è
+andata bene. Si lavora una società per volta: prima ORTI, poi INTUR.
 
----
+### A1. Quando
+Il giorno 1 del mese nuovo, o subito dopo. Se manca un pezzo (un saldo, uno scadenziario), lo si
+dice e si aspetta: non si parte con i numeri del mese prima.
 
-## Passi
+### A2. Il foglio «Saldi Banca Fine Mese»
+Nel foglio su Drive, la colonna del mese appena chiuso va compilata per **tutti e sette i conti**:
+ORTI Intesa, MPS, MPS Kross, Unicredit; INTUR Sella, MPS, Intesa. BCP è chiuso e resta fuori.
+**Un conto senza numero non è zero**: se un estratto non c'è ancora, la cella resta vuota e lo si
+scrive a Stefano. Non copiare un numero da un'altra riga per «far tornare» il totale, e non
+incollare valori sopra le celle che hanno una formula: i subtotali li calcola il foglio.
 
-### 1. Skeleton mese N+1 — **manuale** (sarà automatizzato in fase 2)
+### A3. La rotazione nell'app Cashflow
+Nel hub, tessera **Cashflow** (sezione Finanza), con l'account di amministrazione. Serve il PF del
+mese da chiudere, preso dalla cartella master su Drive, e lo scadenziario Esolver della stessa
+società («Situazione partite sintetica per fornitori», esportato in .xlsx, senza filtri, il 30/31
+del mese o dopo). Nell'app:
+1. **Società**: ORTI o INTUR.
+2. **PF del mese da chiudere**: carica il file di quella società.
+3. **Scadenziario fornitori**: carica lo scadenziario della stessa società. Sotto, l'app scrive
+   quanti fornitori ha letto e i mesi che copre: la riga non deve essere vuota.
+4. **Ultimo mese con saldi banca certificati**: il numero del mese che chiudi (per il PF di
+   ottobre si mette **9**, settembre; per il PF di novembre si mette 10). **Anno**: quello del
+   mese chiuso.
+5. **Saldi banca al cutover**: un campo per conto, già compilato se i saldi sono nel sistema.
+   Confrontali con il tuo foglio; se un numero non torna, correggi a mano.
+6. **Fornitori non mappati**: scegli **«fail (blocca)»**: se un fornitore manca, l'app si ferma e
+   non lascia fuori niente in silenzio.
+7. **Genera PF mese successivo** (fino a 30 secondi), leggi gli esiti, poi **Scarica**.
 
-Aprire il PF di N e:
+Cosa deve uscire: fornitori da mappare **0** (se compaiono, vedi A4); **Controlli: ERR = 0**.
+INDET non è un errore (vuol dire «non abbastanza dati per decidere», per esempio una cella che
+Excel non ha ancora ricalcolato). Con ERR maggiore di 0 il file **non si usa**: il nome finisce
+con `_FAILED_CHECKS`, e i controlli falliti si mandano a Stefano.
 
-1. **Sheet master "Piano Finanziario"**:
-   - Shiftare i mesi a sinistra: colonna 3 diventa N+1, colonna 11 diventa N+9.
-   - Azzerare/sovrascrivere riga 31 con la data di fine mese N (es. `30/04/2026`).
-   - Aggiornare righe 32+ (Saldo MPS, Saldo Intesa, …) con i saldi consuntivo di fine N.
-   - Aggiornare riga 4 (SALDO MESE PRECED) colonna 3 = somma nuovi saldi banca.
-2. **Sheet dettaglio per ciascuna voce USCITE** (`Materie Prime-Consumo `, `Utenze`, `Salari e Stipendi`, `Tasse e Imposte`, `Commisisoni Portali`, `Mutui e Finaziamenti`, `Consulenze`, `Godimento Beni di Terzi`, ` Varie ed Eventuali`, `Canoni e servizi`):
-   - Shiftare le colonne mese (col 4..12) di un mese.
-   - Azzerare le celle del vecchio mese N nelle righe fornitori (lasciando intatte riga 3 PREVISIONALE e riga 4 totale voce).
+### A4. Mappatura dei fornitori
+Se l'app mostra «fornitori da mappare», per ognuno si sceglie la voce del PF (Materie prime,
+Utenze, Consulenze, Varie ed eventuali…). **La scelta è permanente**: vale anche per i mesi dopo.
+Se un fornitore non deve mai entrare nel PF, «escludi sempre». Se non sai dove metterne uno,
+scrivi nome e codice a Stefano prima di scegliere: con «fail (blocca)» l'app aspetta.
 
-**Razionale del cancellamento**: tutto ciò che era previsto per il mese N ora è materializzato nei saldi banca aggiornati. Lasciarlo in cella creerebbe double counting.
+### A5. Le somme di riga nei fogli di dettaglio
+In ogni foglio di dettaglio (Utenze, Salari, Materie prime…) la colonna **C** è la somma della
+riga su tutti i mesi. Nei file prodotti dall'app dal 2026-11-03 in poi la somma arriva da sola
+fino all'ultimo mese del foglio. Nei file **vecchi**, o se un totale si ferma prima dell'ultimo
+mese, si allunga la somma a mano fino all'ultima colonna-mese (è successo nel PF di ottobre ORTI).
 
-### 2. Rotation — **automatizzata** (`hotelops pf-rotate`, oppure app Cashflow nel hub)
+### A6. Aprire il file in Excel e salvarlo
+**Sempre.** L'app scrive le formule ma non i risultati; il sistema legge i risultati. Un file
+scaricato e non salvato da Excel **arriva vuoto senza nessun errore** (è successo con il PF di
+ottobre INTUR). Quindi: apri il file, guarda che «Piano Finanziario» e «Controlli» abbiano senso,
+**salva da Excel**.
 
-```bash
-hotelops pf-rotate --pf <PF di N> --scad <partite al 30/31 di N> --societa ORTI \
-  --mese-chiuso <N> --anno <YYYY> --unmapped-policy skip [--exclude 264]
-```
+### A7. Su Drive con il nome pulito
+Rinomina il file in `ORTI_PF_AAAA-MM.xlsx` (per INTUR uguale, con INTUR): il mese nel nome è il
+**primo mese aperto**, cioè il mese nuovo (il PF di ottobre si chiama `..._2026-10`). Caricalo
+nella cartella master dei PF, accanto a quelli del mese prima.
 
-Il motore fa da solo lo step 1 (saldi dal CSV→BQ, azzera il mese chiuso senza toccare formule,
-avanza la cascata) e scrive un file nuovo `<SOC>_PF_<primo mese aperto>_post-rotate_<ts>.xlsx`;
-con ERR nei Controlli il file esce con suffisso `_FAILED_CHECKS`. Più mesi arretrati = più giri in
-catena sull'output precedente. I non mappati finiscono nel foglio `DA MAPPARE<n>`: li assegna Rosa.
+### A8. Dire che è pronto
+Scrivi a Stefano che i due file sono su Drive. **Rosa non carica niente nel sistema**: il carico, la
+promozione e la pagina sono passi tecnici con una firma (sezione B e C). Poi il file torna a Rosa
+per compilare incassi e costi dei mesi nuovi (il PF arriva a dicembre 2029 e le rate dei mutui
+da luglio 2027 sono già scritte dai contratti).
 
-Equivalente nell'app Cashflow (`verticals/condges/app_cashflow.py`, stesso motore), nell'app:
-
-1. Upload **Piano Finanziario** (file post-step 1)
-2. Upload **Situazione fornitori** (scadenzario Esolver di N+1)
-3. Review:
-   - Mappati: fornitori con `voce_id` in `d_fornitori.csv`
-   - Non mappati: fornitori senza voce — assegnare manualmente nell'UI (persiste in session)
-   - Escludere fornitori specifici con checkbox se necessario
-4. Click **"Aggiorna PF Excel"** → download
-
-Cosa scrive l'app (`app_scadenzario.write_pf`):
-
-- Per ogni fornitore mappato: cerca la riga nel foglio dettaglio della sua voce (match per codice colonna 1, fallback per nome fuzzy colonna 2)
-- Scrive `scaduto` → colonna del mese corrente (= mese N+1 per `date.today().month`)
-- Scrive importi `mese_K` → colonna del mese K
-- Sign flip (scadenzario negativo → PF positivo)
-- Aggiusta riga `PREVISIONALE` se è dentro il range del SUM totale, riducendola di `supplier_total` per evitare double counting (SUM = MAX(orig_prev, supplier_total))
-
-### 3. Voci non-fornitori — **manuale**
-
-L'app aggiorna solo le 10 voci USCITE legate a fornitori. Le restanti restano da aggiornare a mano nel master "Piano Finanziario":
-
-- **ENTRATE**: Entrate Hotel, Residence, CVM, Supermercato, Rientro Sospesi, Caparre Intur (forecast manuale)
-- **USCITE non-fornitore**: Mutui e Finaziamenti, Salari e Stipendi, Tasse e Imposte (forecast manuale, anche se hanno fogli dettaglio)
-- Eventuali altre celle sul master Piano Finanziario
-
----
-
-## Verifica
-
-Check operativo prima di passare il file a Rosa:
-
-1. **Eyeball 3-5 fornitori chiave** (es. Le Croissant, Ausino, fitto INTUR): aprire il foglio dettaglio della loro voce e confermare che le celle del mese N+1 corrispondono ai valori attesi dallo scadenzario.
-2. **Sanity check sui totali**: riga 27 (TOTALE USCITE) del master deve aggiornarsi automaticamente via formula SUM dai fogli dettaglio; controllare che il valore N+1 sia plausibile vs N.
-3. **Coerenza saldi banca**: la riga TOTALE BANCHE del master deve essere = somma di **tutti** i conti del registry (ORTI: MPS + Intesa + MPS Kross + Unicredit; INTUR: Sella + MPS + Intesa) e coincidere col subtotale del foglio di Rosa. Riga 4 (SALDO MESE PRECED) colonna N+1 deve essere uguale.
-4. **Riga 29 Cash Flow** colonna N+1 = TOTALE ENTRATE − TOTALE USCITE.
-
-Approval finale: passare il file a Rosa, attendere conferma o segnalazione anomalie.
+### Se qualcosa va storto
+- «Genera» gira e non finisce mai: ricarica la pagina e rifai i passi; se succede due volte, manda a
+  Stefano l'ora e la società.
+- Riquadro rosso «Rotation fallita: …»: copia tutto il testo e mandalo a Stefano. Il file non è
+  stato prodotto, non c'è niente da buttare.
+- Controlli con ERR maggiore di 0: non usare il file; manda a Stefano i controlli falliti.
 
 ---
 
-## Limitazioni note (TODO)
+## B. Stefano — le decisioni
 
-- **Step 1 (skeleton) è manuale** → in fase 2 l'app farà shift colonne + cancellamento mese N + scrittura saldi banca.
-- **Step 3 (non-fornitori) resta manuale** → non in scope per questa patch.
-- **Match fornitori per nome è fuzzy** (containment ≥4 char in entrambe le direzioni) — può causare falsi positivi rari. Match per codice fornitore è preferito quando disponibile.
-- **Sheet name typos** (`Commisisoni Portali`, `Mutui e Finaziamenti`, ` Varie ed Eventuali`) sono hardcoded in `app_scadenzario.VOCE_TO_SHEET_CANDIDATES`. Se Rosa cambia template, aggiornare la mappa.
-- **Voce assignments per fornitori non mappati** vivono in `st.session_state` e si perdono al refresh. Se ricorrenti, aggiungerli a `core/bq/dimensioni/d_fornitori.csv` come fix permanente.
-- **Library `verticals/condges/scadenzario_excel.py`** contiene un workflow alternativo (`parse_sintetica_scadenze` + `cascade_scaduto` + `write_back_to_pf`) per il formato "Situazione sintetica scadenze" (aggregato per fornitore). Non collegato alla CLI attiva. Dead code candidato a rimozione.
+### B1. Apertura della finestra e chi esegue
+Ogni mese la finestra tecnica (sezione C) si apre con una parola di Stefano («apri la finestra»)
+e ha **un solo esecutore** dichiarato (una sessione, una macchina). Chi produce il file (Rosa
+nell'app, oppure una sessione con la CLI che poi Rosa rivede) lo dice Stefano; il file di Rosa è
+l'input, un file nostro è un confronto.
+
+### B2. Gli scadenziari Esolver
+Due export «Situazione partite sintetica per fornitori», uno per società, senza filtri,
+**esportati il 30/31 del mese chiuso o dopo**, con la **data di esportazione dichiarata** nel nome
+o nel messaggio. Attenzione: l'export «ORTI» può contenere INTUR (ragione sociale interna). Un
+export precedente alla chiusura non vale: si rifà.
+
+### B3. Voci non-fornitori e merito
+L'app aggiorna le voci di uscita legate ai fornitori. Restano decisioni di merito, da dire a Rosa
+o scrivere nel file: le **entrate** (Hotel, Residence, CVM, Supermercato, Rientro sospesi,
+Caparre), **Salari**, **Tasse e imposte** oltre lo schema ricorrente, i **mutui** fuori contratto,
+il **canone** e i fitti verso terzi, i progetti (cantiere, soft restyling) che entrano come leve
+nella pagina Cassa e non nel PF. Un numero «scritto» (una stima, un tetto) resta tale finché non ha
+una fonte: la pagina lo mostra come dichiarato, non come attestato.
+
+### B4. Le firme dei passi non reversibili
+Tre passi scrivono fuori dal file e si fanno **solo su parola di Stefano**, uno per uno:
+1. il **carico** dei file in BigQuery (archivio delle rotazioni e piano vivo);
+2. la **promozione** del piano vivo (sostituisce il piano precedente per società);
+3. il **push** della pagina Cassa (`pubblica`).
+Chi esegue dichiara prima lo SHA di `main` con cui gira, e dopo scrive la ricevuta nel verbale
+della finestra. Le cifre vere restano fuori dai commit e dalle PR (repository pubblico).
+
+---
+
+## C. Tecnica — carico, archivio, ancora, push
+
+Esecutore: uno solo, dichiarato in B1. Ogni passo ha un comando, un dry-run dove esiste, e una
+ricevuta misurata. Si gira da un clone allineato a `origin/main`, con lo SHA scritto accanto a ogni
+ricevuta. Il verbale della finestra è il posto delle ricevute.
+
+### C1. Controllo dei valori in cache — PRIMA di tutto
+Un file di Rosa salvato da Excel porta i risultati delle formule; un file prodotto dall'app e non
+risalvato no, e il loader lo legge come **vuoto senza errore**. Controllo:
+
+    python -m ingest.flussi.ingest_piano_finanziario_xlsx --file <PF.xlsx> --dry-run
+
+Il dry-run stampa le righe lette: un PF intero ne porta decine (ORTI ~110, INTUR ~70 nell'ultimo
+anno); poche righe o zero = formule senza cache. Il loader rifiuta il carico di un file «sottile»
+(meno di una quota delle righe oggi in tabella per società) salvo `--accetta-sottile`, che non si
+usa. Rimedio: Rosa riapre e salva da Excel (A6); in alternativa il ricalcolo headless
+
+    soffice --headless --calc --convert-to xlsx --outdir <cartella> <PF.xlsx>
+
+che **produce un file nuovo con un altro sha256**: nel verbale si scrivono entrambi, «in ingresso
+→ ricalcolato», con la riga esatta del comando. Il dry-run e il carico girano sul file ricalcolato.
+Nota: il ricalcolo headless non ripara le formule che Excel non ha mai calcolato in un file
+costruito a mano; il controllo sulle righe lette resta la prova.
+
+### C2. Saldi di fine mese e scadenziari
+**Saldi.** Il CSV `core/bq/dimensioni/d_saldi_banca_chiusura_mensile.csv` è la verità e il carico
+**sostituisce tutta la tabella** (WRITE_TRUNCATE): una riga per (società, data di riferimento,
+conto), la nota cita il foglio di Rosa e la data di lettura. **Un conto mancante non si scrive a
+zero**: la riga non c'è, e il motore della rotazione si ferma (gate O-A) invece di saltarlo.
+
+    python -m core.bq.load.load_saldi_banca_chiusura_mensile --dry-run
+    python -m core.bq.load.load_saldi_banca_chiusura_mensile
+
+Ricevuta: `SELECT societa_id, banca_id, saldo_eur FROM f_saldi_banca_chiusura_mensile WHERE
+data_riferimento = '<AAAA-MM-GG>'` = sette righe, i numeri del foglio di Rosa.
+
+**Scadenziari.** Intake dal Drive con il nome di sorgente del registry (freschezza `grace_day: 1`:
+dal 2 del mese `hotelops health` segna STALE finché non c'è la foto di fine mese):
+
+    python -m ingest.drive_fetch --source-name ESOLVER_PARTITE_ORTI_SNAPSHOT --file-id <id>
+    python -m ingest.drive_fetch --source-name ESOLVER_PARTITE_INTUR_SNAPSHOT --file-id <id>
+
+Ricevuta: il raw in lineage con la data di esportazione dichiarata (B2).
+
+### C3. Rotazione e allungamento (due layout)
+Stesso motore dell'app Cashflow, dalla CLI:
+
+    hotelops pf-rotate --pf <PF di N> --scad <partite al 30/31 di N> --scad-tipo sintetica \
+      --societa ORTI --mese-chiuso <N> --anno <AAAA> --unmapped-policy fail [--exclude 264]
+
+Il motore legge i saldi da BigQuery (C2), azzera il mese chiuso senza toccare formule, avanza la
+cascata, scrive i fornitori nei fogli di dettaglio e produce `<SOC>_PF_<primo mese aperto>_post-rotate_<ts>.xlsx`;
+con ERR nei Controlli il file esce con suffisso `_FAILED_CHECKS`. I due layout: ORTI month-closed
+(saldi nella colonna del mese chiuso), INTUR fixed-snapshot (saldi in colonna C; riconosciuto con
+«DATA RILEVAZ» in C1 oppure con la **data in C1**, #209: la data resta una data, non testo).
+Più mesi arretrati = più giri in catena sull'output precedente.
+
+**Allungamento dell'orizzonte** (una volta l'anno, o quando serve; atto dichiarato nel verbale con
+lo SHA):
+
+    hotelops pf-extend --pf <PF.xlsx> --to AAAA-MM [--trim-before AAAA-MM]
+
+Copia il pattern dell'ultima colonna-mese con traduzione dei riferimenti, sposta la colonna TOTALI
+del master e **ripunta anche i totali di riga a sinistra dei mesi nei fogli di dettaglio** (#218:
+prima restavano fermi all'ultimo mese vecchio e le colonne nuove uscivano dal totale); il foglio
+Controlli viene riallineato all'orizzonte nuovo (#214). Un totale di riga che già non arrivava
+all'ultimo mese non viene allungato: è un range corto di chi ha scritto il file, si sistema a
+mano (A5). I mesi aggiunti sono **vuoti**: nel piano vivo e nella pagina sono «non pianificati»,
+mai zero (vedi `cdg_cassa.md`, punto 15).
+
+### C4. Archivio delle rotazioni e promozione del piano vivo
+Due tabelle, due carichi, due ricevute.
+
+**Archivio `f_pf_rotazioni`** (tutte le versioni, una riga per società·voce·anno·mese·fonte·file,
+con `occorrenza` nell'hash per le voci ripetute nello stesso mese, #168). Carico normale del mese:
+
+    python -m core.bq.load.load_pf_rotazioni --dry-run <PF ORTI> <PF INTUR>
+    python -m core.bq.load.load_pf_rotazioni <PF ORTI> <PF INTUR>
+
+Il loader fa DELETE per `file_sorgente` + INSERT. Se la chiave di riga è cambiata (come con #168)
+la corsa deve coprire **tutti** i file in tabella in una volta: `--ricarico-completo` con l'elenco
+completo, e il loader rifiuta una corsa parziale finché restano righe con la chiave vecchia.
+Ricevuta (dichiarata prima, misurata dopo):
+
+    SELECT COUNT(*) AS totale,
+           COUNTIF(hash_riga = TO_HEX(MD5(CONCAT(societa_id,'|',voce_id,'|',CAST(anno AS STRING),'|',CAST(mese AS STRING),'|',fonte,'|',file_sorgente)))) AS chiave_vecchia,
+           COUNT(DISTINCT hash_riga) AS hash_distinti,
+           COUNT(DISTINCT file_sorgente) AS file
+    FROM `hotelops-suite.hotelops.f_pf_rotazioni`
+
+attesa: `chiave_vecchia = 0`, `totale = hash_distinti`, `file` = numero di file in archivio, e per
+file le stesse righe del dry-run rifatto subito prima della corsa.
+
+**Piano vivo `f_piano_finanziario_input`** (chiave naturale `[societa_id, fonte]`: la promozione
+**sostituisce** il piano precedente della società, come fa il foglio). Intake + promote dal Drive
+(policy AUTO) o dal file:
+
+    python -m ingest.drive_fetch --source-name ESOLVER_PF_ORTI_SNAPSHOT --file-id <id>
+    python -m ingest.drive_fetch --source-name ESOLVER_PF_INTUR_SNAPSHOT --file-id <id>
+    # oppure, dal file: python -m ingest.flussi.ingest_piano_finanziario_xlsx --file <PF.xlsx> [--dry-run]
+
+Ricevuta: una sola `file_sorgente` per società; `hotelops cdg cassa --aggiorna` non si ferma su
+`BaselineNonUnica`; in «Fonti e versioni» della pagina compare il file nuovo con la data di
+caricamento. Il canone e i fitti verso terzi vengono isolati per etichetta della riga nel foglio
+di dettaglio: se cambia il nome della riga, la pagina perde il canone (controllare «Canone come
+nel PF» in testa).
+
+### C5. Controllo d'ancora — prima della promozione
+Il PF di N+1 porta i saldi di fine N per conto (righe «Saldo <banca>» del master; «SALDO MESE
+PRECED.» = la loro somma nella colonna del primo mese aperto). Prima di promuovere, si confrontano
+**conto per conto** con `f_saldi_banca_chiusura_mensile` alla data di fine N e con i valori noti
+sbagliati del foglio dei saldi (subtotali incollati nelle righe banca, saldi copiati da un'altra
+società). **Rosso = la promozione si ferma**: si scrive nel verbale cosa porta il file, la
+correzione la fa Rosa nel foglio, non noi in BigQuery. Lo script usato nella finestra di ottobre
+2026 (`controllo_ancora_3009.py`, con il riferimento BigQuery salvato in un JSON) vive nel dossier
+locale della finestra, fuori dal repository; la regola è questa, lo script la applica.
+
+### C6. Quadratura e i quattro controlli
+**Quadratura al centesimo** (file per file, prima del carico): per ogni colonna-mese del master,
+somma delle voci parsate = riga TOTALE ENTRATE e riga TOTALE USCITE del foglio; le differenze si
+dichiarano con mese e importo, non si «sistemano». Lo script della finestra (`pf_quadratura.py`,
+dossier locale) legge il master con i valori in cache: **non vede i totali di riga dei fogli di
+dettaglio** (colonna C), che il loader non usa.
+
+I quattro controlli operativi sul file, prima di passarlo a Rosa (e dopo, prima di promuovere):
+1. **Eyeball di 3–5 fornitori chiave** (es. Le Croissant, Ausino, fitto INTUR): nel foglio di
+   dettaglio della loro voce le celle del primo mese aperto corrispondono allo scadenziario.
+2. **Totali**: la riga TOTALE USCITE del master si aggiorna via formula dai fogli di dettaglio;
+   il valore del primo mese aperto è plausibile rispetto al mese chiuso.
+3. **Saldi banca**: TOTALE BANCHE del master = somma di **tutti** i conti del registry (ORTI: MPS +
+   Intesa + MPS Kross + Unicredit; INTUR: Sella + MPS + Intesa) e coincide con il foglio di Rosa;
+   «SALDO MESE PRECED.» del primo mese aperto è uguale.
+4. **Cash Flow** del primo mese aperto = TOTALE ENTRATE − TOTALE USCITE.
+Il foglio «Controlli» del file li ripete per etichetta (C1–C16, #210): ERR = 0 è la condizione.
+
+### C7. Push della pagina Cassa
+Dal clone che ha le tre variabili Cloudflare nel `.env` (oggi il Mac), su parola «pubblica»:
+
+    python -m cli cdg scenario salva .hotelops_state/cdg_cassa/base_scenario.json   # solo se il seme è cambiato
+    python -m cli cdg cassa --aggiorna --push
+
+Ricevuta: rilettura del KV (`cassa_html`, `generato_il` dell'ora del push) e, in pagina, «Fonti e
+versioni» con il file PF nuovo, i saldi di partenza alla data di fine N, i mesi oltre il PF come
+«senza PF» e i mesi vuoti come «non pianificati». I file locali accanto al seme (`pf_corretto.json`,
+`canone_dichiarato.json`, `banda_pf.json`) non stanno nel repository: si portano a mano.
+
+---
+
+## Limitazioni note (aggiornate 2026-11-03)
+- `app_scadenzario.py` è **cancellato** dal 2026-06-23: nessun passo lo usa; la mappatura dei
+  fornitori è su BigQuery (`d_fornitori`), permanente, e il CSV è solo seed/export. **Doppia verità
+  aperta**: gli upsert in-app non tornano nel CSV; `core/bq/load/load_fornitori.py` fa WRITE_TRUNCATE
+  dal CSV (protetto da `--force`). Prima di qualsiasi reseed esportare la tabella nel CSV
+  (`export_fornitori_to_csv`) e committare.
+- Le voci non-fornitori (B3) restano a mano nel master.
+- Il match dei fornitori per nome è fuzzy (containment ≥ 4 caratteri): il codice fornitore vince
+  quando c'è.
+- I nomi dei fogli con refuso (`Commisisoni Portali`, `Mutui e Finaziamenti`, ` Varie ed Eventuali`)
+  sono nel motore: se Rosa cambia template, aggiornare la mappa.
+- `verticals/condges/scadenzario_excel.py` è un flusso alternativo non collegato alla CLI: codice
+  morto candidato a rimozione.
+- Le stime oltre l'ultimo mese pianificato da Rosa (righe «Stima …» nei dettagli) oggi non sono
+  distinguibili dal piano nel carico: proposta in corso (loader marca le righe, pagina le mostra
+  come «stima»); finché non c'è, non si caricano.
