@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Iterable
 
 from openpyxl.worksheet.worksheet import Worksheet
@@ -151,6 +152,10 @@ class PFLayout:
     snapshot_kind: str = (
         "month-closed"  # "month-closed" | "fixed-snapshot" (C is DATA RILEVAZ)
     )
+    # fixed-snapshot: la cella della data di rilevazione. "C2" sotto la scritta
+    # «DATA RILEVAZ» in C1 (forma storica); "C1" quando la data sta in C1 al posto
+    # della scritta (PF INTUR di Rosa da settembre 2026).
+    data_cell: str | None = None
 
 
 def find_layout(wb) -> PFLayout:
@@ -200,8 +205,15 @@ def find_layout(wb) -> PFLayout:
     # snapshot of saldi banche, independent of which month is closed).
     c1_val = pf["C1"].value
     snapshot_kind = "month-closed"
+    data_cell = None
     if isinstance(c1_val, str) and "data rilevaz" in c1_val.strip().lower():
-        snapshot_kind = "fixed-snapshot"
+        snapshot_kind, data_cell = "fixed-snapshot", "C2"
+    elif (
+        isinstance(c1_val, (datetime, date))
+        and str(pf["C2"].value or "").strip().upper() not in MESI_IT
+    ):
+        # La data della fotografia in C1 al posto della scritta: stessa colonna C fissa.
+        snapshot_kind, data_cell = "fixed-snapshot", "C1"
 
     return PFLayout(
         saldo_iniziale_row=saldo_iniziale_row,
@@ -214,6 +226,7 @@ def find_layout(wb) -> PFLayout:
         entrate_rows=entrate_rows,
         uscite_rows=uscite_rows,
         snapshot_kind=snapshot_kind,
+        data_cell=data_cell,
     )
 
 
