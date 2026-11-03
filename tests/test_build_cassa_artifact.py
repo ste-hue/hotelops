@@ -1189,3 +1189,10 @@ def test_payload_porta_la_banda_e_la_pagina_la_mostra():
     assert "function banda(soc, h)" in html and "const fraseBanda" in html and 'class="piccolo banda"' in html
     assert "Documento di pianificazione, non previsione." in html and "c.hidden = !(hPf > 12)" in html
     assert '"senza PF", "non pianificato", "saldo iniziale €"' in html
+
+
+def test_il_nome_del_pagamento_si_scrive_nella_testata():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert '<input type="text" class="pag-nome nome" data-campo="nome"' in html
+    assert "modifica nome, IVA e rate" not in html and "<summary>IVA, stato, fornitore e rate</summary>" in html
+    assert '.pag-testa > [data-campo], .sotto > .riga [data-campo]' in html

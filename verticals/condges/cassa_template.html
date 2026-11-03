@@ -95,6 +95,8 @@ input.nome{width:100%}
 .pag-testa{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
 .pag-testa .mini{margin-left:auto}
 .pag-nome{font-weight:600;flex:1 1 160px}
+input.pag-nome{border:1px solid transparent;background:transparent;padding:2px 4px;margin-left:-5px;font:inherit;font-weight:600}
+input.pag-nome:hover,input.pag-nome:focus{border-color:var(--line);background:var(--card)}
 .pag-tot{font-weight:600;white-space:nowrap}
 .frase{font-size:13px;line-height:1.45;margin-top:3px}
 details.sotto{margin-top:6px}
@@ -1946,12 +1948,12 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         <div class="riga"><label class="piccolo" style="flex:1 1 220px;display:flex;gap:6px;align-items:center">cartella Drive <input type="url" class="nome" style="flex:1 1 160px" data-campo="drive_url" value="${esc(p.drive_url || "")}" placeholder="https://drive.google.com/…"></label>${p.drive_url ? `<a class="doc" href="${esc(p.drive_url)}" target="_blank" rel="noopener">apri la cartella</a>` : ""}</div>
         ${(p.contratti || []).map((c, ci) => bloccoContratto(p, c, ci)).join("")}
         ${p.pagamenti.map((g, j) => { const kg = `g:${p.id}:${j}`; return `<div class="pag" data-g="${j}">
-          <div class="pag-testa"><span class="pag-nome">${esc(g.nome)}</span>${g.fornitore_id ? `<span class="badge">${esc(g.fornitore_id)}</span>` : ""}${(g.documenti || []).filter((d) => d.url).map((d) => `<a class="doc" href="${esc(d.url)}" target="_blank" rel="noopener" title="${esc(d.url)}">📄 ${esc(d.titolo || "documento")}</a>`).join("")}
+          <div class="pag-testa"><input type="text" class="pag-nome nome" data-campo="nome" value="${esc(g.nome)}" aria-label="nome del pagamento" title="scrivi qui il nome del pagamento">${g.fornitore_id ? `<span class="badge">${esc(g.fornitore_id)}</span>` : ""}${(g.documenti || []).filter((d) => d.url).map((d) => `<a class="doc" href="${esc(d.url)}" target="_blank" rel="noopener" title="${esc(d.url)}">📄 ${esc(d.titolo || "documento")}</a>`).join("")}
             <span class="num pag-tot">${fmt(Object.values(g.mesi).reduce((a, b) => a + MOTORE.iva(b, g.aliquota_iva), 0), false)} €</span>
             <button class="mini" data-elimina-g title="elimina questo pagamento dal progetto" aria-label="elimina il pagamento ${esc(g.nome)}">× elimina</button></div>
           <div class="frase">${esc(comeSiPaga(g.mesi, g.aliquota_iva))}</div>
-          <details class="sotto" data-k="${kg}" ${aperte.has(kg) ? "open" : ""}><summary>modifica nome, IVA e rate</summary>
-            <div class="riga"><input type="text" class="nome" style="flex:1 1 140px" data-campo="nome" value="${esc(g.nome)}"> ${selIva(g.aliquota_iva)}
+          <details class="sotto" data-k="${kg}" ${aperte.has(kg) ? "open" : ""}><summary>IVA, stato, fornitore e rate</summary>
+            <div class="riga">${selIva(g.aliquota_iva)}
               <input type="text" class="n" style="width:90px" data-campo="stato" value="${esc(g.stato)}" title="stato">
               <input type="text" class="n" style="width:110px" data-campo="fornitore_id" value="${esc(g.fornitore_id || "")}" placeholder="fornitore" list="lista-fornitori-id" title="id del fornitore: lo stesso in ogni pagamento, lo trovi nella scheda Fornitori"></div>
             ${bloccoRate(g.mesi, g.aliquota_iva)}
@@ -2329,7 +2331,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       div.querySelector("button[data-aggiungi-g]").onclick = () => { p.pagamenti.push({ nome: "Nuovo pagamento", mesi: {}, aliquota_iva: 22, stato: "ipotesi", fornitore_id: null }); aperte.add(`g:${p.id}:${p.pagamenti.length - 1}`); renderLeve(); };
       div.querySelectorAll(".pag").forEach((pg) => {
         const g = p.pagamenti[parseInt(pg.dataset.g, 10)];
-        pg.querySelectorAll(".sotto > .riga [data-campo]").forEach((inp) => {
+        pg.querySelectorAll(".pag-testa > [data-campo], .sotto > .riga [data-campo]").forEach((inp) => {
           inp.onchange = () => {
             const v = inp.value;
             g[inp.dataset.campo] = inp.dataset.campo === "aliquota_iva" ? parseInt(v, 10) : inp.dataset.campo === "fornitore_id" ? (v || null) : v;
