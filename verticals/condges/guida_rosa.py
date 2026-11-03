@@ -58,7 +58,19 @@ def a_html(sezione: str, titolo: str = "Il file del mese — guida per Rosa") ->
             out.append(f"</{lista}>")
             lista = None
 
+    # una voce di elenco può continuare sulle righe dopo (rientrate di tre spazi):
+    # si ricompone prima, così grassetto e codice a cavallo di riga si convertono.
+    righe: list[str] = []
     for riga in sezione.splitlines():
+        if (
+            riga.startswith("   ")
+            and righe
+            and re.match(r"^\s*(\d+\.|-)\s+", righe[-1])
+        ):
+            righe[-1] += " " + riga.strip()
+        else:
+            righe.append(riga)
+    for riga in righe:
         r = riga.rstrip()
         if not r.strip():
             chiudi_para()
@@ -89,10 +101,6 @@ def a_html(sezione: str, titolo: str = "Il file del mese — guida per Rosa") ->
                 out.append("<ul>")
                 lista = "ul"
             out.append(f"<li>{_inline(m.group(1))}</li>")
-            continue
-        if lista and r.startswith("   "):
-            # continuazione di una voce di elenco
-            out[-1] = out[-1][: -len("</li>")] + " " + _inline(r.strip()) + "</li>"
             continue
         if lista:
             chiudi_lista()

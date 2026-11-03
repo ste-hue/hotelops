@@ -60,22 +60,31 @@ dice e si aspetta: non si parte con i numeri del mese prima.
 Nel foglio su Drive, la colonna del mese appena chiuso va compilata per **tutti e sette i conti**:
 ORTI Intesa, MPS, MPS Kross, Unicredit; INTUR Sella, MPS, Intesa. BCP è chiuso e resta fuori.
 **Un conto senza numero non è zero**: se un estratto non c'è ancora, la cella resta vuota e lo si
-scrive a Stefano. Non copiare un numero da un'altra riga per «far tornare» il totale, e non
-incollare valori sopra le celle che hanno una formula: i subtotali li calcola il foglio.
+scrive a Stefano. **Il numero è il saldo dell'ultimo giorno del mese chiuso**, non di quando lo
+guardi: se l'estratto è del 3 novembre, il saldo del 31 ottobre è un'altra riga. Non copiare un
+numero da un'altra riga per «far tornare» il totale, e non incollare valori sopra le celle che
+hanno una formula: i subtotali li calcola il foglio.
 
 ### A3. La rotazione nell'app Cashflow
-Nel hub, tessera **Cashflow** (sezione Finanza), con l'account di amministrazione. Serve il PF del
-mese da chiudere, preso dalla cartella master su Drive, e lo scadenziario Esolver della stessa
-società («Situazione partite sintetica per fornitori», esportato in .xlsx, senza filtri, il 30/31
-del mese o dopo). Nell'app:
+L'app Cashflow è a questo indirizzo: <link> (sezione Finanza, riquadro «Cashflow»), con l'account
+di amministrazione. Serve il PF del mese da chiudere, preso su Drive dalla cartella
+«PIANI FINAZIARI › 2026» (la cartella dei PF, con il nome che vedi tu), e lo scadenziario Esolver
+della stessa società («Situazione partite sintetica per fornitori», esportato in .xlsx, senza
+filtri). **Guarda la data di esportazione dichiarata sullo scadenziario: se è prima dell'ultimo
+giorno del mese che stai chiudendo, non si parte**, si chiede un export nuovo. Nell'app:
 1. **Società**: ORTI o INTUR.
-2. **PF del mese da chiudere**: carica il file di quella società.
-3. **Scadenziario fornitori**: carica lo scadenziario della stessa società. Sotto, l'app scrive
-   quanti fornitori ha letto e i mesi che copre: la riga non deve essere vuota.
+2. **PF del mese da chiudere**: carica il file di quella società. **Se nella cartella ci sono due
+   file della stessa società per lo stesso mese, fermati e chiedi quale**: non scegliere il più
+   recente.
+3. **Scadenziario fornitori**: carica lo scadenziario della stessa società. **Prima, apri lo
+   scadenziario e controlla che la ragione sociale in alto sia quella della società che stai
+   chiudendo**: l'export «ORTI» può contenere INTUR. Sotto, l'app scrive quanti fornitori ha letto
+   e i mesi che copre: la riga non deve essere vuota.
 4. **Ultimo mese con saldi banca certificati**: il numero del mese che chiudi (per il PF di
    ottobre si mette **9**, settembre; per il PF di novembre si mette 10). **Anno**: quello del
    mese chiuso.
-5. **Saldi banca al cutover**: un campo per conto, già compilato se i saldi sono nel sistema.
+5. **Saldi banca al cutover** (il campo si chiama così: vuol dire alla data di chiusura, l'ultimo
+   giorno del mese chiuso): un campo per conto, già compilato se i saldi sono nel sistema.
    Confrontali con il tuo foglio; se un numero non torna, correggi a mano.
 6. **Fornitori non mappati**: scegli **«fail (blocca)»**: se un fornitore manca, l'app si ferma e
    non lascia fuori niente in silenzio.
@@ -90,30 +99,36 @@ con `_FAILED_CHECKS`, e i controlli falliti si mandano a Stefano.
 Se l'app mostra «fornitori da mappare», per ognuno si sceglie la voce del PF (Materie prime,
 Utenze, Consulenze, Varie ed eventuali…). **La scelta è permanente**: vale anche per i mesi dopo.
 Se un fornitore non deve mai entrare nel PF, «escludi sempre». Se non sai dove metterne uno,
-scrivi nome e codice a Stefano prima di scegliere: con «fail (blocca)» l'app aspetta.
+scrivi nome e codice a Stefano prima di scegliere: con «fail (blocca)» l'app aspetta. **Se ti
+accorgi dopo di aver scelto la voce sbagliata, non toccare il file: dillo, si corregge nel
+sistema.**
 
 ### A5. Le somme di riga nei fogli di dettaglio
 In ogni foglio di dettaglio (Utenze, Salari, Materie prime…) la colonna **C** è la somma della
 riga su tutti i mesi. Nei file prodotti dall'app dal 2026-11-03 in poi la somma arriva da sola
-fino all'ultimo mese del foglio. Nei file **vecchi**, o se un totale si ferma prima dell'ultimo
-mese, si allunga la somma a mano fino all'ultima colonna-mese (è successo nel PF di ottobre ORTI).
+fino all'ultimo mese del foglio. **Per vederlo: clicca la cella C della riga e guarda che la
+selezione evidenziata arrivi fino all'ultima colonna-mese del foglio.** Nei file **vecchi**, o se
+la selezione si ferma prima, si allunga la somma a mano fino all'ultima colonna-mese (è successo
+nel PF di ottobre ORTI).
 
 ### A6. Aprire il file in Excel e salvarlo
 **Sempre.** L'app scrive le formule ma non i risultati; il sistema legge i risultati. Un file
 scaricato e non salvato da Excel **arriva vuoto senza nessun errore** (è successo con il PF di
 ottobre INTUR). Quindi: apri il file, guarda che «Piano Finanziario» e «Controlli» abbiano senso,
-**salva da Excel**.
+**salva da Excel**. **Poi chiudi e riapri il file: se il foglio «Controlli» è vuoto o tutto a
+zero, il salvataggio non ha preso** e si rifà.
 
 ### A7. Su Drive con il nome pulito
 Rinomina il file in `ORTI_PF_AAAA-MM.xlsx` (per INTUR uguale, con INTUR): il mese nel nome è il
 **primo mese aperto**, cioè il mese nuovo (il PF di ottobre si chiama `..._2026-10`). Caricalo
-nella cartella master dei PF, accanto a quelli del mese prima.
+nella cartella «PIANI FINAZIARI › 2026» su Drive, accanto a quelli del mese prima.
 
 ### A8. Dire che è pronto
-Scrivi a Stefano che i due file sono su Drive. **Rosa non carica niente nel sistema**: il carico, la
-promozione e la pagina sono passi tecnici con una firma (sezione B e C). Poi il file torna a Rosa
-per compilare incassi e costi dei mesi nuovi (il PF arriva a dicembre 2029 e le rate dei mutui
-da luglio 2027 sono già scritte dai contratti).
+Scrivi a Stefano che i due file sono su Drive e **dichiara «aperto e salvato da Excel»** per
+ciascuno: chi fa il controllo dopo deve sapere se il passo è stato fatto. **Rosa non carica niente
+nel sistema**: il carico, la promozione e la pagina sono passi tecnici con una firma (sezione B e
+C). Poi il file torna a Rosa per compilare incassi e costi dei mesi nuovi: il PF arriva a dicembre
+2029 e **le rate dei mutui da luglio 2027 sono già scritte dai contratti: non riscriverle**.
 
 ### Se qualcosa va storto
 - «Genera» gira e non finisce mai: ricarica la pagina e rifai i passi; se succede due volte, manda a
@@ -135,8 +150,8 @@ l'input, un file nostro è un confronto.
 ### B2. Gli scadenziari Esolver
 Due export «Situazione partite sintetica per fornitori», uno per società, senza filtri,
 **esportati il 30/31 del mese chiuso o dopo**, con la **data di esportazione dichiarata** nel nome
-o nel messaggio. Attenzione: l'export «ORTI» può contenere INTUR (ragione sociale interna). Un
-export precedente alla chiusura non vale: si rifà.
+o nel messaggio (il controllo della ragione sociale in testa all'export lo fa chi lo carica, A3).
+Un export precedente alla chiusura non vale: si rifà.
 
 ### B3. Voci non-fornitori e merito
 L'app aggiorna le voci di uscita legate ai fornitori. Restano decisioni di merito, da dire a Rosa
