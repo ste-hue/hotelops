@@ -95,6 +95,8 @@ input.nome{width:100%}
 .pag-testa{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
 .pag-testa .mini{margin-left:auto}
 .pag-nome{font-weight:600;flex:1 1 160px}
+input.pag-nome{border:1px solid transparent;background:transparent;padding:2px 4px;margin-left:-5px;font:inherit;font-weight:600}
+input.pag-nome:hover,input.pag-nome:focus{border-color:var(--line);background:var(--card)}
 .pag-tot{font-weight:600;white-space:nowrap}
 .frase{font-size:13px;line-height:1.45;margin-top:3px}
 details.sotto{margin-top:6px}
@@ -190,6 +192,9 @@ details.leva summary .sw{display:inline-flex;align-items:center}
 details.leva.spento summary .nome,details.leva.spento summary .tot{color:var(--muted);font-weight:500}
 details.leva .corpo{padding:4px 0 6px 18px}
 .minimi .oltre{font-size:12px;color:var(--muted);margin-top:4px}
+.minimi .banda{color:var(--muted);margin-top:4px}
+.cornice{margin-top:10px;padding:8px 12px;border-radius:8px;background:var(--warn-bg);color:var(--ink);font-size:13px}
+.cornice[hidden]{display:none}
 .minimi .avviso{color:var(--bad);margin-top:2px}
 .minimi details.dettagli{margin-top:6px}
 .minimi details.dettagli>summary{font-size:12px;color:var(--muted);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:4px}
@@ -408,6 +413,22 @@ const MOTORE = (() => {
     return out;
   }
 
+  // Orizzonte aperto: le leve possono andare oltre l'ultimo mese, l'orizzonte le segue.
+  // Stessa regola di cassa_motore.mesi_citati / allunga_orizzonte.
+  const meseValido = (x) => typeof x === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(x);
+  function mesiCitati(obj, out = new Set()) {
+    if (Array.isArray(obj)) obj.forEach((v) => mesiCitati(v, out));
+    else if (obj && typeof obj === "object") for (const [k, v] of Object.entries(obj)) { if (meseValido(k)) out.add(k); mesiCitati(v, out); }
+    else if (meseValido(obj)) out.add(obj);
+    return out;
+  }
+  const meseDopo = (m) => { const [a, n] = m.split("-").map(Number); return `${a + Math.floor(n / 12)}-${String((n % 12) + 1).padStart(2, "0")}`; };
+  // I mesi aggiunti sono senza PF: contano solo le leve, nessun saldo inventato. Non accorcia mai.
+  function allungaOrizzonte(mesi, ipotetici, finoA) {
+    const out = mesi.slice(), ipo = new Set(ipotetici);
+    while (finoA && out[out.length - 1] < finoA) { const m = meseDopo(out[out.length - 1]); out.push(m); ipo.add(m); }
+    return { mesi: out, mesi_ipotetici: [...ipo].sort() };
+  }
   function flussiCanone(s, mesi) {
     const out = [];
     const anni = Object.keys(s.netto_per_anno).map(Number).sort((a, b) => a - b);
@@ -559,8 +580,11 @@ const MOTORE = (() => {
     const minimi = {};
     for (const soc of SOCIETA) {
       const mie = righe.filter((r) => r.societa === soc);
-      const pfR = mie.filter((r) => !ipo.has(r.mese));
-      const coda = mie.filter((r) => ipo.has(r.mese));
+      // Mesi non pianificati (colonna nel file, nessuna riga): per il minimo contano come senza PF.
+      const vuoti = new Set((payload.mesi_non_pianificati || {})[soc] || []);
+      const senza = (m) => ipo.has(m) || vuoti.has(m);
+      const pfR = mie.filter((r) => !senza(r.mese));
+      const coda = mie.filter((r) => senza(r.mese));
       const m = primoMin(pfR.length ? pfR : coda);
       const c = coda.length ? primoMin(coda) : null;
       minimi[soc] = {
@@ -584,7 +608,7 @@ const MOTORE = (() => {
     return { righe, minimi, consolidato, non_riconciliati: nonRic };
   }
 
-  return { ORIGINI, SOCIETA, SOSTITUZIONE, calcola, distribuisci, iva, flussiCanone, riconcilia, normalizza };
+  return { ORIGINI, SOCIETA, SOSTITUZIONE, calcola, distribuisci, iva, flussiCanone, riconcilia, normalizza, mesiCitati, meseDopo, allungaOrizzonte };
 })();
 if (typeof module !== "undefined") module.exports = MOTORE;
 </script>
@@ -1459,7 +1483,53 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   const IPO = new Set(D.mesi_ipotetici);
   const MESI_PF = D.mesi.filter((m) => !IPO.has(m));
   const ULTIMO_PF = MESI_PF[MESI_PF.length - 1];
-  const ULTIMO = D.mesi[D.mesi.length - 1];
+  let ULTIMO = D.mesi[D.mesi.length - 1];
+  // Orizzonte aperto: se lo scenario cita un mese oltre l'ultimo, i mesi mancanti si aggiungono
+  // senza PF (D.mesi e IPO crescono sul posto, chi li legge li vede). Non si accorcia mai.
+  function allunga(scenario) {
+    const fino = [...MOTORE.mesiCitati(scenario)].sort().pop();
+    if (!fino || fino <= ULTIMO) return;
+    const o = MOTORE.allungaOrizzonte(D.mesi, D.mesi_ipotetici, fino);
+    const nuovi = o.mesi.slice(D.mesi.length);
+    D.mesi.push(...nuovi);
+    D.mesi_ipotetici.push(...nuovi);
+    nuovi.forEach((m) => IPO.add(m));
+    ULTIMO = D.mesi[D.mesi.length - 1];
+    // Il solo PF sui mesi nuovi: stesso motore, scenario vuoto (è come lo calcola il build).
+    D.baseline = MOTORE.calcola(D, { nome: "solo PF", progetti: [], finanziamenti: [], manuali: [], canone: null, soglia: 0 });
+  }
+  // Dove le rate si possono generare o spostare: l'orizzonte più dieci anni virtuali.
+  const ORIZ = () => { const o = D.mesi.slice(); for (let k = 0; k < 120; k++) o.push(MOTORE.meseDopo(o[o.length - 1])); return o; };
+  // Per società: mesi dentro il file ma senza righe («non pianificato», §A non registrato). Mai zero.
+  const VUOTI = Object.fromEntries(SOC.map((s) => [s, new Set((D.mesi_non_pianificati || {})[s] || [])]));
+  const senzaPf = (soc, m) => IPO.has(m) || VUOTI[soc].has(m);
+  const ultimoPf = (soc) => { const p = MESI_PF.filter((m) => !VUOTI[soc].has(m)); return p[p.length - 1] || null; };
+  // Orizzonte h = mesi fra l'ancora e un mese; banda d'errore del PF per h (misurata fino a 3, poi solo il segno).
+  const BANDA = D.banda_pf || { societa: {} };
+  const hDi = (soc, m) => { const a = D.ancore[soc]; if (!a || !m) return 0; const [ay, am] = String(a.data).slice(0, 7).split("-").map(Number); const [y, mm] = m.split("-").map(Number); return y * 12 + mm - (ay * 12 + am); };
+  function banda(soc, h) {
+    const b = (BANDA.societa || {})[soc];
+    if (!b || h < 1) return null;
+    const hs = Object.keys(b.h || {}).map(Number).sort((x, y) => x - y);
+    if (!hs.length) return null;
+    const hmax = hs[hs.length - 1];
+    if (h <= hmax) {
+      const k = hs.filter((x) => x <= h).pop();
+      // La larghezza non si restringe con h: a n = 3 la cella è più stretta solo per caso.
+      const larghezza = Math.max(...hs.filter((x) => x <= h).map((x) => b.h[String(x)].banda));
+      return { h, medio: b.h[String(k)].medio, larghezza, misurata: true, n: b.h[String(k)].n, segno: b.segno };
+    }
+    return { h, medio: b.h[String(hmax)].medio + (b.crescita_mese || 0) * (h - hmax), larghezza: null, misurata: false, segno: b.segno, crescita: b.crescita_mese || 0 };
+  }
+  const hs = (soc) => Math.max(0, ...Object.keys(((BANDA.societa || {})[soc] || {}).h || {}).map(Number));
+  const fraseBanda = (soc, m) => {
+    const h = hDi(soc, m), b = banda(soc, h);
+    if (!b) return "";
+    const mila = (v) => `${v < 0 ? "−" : "+"}${fmt(Math.round(Math.abs(v) / 100000) * 100000, false)}`;
+    return b.misurata
+      ? `a ${h} ${h === 1 ? "mese" : "mesi"} dall'ancora il PF è storicamente ${b.segno} su ${soc} di circa ${mila(b.medio)} (banda ±${fmt(b.larghezza, false)}, n = ${b.n})`
+      : `a ${h} mesi dall'ancora la banda non è misurata (fino a ${hs(soc)}): vale solo il segno, ${b.segno}, che per storia cresce di circa ${mila(b.crescita)} al mese; il numero qui sopra è un ordine di grandezza`;
+  };
   const { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi } = FORMATO;
   // Legge un campo euro: null = non valido (campo marcato, stato invariato).
   const euroDa = (inp) => { const v = parseEuro(inp.value); inp.classList.toggle("invalid", v === null); return v; };
@@ -1502,7 +1572,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     s.progetti = (s.progetti || []).map((p) => {
       let q = { ...p, contratti: p.contratti || [] };
       if (!q.livelli) q = FORMATO.consolidaContratti({ ...q, livelli: FORMATO.livelliDaPagamenti(q) });
-      q.pagamenti = FORMATO.derivaPagamenti(q, D.mesi);
+      q.pagamenti = FORMATO.derivaPagamenti(q, ORIZ());
       return q;
     });
     s.finanziamenti = (s.finanziamenti || []).map((f) => ({ ...f, erogazioni: f.erogazioni || {}, rate: f.rate || {} }));
@@ -1523,11 +1593,12 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   }
 
   function calcolaSicuro(scenario) {
-    try { return MOTORE.calcola(D, scenario); } catch (e) { return null; }
+    try { allunga(scenario); return MOTORE.calcola(D, scenario); } catch (e) { return null; }
   }
 
   function ricalcola(opts = {}) {
     try {
+      allunga(stato.scenario);
       ris = MOTORE.calcola(D, stato.scenario);
     } catch (e) {
       mostraErrore(`Scenario non calcolabile: ${e.message}`);
@@ -1597,6 +1668,12 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const anc = Object.values(D.ancore)[0];
     // Corta: chi vuole i file e le ore li trova in «Fonti e versioni».
     el("sub").textContent = `saldi al ${anc ? dataIt(anc.data) : "—"} · pagina del ${oraDi(D.generato_il)}`;
+    // Oltre 12 mesi di PF dall'ancora la curva non è più una previsione: lo dice in testa.
+    const hPf = Math.max(...SOC.map((s) => hDi(s, ULTIMO_PF)));
+    let c = el("cornice");
+    if (!c) { c = document.createElement("div"); c.id = "cornice"; c.className = "cornice"; c.setAttribute("role", "note"); document.querySelector("header").insertAdjacentElement("afterend", c); }
+    c.hidden = !(hPf > 12);
+    c.innerHTML = hPf > 12 ? `<strong>Documento di pianificazione, non previsione.</strong> Il PF arriva a ${hPf} mesi dall'ancora: la banda d'errore è misurata fino a 3 mesi (${esc(BANDA.finestra || "")}); oltre vale solo il segno. I numeri lontani sono ordini di grandezza.` : "";
   }
 
   function renderScenario() {
@@ -1689,10 +1766,10 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         .concat(SOC.map((s) => ["solo PF", s, D.baseline.minimi[s].mese, E(D.baseline.minimi[s].saldo), "", 0])) });
     // Saldi mese per mese
     const origini = Object.keys(ris.righe[0].entrate);
-    fogli.push({ nome: "Saldi mese per mese", colonne: ["scenario", "mese", "società", "senza PF", "saldo iniziale €", ...origini.map((o) => `entrate ${o} €`), "entrate totali €", ...origini.map((o) => `uscite ${o} €`), "uscite totali €", "saldo finale €"],
-      euro: [4, ...origini.map((_, i) => 5 + i), 5 + origini.length, ...origini.map((_, i) => 6 + origini.length + i), 6 + 2 * origini.length, 7 + 2 * origini.length],
+    fogli.push({ nome: "Saldi mese per mese", colonne: ["scenario", "mese", "società", "senza PF", "non pianificato", "saldo iniziale €", ...origini.map((o) => `entrate ${o} €`), "entrate totali €", ...origini.map((o) => `uscite ${o} €`), "uscite totali €", "saldo finale €"],
+      euro: [5, ...origini.map((_, i) => 6 + i), 6 + origini.length, ...origini.map((_, i) => 7 + origini.length + i), 7 + 2 * origini.length, 8 + 2 * origini.length],
       righe: ris.righe.map((r) => { const te = origini.reduce((s, o) => s + r.entrate[o], 0), tu = origini.reduce((s, o) => s + r.uscite[o], 0);
-        return [nomeSc, r.mese, r.societa, IPO.has(r.mese) ? "sì" : "no", E(r.ini), ...origini.map((o) => E(r.entrate[o])), E(te), ...origini.map((o) => E(r.uscite[o])), E(tu), E(r.fin)]; }) });
+        return [nomeSc, r.mese, r.societa, IPO.has(r.mese) ? "sì" : "no", VUOTI[r.societa].has(r.mese) ? "sì" : "no", E(r.ini), ...origini.map((o) => E(r.entrate[o])), E(te), ...origini.map((o) => E(r.uscite[o])), E(tu), E(r.fin)]; }) });
     // Calendario (lordo in cassa, una riga per rata) + canone
     const cal = [];
     for (const r of righeCalendario()) for (const [m, v] of Object.entries(r.mesi()).sort()) if (v) cal.push([r.gruppo, r.nome, r.soc, r.tipo, r.spento ? "no" : "sì", m, E(r.lordo(v))]);
@@ -1787,7 +1864,9 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       ${(D.pf_correzioni || []).length ? `<li>PF corretto: ${(D.pf_correzioni || []).filter((c) => c.applicata).length} voci dichiarate al posto del file di Rosa, per tutti gli scenari (vedi «Voci del PF corrette»)</li>` : ""}
       ${CONTR ? `<li>Contratto del canone: ${esc(CONTR.fonte)}</li>` : ""}
       <li>Canone di riferimento: ${CR.dichiarato ? `${fmt(CR.lordo_annuo, false)} € lordo/anno IVA inclusa (${fmt(CR.netto_annuo, false)} netto) dichiarato il ${esc(CR.dichiarato_il || "—")} — ${esc(CR.fonte)}` : esc(CR.fonte)}</li>
-      <li>Mesi senza PF: ${D.mesi_ipotetici.length ? `${meseIt(D.mesi_ipotetici[0])} – ${meseIt(ULTIMO)}` : "nessuno"} (il PF finisce a ${meseIt(ULTIMO_PF)})</li></ul>`;
+      <li>Mesi senza PF: ${D.mesi_ipotetici.length ? `${meseIt(D.mesi_ipotetici[0])} – ${meseIt(ULTIMO)}` : "nessuno"} (il PF finisce a ${meseIt(ULTIMO_PF)})</li>
+      <li>Mesi non pianificati (colonna nel file, nessuna riga): ${SOC.map((s) => `${s} ${VUOTI[s].size ? intervalloMesi([...VUOTI[s]].sort()) : "nessuno"}`).join(" · ")}</li>
+      <li>Banda d'errore del PF: ${BANDA.misurata_il ? `misurata il ${esc(dataIt(BANDA.misurata_il))} su ${esc(BANDA.finestra || "")}: ordine di grandezza, non statistica` : "non misurata"}</li></ul>`;
   }
 
   // ── canone: lo slider parte dal PF ──
@@ -2015,6 +2094,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const fin = (stato.scenario.finanziamenti || []).filter((f) => f.societa === soc && statoFin(f.stato) === "da_verificare" && Object.keys(f.erogazioni || {}).some((x) => x <= m.mese));
     if (fin.length) out.push({ stato: "da_verificare", testo: `regge su ${fin.length === 1 ? "un finanziamento" : `${fin.length} finanziamenti`} da verificare`, titolo: fin.map((f) => f.nome).join(" · ") });
     if (!MESI_PF.length) out.push({ stato: "non_registrato", testo: "nessun mese con PF", titolo: "senza PF il «sotto zero» non può dire niente" });
+    if (VUOTI[soc].size) { const v = [...VUOTI[soc]].sort(); out.push({ stato: "non_registrato", testo: `non pianificato ${intervalloMesi(v)}`, titolo: `il file del PF di ${soc} ha la colonna ma nessuna riga in ${v.length === 1 ? "questo mese" : "questi mesi"}: non è zero, è vuoto; per il minimo conta come senza PF` }); }
     return out;
   }
   function renderMinimi() {
@@ -2037,6 +2117,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         <div class="saldo num ${m.saldo < 0 ? "neg" : ""}">${fmt(m.saldo)} €</div>
         <div class="delta num">${delta === 0 ? "come con il solo PF" : `${segno(delta, false)} rispetto al solo PF`}</div>
         ${sotto}
+        ${fraseBanda(soc, m.mese) ? `<div class="piccolo banda" title="${esc(BANDA.finestra || "")}; ordine di grandezza, non statistica">${esc(fraseBanda(soc, m.mese))}</div>` : ""}
         <div class="condizioni">${cond.map((c) => chipStato(c.stato, c.titolo, c.testo)).join("")}</div>
         <details class="dettagli" data-k="${kd}" ${aperte.has(kd) ? "open" : ""}><summary>dettagli</summary>
           <div class="piccolo">solo PF: minimo ${fmt(b.saldo)} a ${meseIt(b.mese)} · ancora al ${dataIt(a.data)} ${chipStato(statoAncora(a), a.attestato ? "quadra con i movimenti in banca" : "dal foglio dei saldi, non riscontrato coi movimenti")}</div>
@@ -2098,8 +2179,16 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const assi = D.mesi.map((m, i) => (i % passo ? "" : `<text x="${x(i).toFixed(1)}" y="${H - 12}" text-anchor="middle" font-size="10" fill="var(--muted)">${meseIt(m)}</text>`)).join("");
     const griglia = [lo + pad, (lo + hi) / 2, hi - pad].map((v) => `<text x="${L - 6}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)" class="num">${fmt(Math.round(v / 100) * 100, false)}</text>`).join("");
     const punti = sce.slice(0, nPF).map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${v < 0 ? "var(--bad)" : "var(--accent)"}"><title>${meseIt(D.mesi[i])}: ${fmt(v)} € (solo PF ${fmt(bas[i])})</title></circle>`).join("");
+    // Corridoio d'errore: il saldo atteso per storia (previsto − scarto medio) ± banda, fino a dove
+    // la banda è misurata; oltre, solo la deriva del segno, tratteggiata. Si allarga a vista con h.
+    const bande = D.mesi.slice(0, nPF).map((m, i) => ({ i, b: banda(soc, hDi(soc, m)) })).filter((o) => o.b);
+    const mis = bande.filter((o) => o.b.misurata), oltrePF = bande.filter((o) => !o.b.misurata && o.b.h <= hs(soc) + 3);
+    const yc = (v) => Math.min(H - B, Math.max(T, y(v)));
+    const corridoio = mis.length ? `<polygon points="${mis.map((o) => `${x(o.i).toFixed(1)},${yc(sce[o.i] - o.b.medio + o.b.larghezza).toFixed(1)}`).concat(mis.slice().reverse().map((o) => `${x(o.i).toFixed(1)},${yc(sce[o.i] - o.b.medio - o.b.larghezza).toFixed(1)}`)).join(" ")}" fill="var(--accent)" opacity="0.10"><title>banda d'errore del PF fino a ${mis[mis.length - 1].b.h} mesi dall'ancora (misurata)</title></polygon>` : "";
+    const deriva = oltrePF.length ? `<path d="${[mis[mis.length - 1], ...oltrePF].filter(Boolean).map((o, k) => `${k ? "L" : "M"}${x(o.i).toFixed(1)},${yc(sce[o.i] - o.b.medio).toFixed(1)}`).join(" ")}" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="2 4"><title>oltre la banda misurata: solo il segno (${oltrePF[0].b.segno}), non un numero</title></path>` : "";
+    const vuoti = D.mesi.slice(0, nPF).map((m, i) => VUOTI[soc].has(m) ? `<rect x="${(x(i) - dx / 2).toFixed(1)}" y="${T}" width="${dx.toFixed(1)}" height="${H - T - B}" fill="var(--warn-bg)" opacity="0.6"><title>${meseIt(m)}: non pianificato (colonna nel file, nessuna riga)</title></rect>` : "").join("");
     return `<svg class="graf" viewBox="0 0 ${W} ${H}" role="img" aria-label="Saldo ${soc}">
-      ${coda}
+      ${coda}${vuoti}${corridoio}${deriva}
       <line x1="${L}" x2="${W - R}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>
       ${griglia}${barre}
       <path d="${path(bas)}" fill="none" stroke="var(--base-line)" stroke-width="1.5" stroke-dasharray="5 4"/>
@@ -2124,20 +2213,21 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       const dPF = righe[iPF].fin - basi[iPF].fin;
       const corpo = righe.map((r, i) => {
         const k = `${soc}|${r.mese}`;
-        const ipo = IPO.has(r.mese);
+        const vuoto = VUOTI[soc].has(r.mese);
+        const ipo = IPO.has(r.mese) || vuoto;
         const ent = somma(r.entrate), usc = somma(r.uscite);
         const d = ipo ? (r.fin - basi[i].fin) - dPF : r.fin - basi[i].fin;
         let dett = "";
         if (aperti.has(k)) {
           const v = vociMese(soc, r.mese);
           const lista = (o, segno) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([n, x]) => `<li>${segno} ${esc(n)} <span class="num">${fmt(x)}</span></li>`).join("");
-          dett = `<tr class="dett"><td colspan="5">${ipo ? '<div class="nota">mese senza PF: contano solo le leve dello scenario</div>' : ""}<ul>${lista(v.E, "+") + lista(v.U, "−") || "<li>nessun movimento</li>"}</ul></td></tr>`;
+          dett = `<tr class="dett"><td colspan="5">${vuoto ? '<div class="nota">mese nel file del PF ma senza righe: non pianificato, non zero; contano solo le leve dello scenario</div>' : ipo ? '<div class="nota">mese senza PF: contano solo le leve dello scenario</div>' : ""}<ul>${lista(v.E, "+") + lista(v.U, "−") || "<li>nessun movimento</li>"}</ul></td></tr>`;
         }
         const finale = ipo
           ? `<td class="num ${d < 0 ? "neg" : ""}">${d ? `<span class="piccolo">leve</span> ${segno(d)}` : "—"}</td>`
           : `<td class="num ${r.fin < 0 ? "neg" : ""}">${fmt(r.fin)}${d ? `<br><span class="piccolo num">${segno(d)}</span>` : ""}</td>`;
         return `<tr class="mese ${ipo ? "ipo" : ""}" data-k="${k}">
-          <td>${meseIt(r.mese)}${ipo ? ' <span class="badge">senza PF</span>' : ""}</td>
+          <td>${meseIt(r.mese)}${vuoto ? ' <span class="badge warn" title="colonna nel file, nessuna riga">non pianificato</span>' : ipo ? ' <span class="badge">senza PF</span>' : ""}</td>
           <td class="num ini ${ipo ? "vuoto" : ""}">${ipo ? "—" : fmt(r.ini)}</td><td class="num ${ipo && !ent ? "vuoto" : ""}">${ipo && !ent ? "—" : fmt(ent)}</td><td class="num ${ipo && !usc ? "vuoto" : ""}">${ipo && !usc ? "—" : fmt(usc)}</td>
           ${finale}</tr>${dett}`;
       }).join("");
@@ -2166,7 +2256,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   // La frase «come si paga»: quante rate, ogni quanto, la prima e l'ultima, e quante cadono senza PF.
   function comeSiPaga(mesi, aliquota) {
     const f = FORMATO.formaRate(mesi, D.mesi);
-    if (!f.n) return "nessuna rata. Scrivi il totale, in quante rate, ogni quanto e la prima rata, poi «Genera le rate».";
+    if (!f.n) return "ancora nessun importo: scrivilo qui sopra, scegli in quante rate e da quando, poi «Metti in cassa».";
     const passo = f.passo ? (PASSI.find(([x]) => x === f.passo) || [0, `ogni ${f.passo} mesi`])[1] : "a mesi liberi";
     const conIva = aliquota !== null && aliquota > 0;
     const quota = f.n > 1 && f.quota !== null ? ` da ${fmt(f.quota, false)}${conIva ? ` netto (${fmt(MOTORE.iva(f.quota, aliquota), false)} lordo)` : ""}` : "";
@@ -2235,7 +2325,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
           if (m2 <= m1) throw new Error("la fine lavori deve venire dopo la metà lavori");
           const meta = Math.floor(imp / 2);
           er = { [m1]: meta, [m2]: imp - meta };
-        } else er = FORMATO.spalma(imp, m1, parseInt(box.querySelector("input[data-tranche-n]").value, 10), parseInt(box.querySelector("select[data-tranche-passo]").value, 10), D.mesi);
+        } else er = FORMATO.spalma(imp, m1, parseInt(box.querySelector("input[data-tranche-n]").value, 10), parseInt(box.querySelector("select[data-tranche-passo]").value, 10), ORIZ());
         f.importo = imp;
         f.erogazioni = er;
         err.textContent = "";
@@ -2243,19 +2333,18 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       } catch (e) { err.textContent = e.message; }
     };
   }
-  function bloccoRate(mesi, aliquota) {
+  function bloccoRate(mesi, aliquota, etichetta = "prezzo") {
     const f = FORMATO.formaRate(mesi, D.mesi);
     return `<div class="come">
-      <div class="riga"><label class="piccolo">totale <input type="text" class="eur" data-spalma-tot value="${fmt(f.totale)}"></label>
+      <div class="riga"><label class="piccolo">${etichetta} <input type="text" class="eur" data-spalma-tot value="${f.totale ? fmt(f.totale) : ""}" placeholder="es. 15.000"></label>
         ${aliquota ? '<select data-spalma-base><option value="netto">netto</option><option value="lordo">lordo IVA inclusa</option></select>' : ""}
         <label class="piccolo">in <input type="text" class="n" data-spalma-n value="${Math.max(1, f.n)}"> rate</label>
         <select data-spalma-passo ${f.n <= 1 ? "hidden" : ""}>${PASSI.map(([x, e]) => `<option value="${x}" ${x === (f.passo || 1) ? "selected" : ""}>${e}</option>`).join("")}</select>
         <label class="piccolo"><span data-spalma-quando>${f.n <= 1 ? "mese" : "prima rata"}</span> ${selMesi(f.primo || D.mesi[0], "sel-spalma-da")}</label>
-        <button data-spalma>Genera le rate</button></div>
-      <div class="riga"><button class="mini" data-sposta="-1" ${f.n ? "" : "disabled"}>◀ tutto un mese prima</button>
-        <button class="mini" data-sposta="1" ${f.n ? "" : "disabled"}>tutto un mese dopo ▶</button>
-        <span class="errore-r" data-errore-spalma></span></div>
-      <div class="piccolo">mese per mese (puoi correggere ogni importo)</div></div>`;
+        <button data-spalma class="${f.n ? "" : "primario"}">${f.n ? "Rifai le rate" : "Metti in cassa"}</button></div>
+      <div class="riga">${f.n ? `<button class="mini" data-sposta="-1">◀ tutto un mese prima</button>
+        <button class="mini" data-sposta="1">tutto un mese dopo ▶</button>` : ""}
+        <span class="errore-r" data-errore-spalma></span></div></div>`;
   }
   const selMeseA = (val, attr) => `<select ${attr}>${D.mesi.map((m) => `<option value="${m}" ${m === val ? "selected" : ""}>${meseIt(m)}</option>`).join("")}</select>`;
   const pctIt = (x) => String(x || 0).replace(".", ",");
@@ -2276,7 +2365,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     // Verifica mese per mese: i pagamenti verso F seguono i patti scritti qui sopra?
     const perMese = (lista) => { const o = {}; for (const g of lista) for (const [m, v] of Object.entries(g.mesi)) o[m] = (o[m] || 0) + v; return JSON.stringify(Object.entries(o).filter(([, v]) => v).sort()); };
     let seguono = false;
-    try { seguono = perMese(FORMATO.pagamentiDaContratto(c, D.mesi)) === perMese(suoi); } catch (e) { seguono = false; }
+    try { seguono = perMese(FORMATO.pagamentiDaContratto(c, ORIZ())) === perMese(suoi); } catch (e) { seguono = false; }
     const verifica = !F ? "" : seguono
       ? `<span class="ok-t">✓ i pagamenti verso ${esc(F)} seguono questi patti: ${fmt(c.totale, false)} netto</span>`
       : diff !== 0
@@ -2330,7 +2419,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     root.querySelector("[data-togli-c]").onclick = () => { sc.splice(sc.indexOf(c), 1); renderLeve(); };
     root.querySelector("[data-genera]").onclick = () => {
       try {
-        const r = FORMATO.generaPatti(p, p.contratti.indexOf(c), D.mesi);
+        const r = FORMATO.generaPatti(p, p.contratti.indexOf(c), ORIZ());
         if (r.errore) { root.querySelector("[data-errore-c]").textContent = r.errore; return; }
         p.livelli = r.progetto.livelli;
         p.contratti = r.progetto.contratti;
@@ -2354,9 +2443,9 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       const tot = base && base.value === "lordo" ? FORMATO.nettoDaLordo(t, aliquota) : t;
       const n = parseInt(root.querySelector("input[data-spalma-n]").value, 10);
       const passo = parseInt(root.querySelector("select[data-spalma-passo]").value, 10);
-      prova(() => FORMATO.spalma(tot, root.querySelector("select.sel-spalma-da").value, n, passo, D.mesi));
+      prova(() => FORMATO.spalma(tot, root.querySelector("select.sel-spalma-da").value, n, passo, ORIZ()));
     };
-    root.querySelectorAll("button[data-sposta]").forEach((b) => { b.onclick = () => prova(() => FORMATO.sposta(leggi(), parseInt(b.dataset.sposta, 10), D.mesi)); });
+    root.querySelectorAll("button[data-sposta]").forEach((b) => { b.onclick = () => prova(() => FORMATO.sposta(leggi(), parseInt(b.dataset.sposta, 10), ORIZ())); });
   }
   const selSoc = (val) => `<select data-campo="societa">${SOC.map((s) => `<option ${s === val ? "selected" : ""}>${s}</option>`).join("")}</select>`;
   // L'aliquota del pagamento entra tra le opzioni se non è tra le tre standard: la select non mente mai.
@@ -2410,7 +2499,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   // La cella che aveva il fuoco lo ritrova dopo il ridisegno (Tab porta alla cella dopo, come in Excel).
   let rinomina = null;   // la riga vuota appena diventata una riga vera: il fuoco la segue
   function aggiornaProgetto(p) {
-    p.pagamenti = FORMATO.derivaPagamenti(p, D.mesi);
+    p.pagamenti = FORMATO.derivaPagamenti(p, ORIZ());
     const f = fuocoLivelli();
     ricalcola();
     rimettiFuoco(f);
@@ -2436,7 +2525,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   // Una cella scritta: la legge, la valida e la scrive nel suo nodo. Ritorna un messaggio se non va.
   function scriviCella(p, tipo, nodo, m, col, valore) {
     const L = p.livelli, raw = String(valore).trim();
-    const fuori = (mesi) => Object.keys(mesi).filter((x) => !D.mesi.includes(x));
+    const fuori = (mesi) => { const o = ORIZ(); return Object.keys(mesi).filter((x) => !o.includes(x)); };
     if (col === "nome") { if (!raw) return "il nome non può restare vuoto"; nodo.nome = raw; return null; }
     if (col === "fornitore") { nodo.fornitore_id = raw || null; return null; }
     if (col === "area") { nodo.area = raw || null; return null; }
@@ -2446,7 +2535,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       if (v === null || v < 0) return "scrivi un importo netto, es. 30.000";
       // stessi mesi in proporzione; una sottovoce senza mesi prende quelli della sua macro, o del progetto
       const pesi = Object.keys(nodo.mesi || {}).length ? null : conMesi(m.mesi_budget) ? m.mesi_budget : conMesi(L.mesi_budget) ? L.mesi_budget : null;
-      nodo.mesi = pesi ? FORMATO.perPesi(v, pesi, Object.keys(pesi).filter((x) => D.mesi.includes(x))) : riscala(nodo.mesi, v);
+      nodo.mesi = pesi ? FORMATO.perPesi(v, pesi, Object.keys(pesi).filter((x) => ORIZ().includes(x))) : riscala(nodo.mesi, v);
       nodo.netto = v;
       return null;
     }
@@ -2467,7 +2556,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         const tot = nettoVoce(nodo);
         const mesi = raw ? FORMATO.quandoParse(raw, tot) : {};
         if (!mesi) return `non capisco «${raw}»: es. «mar 27», «gen 27–mar 27 ×3», «ott 26 15% · nov 26–mar 27 ×5»`;
-        if (fuori(mesi).length) return `${fuori(mesi).map(meseIt).join(", ")} fuori dall'orizzonte (fino a ${meseIt(ULTIMO)})`;
+        if (fuori(mesi).length) return `${fuori(mesi).map(meseIt).join(", ")} fuori dall'orizzonte (${meseIt(D.mesi[0])} – ${meseIt(ORIZ().pop())})`;
         nodo.mesi = mesi;
         nodo.netto = tot;
         return null;
@@ -2475,7 +2564,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       // i mesi di un budget sono pesi: si leggono sul budget (o su 100, se il budget non c'è ancora)
       const mesi = raw ? FORMATO.quandoParse(raw, nodo.budget_netto || 10000) : null;
       if (raw && !mesi) return `non capisco «${raw}»: es. «gen 27–mar 27 ×3», «feb 27 40% · mar 27 60%»`;
-      if (mesi && fuori(mesi).length) return `${fuori(mesi).map(meseIt).join(", ")} fuori dall'orizzonte (fino a ${meseIt(ULTIMO)})`;
+      if (mesi && fuori(mesi).length) return `${fuori(mesi).map(meseIt).join(", ")} fuori dall'orizzonte (${meseIt(D.mesi[0])} – ${meseIt(ORIZ().pop())})`;
       nodo.mesi_budget = mesi && conMesi(mesi) ? mesi : null;
       return null;
     }
@@ -2503,7 +2592,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   function bloccoLivelli(p) {
     const L = p.livelli, B = FORMATO.buste(L);
     const ivaP = L.aliquota_iva ?? 22;
-    const avvisi = [...FORMATO.avvisiLivelli(p.livelli, D.mesi),
+    const avvisi = [...FORMATO.avvisiLivelli(p.livelli, ORIZ()),
       ...L.macro.flatMap((m) => (m.voci || []).filter((v) => v.netto && !Object.keys(v.mesi || {}).length).map((v) => `${v.nome}: ${eu(v.netto)} senza «quando»: non conta finché non scrivi i mesi`))];
     const quandoIn = (val, ph, err = false) => `<input type="text" class="quando${err ? " invalid" : ""}" data-col="quando" value="${esc(val)}" placeholder="${esc(ph)}" title="${val ? `${esc(val)} · ` : ""}quando si paga: ${esc(AIUTO_QUANDO)}">`;
     const fornIn = (val, ph = "fornitore") => `<input type="text" data-col="fornitore" value="${esc(val || "")}" placeholder="${esc(ph)}" list="lista-fornitori-id" title="id del fornitore: lo stesso in ogni progetto, lo trovi nella scheda Fornitori">`;
@@ -2669,7 +2758,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       if (pv) pv.onclick = () => {
         const F = String(v.fornitore_id).trim();
         p.contratti = p.contratti || [];
-        p.contratti.push({ ...FORMATO.contrattoDaPagamenti(p.pagamenti.filter((g) => g.voce_id === v.id), F, D.mesi), voce_id: v.id });
+        p.contratti.push({ ...FORMATO.contrattoDaPagamenti(p.pagamenti.filter((g) => g.voce_id === v.id), F, ORIZ()), voce_id: v.id });
         renderLeve();
       };
     });
@@ -2711,7 +2800,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const base = scelta === null ? p.livelli : { macro: p.livelli.macro.filter((m) => m.nome === scelta).map((m) => ({ ...m, budget_netto: null })) };
     const diff = FORMATO.diffLivelli(base, livelli, FORMATO.contrattiToccati(p, scelta));
     const dopo = FORMATO.applicaLivelli(p, FORMATO.filtraLivelli(base, livelli, imp.spente), { macro_scelta: scelta });
-    dopo.pagamenti = FORMATO.derivaPagamenti(dopo, D.mesi);
+    dopo.pagamenti = FORMATO.derivaPagamenti(dopo, ORIZ());
     const usati = new Set(dopo.livelli.macro.flatMap((m) => (m.voci || []).map((v) => v.fornitore_id)));
     return { diff, da_sistemare, dopo, scelta, nuovi: Object.values(ric).filter((r) => usati.has(r.id) && !(sc.fornitori || {})[r.id]) };
   }
@@ -2813,7 +2902,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     if (v) { v.mesi = mesi; v.netto = somma(mesi); }
     else if (m) m.mesi_budget = { ...mesi };
     else L.mesi_budget = { ...mesi };
-    p.pagamenti = FORMATO.derivaPagamenti(p, D.mesi);
+    p.pagamenti = FORMATO.derivaPagamenti(p, ORIZ());
   }
 
   function renderLeve() {
@@ -2863,7 +2952,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
           ${grigliaMesi(f.erogazioni, "erog")}</div>
         <div class="riquadro rate"><div class="piccolo"><strong>Quando li restituisci</strong> · rate del mutuo</div>
           ${Object.keys(f.rate).length ? "" : `<div class="avviso-r">${chipStato("non_registrato", "nessuna rata di rimborso scritta nello scenario", "rate non registrate")} entra solo il denaro erogato: il minimo è ottimista</div>`}
-          <div class="frase">${esc(comeSiPaga(f.rate, null))}</div><div class="rate-f">${bloccoRate(f.rate, null)}</div>${grigliaMesi(f.rate, "rata")}</div>
+          <div class="frase">${esc(comeSiPaga(f.rate, null))}</div><div class="rate-f">${bloccoRate(f.rate, null, "totale")}</div>${grigliaMesi(f.rate, "rata")}</div>
         <div class="documenti"><div class="piccolo">documenti (relazione notarile, delibera, contratto di mutuo: link Drive)</div>
           ${(f.documenti || []).map((d, di) => `<div class="riga" data-doc="${di}"><input type="text" class="nome" style="flex:1 1 120px" data-doc-titolo value="${esc(d.titolo || "")}" placeholder="titolo, es. relazione notarile 22/10/2026"><input type="url" class="nome" style="flex:2 1 200px" data-doc-url value="${esc(d.url || "")}" placeholder="https://drive.google.com/…"><button type="button" class="mini" data-elimina-doc title="togli il documento" aria-label="togli il documento ${esc(d.titolo || "")}">×</button></div>`).join("")}
           <button type="button" class="mini" data-aggiungi-doc>+ documento</button></div>
@@ -2982,7 +3071,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     // i mesi: dai patti abituali del fornitore se ci sono; altrimenti una rata al mese scelto
     const p = riga.ric.patti;
     if (p) {
-      try { const c = contrattoDaPatti(p, budget.mese, riga.ric.id, riga.importo); const pag = FORMATO.pagamentiDaContratto(c, D.mesi); return { pagamenti: pag.map((g) => ({ ...g, nome: `${riga.opera || riga.fornitore} · ${g.nome.replace(/^[^·]+· /, "")}`.slice(0, 80), stato: "ipotesi" })), come: `patti abituali: ${riassuntoPatti(p)}` }; } catch (e) { /* patti non applicabili qui: cade sulla rata unica */ }
+      try { const c = contrattoDaPatti(p, budget.mese, riga.ric.id, riga.importo); const pag = FORMATO.pagamentiDaContratto(c, ORIZ()); return { pagamenti: pag.map((g) => ({ ...g, nome: `${riga.opera || riga.fornitore} · ${g.nome.replace(/^[^·]+· /, "")}`.slice(0, 80), stato: "ipotesi" })), come: `patti abituali: ${riassuntoPatti(p)}` }; } catch (e) { /* patti non applicabili qui: cade sulla rata unica */ }
     }
     return { pagamenti: [{ nome: riga.opera || riga.fornitore, mesi: { [budget.mese]: riga.importo }, aliquota_iva: budget.iva, stato: "ipotesi", fornitore_id: riga.ric.id || null }], come: `una rata a ${meseIt(budget.mese)}` };
   }
@@ -3212,7 +3301,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         const usati = new Set(p.contratti.map((c) => String(c.fornitore).trim()));
         const voci = p.livelli.macro.flatMap((m) => m.voci || []);
         const v = voci.find((x) => x.fornitore_id && !usati.has(x.fornitore_id) && voci.filter((y) => y.fornitore_id === x.fornitore_id).length === 1);
-        p.contratti.push(v ? { ...FORMATO.contrattoDaPagamenti(p.pagamenti.filter((g) => g.voce_id === v.id), v.fornitore_id, D.mesi), voce_id: v.id }
+        p.contratti.push(v ? { ...FORMATO.contrattoDaPagamenti(p.pagamenti.filter((g) => g.voce_id === v.id), v.fornitore_id, ORIZ()), voce_id: v.id }
           : { fornitore: "", totale: 0, aliquota_iva: 22, stato: "contratto", modo: "sal", anticipo_pct: 0, anticipo_mese: D.mesi[0], ritenuta_pct: 0,
               svincolo_mese: D.mesi[D.mesi.length - 1], sal_modo: "n", sal_n: 1, sal_ogni: 0, sal_da: D.mesi[0], sal_passo: 1, quote: [] });
         mostraPatti(p, p.contratti[p.contratti.length - 1]);
@@ -3220,7 +3309,10 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       };
       collegaLivelli(div, p);
     });
-    el("aggiungi-p").onclick = () => { const id = `P${Date.now().toString(36)}`; sc.progetti.push({ id, nome: "Nuovo progetto", societa: "INTUR", acceso: true, stato: "ipotesi", pagamenti: [], contratti: [], livelli: { budget_netto: null, mesi_budget: null, aliquota_iva: 22, macro: [] } }); aperte.add(`p:${id}`); ricalcola(); };
+    el("aggiungi-p").onclick = () => { const id = `P${Date.now().toString(36)}`; sc.progetti.push({ id, nome: "Nuovo progetto", societa: "INTUR", acceso: true, stato: "ipotesi", pagamenti: [], contratti: [], livelli: { budget_netto: null, mesi_budget: null, aliquota_iva: 22, macro: [] } }); aperte.add(`p:${id}`); ricalcola();
+      // il progetto nuovo si apre col nome selezionato: si scrive subito il nome
+      const campo = el("progetti").querySelector(`details[data-k="p:${id}"] .corpo input[data-campo="nome"]`);
+      if (campo) { campo.scrollIntoView({ block: "center" }); campo.focus(); campo.select(); } };
     // finanziamenti
     el("finanziamenti").querySelectorAll("details.leva[data-f]").forEach((div) => {
       const i = parseInt(div.dataset.f, 10);
@@ -3390,10 +3482,11 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       chip.onkeydown = (e) => {
         if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
         e.preventDefault();
-        const i = D.mesi.indexOf(da) + (e.key === "ArrowLeft" ? -1 : 1);
-        if (i < 0 || i >= D.mesi.length) return;
-        muovi(riga, da, D.mesi[i]);
-        const nuovo = el("calendario").querySelector(`.chip[data-r="${riga.id}"][data-m="${D.mesi[i]}"]`);
+        // → sull'ultimo mese allunga l'orizzonte di un mese (orizzonte aperto)
+        const o = ORIZ(), i = o.indexOf(da) + (e.key === "ArrowLeft" ? -1 : 1);
+        if (i < 0) return;
+        muovi(riga, da, o[i]);
+        const nuovo = el("calendario").querySelector(`.chip[data-r="${riga.id}"][data-m="${o[i]}"]`);
         if (nuovo) nuovo.focus();
       };
       chip.onpointerdown = (e) => {

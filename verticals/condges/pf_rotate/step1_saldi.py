@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
@@ -105,8 +105,9 @@ def write_saldi_banca(
         # rows or the saldo_iniziale_row.
         target_col = 3  # C
         target_col_letter = "C"
-        # Data goes in C2 (directly under "DATA RILEVAZ" header in C1)
-        data_row = 2
+        # Data in C2 (sotto la scritta «DATA RILEVAZ» in C1), oppure in C1 quando
+        # la data sta al posto della scritta: si scrive dove già sta.
+        data_row = 1 if layout.data_cell == "C1" else 2
     else:
         # ORTI-style: saldi banche go in the closed month column.
         target_col = col_mese_chiuso
@@ -114,7 +115,11 @@ def write_saldi_banca(
         # Data alla riga immediatamente precedente al primo saldo banca
         data_row = min(layout.saldi_banca_rows) - 1
 
-    pf.cell(data_row, target_col, data_saldo.strftime("%d/%m/%Y"))
+    if layout.data_cell == "C1":
+        # C1 è una data vera (cella datata di Rosa): resta una data, non un testo
+        pf.cell(data_row, target_col, datetime(data_saldo.year, data_saldo.month, data_saldo.day))
+    else:
+        pf.cell(data_row, target_col, data_saldo.strftime("%d/%m/%Y"))
 
     written: dict[int, float] = {}
     for r in layout.saldi_banca_rows:

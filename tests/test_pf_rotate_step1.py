@@ -277,3 +277,50 @@ def test_write_saldi_fixed_snapshot_non_tocca_r4_mesi(intur_pf_bytes):
     )
     after = [pf.cell(4, c).value for c in range(3, 12)]
     assert before == after
+
+
+def _build_intur_data_in_c1_wb() -> openpyxl.Workbook:
+    """Come il PF INTUR di Rosa da settembre 2026: la data della fotografia sta in C1
+    (al posto della scritta «DATA RILEVAZ»), C2 è vuota."""
+    from datetime import datetime
+
+    wb = _build_fixed_snapshot_wb()
+    pf = wb["Piano Finanziario"]
+    pf["C1"] = datetime(2026, 8, 31)
+    pf["D1"] = 2026
+    return wb
+
+
+def test_find_layout_intur_con_la_data_in_c1():
+    lay = find_layout(_build_intur_data_in_c1_wb())
+    assert lay.snapshot_kind == "fixed-snapshot"
+    assert lay.data_cell == "C1"
+    # la forma storica resta riconosciuta, con la data in C2
+    assert find_layout(_build_fixed_snapshot_wb()).data_cell == "C2"
+
+
+def test_find_layout_c1_anno_resta_month_closed():
+    # ORTI: in C1 c'è l'anno (2026), non una data: resta month-closed
+    wb = _build_fixed_snapshot_wb()
+    pf = wb["Piano Finanziario"]
+    pf["C1"] = 2026
+    pf["C2"] = "APRILE"
+    assert find_layout(wb).snapshot_kind == "month-closed"
+
+
+def test_write_saldi_banca_intur_data_in_c1_aggiorna_c1():
+    from datetime import datetime
+
+    wb = _build_intur_data_in_c1_wb()
+    pf = wb["Piano Finanziario"]
+    out = write_saldi_banca(
+        wb,
+        periodo_chiuso=P(9),
+        data_saldo=date(2026, 9, 30),
+        saldi={"MPS": 100, "Intesa": 200, "BCP": 50},
+    )
+    assert out["snapshot_kind"] == "fixed-snapshot" and out["col"] == "C"
+    assert pf["C1"].value == datetime(2026, 9, 30)  # la data resta dove l'ha messa Rosa
+    assert pf["C2"].value is None
+    assert (pf["C31"].value, pf["C32"].value, pf["C33"].value) == (100, 200, 50)
+    assert pf["K31"].value is None  # mese chiuso (SETTEMBRE = K) non toccato

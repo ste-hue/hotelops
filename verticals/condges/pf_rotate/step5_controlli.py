@@ -9,6 +9,7 @@ Layout-aware: usa find_layout() per rilevare le posizioni di riga dinamicamente
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from enum import Enum
 
@@ -107,13 +108,14 @@ def _check_C1_saldo_iniziale_hardcoded(
 ) -> CheckResult:
     pf = wb["Piano Finanziario"]
     if layout.snapshot_kind == "fixed-snapshot":
-        c2 = pf["C2"].value
+        cella = layout.data_cell or "C2"
+        c2 = pf[cella].value
         if not c2:
             return CheckResult(
                 "C1",
                 "Snapshot C: data rilevazione popolata",
                 CheckOutcome.ERR,
-                "C2 vuota",
+                f"{cella} vuota",
             )
         bad_rows = [
             f"C{r}"
@@ -304,6 +306,23 @@ VOCE_LINKS = [
 ]
 
 
+def _norm_label(v) -> str:
+    return re.sub(r"[^a-z]", "", str(v or "").lower())
+
+
+def _riga_della_voce(pf, voce_label: str, master_row: int) -> int | None:
+    """La riga del master che porta la voce: quella configurata se l'etichetta in col A
+    corrisponde, altrimenti la cerca per etichetta (INTUR ha le voci una riga più in
+    basso di ORTI). None se la voce non c'è."""
+    chiave = _norm_label(voce_label)
+    if _norm_label(pf.cell(master_row, 1).value).startswith(chiave):
+        return master_row
+    for r in range(1, (pf.max_row or 0) + 1):
+        if _norm_label(pf.cell(r, 1).value).startswith(chiave):
+            return r
+    return None
+
+
 def _check_voce_link(
     wb, check_id, voce_label, master_row, alias_spec, detail_row, col_letters: list[str]
 ):
@@ -318,28 +337,51 @@ def _check_voce_link(
             CheckOutcome.INDET,
             "foglio dettaglio assente",
         )
-    detail = wb[name]
-    err_cols = []
-    for col in col_letters:
-        col_i = _col_idx(col)
-        m_val = _read_num_rc(pf, master_row, col_i)
-        d_val = _read_num_rc(detail, detail_row, col_i)
-        if m_val is None or d_val is None:
-            continue
-        if voce_label == "Materie Prime":
-            if m_val + EPS < d_val:
-                err_cols.append(f"{col}: master={m_val} < detail={d_val}")
-        else:
-            if not _eq(m_val, d_val):
-                err_cols.append(f"{col}: master={m_val} vs detail={d_val}")
-    if err_cols:
+    riga = _riga_della_voce(pf, voce_label, master_row)
+    if riga is None:
         return CheckResult(
             check_id,
             f"Riga {master_row} — {voce_label}",
+            CheckOutcome.INDET,
+            "riga della voce non trovata nel master",
+        )
+    detail = wb[name]
+    # Le colonne si allineano per mese: il foglio di dettaglio può avere i mesi
+    # in colonne diverse dal master (INTUR: spostati di qualche colonna).
+    try:
+        per_master = {c: p for p, c in find_month_periods(pf).items()}
+        col_dettaglio = find_month_periods(detail)
+    except ValueError as e:
+        return CheckResult(
+            check_id, f"Riga {riga} — {voce_label}", CheckOutcome.INDET, str(e)
+        )
+    err_cols = []
+    for col in col_letters:
+        col_i = _col_idx(col)
+        per = per_master.get(col_i)
+        d_col = col_dettaglio.get(per) if per is not None else None
+        if d_col is None:
+            continue
+        m_val = _read_num_rc(pf, riga, col_i)
+        d_val = _read_num_rc(detail, detail_row, d_col)
+        if m_val is None or d_val is None:
+            continue
+        anno, mese = periodo_anno_mese(per)
+        dove = f"{col} ({anno}-{mese:02d})"
+        if voce_label == "Materie Prime":
+            if m_val + EPS < d_val:
+                err_cols.append(f"{dove}: master={m_val} < detail={d_val}")
+        else:
+            if not _eq(m_val, d_val):
+                err_cols.append(f"{dove}: master={m_val} vs detail={d_val}")
+    if err_cols:
+        return CheckResult(
+            check_id,
+            f"Riga {riga} — {voce_label}",
             CheckOutcome.ERR,
             "; ".join(err_cols),
         )
-    return CheckResult(check_id, f"Riga {master_row} — {voce_label}", CheckOutcome.OK)
+    return CheckResult(check_id, f"Riga {riga} — {voce_label}", CheckOutcome.OK)
 
 
 def _check_saldo_proiettato_structural(

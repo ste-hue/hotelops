@@ -90,6 +90,10 @@ def input_da_payload(payload: dict, scenario: M.Scenario) -> M.Input:
         intercompany=[M.Flusso(**f) for f in payload["intercompany"]],
         fatti=[_fatto(f) for f in payload.get("fatti") or ()],
         scenario=scenario,
+        mesi_non_pianificati={
+            s: frozenset(v)
+            for s, v in (payload.get("mesi_non_pianificati") or {}).items()
+        },
     )
 
 
@@ -110,12 +114,23 @@ def scenario_del_payload(
 
 
 def _righe_saldi(
-    righe: Iterable[M.RigaMese], etichetta: str, ipotetici: set[str]
+    righe: Iterable[M.RigaMese],
+    etichetta: str,
+    ipotetici: set[str],
+    vuoti: dict[str, set[str]] | None = None,
 ) -> list[list]:
     out = []
     for r in righe:
+        np = "sì" if r.mese in (vuoti or {}).get(r.societa, set()) else "no"
         out.append(
-            [etichetta, r.mese, r.societa, "sì" if r.mese in ipotetici else "no", r.ini]
+            [
+                etichetta,
+                r.mese,
+                r.societa,
+                "sì" if r.mese in ipotetici else "no",
+                np,
+                r.ini,
+            ]
             + [r.entrate.get(o, 0) for o in ORIGINI]
             + [sum(r.entrate.values())]
             + [r.uscite.get(o, 0) for o in ORIGINI]
@@ -124,16 +139,37 @@ def _righe_saldi(
     return out
 
 
+def payload_allungato(payload: dict, documento: dict | None = None) -> dict:
+    """Come la pagina: l'orizzonte arriva fino all'ultimo mese citato dallo scenario."""
+    doc = documento if documento is not None else payload.get("seme")
+    fino = max(M.mesi_citati((doc or {}).get("scenario") or {}), default=None)
+    if not fino or fino <= payload["mesi"][-1]:
+        return payload
+    mesi, ipo = M.allunga_orizzonte(
+        payload["mesi"], payload.get("mesi_ipotetici") or (), fino
+    )
+    return {**payload, "mesi": mesi, "mesi_ipotetici": sorted(ipo)}
+
+
 def tabelle(payload: dict, documento: dict | None = None) -> dict[str, Tabella]:
+    payload = payload_allungato(payload, documento)
     sc, nome = scenario_del_payload(payload, documento)
     ipo = set(payload.get("mesi_ipotetici") or ())
+    vuoti = {s: set(v) for s, v in (payload.get("mesi_non_pianificati") or {}).items()}
     base = M.calcola(input_da_payload(payload, VUOTO))
     scen = M.calcola(input_da_payload(payload, sc))
 
     t: dict[str, Tabella] = {}
 
     intest = (
-        ["scenario", "mese", "societa", "mese_senza_pf", "saldo_iniziale"]
+        [
+            "scenario",
+            "mese",
+            "societa",
+            "mese_senza_pf",
+            "mese_non_pianificato",
+            "saldo_iniziale",
+        ]
         + [f"entrate_{o}" for o in ORIGINI]
         + ["entrate_totali"]
         + [f"uscite_{o}" for o in ORIGINI]
@@ -141,7 +177,8 @@ def tabelle(payload: dict, documento: dict | None = None) -> dict[str, Tabella]:
     )
     t["saldi_mensili"] = (
         intest,
-        _righe_saldi(base.righe, "solo PF", ipo) + _righe_saldi(scen.righe, nome, ipo),
+        _righe_saldi(base.righe, "solo PF", ipo, vuoti)
+        + _righe_saldi(scen.righe, nome, ipo, vuoti),
     )
 
     t["minimi"] = (
@@ -422,6 +459,16 @@ def tabelle(payload: dict, documento: dict | None = None) -> dict[str, Tabella]:
                 "mesi senza PF",
                 " ".join(payload.get("mesi_ipotetici") or []) or "nessuno",
             ],
+            [
+                "mesi non pianificati",
+                "; ".join(
+                    f"{s}: {' '.join(v)}"
+                    for s, v in sorted(
+                        (payload.get("mesi_non_pianificati") or {}).items()
+                    )
+                )
+                or "nessuno",
+            ],
         ]
         + [
             [f"PF {s}", (b or {}).get("file_sorgente", "")]
@@ -605,6 +652,7 @@ def scrivi_json(
         },
         "mesi": payload.get("mesi"),
         "mesi_senza_pf": payload.get("mesi_ipotetici"),
+        "mesi_non_pianificati": payload.get("mesi_non_pianificati") or {},
         "unita": {
             "importi": "centesimi interi",
             "mesi": "YYYY-MM",

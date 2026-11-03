@@ -335,6 +335,13 @@ def render() -> None:
             f"{tot_oltre:,.2f} € NON scritti"
         )
 
+    senza = (result.scadenzario_summary or {}).get("senza_foglio") or {}
+    if senza:
+        righe = ", ".join(
+            f"{cod} ({voce}) {abs(imp):,.2f} €" for cod, (voce, imp) in sorted(senza.items())
+        )
+        st.warning(f"⚠️ Senza foglio nel PF, NON scritti: {righe}")
+
     summ = scad_summary(scad_df, bucket_periodi)
     st.metric("Scaduto (roll-forward)", f"€ {summ['scaduto_totale']:,.2f}")
     st.metric("Totale partite aperte", f"€ {summ['totale_partite_aperte']:,.2f}")

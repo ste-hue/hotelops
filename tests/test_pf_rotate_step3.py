@@ -205,3 +205,42 @@ def test_apply_scadenzario_raises_su_collisione_multi_anno_da_mappare(
             fornitori_csv=tmp_fornitori_csv,
             policy=UnmappedPolicy.SKIP,
         )
+
+
+def test_godimento_beni_usa_il_foglio_godimento():
+    """USCITE_GODIMENTO_BENI (voce scritta su BQ per 264 Panorama Company) è lo
+    stesso foglio di USCITE_CANONE_PASSIVO: «Godimento Beni di Terzi»."""
+    from verticals.condges.pf_rotate.pf_writer import resolve_sheet_name
+
+    fogli = ["Piano Finanziario", "Utenze", "Godimento Beni di Terzi"]
+    assert (
+        resolve_sheet_name("USCITE_GODIMENTO_BENI", fogli) == "Godimento Beni di Terzi"
+    )
+
+
+def test_write_pf_voce_senza_foglio_va_nel_secchio(minimal_pf_orti_bytes):
+    """Voce senza foglio dettaglio: niente scritto, ma l'importo non sparisce
+    in un log — finisce nel secchio ``senza_foglio`` {codice: (voce, importo)}."""
+    from verticals.condges.pf_rotate.pf_writer import write_pf
+
+    scad_df = pd.DataFrame(
+        [
+            {
+                "codice_fornitore": 853,
+                "nome": "Banca Sella",
+                "totale": -120.0,
+                "scaduto": -20.0,
+                f"mese_{P(6)}": -100.0,
+            }
+        ]
+    )
+    _out, summary = write_pf(
+        pf_bytes=minimal_pf_orti_bytes,
+        scad_df=scad_df,
+        bucket_periodi=[P(6)],
+        fornitori_map={853: {"voce_id": "USCITE_SPESE_BANCARIE", "nome_pf": "Sella"}},
+        excluded=set(),
+        scaduto_periodo=P(5),
+        clear_codici={853},
+    )
+    assert summary["senza_foglio"] == {853: ("USCITE_SPESE_BANCARIE", -120.0)}

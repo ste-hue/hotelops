@@ -959,7 +959,7 @@ def test_template_brief_ui_1_3_parole_stati_e_finanziamenti():
     # 1. il bottone dice il risultato; nessuna parola con due significati; via il doppione della pillola
     assert "Salva scenario (.json)" in html and "Excel (.xlsx)" in html and "Apri scenario (.json)" in html
     assert "Esporta scenario" not in html and "Esporta Excel" not in html and 'id="nessuna"' not in html
-    assert ">Genera le rate<" in html and ">Rateizza<" not in html
+    assert '${f.n ? "Rifai le rate" : "Metti in cassa"}' in html and ">Rateizza<" not in html
     # 2. finanziamenti: due riquadri nelle parole di Stefano, generatore delle tranche, controllo «erogato X di Y»
     assert "Quando la banca ti dà i soldi" in html and "Quando li restituisci" in html
     assert "data-genera-tranche" in html and "erogato ${fmt(erogato, false)} di ${fmt(f.importo, false)}" in html
@@ -1095,6 +1095,8 @@ def test_template_importa_budget_e_lettore_xlsx():
         assert pezzo in html, pezzo
     # i mesi dai patti abituali se ci sono, altrimenti una rata al mese scelto; stato «ipotesi»
     assert "contrattoDaPatti(p, budget.mese, riga.ric.id, riga.importo)" in html and 'stato: "ipotesi", fornitore_id: riga.ric.id || null' in html
+    # «Da assegnare» (foglio «Per fornitore» di hpan26-soft) = senza fornitore, non una scheda finta
+    assert "/^(tbd|n\\.?d\\.?|da definire|da assegnare|-|—)?$/i" in html
 
 
 def test_lettore_csv_e_colonne_xlsx_in_node(tmp_path):
@@ -1622,8 +1624,8 @@ def test_template_progetti_a_livelli():
     # Dentro il progetto una tabella a livelli: budget del progetto, macro, sottovoci; si aggiunge scrivendo
     # nell'ultima riga vuota. Ogni modifica rideriva i pagamenti (il calcolo legge solo quelli).
     html = render_html(build_payload(snapshot_sintetico(), []))
-    for pezzo in ("function aggiornaProgetto(p)", "p.pagamenti = FORMATO.derivaPagamenti(p, D.mesi);", "data-nuova-macro", "data-nuova-voce",
-                  "data-budget-progetto", "data-budget-macro", '"cdg-cassa-scenario/2"', "FORMATO.avvisiLivelli(p.livelli, D.mesi)",
+    for pezzo in ("function aggiornaProgetto(p)", "p.pagamenti = FORMATO.derivaPagamenti(p, ORIZ());", "data-nuova-macro", "data-nuova-voce",
+                  "data-budget-progetto", "data-budget-macro", '"cdg-cassa-scenario/2"', "FORMATO.avvisiLivelli(p.livelli, ORIZ())",
                   'class="livelli"', "data-elimina-macro", "data-conferma-macro"):
         assert pezzo in html, pezzo
     # il vecchio «+ pagamento» sparisce: si scrive nella riga vuota
@@ -1845,3 +1847,142 @@ def test_import_in_una_macro_toglie_solo_i_patti_di_quella_macro(tmp_path):
     )
     assert any(d.get("patti_persi") and d["fornitore"] == "AMCN" for d in r["d"])
     assert r["c"] == [{"fornitore": "AMCN", "totale": 3_000_000, "voce_id": "v1"}]
+
+
+# ── mesi non pianificati: colonna nel file, nessuna riga; mai zero ──
+
+VUOTI_3 = ["2027-04", "2027-05", "2027-06"]
+CODA_3 = ["2027-07", "2027-08", "2027-09"]
+
+
+def snapshot_allungato():
+    """Lo stesso PF di snapshot_sintetico, con il file allungato di tre mesi vuoti per
+    entrambe le società (pf-extend senza scrivere niente): i tre mesi sono «non pianificati»
+    e la coda ipotetica slitta dopo."""
+    return dict(
+        snapshot_sintetico(),
+        mesi=MESI_PF + VUOTI_3 + CODA_3,
+        mesi_ipotetici=CODA_3,
+        mesi_non_pianificati={"INTUR": VUOTI_3, "ORTI": VUOTI_3},
+    )
+
+
+def test_il_minimo_non_cambia_se_il_file_si_allunga_senza_righe():
+    # Ricevuta del coordinatore (03/11): minimo IDENTICO prima e dopo l'allungamento finché
+    # nessuna cella nuova è scritta. È la prova che il vuoto non è diventato zero.
+    prima, dopo = snapshot_sintetico(), snapshot_allungato()
+    assert dopo["mesi_non_pianificati"] == {"INTUR": VUOTI_3, "ORTI": VUOTI_3}
+    for sc in (Scenario("v", [], []), _scenario_base()[0]):
+        a = calcola(input_da_snapshot(prima, sc)).minimi
+        b = calcola(input_da_snapshot(dopo, sc)).minimi
+        for soc in ("ORTI", "INTUR"):
+            assert (b[soc].mese, b[soc].saldo, b[soc].sotto_soglia) == (
+                a[soc].mese,
+                a[soc].saldo,
+                a[soc].sotto_soglia,
+            )
+    # La distinzione è misurabile: con i vuoti marcati, la «coda senza PF» parte dal primo
+    # mese non pianificato (come prima dell'allungamento); se gli stessi mesi passassero per
+    # «con PF» a zero, la coda partirebbe tre mesi dopo e il minimo li conterebbe.
+    vuoto = Scenario("v", [], [])
+    assert calcola(input_da_snapshot(dopo, vuoto)).minimi["ORTI"].coda_mese == VUOTI_3[0]
+    assert calcola(input_da_snapshot(prima, vuoto)).minimi["ORTI"].coda_mese == VUOTI_3[0]
+    zero = dict(snapshot_allungato(), mesi_non_pianificati={})
+    assert calcola(input_da_snapshot(zero, vuoto)).minimi["ORTI"].coda_mese == CODA_3[0]
+
+
+def test_js_uguale_a_python_con_mesi_non_pianificati(tmp_path):
+    snap = snapshot_allungato()
+    p = build_payload(snap, [])
+    assert p["mesi_non_pianificati"] == {"INTUR": VUOTI_3, "ORTI": VUOTI_3}
+    sc, _ = _scenario_base()
+    out = esegui_node(tmp_path, render_html(p), p, scenario_to_json(sc, p["base"]))
+    assert out == to_dict(calcola(input_da_snapshot(snap, sc)))
+    vuoto = Scenario("v", [], [])
+    out = esegui_node(tmp_path, render_html(p), p, scenario_to_json(vuoto, p["base"]))
+    assert out == p["baseline"]
+
+
+BANDA_FINTA = {
+    "misurata_il": "2026-10-30",
+    "finestra": "finta: cinque mesi, ventidue versioni",
+    "societa": {
+        "INTUR": {"segno": "ottimista", "crescita_mese": 100, "h": {"1": {"medio": 10, "banda": 50, "n": 5}, "2": {"medio": 20, "banda": 40, "n": 4}}},
+        "ORTI": {"segno": "pessimista", "crescita_mese": -100, "h": {"1": {"medio": -10, "banda": 30, "n": 5}}},
+    },
+}
+
+
+def test_payload_porta_la_banda_e_la_pagina_la_mostra():
+    # Le misure vere stanno nel file locale banda_pf.json (repo pubblico): qui una banda finta.
+    assert build_payload(snapshot_allungato(), [])["banda_pf"] == {"societa": {}}
+    p = build_payload(snapshot_allungato(), [], banda_pf=BANDA_FINTA)
+    assert p["banda_pf"] == BANDA_FINTA
+    # ORTI: a 3 mesi il file del PF ha la colonna ma nessuna riga: la pagina lo dice e non stampa zero
+    assert any("non pianificato, non zero" in riga and riga.startswith("ORTI") for riga in p["limiti"])
+    html = render_html(p)
+    assert "non pianificato" in html and 'class="badge warn" title="colonna nel file, nessuna riga"' in html
+    assert "function banda(soc, h)" in html and "const fraseBanda" in html and 'class="piccolo banda"' in html
+    assert "Documento di pianificazione, non previsione." in html and "c.hidden = !(hPf > 12)" in html
+    assert '"senza PF", "non pianificato", "saldo iniziale €"' in html
+
+
+# ── orizzonte aperto: le leve oltre l'ultimo mese allungano l'orizzonte ──
+
+
+def _scenario_oltre(mesi: list[str]) -> tuple[Scenario, str]:
+    """Utenze in 12 rate dall'ultimo mese: undici cadono oltre l'orizzonte."""
+    from verticals.condges.cassa_motore import allunga_orizzonte
+
+    oltre, _ = allunga_orizzonte(mesi, (), None)
+    da = oltre[-1]
+    rate = {}
+    m = da
+    for _ in range(12):
+        rate[m] = 100_000
+        a, n = (int(x) for x in m.split("-"))
+        m = f"{a + n // 12}-{n % 12 + 1:02d}"
+    pag = [Pagamento("utenze", rate, 22, "ipotesi")]
+    sc = Scenario("oltre", [Progetto("SH", "Staff House", "ORTI", True, "ipotesi", pag)], [])
+    return sc, max(rate)
+
+
+def test_orizzonte_aperto_python_e_js_uguali(tmp_path):
+    from verticals.condges.cassa_motore import allunga_orizzonte, mesi_citati
+    from verticals.condges.cassa_tabelle import input_da_payload, payload_allungato
+
+    p = build_payload(snapshot_allungato(), [])
+    sc, ultima = _scenario_oltre(p["mesi"])
+    doc = json.loads(scenario_to_json(sc, p["base"]))
+    assert max(mesi_citati(doc["scenario"])) == ultima > p["mesi"][-1]
+    pp = payload_allungato(p, doc)
+    assert pp["mesi"][-1] == ultima and pp["mesi"][: len(p["mesi"])] == p["mesi"]
+    assert set(pp["mesi_ipotetici"]) == set(p["mesi_ipotetici"]) | set(pp["mesi"][len(p["mesi"]) :])
+    # non accorcia mai, e senza mesi oltre non tocca il payload
+    assert allunga_orizzonte(p["mesi"], p["mesi_ipotetici"], p["mesi"][0])[0] == p["mesi"]
+    assert payload_allungato(p, {"scenario": {}}) is p
+    atteso = to_dict(calcola(input_da_payload(pp, sc)))
+    # tutte e dodici le rate contano: l'ultima riga ORTI ha pagato 12 × lordo
+    orti = [r for r in atteso["righe"] if r["societa"] == "ORTI"]
+    assert orti[-1]["mese"] == ultima
+    assert sum(r["uscite"]["progetto"] for r in orti) == 12 * 122_000
+    (tmp_path / "scenario.json").write_text(json.dumps(doc), encoding="utf-8")
+    out = esegui_node_fn(
+        tmp_path,
+        render_html(p),
+        "(() => { const S = require('./scenario.json').scenario;"
+        " const o = M.allungaOrizzonte(D.mesi, D.mesi_ipotetici, [...M.mesiCitati(S)].sort().pop());"
+        " return JSON.stringify(M.calcola({ ...D, ...o }, S)); })()",
+    )
+    assert json.loads(out) == atteso
+
+
+def test_la_pagina_allunga_l_orizzonte_invece_di_rifiutare():
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert "function allunga(scenario)" in html and "allunga(stato.scenario);" in html
+    assert "const ORIZ = () =>" in html
+    # generare e spostare le rate usa l'orizzonte aperto, non più D.mesi
+    assert "n, passo, ORIZ()));" in html and "FORMATO.sposta(leggi(), parseInt(b.dataset.sposta, 10), ORIZ())" in html
+    assert "FORMATO.pagamentiDaContratto(c, D.mesi)" not in html
+    # il solo PF si ricalcola sui mesi nuovi (prima: «reading 'fin'» sul primo mese aggiunto)
+    assert "D.baseline = MOTORE.calcola(D, { nome: \"solo PF\"" in html

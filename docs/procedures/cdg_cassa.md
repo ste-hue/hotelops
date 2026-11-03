@@ -189,10 +189,24 @@ scrittura dal browser verso BigQuery. Spec: `docs/superpowers/specs/2026-10-29-c
     cadono solo i patti legati alle sottovoci di quella macro; quelli dello stesso fornitore in altre
     macro restano.
     **Quando l'orizzonte scorre** (nuovo mese chiuso), la pagina ricalcola il «da assegnare» sui mesi del
-    budget rimasti nell'orizzonte. Le tabelle Python (`hotelops cdg tabelle`) e BigQuery invece leggono i
+    budget non ancora passati (i mesi oltre l'ultimo allungano l'orizzonte, punto 16). Le tabelle Python (`hotelops cdg tabelle`) e BigQuery invece leggono i
     pagamenti salvati al momento del salvataggio. Per uno scenario `/2` salvato prima che l'orizzonte
     scorresse, pagina e tabelle possono quindi dare cifre diverse sul «da assegnare» finché lo scenario
     non viene ri-esportato e ri-salvato (punto 2).
+
+16. **Orizzonte lungo: «non pianificato» non è zero, e la banda cresce con h.** Il PF vivo è un file solo
+    su due anni (colonne datate per anno dall'ingest, wrap dicembre→gennaio); si allunga con
+    `pf-extend --to AAAA-MM` sul master, alla finestra, come atto dichiarato nel verbale. L'ingest non
+    emette celle a zero, quindi un mese con la colonna ma senza righe per una società è **non
+    pianificato** (`mesi_non_pianificati` per società nello snapshot, calcolato in `cassa_fonti`): il
+    motore (Python e JS, in parità) lo tratta come un mese senza PF per il minimo, la pagina lo marca
+    «non pianificato» (§A non registrato) nella tabella, nella scheda del minimo e nel grafico, mai
+    con uno 0; l'Excel e `cdg tabelle` portano la colonna accanto a «senza PF». Sotto ogni minimo la
+    **banda d'errore per h** (mesi dall'ancora): misurata fino a 3 mesi (file locale `banda_pf.json`
+    accanto al seme, dal rapporto del 30/10: INTUR ottimista, ORTI pessimista; le misure non stanno
+    nel repo), oltre solo il segno e la crescita; nel
+    grafico un corridoio fino a h 3 e la deriva tratteggiata oltre. Se il PF arriva oltre 12 mesi
+    dall'ancora, in testa compare «documento di pianificazione, non previsione».
 
 ## 3. Ri-promuovere un PF (nuovo file di Rosa)
 
