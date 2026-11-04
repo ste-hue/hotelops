@@ -397,6 +397,29 @@ def mesi_non_pianificati(
 # ── orizzonte ipotetico ──
 
 
+def fine_orizzonte(ancore: dict) -> str:
+    """Dicembre dell'anno dopo l'ancora più vecchia: saldi al 31/10/2026 → «2027-12»."""
+    return _mese(min(a.data for a in ancore.values()).year + 1, 12)
+
+
+def taglia_orizzonte(
+    righe: list[Riga], flussi: list[Flusso], mesi: list[str], fine: str
+) -> tuple[list[Riga], list[Flusso], list[str], int]:
+    """Ferma la pagina a ``fine`` (YYYY-MM): il PF oltre (es. le sole rate dei mutui fino al
+    2029) resta fuori; se il PF finisce prima, i mesi mancanti fino a ``fine`` sono la coda
+    ipotetica. Ritorna righe, flussi, mesi col PF entro ``fine`` e la lunghezza della coda."""
+    mesi = [m for m in mesi if m <= fine]
+    coda, ultimo = 0, mesi[-1] if mesi else fine
+    while ultimo < fine:
+        ultimo, coda = _mese_dopo(ultimo), coda + 1
+    return (
+        [r for r in righe if r.mese <= fine],
+        [f for f in flussi if f.mese <= fine],
+        mesi,
+        coda,
+    )
+
+
 def mesi_ipotetici(mesi: list[str], coda: int = 6) -> tuple[list[str], frozenset[str]]:
     nuovi = []
     ultimo = mesi[-1]

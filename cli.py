@@ -560,12 +560,71 @@ def cmd_promote(args):
     sys.exit(1)
 
 
+def _cmd_cdg_cassa_headless(args):
+    """`cdg cassa simula|confronta|variante|scenari|promuovi`: la cassa senza pagina."""
+    import json as _json
+
+    from verticals.condges import cassa_cli as cc
+    from verticals.condges import cassa_fonti as cf
+
+    home = cf.SNAPSHOT_HOME
+    stampa = lambda obj: print(_json.dumps(obj, ensure_ascii=False, indent=1))  # noqa: E731
+    try:
+        if args.cassa_cmd == "scenari":
+            for e in cc.elenco(home):
+                print(
+                    f"{e['nome']:<24} {e['origine']:<9} id {e['scenario_id']}  "
+                    f"salvato {e['salvato_il'] or '?'}"
+                    + (f"  da {e['derivato_da']}" if e["derivato_da"] else "")
+                )
+            return
+        if args.cassa_cmd == "promuovi":
+            d = cc.risolvi(args.nome, home)
+            copia = cc.promuovi(d, args.autorizzato_da, home)
+            print(f"Seme = {d.etichetta}. Il seme di prima è in {copia}")
+            return
+        payload = cc.payload_locale(home)
+        if args.cassa_cmd == "simula":
+            d = cc.risolvi(args.scenario, home)
+            if args.mese:
+                det = cc.dettaglio_mese(payload, d, args.mese, args.vista)
+                if args.json:
+                    stampa({"intestazione": cc.intestazione(d, payload, home, args.vista), "mese": args.mese, "dettaglio": det})
+                else:
+                    print("\n".join(cc._righe_intestazione(cc.intestazione(d, payload, home, args.vista))))
+                    print(cc.testo_mese(det, args.mese))
+                return
+            s = cc.simula(payload, d, home, args.vista)
+            stampa(s) if args.json else print(cc.testo_simula(s))
+        elif args.cassa_cmd == "confronta":
+            c = cc.confronta(
+                payload, cc.risolvi(args.a, home), cc.risolvi(args.b, home), home,
+                da=args.da, fino=args.fino, base_diverse=args.base_diverse,
+            )
+            stampa(c) if args.json else print(cc.testo_confronta(c))
+        elif args.cassa_cmd == "variante":
+            mods = cc.modifiche_da_argomenti(args.canone, args.accendi, args.spegni, args.ipotesi)
+            dest = cc.variante(
+                args.nome, cc.risolvi(args.da, home), mods, payload, home,
+                creato_da=args.creato_da, sostituisci=args.sostituisci,
+            )
+            print(f"Scritto {dest}")
+            print(cc.testo_simula(cc.simula(payload, cc.risolvi(args.nome, home), home)))
+    except cc.ErroreCassa as e:
+        print(f"Errore: {e}")
+        sys.exit(2)
+
+
 def cmd_cdg(args):
     """CdG: scenario salva/lista (lineage), cassa (pagina HTML), tabelle (CSV per Excel)."""
+    if args.cdg_cmd == "cassa" and getattr(args, "cassa_cmd", None):
+        _cmd_cdg_cassa_headless(args)
+        return
+
     if args.cdg_cmd == "cassa":
         from verticals.condges.build_cassa_artifact import DEFAULT_OUT, run
 
-        run(Path(args.out) if args.out else DEFAULT_OUT, args.aggiorna, args.push)
+        run(Path(args.out) if args.out else DEFAULT_OUT, args.aggiorna, args.push, args.fino_a)
         return
 
     if args.cdg_cmd == "tabelle":
@@ -1462,6 +1521,38 @@ def main():
     p_cc.add_argument("--aggiorna", action="store_true", help="Rilegge BigQuery e salva lo snapshot (senza: latest.json)")
     p_cc.add_argument("--push", action="store_true", help="Pubblica HTML e dati nel KV del Worker cdg")
     p_cc.add_argument("--out", default=None, help="File HTML (default docs/reports/artifacts/cassa.html)")
+    p_cc.add_argument(
+        "--fino-a",
+        default=None,
+        metavar="YYYY-MM",
+        help="Ultimo mese della pagina, con --aggiorna (default: dicembre dell'anno dopo i saldi)",
+    )
+    cc_sub = p_cc.add_subparsers(dest="cassa_cmd", required=False)
+    p_sim = cc_sub.add_parser("simula", help="Saldi e minimi di uno scenario, senza pagina")
+    p_sim.add_argument("scenario", nargs="?", default="seme", help="seme | nome in scenari/ | file JSON")
+    p_sim.add_argument("--vista", choices=("pf", "scenario"), default="scenario")
+    p_sim.add_argument("--mese", default=None, metavar="YYYY-MM", help="Dettaglio del mese")
+    p_sim.add_argument("--json", action="store_true")
+    p_cfr = cc_sub.add_parser("confronta", help="Due scenari mese per mese, con il perché")
+    p_cfr.add_argument("a")
+    p_cfr.add_argument("b")
+    p_cfr.add_argument("--da", default=None, metavar="YYYY-MM")
+    p_cfr.add_argument("--a", dest="fino", default=None, metavar="YYYY-MM")
+    p_cfr.add_argument("--base-diverse", action="store_true", help="Confronta anche se i PF sono diversi")
+    p_cfr.add_argument("--json", action="store_true")
+    p_var = cc_sub.add_parser("variante", help="Nuovo scenario in scenari/, derivato da un altro")
+    p_var.add_argument("nome")
+    p_var.add_argument("--da", required=True, help="seme | nome in scenari/ | file JSON")
+    p_var.add_argument("--canone", default=None, help="NxRATA@YYYY-MM (rata netta in euro) oppure «pf»")
+    p_var.add_argument("--accendi", action="append", default=[], metavar="ID_PROGETTO")
+    p_var.add_argument("--spegni", action="append", default=[], metavar="ID_PROGETTO")
+    p_var.add_argument("--ipotesi", action="append", default=[], metavar="TESTO")
+    p_var.add_argument("--creato-da", default="cli")
+    p_var.add_argument("--sostituisci", action="store_true", help="Sovrascrive; la versione di prima resta come _prima_")
+    cc_sub.add_parser("scenari", help="Seme e scenari locali, con provenienza")
+    p_pro = cc_sub.add_parser("promuovi", help="Uno scenario diventa il seme (serve --autorizzato-da)")
+    p_pro.add_argument("nome")
+    p_pro.add_argument("--autorizzato-da", default=None, metavar="\"chi, quando, dove\"")
     p_ct = cdg_sub.add_parser(
         "tabelle",
         help="Tabelle piatte della pagina Cassa in CSV (separatore «;», virgola decimale: Excel li apre)",

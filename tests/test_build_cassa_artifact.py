@@ -429,6 +429,20 @@ def test_js_uguale_a_python(tmp_path):
     assert out == to_dict(calcola(input_da_snapshot(snap, sc)))
 
 
+@pytest.mark.parametrize("acceso", [True, False])
+def test_js_uguale_a_python_con_finanziamento_legato_al_progetto(tmp_path, acceso):
+    snap = snapshot_sintetico()
+    p = build_payload(snap, [])
+    sc, _ = _scenario_base()
+    sc = replace(
+        sc,
+        progetti=[replace(x, acceso=acceso) for x in sc.progetti],
+        finanziamenti=[replace(f, progetto_id="P1") for f in sc.finanziamenti],
+    )
+    out = esegui_node(tmp_path, render_html(p), p, scenario_to_json(sc, p["base"]))
+    assert out == to_dict(calcola(input_da_snapshot(snap, sc)))
+
+
 def test_js_baseline_uguale_a_python(tmp_path):
     p = build_payload(snapshot_sintetico(), [])
     vuoto = Scenario("v", [], [])
@@ -1257,3 +1271,199 @@ def test_il_nome_del_pagamento_si_scrive_nella_testata():
     assert '<input type="text" class="pag-nome nome" data-campo="nome"' in html
     assert "modifica nome, IVA e rate" not in html and "<summary>dettagli: IVA, fornitore, mese per mese, documenti</summary>" in html
     assert '.pag-testa > [data-campo], .sotto > .riga [data-campo]' in html
+
+
+# ── «Sposta di un anno»: un progetto intero, rate e patti insieme ──
+
+# Orizzonte lungo: ott 26 + 59 mesi, come ORIZ() della pagina (D.mesi + mesi virtuali).
+ORIZ_LUNGO_JS = (
+    "(() => { const o = ['2026-10']; while (o.length < 60) { const [a, m] = o[o.length - 1].split('-').map(Number);"
+    " o.push(m === 12 ? `${a + 1}-01` : `${a}-${String(m + 1).padStart(2, '0')}`); } return o; })()"
+)
+PROGETTO_AMCN = {
+    "id": "P1",
+    "nome": "Cantiere",
+    "societa": "INTUR",
+    "acceso": True,
+    "stato": "ipotesi",
+    "pagamenti": AMCN_PAGAMENTI
+    + [
+        {
+            "nome": "Arredi",
+            "mesi": {"2027-03": 1000, "2027-04": 1000, "2027-05": 1001},
+            "aliquota_iva": 22,
+            "stato": "ipotesi",
+            "fornitore_id": None,
+        }
+    ],
+    "contratti": [
+        {
+            "fornitore": "AMCN",
+            "totale": 48200000,
+            "aliquota_iva": 0,
+            "stato": "contratto",
+            "modo": "sal",
+            "anticipo_pct": 15,
+            "anticipo_mese": "2026-10",
+            "ritenuta_pct": 10,
+            "svincolo_mese": "2027-05",
+            "sal_modo": "n",
+            "sal_n": 5,
+            "sal_ogni": 0,
+            "sal_da": "2026-11",
+            "sal_passo": 1,
+            "quote": [],
+        }
+    ],
+}
+
+
+def _sposta(tmp_path, html, espressione):
+    return json.loads(
+        esegui_node_formato(
+            tmp_path,
+            html,
+            f"(() => {{ const O = {ORIZ_LUNGO_JS}; return JSON.stringify({espressione}); }})()",
+        )
+    )
+
+
+def test_js_sposta_progetto_di_un_anno_rate_e_patti_insieme(tmp_path):
+    """Avanti di un anno: ogni rata 12 mesi dopo (dic→gen compreso), importi, IVA e totali invariati;
+    le date dei patti si spostano con le rate, così «Genera» rifà esattamente le rate spostate."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    p = json.dumps(PROGETTO_AMCN)
+    q, rigenerati = _sposta(
+        tmp_path,
+        html,
+        f"(() => {{ const q = F.spostaProgetto({p}, 12, '2026-10'); return [q, F.pagamentiDaContratto(q.contratti[0], O)]; }})()",
+    )
+    piu_un_anno = lambda m: f"{int(m[:4]) + 1}{m[4:]}"  # noqa: E731
+    for g0, g1 in zip(PROGETTO_AMCN["pagamenti"], q["pagamenti"], strict=True):
+        assert g1["mesi"] == {piu_un_anno(m): v for m, v in g0["mesi"].items()}
+        assert sum(g1["mesi"].values()) == sum(g0["mesi"].values())
+        assert {k: v for k, v in g1.items() if k != "mesi"} == {
+            k: v for k, v in g0.items() if k != "mesi"
+        }
+    assert (
+        q["pagamenti"][1]["mesi"]["2027-12"]
+        == q["pagamenti"][1]["mesi"]["2028-01"]
+        == 7230000
+    )  # passaggio d'anno
+    c = q["contratti"][0]
+    assert (c["anticipo_mese"], c["sal_da"], c["svincolo_mese"]) == (
+        "2027-10",
+        "2027-11",
+        "2028-05",
+    )
+    assert [g["mesi"] for g in rigenerati] == [g["mesi"] for g in q["pagamenti"][:3]]
+    assert {k: v for k, v in q.items() if k not in ("pagamenti", "contratti")} == {
+        k: v for k, v in PROGETTO_AMCN.items() if k not in ("pagamenti", "contratti")
+    }
+
+
+def test_js_sposta_progetto_avanti_e_indietro_torna_identico(tmp_path):
+    """Reversibile: avanti poi indietro (e due avanti, due indietro) ridanno il progetto di partenza al
+    carattere, anche con una data dei patti inutilizzata (anticipo 0% al primo mese dell'orizzonte)."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    p = dict(
+        PROGETTO_AMCN,
+        contratti=[
+            dict(PROGETTO_AMCN["contratti"][0], anticipo_pct=0, anticipo_mese="2026-10")
+        ],
+    )
+    pj = json.dumps(p)
+    uno, due, dietro = _sposta(
+        tmp_path,
+        html,
+        f"[F.spostaProgetto(F.spostaProgetto({pj}, 12, '2026-10'), -12, '2026-10'),"
+        f" F.spostaProgetto(F.spostaProgetto(F.spostaProgetto(F.spostaProgetto({pj}, 12, '2026-10'), 12, '2026-10'), -12, '2026-10'), -12, '2026-10'),"
+        f" F.spostaProgetto(F.spostaProgetto({pj}, 12, '2026-10'), -12, '2026-10').contratti[0].anticipo_mese]",
+    )
+    assert uno == p and due == p and dietro == "2026-10"
+
+
+def test_js_sposta_progetto_indietro_oltre_la_pagina_rifiuta_e_non_tocca(tmp_path):
+    """Indietro oltre l'inizio della pagina: errore che dice quale rata e quale mese; il progetto
+    passato a spostaProgetto resta identico al carattere (anche dopo uno spostamento riuscito)."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    pj = json.dumps(PROGETTO_AMCN)
+    msg, intatto = _sposta(
+        tmp_path,
+        html,
+        f"(() => {{ const p = {pj}; const prima = JSON.stringify(p); let m = null; F.spostaProgetto(p, 12, '2026-10');"
+        f" try {{ F.spostaProgetto(p, -12, '2026-10'); }} catch (e) {{ m = e.message; }} return [m, JSON.stringify(p) === prima]; }})()",
+    )
+    assert msg and "ott 26" in msg and "inizio della pagina" in msg and intatto
+
+
+def test_js_sposta_finanziamento_erogazioni_e_rate(tmp_path):
+    """Il finanziamento si sposta solo se chiesto (funzione a parte): erogazioni e rate +12, importi uguali."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    f = {
+        "id": "F1",
+        "nome": "Mutuo",
+        "societa": "INTUR",
+        "erogazioni": {"2026-12": 500, "2027-03": 500},
+        "rate": {"2027-06": 10},
+        "stato": "ipotesi",
+        "progetto_id": "P1",
+    }
+    g = _sposta(tmp_path, html, f"F.spostaFinanziamento({json.dumps(f)}, 12, '2026-10')")
+    assert g["erogazioni"] == {"2027-12": 500, "2028-03": 500} and g["rate"] == {
+        "2028-06": 10
+    }
+    assert {k: v for k, v in g.items() if k not in ("erogazioni", "rate")} == {
+        k: v for k, v in f.items() if k not in ("erogazioni", "rate")
+    }
+
+
+def test_template_sposta_anno_chiede_per_i_finanziamenti_e_non_tocca_altri_progetti():
+    """La pagina sposta solo il progetto del pulsante (lo sostituisce nella lista), i finanziamenti legati
+    solo dopo il «Sì» nella pagina (niente finestre modali), e confronta le card con lo scenario aperto."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert "Sposta avanti di un anno" in html and "Sposta indietro di un anno" in html
+    assert "sc.progetti[sc.progetti.indexOf(p)] = q;" in html
+    assert (
+        "f.progetto_id === p.id ? FORMATO.spostaFinanziamento(f, d, D.mesi[0]) : f" in html
+    )
+    assert (
+        html.count("FORMATO.spostaFinanziamento(") == 1
+    )  # solo nel «Sì, sposta anche…»
+    assert "rispetto allo scenario aperto" in html
+    assert "confirm(" not in html
+
+
+def test_js_sposta_progetto_con_rata_prima_della_pagina(tmp_path):
+    """La pagina parte a nov 26 e l'anticipo AMCN di ott 26 è già pagato: avanti restano a ott 26 la
+    rata e la data dell'anticipo nei patti, il resto va un anno dopo; indietro torna identico. I patti
+    rigenerano ancora le stesse rate. Indietro dalla partenza: rifiuta (il SAL di nov 26 uscirebbe)."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    pj = json.dumps(PROGETTO_AMCN)
+    avanti, ritorno, rigenerati, msg = _sposta(
+        tmp_path,
+        html,
+        f"(() => {{ const a = F.spostaProgetto({pj}, 12, '2026-11'); let m = null;"
+        f" try {{ F.spostaProgetto({pj}, -12, '2026-11'); }} catch (e) {{ m = e.message; }}"
+        f" return [a, F.spostaProgetto(a, -12, '2026-11'), F.pagamentiDaContratto(a.contratti[0], O), m]; }})()",
+    )
+    assert avanti["pagamenti"][0]["mesi"] == {"2026-10": 7230000}
+    assert avanti["contratti"][0]["anticipo_mese"] == "2026-10" and avanti["contratti"][0]["sal_da"] == "2027-11"
+    assert ritorno == PROGETTO_AMCN
+    assert [g["mesi"] for g in rigenerati] == [g["mesi"] for g in avanti["pagamenti"][:3]]
+    assert msg and "nov 26" in msg
+    assert "già passate, restano dove sono" in html
+
+
+def test_template_patti_con_anticipo_prima_della_pagina(tmp_path):
+    """L'anticipo AMCN è pagato a ott 26, prima della pagina (nov 26): la select dei patti lo mostra
+    («già passato», non nov 26) e verifica e «Genera» calcolano i patti su un orizzonte che parte da lì,
+    così le rate «seguono i patti» e «Genera» non rimette l'anticipo a nov 26."""
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert "FORMATO.pagamentiDaContratto(c, ORIZ_PATTI(c))" in html
+    assert html.count("FORMATO.pagamentiDaContratto(c, ORIZ_PATTI(c))") == 2
+    assert '" · già passato"' in html
+    out = esegui_node_formato(
+        tmp_path, html, f"JSON.stringify(F.pagamentiDaContratto({AMCN_JS}, ['2026-10'].concat({ORIZ_JS}.slice(1))).map((g) => g.mesi))"
+    )
+    assert json.loads(out)[0] == {"2026-10": 7230000}
