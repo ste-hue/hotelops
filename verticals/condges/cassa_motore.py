@@ -128,6 +128,16 @@ class Finanziamento:
     importo: int | None = None
     # Riferimenti (relazione notarile, delibera, contratto di mutuo): [{"titolo", "url"}], memoria dell'interfaccia.
     documenti: list[dict] = field(default_factory=list)
+    # Il progetto che il finanziamento paga: con il progetto spento il finanziamento non conta
+    # (e restano le righe «finanziamenti» del PF). None = vale sempre.
+    progetto_id: str | None = None
+
+
+def finanziamenti_attivi(sc: "Scenario") -> list[Finanziamento]:
+    accesi = {p.id for p in sc.progetti if p.acceso}
+    return [
+        f for f in sc.finanziamenti if f.progetto_id is None or f.progetto_id in accesi
+    ]
 
 
 @dataclass(frozen=True)
@@ -243,7 +253,7 @@ def _movimenti(
             ent["canone"] += f.importo
         if f.da == societa:
             usc["canone"] += f.importo
-    for fin in sc.finanziamenti:
+    for fin in finanziamenti_attivi(sc):
         if fin.societa == societa:
             ent["finanziamento"] += fin.erogazioni.get(mese, 0)
             usc["finanziamento"] += fin.rate.get(mese, 0)
@@ -316,7 +326,7 @@ def calcola(inp: Input) -> Risultato:
     sc = inp.scenario
     pf = inp.pf
     # Le erogazioni dello scenario sostituiscono le righe PF di finanziamento.
-    con_fin = {f.societa for f in sc.finanziamenti}
+    con_fin = {f.societa for f in finanziamenti_attivi(sc)}
     pf = [
         r
         for r in pf

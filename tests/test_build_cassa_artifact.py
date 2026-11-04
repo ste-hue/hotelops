@@ -429,6 +429,20 @@ def test_js_uguale_a_python(tmp_path):
     assert out == to_dict(calcola(input_da_snapshot(snap, sc)))
 
 
+@pytest.mark.parametrize("acceso", [True, False])
+def test_js_uguale_a_python_con_finanziamento_legato_al_progetto(tmp_path, acceso):
+    snap = snapshot_sintetico()
+    p = build_payload(snap, [])
+    sc, _ = _scenario_base()
+    sc = replace(
+        sc,
+        progetti=[replace(x, acceso=acceso) for x in sc.progetti],
+        finanziamenti=[replace(f, progetto_id="P1") for f in sc.finanziamenti],
+    )
+    out = esegui_node(tmp_path, render_html(p), p, scenario_to_json(sc, p["base"]))
+    assert out == to_dict(calcola(input_da_snapshot(snap, sc)))
+
+
 def test_js_baseline_uguale_a_python(tmp_path):
     p = build_payload(snapshot_sintetico(), [])
     vuoto = Scenario("v", [], [])

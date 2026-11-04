@@ -130,6 +130,7 @@ def scenario_to_json(
                     "stato": f.stato,
                     **({"importo": f.importo} if f.importo is not None else {}),
                     **({"documenti": f.documenti} if f.documenti else {}),
+                    **({"progetto_id": f.progetto_id} if f.progetto_id else {}),
                 }
                 for f in sc.finanziamenti
             ],
@@ -197,6 +198,7 @@ def scenario_from_json(raw: str | bytes) -> tuple[Scenario, Base, dict]:
             stato=f["stato"],
             importo=_cent(f["importo"]) if f.get("importo") is not None else None,
             documenti=list(f.get("documenti") or []),
+            progetto_id=f.get("progetto_id") or None,
         )
         for f in s["finanziamenti"]
     ]
@@ -271,6 +273,7 @@ def righe_p(
                 "stato": f.stato,
                 **({"importo": f.importo} if f.importo is not None else {}),
                 **({"documenti": f.documenti} if f.documenti else {}),
+                **({"progetto_id": f.progetto_id} if f.progetto_id else {}),
             }
             for f in sc.finanziamenti
         ],
@@ -411,6 +414,7 @@ def scenario_da_righe(
                 stato=f["stato"],
                 importo=f.get("importo"),
                 documenti=list(f.get("documenti") or []),
+                progetto_id=f.get("progetto_id") or None,
             )
             for f in par["finanziamenti"]
         ]

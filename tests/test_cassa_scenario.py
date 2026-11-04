@@ -342,3 +342,14 @@ def test_sostituzione_sopravvive_al_documento_e_alle_tabelle_p():
     assert sorted((r.voce_id, r.origine, r.importo) for r in sc2.manuali) == [
         ("USCITE_TASSE", "sostituzione", 7_000_000), ("x", "manuale", 123), ("y", "manuale", 5),
     ]
+
+
+def test_progetto_id_del_finanziamento_sopravvive_al_salvataggio():
+    from dataclasses import replace
+
+    from verticals.condges.cassa_scenario import scenario_from_json, scenario_to_json
+
+    sc, base = scenario_sintetico()
+    sc = replace(sc, finanziamenti=[replace(f, progetto_id="P1") for f in sc.finanziamenti])
+    back, _, _ = scenario_from_json(scenario_to_json(sc, base))
+    assert [f.progetto_id for f in back.finanziamenti] == ["P1"]

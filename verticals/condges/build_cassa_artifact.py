@@ -342,7 +342,8 @@ def _limiti(snapshot: dict, seme: Scenario, baseline: dict) -> list[str]:
     if seme.finanziamenti:
         out.append(
             "Con i finanziamenti nello scenario, le entrate da finanziamenti del PF di quella "
-            "società non contano: niente doppio conteggio."
+            "società non contano: niente doppio conteggio. Un finanziamento legato a un "
+            "progetto conta solo con il progetto acceso; spento, restano le righe del PF."
         )
     n = len(baseline["non_riconciliati"])
     if n:

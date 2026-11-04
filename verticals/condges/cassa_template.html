@@ -475,7 +475,7 @@ const MOTORE = (() => {
       if (f.a === societa) ent.canone += f.importo;
       if (f.da === societa) usc.canone += f.importo;
     }
-    for (const fin of sc.finanziamenti) {
+    for (const fin of finanziamentiAttivi(sc)) {
       if (fin.societa === societa) {
         ent.finanziamento += fin.erogazioni[mese] || 0;
         usc.finanziamento += fin.rate[mese] || 0;
@@ -490,6 +490,13 @@ const MOTORE = (() => {
       if (f.societa === societa && f.mese === mese) usc.fatto += f.importo;
     }
     return [ent, usc];
+  }
+
+  // Un finanziamento legato a un progetto (progetto_id) conta solo con il progetto acceso:
+  // spento il progetto, restano le righe «finanziamenti» del PF.
+  function finanziamentiAttivi(sc) {
+    const accesi = new Set((sc.progetti || []).filter((p) => p.acceso).map((p) => p.id));
+    return (sc.finanziamenti || []).filter((f) => !f.progetto_id || accesi.has(f.progetto_id));
   }
 
   // Scenario = la parte `scenario` del documento cdg-cassa-scenario/1 (manuali con importo_cent).
@@ -509,7 +516,7 @@ const MOTORE = (() => {
 
   function calcola(payload, scenario) {
     const sc = normalizza(scenario);
-    const conFin = new Set(sc.finanziamenti.map((f) => f.societa));
+    const conFin = new Set(finanziamentiAttivi(sc).map((f) => f.societa));
     let pf = payload.pf.filter((r) => !(r.voce_id === "ENTRATE_FINANZIAMENTI" && conFin.has(r.societa)));
     // Una riga manuale con origine «sostituzione» prende il posto della voce PF di quel mese.
     const sost = new Set(sc.manuali.filter((r) => r.origine === SOSTITUZIONE).map((r) => `${r.societa}|${r.voce_id}|${r.mese}`));
@@ -567,7 +574,7 @@ const MOTORE = (() => {
     return { righe, minimi, consolidato, non_riconciliati: nonRic };
   }
 
-  return { ORIGINI, SOCIETA, SOSTITUZIONE, calcola, distribuisci, iva, flussiCanone, riconcilia, normalizza, mesiCitati, meseDopo, allungaOrizzonte };
+  return { ORIGINI, SOCIETA, SOSTITUZIONE, calcola, finanziamentiAttivi, distribuisci, iva, flussiCanone, riconcilia, normalizza, mesiCitati, meseDopo, allungaOrizzonte };
 })();
 if (typeof module !== "undefined") module.exports = MOTORE;
 </script>
@@ -1171,7 +1178,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
 
   function renderScenario() {
     const sel = document.createElement("select");
-    const tutti = [{ ...D.seme, _k: "seme", _e: `${D.seme.nome} · seme` }, { ...vuoto(), compatibile: true, _k: "vuoto", _e: "Solo PF, nessuna leva" },
+    const tutti = [{ ...D.seme, _k: "seme", _e: `${D.seme.nome} · seme` }, { ...vuoto(), compatibile: true, _k: "vuoto", _e: "PF di Rosa, nessuna leva" },
       ...D.scenari.map((s, i) => ({ ...s, _k: String(i), _e: s._etichetta || `${s.nome} · salvato ${oraDi(s.salvato_il)}` }))];
     el("scenario").innerHTML = `<div class="strumenti" style="margin-top:0"><label class="piccolo">Scenario <select id="sel-scenari"></select></label>
       <input type="text" id="nome-scenario" class="nome" style="width:180px" placeholder="nome scenario">
@@ -1191,8 +1198,8 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     s0.value = stato.chiave || "seme";
     s0.onchange = () => apriScenario(s0.value);
     // La stessa scelta, in alto e a vista: una pillola per scenario, quella attiva piena.
-    const etichetta = (s) => s._k === "vuoto" ? "Solo PF" : (s._e || "").includes("bozza") ? `${s.nome} · bozza` : (s._e || "").includes("importato") ? `${s.nome} · importato` : s.nome;
-    const ordine = [...tutti.filter((s) => s._k === "seme"), ...tutti.filter((s) => s._k !== "seme" && s._k !== "vuoto"), ...tutti.filter((s) => s._k === "vuoto")];
+    const etichetta = (s) => s._k === "vuoto" ? "PF" : (s._e || "").includes("bozza") ? `${s.nome} · bozza` : (s._e || "").includes("importato") ? `${s.nome} · importato` : s.nome;
+    const ordine = [...tutti.filter((s) => s._k === "vuoto"), ...tutti.filter((s) => s._k === "seme"), ...tutti.filter((s) => s._k !== "seme" && s._k !== "vuoto")];
     el("scelta-scenario").innerHTML = ordine.map((s) => `<button type="button" data-scelta="${esc(s._k)}" aria-pressed="${(stato.chiave || "seme") === s._k}">${esc(etichetta(s))}${s.compatibile ? "" : " · base diversa"}</button>${(s._e || "").includes("bozza") ? `<button type="button" class="scarta" data-scarta="${esc(s._k)}" title="scarta la bozza" aria-label="scarta la bozza ${esc(s.nome)}">×</button>` : ""}`).join("");
     el("scelta-scenario").querySelectorAll("[data-scelta]").forEach((b) => {
       b.onclick = () => { if ((stato.chiave || "seme") !== b.dataset.scelta) apriScenario(b.dataset.scelta); };
@@ -1530,7 +1537,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const sc = stato.scenario;
     const voci = { E: {}, U: {} };
     const add = (dir, nome, imp) => { if (imp) voci[dir][nome] = (voci[dir][nome] || 0) + imp; };
-    const conFin = new Set(sc.finanziamenti.map((f) => f.societa));
+    const conFin = new Set(MOTORE.finanziamentiAttivi(sc).map((f) => f.societa));
     for (const r of D.pf) {
       if (r.societa === soc && r.mese === mese && !(r.voce_id === "ENTRATE_FINANZIAMENTI" && conFin.has(soc))) add(r.direzione, etichetta(r.voce_id), r.importo);
     }
@@ -1552,7 +1559,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       if (f.da === soc) add("U", f.nome + tag, f.importo);
     }
     for (const r of (sc.manuali || [])) if (r.societa === soc && r.mese === mese) add(r.direzione, `${etichetta(r.voce_id)} (${r.origine === MOTORE.SOSTITUZIONE ? "corretta nello scenario" : "manuale"})`, r.importo_cent !== undefined ? r.importo_cent : r.importo);
-    for (const f of sc.finanziamenti) {
+    for (const f of MOTORE.finanziamentiAttivi(sc)) {
       if (f.societa !== soc) continue;
       add("E", `${f.nome} · erogazione`, f.erogazioni[mese] || 0);
       add("U", `${f.nome} · rata`, f.rate[mese] || 0);
@@ -1582,7 +1589,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const a = D.ancore[soc];
     const out = [{ stato: statoAncora(a), testo: `partenza ${STATI[statoAncora(a)]}`,
       titolo: a.attestato ? `saldo di partenza al ${dataIt(a.data)}: quadra con i movimenti in banca` : `saldo di partenza al ${dataIt(a.data)}: dal foglio dei saldi, non riscontrato coi movimenti` }];
-    const fin = (stato.scenario.finanziamenti || []).filter((f) => f.societa === soc && statoFin(f.stato) === "da_verificare" && Object.keys(f.erogazioni || {}).some((x) => x <= m.mese));
+    const fin = MOTORE.finanziamentiAttivi(stato.scenario).filter((f) => f.societa === soc && statoFin(f.stato) === "da_verificare" && Object.keys(f.erogazioni || {}).some((x) => x <= m.mese));
     if (fin.length) out.push({ stato: "da_verificare", testo: `regge su ${fin.length === 1 ? "un finanziamento" : `${fin.length} finanziamenti`} da verificare`, titolo: fin.map((f) => f.nome).join(" · ") });
     if (!MESI_PF.length) out.push({ stato: "non_registrato", testo: "nessun mese con PF", titolo: "senza PF il «sotto zero» non può dire niente" });
     if (VUOTI[soc].size) { const v = [...VUOTI[soc]].sort(); out.push({ stato: "non_registrato", testo: `non pianificato ${intervalloMesi(v)}`, titolo: `il file del PF di ${soc} ha la colonna ma nessuna riga in ${v.length === 1 ? "questo mese" : "questi mesi"}: non è zero, è vuoto; per il minimo conta come senza PF` }); }
@@ -2007,13 +2014,15 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       const k = `f:${f.id}`;
       const variante = copia(sc); variante.finanziamenti.splice(i, 1);
       return `<details class="leva" data-k="${k}" data-f="${i}" ${aperte.has(k) ? "open" : ""}>
-      <summary><span class="nome">${esc(f.nome)}</span><span class="badge">${esc(f.societa)}</span>${chipStato(statoFin(f.stato), `stato scritto nel documento: ${f.stato}`)}${(f.documenti || []).filter((d) => d.url).map((d) => `<a class="doc" href="${esc(d.url)}" target="_blank" rel="noopener" title="${esc(d.url)}">📄 ${esc(d.titolo || "documento")}</a>`).join("")}
+      <summary><span class="nome">${esc(f.nome)}</span><span class="badge">${esc(f.societa)}</span>${f.progetto_id && !(sc.progetti.find((p) => p.id === f.progetto_id) || {}).acceso ? '<span class="badge">spento col progetto</span>' : ""}${chipStato(statoFin(f.stato), `stato scritto nel documento: ${f.stato}`)}${(f.documenti || []).filter((d) => d.url).map((d) => `<a class="doc" href="${esc(d.url)}" target="_blank" rel="noopener" title="${esc(d.url)}">📄 ${esc(d.titolo || "documento")}</a>`).join("")}
         <span class="num tot">${fmt(somma(f.erogazioni), false)} €</span><span class="piccolo num">tranche ${periodoDi(f.erogazioni)} · rate ${Object.keys(f.rate).length ? `${fmt(somma(f.rate), false)} (${periodoDi(f.rate)})` : "nessuna nell'orizzonte"}</span>
         ${peso(variante, f.societa, true)}<button type="button" class="mini apri-leva" data-apri-foglio aria-label="apri">apri ›</button></summary>
       <div class="corpo">
         <div class="riga"><input type="text" class="nome" style="flex:1 1 140px;font-weight:600" data-campo="nome" value="${esc(f.nome)}"> ${selSoc(f.societa)}
           <input type="text" class="n" style="width:110px" data-campo="stato" value="${esc(f.stato)}" title="stato">
           <button data-elimina-f title="elimina">× elimina</button></div>
+        <div class="riga"><label class="piccolo">paga il progetto <select data-campo="progetto_id"><option value="">nessuno: conta sempre</option>${sc.progetti.map((p) => `<option value="${esc(p.id)}" ${f.progetto_id === p.id ? "selected" : ""}>${esc(p.nome)}</option>`).join("")}</select></label>
+          ${f.progetto_id && !(sc.progetti.find((p) => p.id === f.progetto_id) || {}).acceso ? '<span class="nota">progetto spento: questo finanziamento non conta, valgono le righe del PF</span>' : ""}</div>
         <div class="riquadro tranche"><div class="piccolo"><strong>Quando la banca ti dà i soldi</strong> · tranche</div>
           <div class="frase">${fraseTranche(f)}</div>
           ${bloccoTranche(f)}
