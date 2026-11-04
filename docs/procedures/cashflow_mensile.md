@@ -90,7 +90,7 @@ hotelops pf-rotate --pf <PF di N> --scad <partite al 30/31 di N> --societa ORTI 
 ```
 
 Il motore fa da solo lo step 1 (saldi dal CSV→BQ, azzera il mese chiuso senza toccare formule,
-avanza la cascata) e scrive un file nuovo `<SOC>_PF_<primo mese aperto>_post-rotate_<ts>.xlsx`;
+avanza la cascata) e scrive un file nuovo `<SOC>_PF_<mese dei saldi>_post-rotate_<ts>.xlsx` (saldi al 30/09 → `_2026-09`);
 con ERR nei Controlli il file esce con suffisso `_FAILED_CHECKS`. Più mesi arretrati = più giri in
 catena sull'output precedente. I non mappati finiscono nel foglio `DA MAPPARE<n>`: li assegna Rosa.
 

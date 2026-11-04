@@ -10,6 +10,7 @@ nessuna connessione a BigQuery (si prova solo build_rows).
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,8 +22,10 @@ from core.bq.load.load_pf_rotazioni import (
     SQL_RIGHE_CHIAVE_VECCHIA,
     _hash,
     build_rows,
+    carica_rinomine,
     file_mancanti,
     righe_chiave_vecchia,
+    sostituiti,
     verifica_convenzione,
 )
 
@@ -127,6 +130,28 @@ def test_file_mancanti_elenca_cio_che_la_corsa_non_ricaricherebbe():
         "ORTI_PF_2026-09.xlsx",
     ]
     assert file_mancanti(in_tabella, in_tabella | {"ORTI_PF_2026-10.xlsx"}) == []
+
+
+def test_rinomine_coprono_i_nomi_vecchi_anche_quando_il_nome_si_sposta_di_un_mese(tmp_path):
+    """Cambio di nome (2026-11-04): il vecchio «_09» (saldi 31/08) diventa «_08», il vecchio
+    «_10» (saldi 30/09) diventa «_09». Il nome nuovo «_09» è anche un nome vecchio: va
+    cancellato e ricaricato, e il vecchio «_10» sparisce."""
+    in_tabella = {"ORTI_PF_2026-08.xlsx", "ORTI_PF_2026-09.xlsx", "ORTI_PF_2026-10.xlsx"}
+    rinomine = {
+        "ORTI_PF_2026-08.xlsx": "ORTI_PF_2026-07.xlsx",
+        "ORTI_PF_2026-09.xlsx": "ORTI_PF_2026-08.xlsx",
+        "ORTI_PF_2026-10.xlsx": "ORTI_PF_2026-09.xlsx",
+    }
+    in_corsa = {"ORTI_PF_2026-07.xlsx", "ORTI_PF_2026-08.xlsx", "ORTI_PF_2026-09.xlsx"}
+    assert file_mancanti(in_tabella, in_corsa) == ["ORTI_PF_2026-10.xlsx"]
+    assert file_mancanti(in_tabella, in_corsa, rinomine) == []
+    assert in_corsa | sostituiti(rinomine, in_corsa) == in_tabella | {"ORTI_PF_2026-07.xlsx"}
+
+    f = tmp_path / "rinomine.json"
+    f.write_text(json.dumps(rinomine), encoding="utf-8")
+    assert carica_rinomine(f, in_corsa) == rinomine
+    with pytest.raises(SystemExit, match="ORTI_PF_2026-07.xlsx"):
+        carica_rinomine(f, in_corsa - {"ORTI_PF_2026-07.xlsx"})
 
 
 # ── Chiave vecchia riconoscibile in SQL (coordinatore, 28/10/2026, sulla tabella vera:

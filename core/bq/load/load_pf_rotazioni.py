@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -111,9 +112,29 @@ def build_rows(paths: list[Path], logger) -> list[dict]:
     return out
 
 
-def file_mancanti(in_tabella: set[str], in_corsa: set[str]) -> list[str]:
-    """File già in tabella che questa corsa non ricaricherebbe: resterebbero con la chiave vecchia."""
-    return sorted(in_tabella - in_corsa)
+def file_mancanti(
+    in_tabella: set[str], in_corsa: set[str], rinomine: dict[str, str] | None = None
+) -> list[str]:
+    """File già in tabella che questa corsa non ricaricherebbe: resterebbero con la chiave vecchia.
+
+    Un nome vecchio è coperto se la corsa porta il suo nome nuovo (``rinomine`` vecchio → nuovo).
+    """
+    coperti = in_corsa | sostituiti(rinomine or {}, in_corsa)
+    return sorted(in_tabella - coperti)
+
+
+def sostituiti(rinomine: dict[str, str], in_corsa: set[str]) -> set[str]:
+    """Nomi vecchi da cancellare: quelli il cui nome nuovo è in questa corsa."""
+    return {vecchio for vecchio, nuovo in rinomine.items() if nuovo in in_corsa}
+
+
+def carica_rinomine(path: Path, in_corsa: set[str]) -> dict[str, str]:
+    """JSON {nome vecchio: nome nuovo}. Ogni nome nuovo deve essere nella corsa."""
+    rinomine = json.loads(path.read_text(encoding="utf-8"))
+    assenti = sorted(n for n in rinomine.values() if n not in in_corsa)
+    if assenti:
+        raise SystemExit(f"--rinomine: nomi nuovi non in questa corsa: {assenti}")
+    return rinomine
 
 
 # Chiave VECCHIA (fino a 7f17c93, senza occorrenza) ricalcolata in SQL. Misurata sulla
@@ -154,6 +175,12 @@ def main() -> None:
         help="rifiuta la corsa se non copre TUTTI i file_sorgente già in tabella "
         "(cambio di convenzione della chiave: una tabella, una convenzione)",
     )
+    ap.add_argument(
+        "--rinomine",
+        type=Path,
+        help="JSON {nome vecchio: nome nuovo}: i file rinominati sostituiscono le righe "
+        "caricate col nome vecchio (cambio di convenzione dei nomi, 2026-11-04)",
+    )
     args = ap.parse_args()
     logger = setup_logger()
 
@@ -166,6 +193,13 @@ def main() -> None:
     logger.info(
         f"  hash distinti: {len({r['hash_riga'] for r in rows})} su {len(rows)} righe"
     )
+
+    rinomine = carica_rinomine(args.rinomine, set(per_file)) if args.rinomine else {}
+    vecchi = sostituiti(rinomine, set(per_file))
+    if rinomine:
+        logger.info(f"Rinomine: {len(vecchi)} nomi vecchi sostituiti dai nuovi")
+        for v in sorted(vecchi):
+            logger.info(f"  {v} → {rinomine[v]}")
 
     if args.dry_run:
         logger.info("DRY-RUN — nessuna scrittura.")
@@ -185,7 +219,7 @@ def main() -> None:
                 f"SELECT DISTINCT file_sorgente FROM `{BQ_TABLE}`"
             ).result()
         }
-        mancanti = file_mancanti(in_tabella, set(per_file))
+        mancanti = file_mancanti(in_tabella, set(per_file), rinomine)
         if mancanti:
             raise SystemExit(
                 f"--ricarico-completo: {len(mancanti)} file in tabella non sono in questa corsa, "
@@ -193,7 +227,7 @@ def main() -> None:
             )
 
     # Idempotenza: rimpiazza per-file (DELETE file_sorgente + INSERT).
-    file_names = sorted(per_file)
+    file_names = sorted(set(per_file) | vecchi)
     in_list = ", ".join(f"'{n}'" for n in file_names)
     client.query(
         f"DELETE FROM `{BQ_TABLE}` WHERE file_sorgente IN ({in_list})"

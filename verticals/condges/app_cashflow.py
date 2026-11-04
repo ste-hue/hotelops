@@ -356,7 +356,7 @@ def render() -> None:
         )
 
     # Nome canonico dell'engine: <societa>_PF_<YYYY-MM>_post-rotate_<timestamp>.xlsx
-    # — ha il mese (primo proiettato) + il timestamp. Mostrato nel bottone per verifica.
+    # — ha il mese dei saldi (ultimo chiuso) + il timestamp. Mostrato nel bottone per verifica.
     nome_download = result.out_path.name
     st.download_button(
         f"⬇️ Scarica {nome_download}",

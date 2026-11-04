@@ -186,7 +186,9 @@ def _handle(args: argparse.Namespace) -> int:
 
     args.out.mkdir(parents=True, exist_ok=True)
     ts = date.today().isoformat()
-    nome = f"{args.societa}_PF_{anno_aperto}-{primo_aperto:02d}_generato_{ts}.xlsx"
+    # Nome = mese dei saldi (il mese prima del primo aperto), come pf-rotate.
+    anno_saldi, mese_saldi = (anno_aperto, primo_aperto - 1) if primo_aperto > 1 else (anno_aperto - 1, 12)
+    nome = f"{args.societa}_PF_{anno_saldi}-{mese_saldi:02d}_generato_{ts}.xlsx"
     out_path = args.out / nome
     out_path.write_bytes(out_bytes)
 
