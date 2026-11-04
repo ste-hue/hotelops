@@ -322,7 +322,10 @@ def _riconcilia(
     return progetti, non_ric
 
 
-def calcola(inp: Input) -> Risultato:
+def pf_e_flussi_effettivi(inp: Input) -> tuple[list[Riga], list[Flusso]]:
+    """Le righe PF e i flussi fra società che il calcolo usa davvero, dopo le sostituzioni
+    dello scenario (finanziamenti, righe «sostituzione», canone). Serve anche a chi spiega un
+    mese voce per voce: mostra quello che il motore conta, non il PF grezzo."""
     sc = inp.scenario
     pf = inp.pf
     # Le erogazioni dello scenario sostituiscono le righe PF di finanziamento.
@@ -350,6 +353,12 @@ def calcola(inp: Input) -> Risultato:
             for f in interc
             if not (f.nome.startswith("Fitto Hotel") and f.mese[:4] in anni)
         ] + nuovi
+    return pf, interc
+
+
+def calcola(inp: Input) -> Risultato:
+    sc = inp.scenario
+    pf, interc = pf_e_flussi_effettivi(inp)
     progetti, non_ric = _riconcilia(sc.progetti, inp.fatti)
     inp = replace(
         inp, pf=pf, intercompany=interc, scenario=replace(sc, progetti=progetti)

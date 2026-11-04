@@ -568,6 +568,31 @@ def push_to_kv(html: str, data_json: str, env: dict[str, str]) -> None:
 # ── run ──
 
 
+def payload_da_stato(snapshot: dict, home: Path | None = None) -> dict:
+    """Il payload della pagina dallo snapshot e dai file locali (seme, canone dichiarato,
+    PF corretto, banda). Una sola strada, usata dalla pagina e da `cassa_cli`: i numeri
+    della riga di comando sono quelli della pagina."""
+    home = Path(home) if home is not None else cf.SNAPSHOT_HOME
+
+    def leggi(nome: str) -> dict | None:
+        f = home / nome
+        return json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+
+    seme_path = home / SEME_PATH.name
+    seme = carica_seme(seme_path) if seme_path.exists() else None
+    seme_file = leggi(SEME_PATH.name) or {}
+    return build_payload(
+        snapshot,
+        scenari_da_snapshot(snapshot),
+        seme=seme,
+        seme_salvato_il=seme_file.get("salvato_il"),
+        canone_dichiarato=leggi(CANONE_PATH.name),
+        scenari_ritirati=list(seme_file.get("scenari_ritirati") or []),
+        pf_corretto=leggi(PF_CORRETTO_PATH.name),
+        banda_pf=leggi(BANDA_PATH.name),
+    )
+
+
 def run(
     out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False, fino_a: str | None = None
 ) -> Path:
@@ -583,31 +608,8 @@ def run(
         print(f"Snapshot {cf.salva_snapshot(snapshot)}")
     else:
         snapshot = cf.carica_snapshot()
-    seme = carica_seme(SEME_PATH) if SEME_PATH.exists() else None
-    seme_file = json.loads(SEME_PATH.read_text(encoding="utf-8")) if seme else {}
-    seme_salvato_il = seme_file.get("salvato_il")
-    scenari_ritirati = list(seme_file.get("scenari_ritirati") or [])
-    canone_dichiarato = (
-        json.loads(CANONE_PATH.read_text(encoding="utf-8")) if CANONE_PATH.exists() else None
-    )
-    pf_corretto = (
-        json.loads(PF_CORRETTO_PATH.read_text(encoding="utf-8"))
-        if PF_CORRETTO_PATH.exists()
-        else None
-    )
-    banda_pf = (
-        json.loads(BANDA_PATH.read_text(encoding="utf-8")) if BANDA_PATH.exists() else None
-    )
-    payload = build_payload(
-        snapshot,
-        scenari_da_snapshot(snapshot),
-        seme=seme,
-        seme_salvato_il=seme_salvato_il,
-        canone_dichiarato=canone_dichiarato,
-        scenari_ritirati=scenari_ritirati,
-        pf_corretto=pf_corretto,
-        banda_pf=banda_pf,
-    )
+    payload = payload_da_stato(snapshot)
+    banda_pf = (cf.SNAPSHOT_HOME / BANDA_PATH.name).exists()
     print(f"  banda d'errore: {'dal file locale' if banda_pf else 'assente (nessun banda_pf.json)'}")
     for c in payload["pf_correzioni"]:
         print(
