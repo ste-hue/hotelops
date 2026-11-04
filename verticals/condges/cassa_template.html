@@ -762,6 +762,49 @@ const FORMATO = (() => {
     }
     return out;
   }
+  // Sposta un progetto di `delta` mesi (±12 = un anno): le rate e le date dei patti coi fornitori
+  // insieme, così i pagamenti seguono ancora i patti e niente si rigenera sul calendario vecchio.
+  // Importi, IVA, società e intervalli restano. Conta il calendario, non l'orizzonte della pagina.
+  // Una rata prima di `primo` (il primo mese della pagina) è già passata (es. l'anticipo pagato):
+  // resta dov'è, e con lei la data dei patti che la genera. Si rifiuta una rata che oggi conta e
+  // finirebbe prima di `primo`: sparirebbe dal calcolo e il ritorno non la riporterebbe. Così
+  // avanti-poi-indietro torna identico. Delle date dei patti si spostano solo quelle che generano
+  // pagamenti. Restituisce un progetto nuovo; quello di partenza non si tocca. Finanziamenti a parte.
+  const meseSpostato = (m, delta, primo, cosa) => {
+    const [a, mm] = String(m).split("-").map(Number);
+    if (!(a > 0 && mm >= 1 && mm <= 12)) throw new Error(`non si sposta: ${cosa} senza un mese valido`);
+    if (m < primo) return m;
+    const t = a * 12 + (mm - 1) + delta;
+    const out = `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`;
+    if (out < primo) throw new Error(`non si sposta: ${cosa} di ${meseIt(m)} finirebbe prima di ${meseIt(primo)}, l'inizio della pagina, e non conterebbe più`);
+    return out;
+  };
+  function spostaCalendario(mesi, delta, primo, cosa) {
+    const out = {};
+    for (const m of ordinati(mesi)) { const n = meseSpostato(m, delta, primo, cosa); out[n] = (out[n] || 0) + mesi[m]; }
+    return out;
+  }
+  function spostaProgetto(p, delta, primo) {
+    const q = JSON.parse(JSON.stringify(p));
+    const un = (m, cosa) => meseSpostato(m, delta, primo, cosa);
+    q.pagamenti = q.pagamenti.map((g) => ({ ...g, mesi: spostaCalendario(g.mesi, delta, primo, `la rata «${g.nome}»`) }));
+    q.contratti = (q.contratti || []).map((c) => {
+      const d = { ...c };
+      if (c.modo === "percentuali") {
+        d.quote = (c.quote || []).map((x) => ({ ...x, mese: un(x.mese, `la quota ${pctTesto(x.pct)}%`) }));
+        return d;
+      }
+      if (Number(c.anticipo_pct) > 0) d.anticipo_mese = un(c.anticipo_mese, "l'anticipo");
+      if (Number(c.ritenuta_pct) > 0) d.svincolo_mese = un(c.svincolo_mese, "lo svincolo della ritenuta");
+      d.sal_da = un(c.sal_da, "il primo SAL");
+      return d;
+    });
+    return q;
+  }
+  // Sposta erogazioni e rate di un finanziamento di `delta` mesi; restituisce un finanziamento nuovo.
+  function spostaFinanziamento(f, delta, primo) {
+    return { ...JSON.parse(JSON.stringify(f)), erogazioni: spostaCalendario(f.erogazioni || {}, delta, primo, "l'erogazione"), rate: spostaCalendario(f.rate || {}, delta, primo, "la rata del finanziamento") };
+  }
   // Calendario: la rata del mese `da` va nel mese `a` (si somma se lì c'è già una rata). Totale invariato.
   function spostaRata(mesi, da, a) {
     if (!(da in mesi) || da === a) return { ...mesi };
@@ -813,7 +856,7 @@ const FORMATO = (() => {
     }
     return { nome: doc.nome || sc.nome || "importato", base: doc.base || {}, scenario: sc, salvato_il: doc.salvato_il || null };
   }
-  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata };
+  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, spostaProgetto, spostaFinanziamento, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata };
 })();
 if (typeof module !== "undefined") module.exports = FORMATO;
 </script>
@@ -1007,6 +1050,17 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   }
   // Dove le rate si possono generare o spostare: l'orizzonte più dieci anni virtuali.
   const ORIZ = () => { const o = D.mesi.slice(); for (let k = 0; k < 120; k++) o.push(MOTORE.meseDopo(o[o.length - 1])); return o; };
+  // Per i patti con un fornitore: ORIZ() più i mesi già passati che i patti stessi citano (es. l'anticipo
+  // pagato a ottobre, prima dell'inizio della pagina). Lì la rata resta e non conta: è già nel saldo.
+  const mesiDeiPatti = (c) => [c.anticipo_mese, c.svincolo_mese, c.sal_da, ...(c.quote || []).map((q) => q.mese)].filter(Boolean);
+  const ORIZ_PATTI = (c) => {
+    const o = ORIZ();
+    const primo = [...mesiDeiPatti(c)].sort()[0];
+    if (!primo || primo >= o[0]) return o;
+    const prima = [primo];
+    while (MOTORE.meseDopo(prima[prima.length - 1]) < o[0]) prima.push(MOTORE.meseDopo(prima[prima.length - 1]));
+    return prima.concat(o);
+  };
   // Per società: mesi dentro il file ma senza righe («non pianificato», §A non registrato). Mai zero.
   const VUOTI = Object.fromEntries(SOC.map((s) => [s, new Set((D.mesi_non_pianificati || {})[s] || [])]));
   const senzaPf = (soc, m) => IPO.has(m) || VUOTI[soc].has(m);
@@ -1085,6 +1139,10 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   let ris = null;
   const aperti = new Set();   // righe della tabella aperte (società|mese)
   const aperte = new Set();   // tendine aperte: "canone", "p:<id>", "f:<id>"
+  // «Sposta di un anno»: i mesi di cui un progetto si è mosso e che i suoi finanziamenti non hanno ancora
+  // seguito (la pagina chiede, non decide), e l'ultimo spostamento rifiutato. Non entrano nello scenario.
+  const annoSospeso = new Map();   // id progetto -> mesi (±12 per anno)
+  const annoErrore = new Map();    // id progetto -> perché non si è spostato
 
   function mostraErrore(msg) {
     const e = el("errore");
@@ -1094,6 +1152,14 @@ if (typeof module !== "undefined") module.exports = EXCEL;
 
   function calcolaSicuro(scenario) {
     try { allunga(scenario); return MOTORE.calcola(D, scenario); } catch (e) { return null; }
+  }
+  // Lo scenario com'era all'apertura (o all'importazione), calcolato sullo stesso orizzonte di adesso:
+  // è il termine di confronto delle card. Si ricalcola solo se cambia lo scenario o l'orizzonte.
+  let origineCalcolata = { chiave: null, ris: null };
+  function risOrigine() {
+    const chiave = `${D.mesi.length}|${stato.origine}`;
+    if (origineCalcolata.chiave !== chiave) origineCalcolata = { chiave, ris: calcolaSicuro(JSON.parse(stato.origine)) };
+    return origineCalcolata.ris;
   }
 
   function ricalcola(opts = {}) {
@@ -1249,7 +1315,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     }
     const nuovo = completa(s.scenario);
     stato = { nome: s.nome, scenario: nuovo, origine: JSON.stringify(nuovo), chiave };
-    aperti.clear();
+    aperti.clear(); annoSospeso.clear(); annoErrore.clear();
     renderScenario();
     ricalcola();
   }
@@ -1595,6 +1661,16 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     if (VUOTI[soc].size) { const v = [...VUOTI[soc]].sort(); out.push({ stato: "non_registrato", testo: `non pianificato ${intervalloMesi(v)}`, titolo: `il file del PF di ${soc} ha la colonna ma nessuna riga in ${v.length === 1 ? "questo mese" : "questi mesi"}: non è zero, è vuoto; per il minimo conta come senza PF` }); }
     return out;
   }
+  // Rispetto allo scenario aperto: il minimo e i mesi sotto soglia di prima, se qualcosa è cambiato.
+  function confrontoOrigine(soc, m) {
+    const o = modificato() ? risOrigine() : null;
+    if (!o) return "";
+    const mo = o.minimi[soc];
+    const d = m.saldo - mo.saldo;
+    const sotto = m.sotto_soglia.length !== mo.sotto_soglia.length ? ` · mesi sotto ${stato.scenario.soglia ? "soglia" : "zero"}: ${mo.sotto_soglia.length} → ${m.sotto_soglia.length}` : "";
+    const testo = d === 0 && mo.mese === m.mese ? "come lo scenario aperto" : `${segno(d, false)} rispetto allo scenario aperto (era ${fmt(mo.saldo, false)} a ${meseIt(mo.mese)})`;
+    return `<div class="delta num" data-confronto-origine>${testo}${sotto}</div>`;
+  }
   function renderMinimi() {
     const box = el("minimi");
     box.innerHTML = "";
@@ -1614,6 +1690,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         <div><strong>${soc}</strong> · minimo a ${meseIt(m.mese)}</div>
         <div class="saldo num ${m.saldo < 0 ? "neg" : ""}">${fmt(m.saldo)} €</div>
         <div class="delta num">${delta === 0 ? "come con il solo PF" : `${segno(delta, false)} rispetto al solo PF`}</div>
+        ${confrontoOrigine(soc, m)}
         ${sotto}
         ${fraseBanda(soc, m.mese) ? `<div class="piccolo banda" title="${esc(BANDA.finestra || "")}; ordine di grandezza, non statistica">${esc(fraseBanda(soc, m.mese))}</div>` : ""}
         <div class="condizioni">${cond.map((c) => chipStato(c.stato, c.titolo, c.testo)).join("")}</div>
@@ -1844,7 +1921,9 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         <button class="mini" data-sposta="1">tutto un mese dopo ▶</button>` : ""}
         <span class="errore-r" data-errore-spalma></span></div></div>`;
   }
-  const selMeseA = (val, attr) => `<select ${attr}>${D.mesi.map((m) => `<option value="${m}" ${m === val ? "selected" : ""}>${meseIt(m)}</option>`).join("")}</select>`;
+  // Il mese scritto nei patti è sempre tra le opzioni: prima della pagina (già passato) o dopo, la select
+  // non mente e «Genera» non lo sposta di nascosto sul primo mese.
+  const selMeseA = (val, attr) => `<select ${attr}>${(val && !D.mesi.includes(val) ? [...D.mesi, val].sort() : D.mesi).map((m) => `<option value="${m}" ${m === val ? "selected" : ""}>${meseIt(m)}${m < D.mesi[0] ? " · già passato" : ""}</option>`).join("")}</select>`;
   const pctIt = (x) => String(x || 0).replace(".", ",");
   function riassuntoContratto(c) {
     if (c.modo === "percentuali") return (c.quote || []).map((q) => `${pctIt(q.pct)}% a ${meseIt(q.mese)}`).join(" · ") || "nessuna quota";
@@ -1860,7 +1939,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     // Verifica mese per mese: i pagamenti verso F seguono i patti scritti qui sopra?
     const perMese = (lista) => { const o = {}; for (const g of lista) for (const [m, v] of Object.entries(g.mesi)) o[m] = (o[m] || 0) + v; return JSON.stringify(Object.entries(o).filter(([, v]) => v).sort()); };
     let seguono = false;
-    try { seguono = perMese(FORMATO.pagamentiDaContratto(c, ORIZ())) === perMese(p.pagamenti.filter((g) => g.fornitore_id === F)); } catch (e) { seguono = false; }
+    try { seguono = perMese(FORMATO.pagamentiDaContratto(c, ORIZ_PATTI(c))) === perMese(p.pagamenti.filter((g) => g.fornitore_id === F)); } catch (e) { seguono = false; }
     const verifica = !F ? "" : seguono
       ? `<span class="ok-t">✓ i pagamenti verso ${esc(F)} seguono questi patti: ${fmt(c.totale, false)} netto</span>`
       : diff !== 0
@@ -1913,7 +1992,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     root.querySelector("[data-togli-c]").onclick = () => { sc.splice(sc.indexOf(c), 1); renderLeve(); };
     root.querySelector("[data-genera]").onclick = () => {
       try {
-        const nuovi = FORMATO.pagamentiDaContratto(c, ORIZ());
+        const nuovi = FORMATO.pagamentiDaContratto(c, ORIZ_PATTI(c));
         const F = String(c.fornitore).trim();
         const i = p.pagamenti.findIndex((g) => g.fornitore_id === F);
         const altri = p.pagamenti.filter((g) => g.fornitore_id !== F);
@@ -1965,6 +2044,21 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     return `<span class="peso ${d < 0 ? "neg" : ""}">${pre}${acceso ? "pesa " : ""}${segno(d, false)} sul minimo ${soc}</span>`;
   }
 
+  // Sposta tutto il progetto di un anno: rate e patti coi fornitori insieme. I finanziamenti legati
+  // non si muovono da soli: dopo lo spostamento la pagina chiede se devono seguirlo.
+  function rigaAnno(p) {
+    if (!p.pagamenti.some((g) => Object.keys(g.mesi).length)) return "";
+    const legati = stato.scenario.finanziamenti.filter((f) => f.progetto_id === p.id);
+    const d = annoSospeso.get(p.id) || 0;
+    const err = annoErrore.get(p.id);
+    const quanto = Math.abs(d) === 12 ? "un anno" : `${Math.abs(d) / 12} anni`;
+    const uno = legati.length === 1;
+    const domanda = d && legati.length ? `<div class="riga domanda-anno"><span class="warn-t">Il progetto è ${quanto} ${d > 0 ? "più avanti" : "più indietro"}; ${uno ? "il finanziamento legato" : "i finanziamenti legati"} (${legati.map((f) => esc(f.nome.split(" · ")[0])).join(", ")}) ${uno ? "è rimasto" : "sono rimasti"} dove ${uno ? "era" : "erano"}. ${uno ? "Lo sposto" : "Li sposto"} di ${quanto} anche ${uno ? "lui" : "loro"}?</span>
+        <button type="button" class="mini" data-anno-fin>Sì, sposta anche ${uno ? "il finanziamento" : "i finanziamenti"}</button><button type="button" class="mini" data-anno-lascia>No, ${uno ? "lascialo" : "lasciali"} dove ${uno ? "è" : "sono"}</button></div>` : "";
+    const prima = p.pagamenti.reduce((t, g) => t + Object.entries(g.mesi).filter(([m]) => m < D.mesi[0]).reduce((a, [, v]) => a + v, 0), 0);
+    const notaPrima = prima ? `<span class="nota">${fmt(prima, false)} € netto in rate prima di ${meseIt(D.mesi[0])}: già passate, restano dove sono</span>` : "";
+    return `<div class="riga sposta-anno"><button type="button" class="mini" data-anno="-12" title="tutte le rate e i patti coi fornitori 12 mesi prima">◀ Sposta indietro di un anno</button><button type="button" class="mini" data-anno="12" title="tutte le rate e i patti coi fornitori 12 mesi dopo">Sposta avanti di un anno ▶</button>${notaPrima}${err ? `<span class="warn-t">${esc(err)}</span>` : ""}</div>${domanda}`;
+  }
   function renderLeve() {
     sincronizzaAperte();
     const sc = stato.scenario;
@@ -1985,6 +2079,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
           ${selSoc(p.societa)} <input type="text" class="n" style="width:110px" data-campo="stato" value="${esc(p.stato)}" title="stato">
           <button data-elimina-p title="elimina progetto">× elimina</button></div>
         <div class="riga"><label class="piccolo" style="flex:1 1 220px;display:flex;gap:6px;align-items:center">cartella Drive <input type="url" class="nome" style="flex:1 1 160px" data-campo="drive_url" value="${esc(p.drive_url || "")}" placeholder="https://drive.google.com/…"></label>${p.drive_url ? `<a class="doc" href="${esc(p.drive_url)}" target="_blank" rel="noopener">apri la cartella</a>` : ""}</div>
+        ${rigaAnno(p)}
         ${(p.contratti || []).map((c, ci) => bloccoContratto(p, c, ci)).join("")}
         ${p.pagamenti.map((g, j) => { const kg = `g:${p.id}:${j}`; return `<div class="pag" data-g="${j}">
           <div class="pag-testa"><input type="text" class="pag-nome nome" data-campo="nome" value="${esc(g.nome)}" aria-label="nome del pagamento" title="scrivi qui il nome del pagamento">${g.fornitore_id ? `<span class="badge">${esc(g.fornitore_id)}</span>` : ""}${(g.documenti || []).filter((d) => d.url).map((d) => `<a class="doc" href="${esc(d.url)}" target="_blank" rel="noopener" title="${esc(d.url)}">📄 ${esc(d.titolo || "documento")}</a>`).join("")}
@@ -2360,6 +2455,30 @@ if (typeof module !== "undefined") module.exports = EXCEL;
         inp.onchange = () => { const v = inp.value.trim(); if (inp.dataset.campo === "drive_url" && !v) delete p.drive_url; else p[inp.dataset.campo] = inp.dataset.campo === "drive_url" ? v : inp.value; ricalcola(); };
       });
       div.querySelector("button[data-elimina-p]").onclick = () => { sc.progetti.splice(sc.progetti.indexOf(p), 1); ricalcola(); };
+      div.querySelectorAll("button[data-anno]").forEach((b) => {
+        b.onclick = () => {
+          const d = parseInt(b.dataset.anno, 10);
+          let q;
+          try { q = FORMATO.spostaProgetto(p, d, D.mesi[0]); } catch (e) { annoErrore.set(p.id, e.message); renderLeve(); return; }
+          annoErrore.delete(p.id);
+          sc.progetti[sc.progetti.indexOf(p)] = q;
+          if (sc.finanziamenti.some((f) => f.progetto_id === p.id)) {
+            const t = (annoSospeso.get(p.id) || 0) + d;
+            if (t) annoSospeso.set(p.id, t); else annoSospeso.delete(p.id);
+          }
+          ricalcola();
+        };
+      });
+      const annoFin = div.querySelector("button[data-anno-fin]");
+      if (annoFin) annoFin.onclick = () => {
+        const d = annoSospeso.get(p.id);
+        try { sc.finanziamenti = sc.finanziamenti.map((f) => (f.progetto_id === p.id ? FORMATO.spostaFinanziamento(f, d, D.mesi[0]) : f)); }
+        catch (e) { annoErrore.set(p.id, `finanziamenti non spostati: ${e.message}`); renderLeve(); return; }
+        annoSospeso.delete(p.id); annoErrore.delete(p.id);
+        ricalcola();
+      };
+      const annoLascia = div.querySelector("button[data-anno-lascia]");
+      if (annoLascia) annoLascia.onclick = () => { annoSospeso.delete(p.id); renderLeve(); };
       div.querySelectorAll(".contratto").forEach((box) => collegaContratto(box, p, p.contratti[+box.dataset.c]));
       div.querySelector("button[data-aggiungi-c]").onclick = () => {
         p.contratti = p.contratti || [];
