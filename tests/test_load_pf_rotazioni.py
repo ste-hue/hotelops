@@ -147,6 +147,13 @@ def test_rinomine_coprono_i_nomi_vecchi_anche_quando_il_nome_si_sposta_di_un_mes
     assert file_mancanti(in_tabella, in_corsa, rinomine) == []
     assert in_corsa | sostituiti(rinomine, in_corsa) == in_tabella | {"ORTI_PF_2026-07.xlsx"}
 
+    # Mappa parziale (review #221): solo «_10 → _09». Il nuovo «_09» non copre il vecchio
+    # «_09» (saldi 31/08): senza la sua rinomina la corsa va rifiutata, non cancellata.
+    parziale = {"ORTI_PF_2026-10.xlsx": "ORTI_PF_2026-09.xlsx"}
+    assert file_mancanti(
+        {"ORTI_PF_2026-09.xlsx", "ORTI_PF_2026-10.xlsx"}, {"ORTI_PF_2026-09.xlsx"}, parziale
+    ) == ["ORTI_PF_2026-09.xlsx"]
+
     f = tmp_path / "rinomine.json"
     f.write_text(json.dumps(rinomine), encoding="utf-8")
     assert carica_rinomine(f, in_corsa) == rinomine

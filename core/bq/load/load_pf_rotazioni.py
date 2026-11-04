@@ -118,8 +118,12 @@ def file_mancanti(
     """File già in tabella che questa corsa non ricaricherebbe: resterebbero con la chiave vecchia.
 
     Un nome vecchio è coperto se la corsa porta il suo nome nuovo (``rinomine`` vecchio → nuovo).
+    Un nome della corsa che è DESTINAZIONE di una rinomina porta un altro contenuto: non copre
+    il file omonimo già in tabella, che deve avere a sua volta una rinomina nella corsa.
     """
-    coperti = in_corsa | sostituiti(rinomine or {}, in_corsa)
+    rinomine = rinomine or {}
+    destinazioni = set(rinomine.values())
+    coperti = (in_corsa - destinazioni) | sostituiti(rinomine, in_corsa)
     return sorted(in_tabella - coperti)
 
 
