@@ -90,6 +90,8 @@ def test_rotate_end_to_end_orti(
     )
 
     assert result.out_path.exists()
+    # Nome = mese dei saldi (saldi al 30/04 → «PF 04»), convenzione del 2026-11-04.
+    assert result.out_path.name.startswith("ORTI_PF_2026-04_post-rotate_")
     assert result.failed is False
     assert result.n_controlli_err == 0
     assert result.scadenzario_summary["totale_fornitori_scritti"] >= 1
