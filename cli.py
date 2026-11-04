@@ -565,7 +565,7 @@ def cmd_cdg(args):
     if args.cdg_cmd == "cassa":
         from verticals.condges.build_cassa_artifact import DEFAULT_OUT, run
 
-        run(Path(args.out) if args.out else DEFAULT_OUT, args.aggiorna, args.push)
+        run(Path(args.out) if args.out else DEFAULT_OUT, args.aggiorna, args.push, args.fino_a)
         return
 
     if args.cdg_cmd == "tabelle":
@@ -1462,6 +1462,12 @@ def main():
     p_cc.add_argument("--aggiorna", action="store_true", help="Rilegge BigQuery e salva lo snapshot (senza: latest.json)")
     p_cc.add_argument("--push", action="store_true", help="Pubblica HTML e dati nel KV del Worker cdg")
     p_cc.add_argument("--out", default=None, help="File HTML (default docs/reports/artifacts/cassa.html)")
+    p_cc.add_argument(
+        "--fino-a",
+        default=None,
+        metavar="YYYY-MM",
+        help="Ultimo mese della pagina, con --aggiorna (default: dicembre dell'anno dopo i saldi)",
+    )
     p_ct = cdg_sub.add_parser(
         "tabelle",
         help="Tabelle piatte della pagina Cassa in CSV (separatore «;», virgola decimale: Excel li apre)",

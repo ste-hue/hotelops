@@ -137,16 +137,20 @@ def scenari_da_snapshot(snapshot: dict) -> list[tuple[Scenario, Base, dict]]:
     return [scenario_from_json(json.dumps(doc)) for doc in snapshot.get("scenari", [])]
 
 
-def acquisisci(query=cf.query_bq) -> dict:
-    """Legge le fonti BigQuery e compone lo snapshot (mesi oltre il PF senza righe)."""
+def acquisisci(query=cf.query_bq, fino_a: str | None = None) -> dict:
+    """Legge le fonti BigQuery e compone lo snapshot fino a ``fino_a`` (YYYY-MM; default
+    dicembre dell'anno dopo l'ancora). Mesi senza PF entro l'orizzonte: coda ipotetica."""
     ancore = cf.leggi_ancore(query)
     righe, flussi, base, mesi = cf.leggi_baseline(query)
     fatti = cf.leggi_fatti(query)
     scenari = cf.leggi_scenari(query)
     fornitori = cf.leggi_fornitori(query)
+    righe, flussi, mesi, n_coda = cf.taglia_orizzonte(
+        righe, flussi, mesi, fino_a or cf.fine_orizzonte(ancore)
+    )
     # I mesi oltre il PF restano nell'orizzonte (le leve ci arrivano) ma senza
     # righe PF né flussi copiati: nessun saldo inventato, solo effetto delle leve.
-    mesi_tutti, coda = cf.mesi_ipotetici(mesi)
+    mesi_tutti, coda = cf.mesi_ipotetici(mesi, n_coda)
     return snapshot_da_fonti(
         ancore=ancore,
         mesi_non_pianificati=cf.mesi_non_pianificati(righe, flussi, mesi),
@@ -563,7 +567,9 @@ def push_to_kv(html: str, data_json: str, env: dict[str, str]) -> None:
 # ── run ──
 
 
-def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> Path:
+def run(
+    out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False, fino_a: str | None = None
+) -> Path:
     push_env = None
     if push:
         from core.env import load_dotenv_file
@@ -572,7 +578,7 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
         push_env = load_push_env()
 
     if aggiorna:
-        snapshot = acquisisci()
+        snapshot = acquisisci(fino_a=fino_a)
         print(f"Snapshot {cf.salva_snapshot(snapshot)}")
     else:
         snapshot = cf.carica_snapshot()
