@@ -260,13 +260,13 @@ def confronta(
             f"{a.etichetta} e {b.etichetta} sono costruiti su PF diversi: "
             "il confronto mescolerebbe due piani. Usa --base-diverse per farlo lo stesso."
         )
-    ra, pa = calcola_doc(payload, a)
-    rb, pb = calcola_doc(payload, b)
+    # Orizzonte comune: fino all'ultimo mese citato da uno dei due, così ogni mese ha
+    # entrambi i saldi (e i minimi si cercano sugli stessi mesi).
+    comune = payload_allungato(payload_allungato(payload, a.doc), b.doc)
+    ra, p = calcola_doc(comune, a)
+    rb, _ = calcola_doc(comune, b)
     sa, sb = _saldi(ra), _saldi(rb)
-    mesi = [
-        m for m in (pa["mesi"] if len(pa["mesi"]) >= len(pb["mesi"]) else pb["mesi"])
-    ]
-    mesi = [m for m in mesi if (not da or m >= da) and (not fino or m <= fino)]
+    mesi = [m for m in p["mesi"] if (not da or m >= da) and (not fino or m <= fino)]
     righe = []
     for m in mesi:
         riga = {"mese": m}

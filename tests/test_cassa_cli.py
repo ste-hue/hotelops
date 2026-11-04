@@ -189,6 +189,23 @@ def test_confronta_rifiuta_basi_diverse(home, tmp_path):
     assert c["base_diverse"] and not c["b"]["base_uguale"]
 
 
+def test_confronta_su_orizzonte_comune(home, tmp_path):
+    # Se uno solo dei due cita un mese oltre l'orizzonte, anche l'altro va calcolato fin lì:
+    # altrimenti quei mesi escono con il saldo vuoto e non vengono confrontati.
+    sc, base = _scenario_oltre_orizzonte()
+    f = tmp_path / "oltre.json"
+    f.write_text(scenario_to_json(sc, base, nome="Oltre"), encoding="utf-8")
+    payload = cc.payload_locale(home)
+    seme, oltre = cc.risolvi("seme", home), cc.risolvi(str(f), home)
+    for a, b in ((seme, oltre), (oltre, seme)):
+        c = cc.confronta(payload, a, b, home)
+        assert c["righe"][-1]["mese"] == "2027-09"
+        for r in c["righe"]:
+            for s in cc.SOCIETA:
+                assert r[s]["a"] is not None and r[s]["b"] is not None, (r["mese"], s)
+                assert r[s]["diff"] is not None
+
+
 def test_scenario_sconosciuto(home):
     with pytest.raises(cc.ErroreCassa, match="non trovato"):
         cc.risolvi("non-esiste", home)
