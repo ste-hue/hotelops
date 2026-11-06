@@ -137,16 +137,20 @@ def scenari_da_snapshot(snapshot: dict) -> list[tuple[Scenario, Base, dict]]:
     return [scenario_from_json(json.dumps(doc)) for doc in snapshot.get("scenari", [])]
 
 
-def acquisisci(query=cf.query_bq) -> dict:
-    """Legge le fonti BigQuery e compone lo snapshot (mesi oltre il PF senza righe)."""
+def acquisisci(query=cf.query_bq, fino_a: str | None = None) -> dict:
+    """Legge le fonti BigQuery e compone lo snapshot fino a ``fino_a`` (YYYY-MM; default
+    dicembre dell'anno dopo l'ancora). Mesi senza PF entro l'orizzonte: coda ipotetica."""
     ancore = cf.leggi_ancore(query)
     righe, flussi, base, mesi = cf.leggi_baseline(query)
     fatti = cf.leggi_fatti(query)
     scenari = cf.leggi_scenari(query)
     fornitori = cf.leggi_fornitori(query)
+    righe, flussi, mesi, n_coda = cf.taglia_orizzonte(
+        righe, flussi, mesi, fino_a or cf.fine_orizzonte(ancore)
+    )
     # I mesi oltre il PF restano nell'orizzonte (le leve ci arrivano) ma senza
     # righe PF né flussi copiati: nessun saldo inventato, solo effetto delle leve.
-    mesi_tutti, coda = cf.mesi_ipotetici(mesi)
+    mesi_tutti, coda = cf.mesi_ipotetici(mesi, n_coda)
     return snapshot_da_fonti(
         ancore=ancore,
         mesi_non_pianificati=cf.mesi_non_pianificati(righe, flussi, mesi),
@@ -338,7 +342,8 @@ def _limiti(snapshot: dict, seme: Scenario, baseline: dict) -> list[str]:
     if seme.finanziamenti:
         out.append(
             "Con i finanziamenti nello scenario, le entrate da finanziamenti del PF di quella "
-            "società non contano: niente doppio conteggio."
+            "società non contano: niente doppio conteggio. Un finanziamento legato a un "
+            "progetto conta solo con il progetto acceso; spento, restano le righe del PF."
         )
     n = len(baseline["non_riconciliati"])
     if n:
@@ -563,7 +568,34 @@ def push_to_kv(html: str, data_json: str, env: dict[str, str]) -> None:
 # ── run ──
 
 
-def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> Path:
+def payload_da_stato(snapshot: dict, home: Path | None = None) -> dict:
+    """Il payload della pagina dallo snapshot e dai file locali (seme, canone dichiarato,
+    PF corretto, banda). Una sola strada, usata dalla pagina e da `cassa_cli`: i numeri
+    della riga di comando sono quelli della pagina."""
+    home = Path(home) if home is not None else cf.SNAPSHOT_HOME
+
+    def leggi(nome: str) -> dict | None:
+        f = home / nome
+        return json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+
+    seme_path = home / SEME_PATH.name
+    seme = carica_seme(seme_path) if seme_path.exists() else None
+    seme_file = leggi(SEME_PATH.name) or {}
+    return build_payload(
+        snapshot,
+        scenari_da_snapshot(snapshot),
+        seme=seme,
+        seme_salvato_il=seme_file.get("salvato_il"),
+        canone_dichiarato=leggi(CANONE_PATH.name),
+        scenari_ritirati=list(seme_file.get("scenari_ritirati") or []),
+        pf_corretto=leggi(PF_CORRETTO_PATH.name),
+        banda_pf=leggi(BANDA_PATH.name),
+    )
+
+
+def run(
+    out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False, fino_a: str | None = None
+) -> Path:
     push_env = None
     if push:
         from core.env import load_dotenv_file
@@ -572,35 +604,12 @@ def run(out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False) -> 
         push_env = load_push_env()
 
     if aggiorna:
-        snapshot = acquisisci()
+        snapshot = acquisisci(fino_a=fino_a)
         print(f"Snapshot {cf.salva_snapshot(snapshot)}")
     else:
         snapshot = cf.carica_snapshot()
-    seme = carica_seme(SEME_PATH) if SEME_PATH.exists() else None
-    seme_file = json.loads(SEME_PATH.read_text(encoding="utf-8")) if seme else {}
-    seme_salvato_il = seme_file.get("salvato_il")
-    scenari_ritirati = list(seme_file.get("scenari_ritirati") or [])
-    canone_dichiarato = (
-        json.loads(CANONE_PATH.read_text(encoding="utf-8")) if CANONE_PATH.exists() else None
-    )
-    pf_corretto = (
-        json.loads(PF_CORRETTO_PATH.read_text(encoding="utf-8"))
-        if PF_CORRETTO_PATH.exists()
-        else None
-    )
-    banda_pf = (
-        json.loads(BANDA_PATH.read_text(encoding="utf-8")) if BANDA_PATH.exists() else None
-    )
-    payload = build_payload(
-        snapshot,
-        scenari_da_snapshot(snapshot),
-        seme=seme,
-        seme_salvato_il=seme_salvato_il,
-        canone_dichiarato=canone_dichiarato,
-        scenari_ritirati=scenari_ritirati,
-        pf_corretto=pf_corretto,
-        banda_pf=banda_pf,
-    )
+    payload = payload_da_stato(snapshot)
+    banda_pf = (cf.SNAPSHOT_HOME / BANDA_PATH.name).exists()
     print(f"  banda d'errore: {'dal file locale' if banda_pf else 'assente (nessun banda_pf.json)'}")
     for c in payload["pf_correzioni"]:
         print(

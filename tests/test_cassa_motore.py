@@ -359,6 +359,38 @@ def test_erogazioni_pf_restano_senza_finanziamenti_dello_scenario():
     )
 
 
+def test_finanziamento_legato_a_progetto_spento_non_conta_e_resta_il_pf():
+    pf_mcc = Riga(
+        "INTUR", "ENTRATE_FINANZIAMENTI", "2026-11", eur(550_000), "E", "finanziamento"
+    )
+    cantiere = Progetto(
+        "p3", "Terzo piano", "INTUR", False, "contratto",
+        [Pagamento("SAL", {"2026-12": eur(100_000)}, 0)],
+    )  # fmt: skip
+    mutuo = Finanziamento(
+        "mps",
+        "MPS",
+        "INTUR",
+        {"2026-12": eur(550_000)},
+        {},
+        "da verificare",
+        progetto_id="p3",
+    )
+
+    def fin(acceso):
+        p = Progetto(**{**cantiere.__dict__, "acceso": acceso})
+        ris = calcola(inp9(pf_extra=[pf_mcc], progetti=[p], finanziamenti=[mutuo]))
+        return {
+            r.mese: r.entrate["finanziamento"]
+            for r in ris.righe
+            if r.societa == "INTUR"
+        }
+
+    spento, acceso = fin(False), fin(True)
+    assert spento["2026-11"] == eur(550_000) and spento["2026-12"] == 0
+    assert acceso["2026-11"] == 0 and acceso["2026-12"] == eur(550_000)
+
+
 def test_una_gamba_da_terzi_conta_solo_dal_lato_a():
     ris = calcola(
         inp_base(

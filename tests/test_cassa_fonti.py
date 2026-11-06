@@ -9,6 +9,7 @@ from verticals.condges.cassa_fonti import (
     carica_snapshot,
     coda_flussi,
     coda_ripetuta,
+    fine_orizzonte,
     leggi_ancore,
     leggi_baseline,
     leggi_fatti,
@@ -17,6 +18,7 @@ from verticals.condges.cassa_fonti import (
     mesi_ipotetici,
     mesi_non_pianificati,
     salva_snapshot,
+    taglia_orizzonte,
 )
 from verticals.condges.cassa_motore import Fatto, Flusso, Riga
 from verticals.condges.cassa_scenario import righe_p, scenario_to_json
@@ -465,6 +467,38 @@ def test_mesi_ipotetici_aggiunge_la_coda():
     assert mesi == ["2026-11", "2026-12", "2027-01", "2027-02", "2027-03"]
     assert ipotetici == frozenset({"2027-01", "2027-02", "2027-03"})
     assert len(mesi_ipotetici(["2026-11"])[0]) == 7
+
+
+def test_orizzonte_si_ferma_a_dicembre_dell_anno_dopo_i_saldi():
+    """PF esteso al 2029 per i mutui: la pagina si ferma a dicembre dell'anno dopo l'ancora."""
+    from types import SimpleNamespace
+
+    ancore = {
+        "ORTI": SimpleNamespace(data=date(2026, 10, 31)),
+        "INTUR": SimpleNamespace(data=date(2026, 10, 31)),
+    }
+    assert fine_orizzonte(ancore) == "2027-12"
+    righe = [
+        Riga("ORTI", "USCITE_MUTUI", m, 1, "U", "pf")
+        for m in ("2027-11", "2027-12", "2028-01", "2029-12")
+    ]
+    flussi = [
+        Flusso("Fitto Hotel (canone)", "ORTI", "INTUR", m, 1, "pf")
+        for m in ("2027-12", "2028-06")
+    ]
+    mesi = ["2027-11", "2027-12", "2028-01", "2029-12"]
+    r, f, m, coda = taglia_orizzonte(righe, flussi, mesi, "2027-12")
+    assert [x.mese for x in r] == ["2027-11", "2027-12"]
+    assert [x.mese for x in f] == ["2027-12"]
+    assert (m, coda) == (["2027-11", "2027-12"], 0)
+
+
+def test_orizzonte_oltre_il_pf_diventa_coda_ipotetica():
+    r, f, m, coda = taglia_orizzonte([], [], ["2026-11", "2027-06"], "2027-12")
+    assert (m, coda) == (["2026-11", "2027-06"], 6)
+    assert mesi_ipotetici(m, coda)[1] == frozenset(
+        f"2027-{i:02d}" for i in range(7, 13)
+    )
 
 
 def test_coda_ripete_il_mese_omologo():

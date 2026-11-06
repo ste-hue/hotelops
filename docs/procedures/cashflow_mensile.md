@@ -120,7 +120,8 @@ zero, il salvataggio non ha preso** e si rifà.
 
 ### A7. Su Drive con il nome pulito
 Rinomina il file in `ORTI_PF_AAAA-MM.xlsx` (per INTUR uguale, con INTUR): il mese nel nome è il
-**primo mese aperto**, cioè il mese nuovo (il PF di ottobre si chiama `..._2026-10`). Caricalo
+**mese dei saldi**, cioè l'ultimo mese chiuso (saldi al 30/09 → `..._2026-09`; deciso il 4/11/2026,
+prima era il mese nuovo). Caricalo
 nella cartella «PIANI FINAZIARI › 2026» su Drive, accanto a quelli del mese prima.
 
 ### A8. Dire che è pronto
@@ -222,7 +223,8 @@ Stesso motore dell'app Cashflow, dalla CLI:
       --societa ORTI --mese-chiuso <N> --anno <AAAA> --unmapped-policy fail [--exclude 264]
 
 Il motore legge i saldi da BigQuery (C2), azzera il mese chiuso senza toccare formule, avanza la
-cascata, scrive i fornitori nei fogli di dettaglio e produce `<SOC>_PF_<primo mese aperto>_post-rotate_<ts>.xlsx`;
+cascata, scrive i fornitori nei fogli di dettaglio e produce `<SOC>_PF_<mese dei saldi>_post-rotate_<ts>.xlsx`
+(saldi al 30/09 → `_2026-09`; convenzione decisa il 4/11/2026, commit 2bb4538);
 con ERR nei Controlli il file esce con suffisso `_FAILED_CHECKS`. I due layout: ORTI month-closed
 (saldi nella colonna del mese chiuso), INTUR fixed-snapshot (saldi in colonna C; riconosciuto con
 «DATA RILEVAZ» in C1 oppure con la **data in C1**, #209: la data resta una data, non testo).

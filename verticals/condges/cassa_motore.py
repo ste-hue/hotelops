@@ -128,6 +128,16 @@ class Finanziamento:
     importo: int | None = None
     # Riferimenti (relazione notarile, delibera, contratto di mutuo): [{"titolo", "url"}], memoria dell'interfaccia.
     documenti: list[dict] = field(default_factory=list)
+    # Il progetto che il finanziamento paga: con il progetto spento il finanziamento non conta
+    # (e restano le righe «finanziamenti» del PF). None = vale sempre.
+    progetto_id: str | None = None
+
+
+def finanziamenti_attivi(sc: "Scenario") -> list[Finanziamento]:
+    accesi = {p.id for p in sc.progetti if p.acceso}
+    return [
+        f for f in sc.finanziamenti if f.progetto_id is None or f.progetto_id in accesi
+    ]
 
 
 @dataclass(frozen=True)
@@ -243,7 +253,7 @@ def _movimenti(
             ent["canone"] += f.importo
         if f.da == societa:
             usc["canone"] += f.importo
-    for fin in sc.finanziamenti:
+    for fin in finanziamenti_attivi(sc):
         if fin.societa == societa:
             ent["finanziamento"] += fin.erogazioni.get(mese, 0)
             usc["finanziamento"] += fin.rate.get(mese, 0)
@@ -312,11 +322,14 @@ def _riconcilia(
     return progetti, non_ric
 
 
-def calcola(inp: Input) -> Risultato:
+def pf_e_flussi_effettivi(inp: Input) -> tuple[list[Riga], list[Flusso]]:
+    """Le righe PF e i flussi fra società che il calcolo usa davvero, dopo le sostituzioni
+    dello scenario (finanziamenti, righe «sostituzione», canone). Serve anche a chi spiega un
+    mese voce per voce: mostra quello che il motore conta, non il PF grezzo."""
     sc = inp.scenario
     pf = inp.pf
     # Le erogazioni dello scenario sostituiscono le righe PF di finanziamento.
-    con_fin = {f.societa for f in sc.finanziamenti}
+    con_fin = {f.societa for f in finanziamenti_attivi(sc)}
     pf = [
         r
         for r in pf
@@ -340,6 +353,12 @@ def calcola(inp: Input) -> Risultato:
             for f in interc
             if not (f.nome.startswith("Fitto Hotel") and f.mese[:4] in anni)
         ] + nuovi
+    return pf, interc
+
+
+def calcola(inp: Input) -> Risultato:
+    sc = inp.scenario
+    pf, interc = pf_e_flussi_effettivi(inp)
     progetti, non_ric = _riconcilia(sc.progetti, inp.fatti)
     inp = replace(
         inp, pf=pf, intercompany=interc, scenario=replace(sc, progetti=progetti)
