@@ -658,8 +658,14 @@ const FORMATO = (() => {
   const MESI_LUNGHI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
   // Giorni in parole per la prima riga: mai «1 giorni», mai «−55 giorni» (negativo = vuoto).
   const giorniTesto = (g) => (g === 0 ? "oggi" : g === 1 ? "1 giorno" : g > 1 ? `${g} giorni` : "");
-  // «piano ORTI di settembre»: il mese nel nome del file è il mese dei saldi (convenzione del 04/11/2026).
+  // «piano ORTI di settembre»: il mese viene dalla data dell'ancora (il dato), non dal nome del file
+  // (la convenzione del nome è ancora da confermare dal Mac): «2026-09-30» → «settembre».
+  const meseLungo = (iso) => (/^\d{4}-\d{2}/.test(String(iso)) ? MESI_LUNGHI[parseInt(String(iso).slice(5, 7), 10) - 1] || "" : "");
+  // Ripiego dichiarato quando l'ancora manca: il mese nel nome del file (convenzione da confermare).
   const meseDelPiano = (nomeFile) => { const m = /_PF_(\d{4})-(\d{2})/.exec(String(nomeFile || "")); return m ? MESI_LUNGHI[parseInt(m[2], 10) - 1] || "" : ""; };
+  // Quota dei saldi di partenza che quadra con i movimenti in banca, pesata sugli importi (0–100);
+  // null senza conti. Con tutti i saldi a zero conta i conti.
+  const quotaAttestata = (conti) => { const c = Object.values(conti || {}); if (!c.length) return null; const tot = c.reduce((t, x) => t + Math.abs(x.saldo || 0), 0); const ok = c.filter((x) => x.attestato); return Math.round(100 * (tot ? ok.reduce((t, x) => t + Math.abs(x.saldo || 0), 0) / tot : ok.length / c.length)); };
   const ordinati = (mesi) => Object.keys(mesi).sort();
 
   // Rateizza `totale` in n rate, una ogni `passo` mesi a partire da `da`, dentro l'orizzonte `orizzonte`.
@@ -861,7 +867,7 @@ const FORMATO = (() => {
     }
     return { nome: doc.nome || sc.nome || "importato", base: doc.base || {}, scenario: sc, salvato_il: doc.salvato_il || null };
   }
-  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, giorniTesto, meseDelPiano, spalma, sposta, spostaProgetto, spostaFinanziamento, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata };
+  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, giorniTesto, meseLungo, meseDelPiano, quotaAttestata, spalma, sposta, spostaProgetto, spostaFinanziamento, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata };
 })();
 if (typeof module !== "undefined") module.exports = FORMATO;
 </script>
@@ -1238,8 +1244,8 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     // Prima riga, tre età nell'ordine: da quale piano (versione = file del PF per società),
     // saldi al <data> con lo stato (dichiarati / attestati), pagina del <ora>. Le ore e i
     // file interi stanno in «Fonti e versioni»; nessuna età sola che fonda le altre.
-    // «piano ORTI di settembre (ORTI_PF_2026-09.xlsx)»: la parola del lettore, il file resta perché è la versione.
-    const piani = SOC.map((s) => { if (!D.base[s]) return `piano ${s} —`; const f = nomeFile(D.base[s].file_sorgente), m = FORMATO.meseDelPiano(f); return `piano ${s}${m ? ` di ${m}` : ""} (${f})`; }).join(" · ");
+    // «piano ORTI di settembre (ORTI_PF_2026-09.xlsx)»: il mese dall'ancora (il dato), il file resta perché è la versione.
+    const piani = SOC.map((s) => { if (!D.base[s]) return `piano ${s} —`; const f = nomeFile(D.base[s].file_sorgente), m = D.ancore[s] ? FORMATO.meseLungo(D.ancore[s].data) : FORMATO.meseDelPiano(f); return `piano ${s}${m ? ` di ${m}` : ""} (${f})`; }).join(" · ");
     const ancs = SOC.map((s) => D.ancore[s]).filter(Boolean);
     const date = [...new Set(ancs.map((a) => dataIt(a.data)))];
     // I giorni fra l'ancora e «pagina del»: l'ancora è vecchia per natura (fine mese chiuso) e
@@ -1249,7 +1255,11 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const giorni = date.length <= 1 ? (ancs[0] ? giorniDa(ancs[0].data) : "") : SOC.map((s) => (D.ancore[s] ? `${s} ${giorniDa(D.ancore[s].data)}` : "")).filter(Boolean).join(", ");
     const stati = ancs.map(statoAncora);
     const statoSaldi = !stati.length || stati.includes("non_registrato") ? "non registrati" : stati.every((x) => x === "attestato") ? "attestati" : "dichiarati";
-    el("sub").textContent = `da ${piani} · saldi al ${quando} (${statoSaldi}${giorni ? `, ${giorni}` : ""}) · pagina del ${oraDi(D.generato_il)}`;
+    // «dichiarati» comprime un dettaglio che il payload ha per conto: la quota (sugli importi) che
+    // quadra con i movimenti, per società; i conti non attestati col motivo restano nel pannello.
+    const quote = statoSaldi === "dichiarati" ? SOC.map((s) => [s, D.ancore[s] ? FORMATO.quotaAttestata(D.ancore[s].conti) : null]).filter(([, q]) => q !== null) : [];
+    const quota = quote.length ? `, ${quote.map(([s, q]) => `${s} ${q}%`).join(" · ")} quadra con i movimenti` : "";
+    el("sub").textContent = `da ${piani} · saldi al ${quando} (${statoSaldi}${quota}${giorni ? `, ${giorni}` : ""}) · pagina del ${oraDi(D.generato_il)}`;
     // Oltre 12 mesi di PF dall'ancora la curva non è più una previsione: lo dice in testa.
     const hPf = Math.max(...SOC.map((s) => hDi(s, ULTIMO_PF)));
     let c = el("cornice");

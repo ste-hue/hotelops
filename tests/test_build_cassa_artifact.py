@@ -550,12 +550,15 @@ def test_replica_cassa_panorama():
 # ── fix round 1: niente finestre modali, input euro validato, calendario al centesimo ──
 
 
-def esegui_node_formato(tmp_path: Path, html: str, espressione: str) -> str:
-    """Esegue `espressione` con F = FORMATO (script id="formato"); stampa il risultato."""
+def esegui_node_formato(tmp_path: Path, html: str, espressione: str, dati: bool = False) -> str:
+    """Esegue `espressione` con F = FORMATO (script id="formato"); stampa il risultato.
+    Con `dati=True` scrive anche dati.json (il payload) accanto allo script."""
     if NODE is None:
         pytest.skip("node non installato")
     formato = re.search(r'<script id="formato">(.*?)</script>', html, re.S).group(1)
     (tmp_path / "formato.js").write_text(formato, encoding="utf-8")
+    if dati:
+        (tmp_path / "dati.json").write_text(_estrai(html)[0], encoding="utf-8")
     (tmp_path / "run.js").write_text(
         f"const F=require('./formato.js');console.log({espressione});", encoding="utf-8"
     )
@@ -1504,18 +1507,32 @@ def test_prima_riga_della_pagina_tre_eta_in_ordine_e_niente_snapshot():
     assert "${giorni ? `, ${giorni}` : \"\"}" in riga
     assert "const giorniDa = (iso) =>" in html and "/ 86400000" in html
     assert "FORMATO.giorniTesto(g)" in html and "piano ${s}${m ? ` di ${m}` : \"\"} (${f})" in html
+    # Il mese del piano viene dall'ancora (il dato), non dal nome del file; la quota attestata
+    # per società accompagna «dichiarati».
+    assert "FORMATO.meseLungo(D.ancore[s].data) : FORMATO.meseDelPiano(f)" in html
+    assert "${statoSaldi}${quota}${giorni" in riga and "quadra con i movimenti" in html
     assert "const stati = ancs.map(statoAncora)" in html
     assert "snapshot" not in html.lower()
 
 
-def test_giorni_in_parole_e_piano_di_mese(tmp_path):
+def test_giorni_in_parole_mese_dall_ancora_e_quota_attestata(tmp_path):
     # «1 giorni» il primo del mese e «−55 giorni» con un'ancora nel futuro non si stampano;
-    # «piano ORTI di settembre»: il mese nel nome del file è il mese dei saldi.
+    # «piano ORTI di settembre»: il mese viene dalla data dell'ancora, non dal nome del file;
+    # la quota «quadra con i movimenti» è pesata sugli importi dei conti (ORTI 300 su 500 = 60%).
     html = render_html(build_payload(snapshot_sintetico(), []))
     out = esegui_node_formato(
         tmp_path,
         html,
-        "JSON.stringify([0, 1, 2, 37, -55, NaN].map(F.giorniTesto).concat("
-        "['ORTI_PF_2026-09.xlsx', 'hotelops_raw_x/INTUR_PF_2027-01.xlsx', 'piano.xlsx', null].map(F.meseDelPiano)))",
+        "((D) => JSON.stringify([0, 1, 2, 37, -55, NaN].map(F.giorniTesto).concat("
+        "['2026-09-30', '2027-01-31', 'boh', null].map(F.meseLungo),"
+        "['ORTI_PF_2026-09.xlsx', 'piano.xlsx'].map(F.meseDelPiano),"
+        "[D.ancore.ORTI.conti, D.ancore.INTUR.conti, {}, {A: {saldo: 0, attestato: true}, B: {saldo: 0, attestato: false}}]"
+        ".map(F.quotaAttestata))))(require('./dati.json'))",
+        dati=True,
     )
-    assert json.loads(out) == ["oggi", "1 giorno", "2 giorni", "37 giorni", "", "", "settembre", "gennaio", "", ""]
+    assert json.loads(out) == [
+        "oggi", "1 giorno", "2 giorni", "37 giorni", "", "",
+        "settembre", "gennaio", "", "",
+        "settembre", "",
+        60, 100, None, 50,
+    ]
