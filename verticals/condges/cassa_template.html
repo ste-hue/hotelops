@@ -291,6 +291,7 @@ body.vista-leve details.leva.aperta>.corpo{display:block;padding-left:0}
 <header>
   <h1>Cassa · ORTI e INTUR</h1>
   <p class="sub" id="sub"></p>
+  <p class="sub" id="sub2" hidden></p>
 </header>
 <div id="errore" class="errore" hidden></div>
 <div id="bozza-avviso" class="bozza-avviso" hidden role="status"></div>
@@ -1259,8 +1260,12 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     // «dichiarati» comprime un dettaglio che il payload ha per conto: la quota (sugli importi) che
     // quadra con i movimenti, per società; i conti non attestati col motivo restano nel pannello.
     const quote = statoSaldi === "dichiarati" ? SOC.map((s) => [s, D.ancore[s] ? FORMATO.quotaAttestata(D.ancore[s].conti) : null]).filter(([, q]) => q) : [];
-    const quota = quote.map(([s, q]) => `${s} ${q.quota === null ? "—" : `${q.quota}%`} del saldo quadra con i movimenti (${q.ok} ${q.ok === 1 ? "conto" : "conti"} su ${q.n})`).join(" · ");
-    el("sub").textContent = `da ${piani} · saldi al ${quando} (${statoSaldi}${quota ? `: ${quota}` : ""}${giorni ? `, ${giorni}` : ""}) · pagina del ${oraDi(D.generato_il)}`;
+    // Due righe: la prima senza parentesi annidate; la seconda, solo con saldi dichiarati, la quota
+    // per società («ORTI 60% (1 conto su 2) · INTUR 100% (1 su 1) del saldo quadra con i movimenti»).
+    const quota = quote.map(([s, q], i) => `${s} ${q.quota === null ? "—" : `${q.quota}%`} (${q.ok} ${i === 0 ? (q.ok === 1 ? "conto " : "conti ") : ""}su ${q.n})`).join(" · ");
+    el("sub").textContent = `da ${piani} · saldi al ${quando} (${statoSaldi}${giorni ? `, ${giorni}` : ""}) · pagina del ${oraDi(D.generato_il)}`;
+    el("sub2").textContent = quota ? `${quota} del saldo quadra con i movimenti` : "";
+    el("sub2").hidden = !quota;
     // Oltre 12 mesi di PF dall'ancora la curva non è più una previsione: lo dice in testa.
     const hPf = Math.max(...SOC.map((s) => hDi(s, ULTIMO_PF)));
     let c = el("cornice");

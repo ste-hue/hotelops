@@ -1510,8 +1510,13 @@ def test_prima_riga_della_pagina_tre_eta_in_ordine_e_niente_snapshot():
     # Il mese del piano viene dall'ancora (il dato), non dal nome del file; la quota attestata
     # per società accompagna «dichiarati».
     assert "FORMATO.meseLungo(D.ancore[s].data) : FORMATO.meseDelPiano(f)" in html
-    assert "${statoSaldi}${quota ? `: ${quota}` : \"\"}${giorni" in riga
-    assert "del saldo quadra con i movimenti (${q.ok} ${q.ok === 1 ? \"conto\" : \"conti\"} su ${q.n})" in html
+    # Due righe: nella prima nessuna parentesi annidata (la quota non ci sta); la quota per
+    # società va nella seconda, «… del saldo quadra con i movimenti», nascosta se i saldi
+    # sono attestati o non registrati.
+    assert "${statoSaldi}${giorni" in riga and "quota" not in riga
+    riga2 = next(l for l in html.splitlines() if 'el("sub2").textContent' in l)
+    assert "del saldo quadra con i movimenti" in riga2
+    assert '<p class="sub" id="sub2" hidden></p>' in html
     assert "const stati = ancs.map(statoAncora)" in html
     assert "snapshot" not in html.lower()
 
