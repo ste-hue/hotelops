@@ -1467,3 +1467,33 @@ def test_template_patti_con_anticipo_prima_della_pagina(tmp_path):
         tmp_path, html, f"JSON.stringify(F.pagamentiDaContratto({AMCN_JS}, ['2026-10'].concat({ORIZ_JS}.slice(1))).map((g) => g.mesi))"
     )
     assert json.loads(out)[0] == {"2026-10": 7230000}
+
+
+def test_push_rifiuta_fonti_senza_data_o_vecchie_e_dice_la_data():
+    # Il presidio sta sul pubblicare: fonti senza data o lette più di 7 giorni fa (default
+    # dichiarato) non si spingono; il messaggio dice la data trovata e il limite.
+    from verticals.condges.build_cassa_artifact import controlla_eta_fonti
+
+    adesso = datetime(2026, 11, 6, 22, 0)  # noqa: DTZ001
+    with pytest.raises(ValueError, match="acquisito_il assente"):
+        controlla_eta_fonti(None, adesso)
+    with pytest.raises(ValueError, match=r"29/10/2026 12:00 \(8 giorni fa\), limite 7 giorni"):
+        controlla_eta_fonti("2026-10-29T12:00", adesso)
+    controlla_eta_fonti("2026-10-31T12:00", adesso)  # 6 giorni: passa
+    controlla_eta_fonti("2026-10-29T12:00", adesso, max_giorni=10)  # limite cambiato: passa
+    assert snapshot_sintetico()["acquisito_il"] == "2026-10-29T12:00"
+
+
+def test_prima_riga_della_pagina_tre_eta_in_ordine_e_niente_snapshot():
+    # Prima riga: da quale piano (file per società) · saldi al <data> (stato) · pagina del <ora>.
+    # Nessuna quinta età che fonda le altre; «snapshot» non è una parola del lettore.
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    riga = next(l for l in html.splitlines() if 'el("sub").textContent' in l)
+    assert (
+        riga.index("da ${piani}")
+        < riga.index("saldi al ${quando}")
+        < riga.index("pagina del ${oraDi(D.generato_il)}")
+    )
+    assert "${statoSaldi}" in riga
+    assert "const stati = ancs.map(statoAncora)" in html
+    assert "snapshot" not in html.lower()

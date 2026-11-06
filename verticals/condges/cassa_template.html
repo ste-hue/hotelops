@@ -1230,10 +1230,16 @@ if (typeof module !== "undefined") module.exports = EXCEL;
 
   // ── testa, fonti e scenari ──
   function renderTesta() {
-    const basi = SOC.map((s) => `${s}: ${D.base[s] ? nomeFile(D.base[s].file_sorgente) : "—"}`).join(" · ");
-    const anc = Object.values(D.ancore)[0];
-    // Corta: chi vuole i file e le ore li trova in «Fonti e versioni».
-    el("sub").textContent = `saldi al ${anc ? dataIt(anc.data) : "—"} · pagina del ${oraDi(D.generato_il)}`;
+    // Prima riga, tre età nell'ordine: da quale piano (versione = file del PF per società),
+    // saldi al <data> con lo stato (dichiarati / attestati), pagina del <ora>. Le ore e i
+    // file interi stanno in «Fonti e versioni»; nessuna età sola che fonda le altre.
+    const piani = SOC.map((s) => `PF ${s} ${D.base[s] ? nomeFile(D.base[s].file_sorgente) : "—"}`).join(" · ");
+    const ancs = SOC.map((s) => D.ancore[s]).filter(Boolean);
+    const date = [...new Set(ancs.map((a) => dataIt(a.data)))];
+    const quando = date.length <= 1 ? (date[0] || "—") : SOC.map((s) => `${s} ${D.ancore[s] ? dataIt(D.ancore[s].data) : "—"}`).join(", ");
+    const stati = ancs.map(statoAncora);
+    const statoSaldi = !stati.length || stati.includes("non_registrato") ? "non registrati" : stati.every((x) => x === "attestato") ? "attestati" : "dichiarati";
+    el("sub").textContent = `da ${piani} · saldi al ${quando} (${statoSaldi}) · pagina del ${oraDi(D.generato_il)}`;
     // Oltre 12 mesi di PF dall'ancora la curva non è più una previsione: lo dice in testa.
     const hPf = Math.max(...SOC.map((s) => hDi(s, ULTIMO_PF)));
     let c = el("cornice");
