@@ -603,7 +603,7 @@ def _cmd_cdg_cassa_headless(args):
             )
             stampa(c) if args.json else print(cc.testo_confronta(c))
         elif args.cassa_cmd == "variante":
-            mods = cc.modifiche_da_argomenti(args.canone, args.accendi, args.spegni, args.ipotesi)
+            mods = cc.modifiche_da_argomenti(args.canone, args.accendi, args.spegni, args.ipotesi, args.calendario)
             dest = cc.variante(
                 args.nome, cc.risolvi(args.da, home), mods, payload, home,
                 creato_da=args.creato_da, sostituisci=args.sostituisci,
@@ -1544,6 +1544,7 @@ def main():
     p_var.add_argument("nome")
     p_var.add_argument("--da", required=True, help="seme | nome in scenari/ | file JSON")
     p_var.add_argument("--canone", default=None, help="NxRATA@YYYY-MM (rata netta in euro) oppure «pf»")
+    p_var.add_argument("--calendario", action="append", default=[], metavar="\"AAAA mese=EURO,…\"", help="stagionale di un anno (netti in euro; la somma deve tornare col canone)")
     p_var.add_argument("--accendi", action="append", default=[], metavar="ID_PROGETTO")
     p_var.add_argument("--spegni", action="append", default=[], metavar="ID_PROGETTO")
     p_var.add_argument("--ipotesi", action="append", default=[], metavar="TESTO")

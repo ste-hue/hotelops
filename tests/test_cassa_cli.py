@@ -348,3 +348,83 @@ def test_la_modifica_canone_riscrive_solo_l_anno_che_nomina():
     assert c["netto_per_anno"] == {"2026": 11_111_100, "2027": 33_333_300}
     assert (c["rate_n"], c["da_mese"], c["aliquota_iva"]) == (3, "2027-06", 10)
     assert c["calendario"] == {"2026-06": 3_333_300, "2026-09": 7_777_800}
+
+
+def _canone_a_rate_2027() -> dict:
+    return {
+        "scenario": {
+            "canone": {
+                "netto_per_anno": {"2026": 11_111_100, "2027": 33_333_300},
+                "rate_n": 3,
+                "da_mese": "2027-06",
+                "calendario": {"2026-09": 11_111_100},
+                "aliquota_iva": 22,
+            }
+        }
+    }
+
+
+def test_calendario_scrive_l_anno_nominato_e_il_motore_lo_usa():
+    # Uno stagionale 2027 si raggiunge con una modifica dichiarata, non editando il JSON:
+    # la somma dei mesi deve tornare col netto dell'anno; gli altri anni restano.
+    from verticals.condges import cassa_motore as M
+    from verticals.condges.cassa_scenario import _scaletta_from_dict
+
+    doc = _canone_a_rate_2027()
+    cc.applica(doc, "calendario: 2027 apr=111111,lug=111111,set=111111")
+    c = doc["scenario"]["canone"]
+    assert c["calendario"] == {
+        "2026-09": 11_111_100,
+        "2027-04": 11_111_100,
+        "2027-07": 11_111_100,
+        "2027-09": 11_111_100,
+    }
+    assert (c["netto_per_anno"], c["rate_n"], c["da_mese"]) == (
+        {"2026": 11_111_100, "2027": 33_333_300},
+        3,
+        "2027-06",
+    )
+    mesi = [f"2027-{m:02d}" for m in range(1, 13)]
+    flussi = M.flussi_canone(_scaletta_from_dict(c), mesi)
+    assert {f.mese: f.importo for f in flussi} == {
+        "2027-04": M.iva(11_111_100, 22),
+        "2027-07": M.iva(11_111_100, 22),
+        "2027-09": M.iva(11_111_100, 22),
+    }
+
+
+@pytest.mark.parametrize(
+    "mod,errore",
+    [
+        ("calendario: 2027 apr=111111,lug=111111", r"222\.222,00.*333\.333,00"),
+        ("calendario: 2028 gen=1", "2028"),
+        ("calendario: 2027 xyz=1", "mese"),
+        ("calendario: 2027", "AAAA"),
+    ],
+)
+def test_calendario_rifiuta_quello_che_non_quadra(mod, errore):
+    doc = _canone_a_rate_2027()
+    with pytest.raises(cc.ErroreCassa, match=errore):
+        cc.applica(doc, mod)
+    assert doc == _canone_a_rate_2027()
+
+
+def test_calendario_senza_canone_e_un_errore():
+    with pytest.raises(cc.ErroreCassa, match="canone"):
+        cc.applica({"scenario": {"canone": None}}, "calendario: 2027 gen=1")
+
+
+def test_variante_con_calendario_finisce_in_provenienza(home):
+    payload = cc.payload_locale(home)
+    mods = [
+        "canone: 3x111111@2027-06",
+        "calendario: 2027 apr=111111,lug=111111,set=111111",
+    ]
+    dest = cc.variante("stag", cc.risolvi("seme", home), mods, payload, home)
+    doc = json.loads(dest.read_text())
+    assert doc["provenienza"]["modifiche"] == mods
+    assert doc["scenario"]["canone"]["calendario"] == {
+        "2027-04": 11_111_100,
+        "2027-07": 11_111_100,
+        "2027-09": 11_111_100,
+    }
