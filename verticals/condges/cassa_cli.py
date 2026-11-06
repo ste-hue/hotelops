@@ -5,6 +5,7 @@ Spec: ``docs/superpowers/specs/2026-11-04-cdg-cassa-motore-headless-design.md`` 
     hotelops cdg cassa simula   [SCENARIO] [--vista pf|scenario] [--mese YYYY-MM] [--json]
     hotelops cdg cassa confronta A B [--da YYYY-MM] [--a YYYY-MM] [--base-diverse] [--json]
     hotelops cdg cassa variante NOME --da SCENARIO [--canone NxRATA@YYYY-MM|pf]
+                                     [--calendario "AAAA mese=EURO,…"]
                                      [--accendi ID] [--spegni ID] [--ipotesi TESTO] [--sostituisci]
     hotelops cdg cassa scenari
     hotelops cdg cassa promuovi NOME --autorizzato-da "Stefano, <data>, <dove>"
@@ -329,6 +330,50 @@ def _minimo(r: M.Risultato, s: str) -> dict:
 # ── varianti ──
 
 _CANONE = re.compile(r"^(\d+)x(\d+(?:[.,]\d{1,2})?)@(\d{4}-\d{2})$")
+_CALENDARIO = re.compile(r"^(\d{4})\s+(\S.*)$")
+_MESI = (
+    "gen",
+    "feb",
+    "mar",
+    "apr",
+    "mag",
+    "giu",
+    "lug",
+    "ago",
+    "set",
+    "ott",
+    "nov",
+    "dic",
+)
+
+
+def _calendario_anno(anno: str, voci: str) -> dict[str, int]:
+    """«apr=111111,lug=222222» → {"2027-04": 11111100, …} (euro netti → centesimi)."""
+    out: dict[str, int] = {}
+    for voce in voci.split(","):
+        nome, sep, euro = voce.strip().partition("=")
+        nome = nome.lower()
+        mese = (
+            _MESI.index(nome) + 1
+            if nome in _MESI
+            else int(nome)
+            if nome.isdigit()
+            else 0
+        )
+        if (
+            not sep
+            or not 1 <= mese <= 12
+            or not re.fullmatch(r"\d+(?:[.,]\d{1,2})?", euro)
+        ):
+            raise ErroreCassa(
+                f"calendario {voce.strip()!r}: atteso mese=EURO (mese gen…dic o 1…12)"
+            )
+        out[f"{anno}-{mese:02d}"] = M.to_cent(euro.replace(",", "."))
+    return out
+
+
+def _euro(cent: int) -> str:
+    return f"{cent / 100:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
 
 
 def applica(doc: dict, modifica: str) -> None:
@@ -350,13 +395,49 @@ def applica(doc: dict, modifica: str) -> None:
         n, rata, da = int(m[1]), M.to_cent(m[2].replace(",", ".")), m[3]
         if n < 1:
             raise ErroreCassa("canone: almeno una rata")
+        # Riscrive solo l'anno che nomina: netti e calendario degli altri anni restano
+        # (nel motore il calendario di un anno vince sulle rate, quindi quello
+        # dell'anno nominato va tolto, altrimenti la modifica non conta).
+        prima = sc.get("canone") or {}
+        cal = {
+            m: v for m, v in (prima.get("calendario") or {}).items() if m[:4] != da[:4]
+        }
         sc["canone"] = {
-            "netto_per_anno": {da[:4]: n * rata},
+            "netto_per_anno": {**prima.get("netto_per_anno", {}), da[:4]: n * rata},
             "rate_n": n,
             "da_mese": da,
-            "calendario": None,
-            "aliquota_iva": (sc.get("canone") or {}).get("aliquota_iva", 22),
+            "calendario": cal or None,
+            "aliquota_iva": prima.get("aliquota_iva", 22),
         }
+    elif tipo == "calendario":
+        # Lo stagionale di un anno: scrive il calendario di quell'anno (nel motore vince
+        # sulle rate) e lascia gli altri anni; i mesi devono sommare al netto dell'anno.
+        m = _CALENDARIO.match(arg)
+        if not m:
+            raise ErroreCassa(
+                f"calendario {arg!r}: atteso «AAAA mese=EURO,mese=EURO,…»"
+            )
+        anno, cal = m[1], _calendario_anno(m[1], m[2])
+        canone = sc.get("canone")
+        if not canone:
+            raise ErroreCassa(
+                "calendario: prima serve un canone (canone: NxRATA@AAAA-MM)"
+            )
+        netto = canone["netto_per_anno"].get(anno)
+        if netto is None:
+            anni = ", ".join(sorted(canone["netto_per_anno"]))
+            raise ErroreCassa(
+                f"calendario {anno}: il canone non ha un netto per il {anno} (ha: {anni})"
+            )
+        if sum(cal.values()) != netto:
+            raise ErroreCassa(
+                f"calendario {anno}: i mesi sommano {_euro(sum(cal.values()))} € "
+                f"ma il netto del {anno} è {_euro(netto)} €"
+            )
+        altri = {
+            k: v for k, v in (canone.get("calendario") or {}).items() if k[:4] != anno
+        }
+        canone["calendario"] = {**altri, **cal}
     elif tipo in ("accendi", "spegni"):
         progetti = [p for p in sc.get("progetti") or [] if p["id"] == arg]
         if not progetti:
@@ -377,8 +458,10 @@ def modifiche_da_argomenti(
     accendi: list[str] | None = None,
     spegni: list[str] | None = None,
     ipotesi: list[str] | None = None,
+    calendario: list[str] | None = None,
 ) -> list[str]:
     out = [f"canone: {canone}"] if canone else []
+    out += [f"calendario: {x}" for x in calendario or []]
     out += [f"accendi {x}" for x in accendi or []]
     out += [f"spegni {x}" for x in spegni or []]
     out += [f"ipotesi: {x}" for x in ipotesi or []]
