@@ -550,12 +550,15 @@ def test_replica_cassa_panorama():
 # ── fix round 1: niente finestre modali, input euro validato, calendario al centesimo ──
 
 
-def esegui_node_formato(tmp_path: Path, html: str, espressione: str) -> str:
-    """Esegue `espressione` con F = FORMATO (script id="formato"); stampa il risultato."""
+def esegui_node_formato(tmp_path: Path, html: str, espressione: str, dati: bool = False) -> str:
+    """Esegue `espressione` con F = FORMATO (script id="formato"); stampa il risultato.
+    Con `dati=True` scrive anche dati.json (il payload) accanto allo script."""
     if NODE is None:
         pytest.skip("node non installato")
     formato = re.search(r'<script id="formato">(.*?)</script>', html, re.S).group(1)
     (tmp_path / "formato.js").write_text(formato, encoding="utf-8")
+    if dati:
+        (tmp_path / "dati.json").write_text(_estrai(html)[0], encoding="utf-8")
     (tmp_path / "run.js").write_text(
         f"const F=require('./formato.js');console.log({espressione});", encoding="utf-8"
     )
@@ -1467,3 +1470,79 @@ def test_template_patti_con_anticipo_prima_della_pagina(tmp_path):
         tmp_path, html, f"JSON.stringify(F.pagamentiDaContratto({AMCN_JS}, ['2026-10'].concat({ORIZ_JS}.slice(1))).map((g) => g.mesi))"
     )
     assert json.loads(out)[0] == {"2026-10": 7230000}
+
+
+def test_push_rifiuta_fonti_senza_data_o_vecchie_e_dice_la_data():
+    # Il presidio sta sul pubblicare: fonti senza data o lette più di 7 giorni fa (default
+    # dichiarato) non si spingono; il messaggio dice la data trovata e il limite.
+    from verticals.condges.build_cassa_artifact import controlla_eta_fonti
+
+    adesso = datetime(2026, 11, 6, 22, 0)  # noqa: DTZ001
+    with pytest.raises(ValueError, match="acquisito_il assente"):
+        controlla_eta_fonti(None, adesso)
+    with pytest.raises(ValueError, match=r"29/10/2026 12:00 \(8 giorni fa\), limite 7 giorni"):
+        controlla_eta_fonti("2026-10-29T12:00", adesso)
+    controlla_eta_fonti("2026-10-31T12:00", adesso)  # 6 giorni: passa
+    controlla_eta_fonti("2026-10-29T12:00", adesso, max_giorni=10)  # limite cambiato: passa
+    assert snapshot_sintetico()["acquisito_il"] == "2026-10-29T12:00"
+    # Una data con fuso (come la scrive un altro orologio) non fa esplodere la sottrazione.
+    controlla_eta_fonti("2026-10-31T12:00:00+00:00", adesso)  # 6 giorni: passa
+    with pytest.raises(ValueError, match=r"\(8 giorni fa\)"):
+        controlla_eta_fonti("2026-10-29T12:00:00+00:00", adesso)
+
+
+def test_prima_riga_della_pagina_tre_eta_in_ordine_e_niente_snapshot():
+    # Prima riga: da quale piano (file per società) · saldi al <data> (stato) · pagina del <ora>.
+    # Nessuna quinta età che fonda le altre; «snapshot» non è una parola del lettore.
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    riga = next(l for l in html.splitlines() if 'el("sub").textContent' in l)
+    assert (
+        riga.index("da ${piani}")
+        < riga.index("saldi al ${quando}")
+        < riga.index("pagina del ${oraDi(D.generato_il)}")
+    )
+    assert "${statoSaldi}" in riga
+    # Accanto allo stato, i giorni fra l'ancora dei saldi e «pagina del»: l'ancora è vecchia per
+    # natura e nessun presidio la rifiuta; il lettore deve vederlo.
+    assert "${giorni ? `, ${giorni}` : \"\"}" in riga
+    assert "const giorniDa = (iso) =>" in html and "/ 86400000" in html
+    assert "FORMATO.giorniTesto(g)" in html and "piano ${s}${m ? ` di ${m}` : \"\"} (${f})" in html
+    # Il mese del piano viene dall'ancora (il dato), non dal nome del file; la quota attestata
+    # per società accompagna «dichiarati».
+    assert "FORMATO.meseLungo(D.ancore[s].data) : FORMATO.meseDelPiano(f)" in html
+    # Due righe: nella prima nessuna parentesi annidata (la quota non ci sta); la quota per
+    # società va nella seconda, «… del saldo quadra con i movimenti», nascosta se i saldi
+    # sono attestati o non registrati.
+    assert "${statoSaldi}${giorni" in riga and "quota" not in riga
+    riga2 = next(l for l in html.splitlines() if 'el("sub2").textContent' in l)
+    assert "del saldo quadra con i movimenti" in riga2
+    assert '<p class="sub" id="sub2" hidden></p>' in html
+    assert "const stati = ancs.map(statoAncora)" in html
+    assert "snapshot" not in html.lower()
+
+
+def test_giorni_in_parole_mese_dall_ancora_e_quota_attestata(tmp_path):
+    # «1 giorni» il primo del mese e «−55 giorni» con un'ancora nel futuro non si stampano;
+    # «piano ORTI di settembre»: il mese viene dalla data dell'ancora, non dal nome del file;
+    # la quota «quadra con i movimenti» ha UN peso, l'importo (ORTI: 300 attestati su 500 = 60%);
+    # il conteggio dei conti è il dettaglio (1 conto su 2); a importi tutti zero la quota è null.
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        "((D) => JSON.stringify([0, 1, 2, 37, -55, NaN].map(F.giorniTesto).concat("
+        "['2026-09-30', '2027-01-31', 'boh', null].map(F.meseLungo),"
+        "['ORTI_PF_2026-09.xlsx', 'piano.xlsx'].map(F.meseDelPiano),"
+        "[D.ancore.ORTI.conti, D.ancore.INTUR.conti, {}, {A: {saldo: 0, attestato: true}, B: {saldo: 0, attestato: false}}]"
+        ".map(F.quotaAttestata))))(require('./dati.json'))",
+        dati=True,
+    )
+    assert json.loads(out) == [
+        "oggi", "1 giorno", "2 giorni", "37 giorni", "", "",
+        "settembre", "gennaio", "", "",
+        "settembre", "",
+        {"quota": 60, "ok": 1, "n": 2},
+        {"quota": 100, "ok": 1, "n": 1},
+        None,
+        {"quota": None, "ok": 1, "n": 2},
+    ]

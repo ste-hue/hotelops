@@ -593,8 +593,36 @@ def payload_da_stato(snapshot: dict, home: Path | None = None) -> dict:
     )
 
 
+ETA_MASSIMA_FONTI_GIORNI = 7  # default dichiarato (coordinatore, 06/11/2026): Stefano lo cambia
+
+
+def controlla_eta_fonti(
+    acquisito_il: str | None, adesso: datetime, max_giorni: int = ETA_MASSIMA_FONTI_GIORNI
+) -> None:
+    """Presidio del pubblicare: una pagina con fonti senza data, o lette più di
+    `max_giorni` fa, non si spinge. Il messaggio dice la data trovata."""
+    if not acquisito_il:
+        raise ValueError(
+            "--push rifiutato: le fonti non hanno una data di lettura (acquisito_il assente); "
+            "rilancia con --aggiorna"
+        )
+    letto = datetime.fromisoformat(str(acquisito_il))
+    # Con o senza fuso, le due date si confrontano sullo stesso piano (ora locale, senza fuso).
+    letto, adesso = (d.astimezone().replace(tzinfo=None) if d.tzinfo else d for d in (letto, adesso))
+    eta = adesso - letto
+    if eta.days > max_giorni:
+        raise ValueError(
+            f"--push rifiutato: fonti lette da BigQuery il {letto:%d/%m/%Y %H:%M} "
+            f"({eta.days} giorni fa), limite {max_giorni} giorni; rilancia con --aggiorna"
+        )
+
+
 def run(
-    out: Path = DEFAULT_OUT, aggiorna: bool = False, push: bool = False, fino_a: str | None = None
+    out: Path = DEFAULT_OUT,
+    aggiorna: bool = False,
+    push: bool = False,
+    fino_a: str | None = None,
+    max_eta_fonti_giorni: int = ETA_MASSIMA_FONTI_GIORNI,
 ) -> Path:
     push_env = None
     if push:
@@ -609,6 +637,9 @@ def run(
     else:
         snapshot = cf.carica_snapshot()
     payload = payload_da_stato(snapshot)
+    if push:
+        adesso = datetime.now()  # noqa: DTZ005 — stessa ora locale delle altre età della pagina
+        controlla_eta_fonti(payload.get("acquisito_il"), adesso, max_eta_fonti_giorni)
     banda_pf = (cf.SNAPSHOT_HOME / BANDA_PATH.name).exists()
     print(f"  banda d'errore: {'dal file locale' if banda_pf else 'assente (nessun banda_pf.json)'}")
     for c in payload["pf_correzioni"]:
