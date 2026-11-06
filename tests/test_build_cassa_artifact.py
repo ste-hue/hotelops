@@ -1503,5 +1503,19 @@ def test_prima_riga_della_pagina_tre_eta_in_ordine_e_niente_snapshot():
     # natura e nessun presidio la rifiuta; il lettore deve vederlo.
     assert "${giorni ? `, ${giorni}` : \"\"}" in riga
     assert "const giorniDa = (iso) =>" in html and "/ 86400000" in html
+    assert "FORMATO.giorniTesto(g)" in html and "piano ${s}${m ? ` di ${m}` : \"\"} (${f})" in html
     assert "const stati = ancs.map(statoAncora)" in html
     assert "snapshot" not in html.lower()
+
+
+def test_giorni_in_parole_e_piano_di_mese(tmp_path):
+    # «1 giorni» il primo del mese e «−55 giorni» con un'ancora nel futuro non si stampano;
+    # «piano ORTI di settembre»: il mese nel nome del file è il mese dei saldi.
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    out = esegui_node_formato(
+        tmp_path,
+        html,
+        "JSON.stringify([0, 1, 2, 37, -55, NaN].map(F.giorniTesto).concat("
+        "['ORTI_PF_2026-09.xlsx', 'hotelops_raw_x/INTUR_PF_2027-01.xlsx', 'piano.xlsx', null].map(F.meseDelPiano)))",
+    )
+    assert json.loads(out) == ["oggi", "1 giorno", "2 giorni", "37 giorni", "", "", "settembre", "gennaio", "", ""]

@@ -655,6 +655,11 @@ const FORMATO = (() => {
   const annuoDaLordi = (lordiScenario, lordiBase, lordoRif) => (lordiBase ? mulDiv(lordiScenario, lordoRif, lordiBase) : lordiScenario);
   const MESI_IT = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
   const meseIt = (m) => `${MESI_IT[parseInt(m.slice(5), 10) - 1]} ${m.slice(2, 4)}`;
+  const MESI_LUNGHI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
+  // Giorni in parole per la prima riga: mai «1 giorni», mai «−55 giorni» (negativo = vuoto).
+  const giorniTesto = (g) => (g === 0 ? "oggi" : g === 1 ? "1 giorno" : g > 1 ? `${g} giorni` : "");
+  // «piano ORTI di settembre»: il mese nel nome del file è il mese dei saldi (convenzione del 04/11/2026).
+  const meseDelPiano = (nomeFile) => { const m = /_PF_(\d{4})-(\d{2})/.exec(String(nomeFile || "")); return m ? MESI_LUNGHI[parseInt(m[2], 10) - 1] || "" : ""; };
   const ordinati = (mesi) => Object.keys(mesi).sort();
 
   // Rateizza `totale` in n rate, una ogni `passo` mesi a partire da `da`, dentro l'orizzonte `orizzonte`.
@@ -856,7 +861,7 @@ const FORMATO = (() => {
     }
     return { nome: doc.nome || sc.nome || "importato", base: doc.base || {}, scenario: sc, salvato_il: doc.salvato_il || null };
   }
-  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, spalma, sposta, spostaProgetto, spostaFinanziamento, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata };
+  return { fmt, parseEuro, calendarioTesto, calendarioParse, nettoDaLordo, scalaRate, annuoDaLordi, meseIt, giorniTesto, meseDelPiano, spalma, sposta, spostaProgetto, spostaFinanziamento, formaRate, leggiDocumento, pagamentiDaContratto, contrattoDaPagamenti, spostaRata };
 })();
 if (typeof module !== "undefined") module.exports = FORMATO;
 </script>
@@ -1233,12 +1238,13 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     // Prima riga, tre età nell'ordine: da quale piano (versione = file del PF per società),
     // saldi al <data> con lo stato (dichiarati / attestati), pagina del <ora>. Le ore e i
     // file interi stanno in «Fonti e versioni»; nessuna età sola che fonda le altre.
-    const piani = SOC.map((s) => `PF ${s} ${D.base[s] ? nomeFile(D.base[s].file_sorgente) : "—"}`).join(" · ");
+    // «piano ORTI di settembre (ORTI_PF_2026-09.xlsx)»: la parola del lettore, il file resta perché è la versione.
+    const piani = SOC.map((s) => { if (!D.base[s]) return `piano ${s} —`; const f = nomeFile(D.base[s].file_sorgente), m = FORMATO.meseDelPiano(f); return `piano ${s}${m ? ` di ${m}` : ""} (${f})`; }).join(" · ");
     const ancs = SOC.map((s) => D.ancore[s]).filter(Boolean);
     const date = [...new Set(ancs.map((a) => dataIt(a.data)))];
     // I giorni fra l'ancora e «pagina del»: l'ancora è vecchia per natura (fine mese chiuso) e
     // nessun presidio la rifiuta; il numero di giorni non lascia che il lettore non se ne accorga.
-    const giorniDa = (iso) => { const g = Math.floor((new Date(String(D.generato_il).slice(0, 10)) - new Date(String(iso).slice(0, 10))) / 86400000); return Number.isFinite(g) ? `${g} giorni` : ""; };
+    const giorniDa = (iso) => { const g = Math.floor((new Date(String(D.generato_il).slice(0, 10)) - new Date(String(iso).slice(0, 10))) / 86400000); return Number.isFinite(g) ? FORMATO.giorniTesto(g) : ""; };
     const quando = date.length <= 1 ? (date[0] || "—") : SOC.map((s) => `${s} ${D.ancore[s] ? dataIt(D.ancore[s].data) : "—"}`).join(", ");
     const giorni = date.length <= 1 ? (ancs[0] ? giorniDa(ancs[0].data) : "") : SOC.map((s) => (D.ancore[s] ? `${s} ${giorniDa(D.ancore[s].data)}` : "")).filter(Boolean).join(", ");
     const stati = ancs.map(statoAncora);
