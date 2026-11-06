@@ -624,7 +624,17 @@ def cmd_cdg(args):
     if args.cdg_cmd == "cassa":
         from verticals.condges.build_cassa_artifact import DEFAULT_OUT, run
 
-        run(Path(args.out) if args.out else DEFAULT_OUT, args.aggiorna, args.push, args.fino_a)
+        run(
+            Path(args.out) if args.out else DEFAULT_OUT,
+            args.aggiorna,
+            args.push,
+            args.fino_a,
+            **(
+                {"max_eta_fonti_giorni": args.eta_massima_fonti}
+                if args.eta_massima_fonti is not None
+                else {}
+            ),
+        )
         return
 
     if args.cdg_cmd == "tabelle":
@@ -1526,6 +1536,13 @@ def main():
         default=None,
         metavar="YYYY-MM",
         help="Ultimo mese della pagina, con --aggiorna (default: dicembre dell'anno dopo i saldi)",
+    )
+    p_cc.add_argument(
+        "--eta-massima-fonti",
+        type=int,
+        default=None,
+        metavar="GIORNI",
+        help="Con --push: rifiuta se le fonti sono state lette più di GIORNI fa (default 7, dichiarato)",
     )
     cc_sub = p_cc.add_subparsers(dest="cassa_cmd", required=False)
     p_sim = cc_sub.add_parser("simula", help="Saldi e minimi di uno scenario, senza pagina")
