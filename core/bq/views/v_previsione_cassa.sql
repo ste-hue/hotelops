@@ -19,7 +19,7 @@
 --   uscite_scad          → uscite certe da scadenzario (informativa)
 --   netto_pf             → entrate - uscite_pf
 --   saldo_proiettato     → saldo rolling (anchor + cumsum netto_pf)
---   stato_liquidita      → OK / ATTENZIONE (<50K) / PERICOLO (<0)
+--   stato_liquidita      → OK / AVVISO (<50K: avviso, non soglia; il confine è zero) / PERICOLO (<0)
 
 CREATE OR REPLACE VIEW `hotelops-suite.hotelops.v_previsione_cassa` AS
 
@@ -205,7 +205,7 @@ SELECT
   saldo_proiettato,
   CASE
     WHEN saldo_proiettato < 0      THEN 'PERICOLO'
-    WHEN saldo_proiettato < 50000  THEN 'ATTENZIONE'
+    WHEN saldo_proiettato < 50000  THEN 'AVVISO'  -- avviso (deciso 2026-11-06), non soglia: il confine è zero
     ELSE 'OK'
   END AS stato_liquidita
 FROM proiezione

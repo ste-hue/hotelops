@@ -93,7 +93,7 @@ SELECT
   COALESCE(c.stato_liquidita,
     CASE
       WHEN c.netto_cumulato < 0     THEN 'PERICOLO'
-      WHEN c.netto_cumulato < 50000 THEN 'ATTENZIONE'
+      WHEN c.netto_cumulato < 50000 THEN 'AVVISO'  -- avviso (deciso 2026-11-06), non soglia; sul netto cumulato, non sul saldo
       ELSE 'OK'
     END
   )                                                AS stato_liquidita
