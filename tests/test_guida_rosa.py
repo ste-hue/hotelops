@@ -10,7 +10,7 @@ def test_la_sezione_di_rosa_si_estrae_dalla_procedura_vera():
     assert s.startswith("## A. Rosa") and "## B." not in s and "## C." not in s
     # i gate che Rosa deve vedere, con le sue parole
     for frase in (
-        "sette i conti",
+        "tutti i conti\ndell'elenco",
         "fail (blocca)",
         "salva da Excel",
         "ERR = 0",
