@@ -1546,3 +1546,13 @@ def test_giorni_in_parole_mese_dall_ancora_e_quota_attestata(tmp_path):
         None,
         {"quota": None, "ok": 1, "n": 2},
     ]
+
+
+def test_la_pagina_dice_avviso_mai_soglia_e_il_js_ha_lo_stesso_default(tmp_path):
+    # Stefano 06/11: avviso a 50.000 sì; «soglia» resta solo come confine = zero («sotto zero»).
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert "Avviso € <input" in html and 'id="avviso"' in html
+    assert "Soglia €" not in html and "sotto la soglia" not in html and "sotto soglia" not in html
+    assert "sotto l'avviso di" in html and "mesi sotto l'avviso" in html and "sotto zero" in html
+    assert esegui_node_fn(tmp_path, html, "M.AVVISO_CENT") == "5000000"
+    assert esegui_node_fn(tmp_path, html, "M.normalizza({nome:'x',progetti:[],finanziamenti:[],manuali:[]}).soglia") == "5000000"

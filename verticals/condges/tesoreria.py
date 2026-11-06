@@ -21,7 +21,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from verticals.condges.bq_data import load_bva, load_consuntivo, load_voci
-from verticals.condges.cashflow import project_cashflow
+from verticals.condges.cashflow import AVVISO_EURO, project_cashflow
 from verticals.condges.export_excel import generate_tesoreria_excel
 from verticals.condges.parse_pf import PFData, ScadenzarioData, parse_pf, parse_scadenzario
 from verticals.condges.scadenze_parse import (
@@ -72,7 +72,7 @@ def _fmt_eur(value: float) -> str:
 def _semaphore_emoji(saldo: float) -> str:
     if saldo < 0:
         return "🔴"
-    if saldo <= 50_000:
+    if saldo <= AVVISO_EURO:  # avviso, non soglia
         return "🟡"
     return "🟢"
 

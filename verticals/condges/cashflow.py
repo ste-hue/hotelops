@@ -5,6 +5,10 @@ Pure functions — no I/O, no BQ, no side effects.
 
 from dataclasses import dataclass
 
+# Avviso (giallo «ci stiamo avvicinando»), non soglia: il confine è zero. Deciso da Stefano
+# il 06/11/2026. Le altre superfici (chiusura mensile, tesoreria, app CdG) leggono da qui.
+AVVISO_EURO = 50_000
+
 
 @dataclass
 class CashflowRow:
@@ -15,20 +19,20 @@ class CashflowRow:
     uscite_fornitori: float
     netto: float
     saldo_fine: float
-    stato: str  # OK, ATTENZIONE, PERICOLO
+    stato: str  # OK, AVVISO, PERICOLO
 
 
 def _semaphore(saldo_fine: float) -> str:
     """Return traffic-light status based on saldo_fine.
 
-    PERICOLO  — saldo < 0
-    ATTENZIONE — 0 <= saldo <= 50_000
-    OK        — saldo > 50_000
+    PERICOLO — saldo < 0 (sotto zero: il confine)
+    AVVISO   — 0 <= saldo <= AVVISO_EURO (sotto l'avviso: ci stiamo avvicinando)
+    OK       — saldo > AVVISO_EURO
     """
     if saldo_fine < 0:
         return "PERICOLO"
-    if saldo_fine <= 50_000:
-        return "ATTENZIONE"
+    if saldo_fine <= AVVISO_EURO:
+        return "AVVISO"
     return "OK"
 
 

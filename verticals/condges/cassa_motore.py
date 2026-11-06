@@ -159,6 +159,12 @@ class ScalettaCanone:
     aliquota_iva: int = 22
 
 
+# Avviso (giallo «ci stiamo avvicinando»), NON soglia: il confine del fabbisogno è zero
+# (firma 28/10 «nessuna riserva minima»). Deciso da Stefano il 06/11/2026: 50.000 €.
+# La chiave `soglia` nei file e in `sotto_soglia` resta per compatibilità: è l'avviso.
+AVVISO_CENT = 5_000_000
+
+
 @dataclass(frozen=True)
 class Scenario:
     nome: str
@@ -166,7 +172,9 @@ class Scenario:
     finanziamenti: list[Finanziamento]
     canone: ScalettaCanone | None = None
     manuali: list[Riga] = field(default_factory=list)
-    soglia: int = 0
+    soglia: int = (
+        AVVISO_CENT  # l'avviso in centesimi; 0 = nessun avviso (resta «sotto zero»)
+    )
     # Il fornitore come oggetto: {id usato nei pagamenti: {nome, codice_esolver, societa, drive_url}}.
     # Memoria dell'interfaccia; il calcolo non lo legge.
     fornitori: dict = field(default_factory=dict)

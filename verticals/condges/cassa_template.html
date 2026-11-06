@@ -361,6 +361,9 @@ const MOTORE = (() => {
   const SOSTITUZIONE = "sostituzione";   // origine speciale delle manuali: al posto della voce PF di quel mese
   const ORIGINI = ["pf", "canone", "finanziamento", "progetto", "manuale", "fatto"];
   const SOCIETA = ["ORTI", "INTUR"];
+  // Avviso (giallo), non soglia: il confine è zero. 50.000 € deciso da Stefano il 06/11/2026.
+  // La chiave `soglia` nei documenti resta per compatibilità: è l'avviso in centesimi.
+  const AVVISO_CENT = 5000000;
 
   function iva(netto, aliquota) {
     return Math.floor((netto * (100 + aliquota) + 50) / 100);
@@ -506,7 +509,7 @@ const MOTORE = (() => {
     sc.progetti = sc.progetti || [];
     sc.finanziamenti = sc.finanziamenti || [];
     sc.canone = sc.canone || null;
-    sc.soglia = sc.soglia || 0;
+    sc.soglia = sc.soglia ?? AVVISO_CENT;
     sc.manuali = (sc.manuali || []).map((r) => ({
       societa: r.societa, voce_id: r.voce_id, mese: r.mese,
       importo: r.importo_cent !== undefined ? r.importo_cent : r.importo,
@@ -575,7 +578,7 @@ const MOTORE = (() => {
     return { righe, minimi, consolidato, non_riconciliati: nonRic };
   }
 
-  return { ORIGINI, SOCIETA, SOSTITUZIONE, calcola, finanziamentiAttivi, distribuisci, iva, flussiCanone, riconcilia, normalizza, mesiCitati, meseDopo, allungaOrizzonte };
+  return { ORIGINI, SOCIETA, SOSTITUZIONE, AVVISO_CENT, calcola, finanziamentiAttivi, distribuisci, iva, flussiCanone, riconcilia, normalizza, mesiCitati, meseDopo, allungaOrizzonte };
 })();
 if (typeof module !== "undefined") module.exports = MOTORE;
 </script>
@@ -1144,7 +1147,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     s.progetti = (s.progetti || []).map((p) => ({ ...p, contratti: p.contratti || [] }));
     s.finanziamenti = (s.finanziamenti || []).map((f) => ({ ...f, erogazioni: f.erogazioni || {}, rate: f.rate || {} }));
     s.canone = s.canone || null;
-    s.soglia = s.soglia || 0;
+    s.soglia = s.soglia ?? MOTORE.AVVISO_CENT;
     s.fornitori = s.fornitori || {};
     return s;
   }
@@ -1223,7 +1226,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
   }
   window.addEventListener("beforeunload", (e) => { if (modificato() && !memoriaOk) { e.preventDefault(); e.returnValue = ""; } });
 
-  const vuoto = () => ({ nome: "Nessuna leva", scenario: { nome: "Nessuna leva", soglia: 0, canone: null, progetti: [], finanziamenti: [], manuali: [] } });
+  const vuoto = () => ({ nome: "Nessuna leva", scenario: { nome: "Nessuna leva", soglia: MOTORE.AVVISO_CENT, canone: null, progetti: [], finanziamenti: [], manuali: [] } });
 
   // Lo stato aperto/chiuso delle tendine si legge dal DOM prima di ridisegnare:
   // l'evento toggle arriva in ritardo e un re-render in mezzo le richiuderebbe.
@@ -1280,7 +1283,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       ...D.scenari.map((s, i) => ({ ...s, _k: String(i), _e: s._etichetta || `${s.nome} · salvato ${oraDi(s.salvato_il)}` }))];
     el("scenario").innerHTML = `<div class="strumenti" style="margin-top:0"><label class="piccolo">Scenario <select id="sel-scenari"></select></label>
       <input type="text" id="nome-scenario" class="nome" style="width:180px" placeholder="nome scenario">
-      <label class="piccolo">Soglia € <input type="text" class="eur" id="soglia"></label>
+      <label class="piccolo" title="avviso, non soglia: il giallo «ci stiamo avvicinando»; il confine resta zero">Avviso € <input type="text" class="eur" id="avviso"></label>
       <button id="esporta" class="primario" title="il file .json dello scenario: si riapre con «Apri scenario»">Salva scenario (.json)</button>
       <button id="esporta-excel" title="un file con nove fogli dello scenario in vista: minimi, saldi mese per mese, calendario, canone, progetti, finanziamenti, voci corrette, PF, fonti">Excel (.xlsx)</button>
       <button id="importa">Apri scenario (.json)</button><input type="file" id="importa-file" accept=".json,application/json" hidden>
@@ -1315,8 +1318,8 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     });
     el("nome-scenario").value = stato.nome;
     el("nome-scenario").oninput = (e) => { stato.nome = e.target.value; stato.scenario.nome = e.target.value; };
-    el("soglia").value = fmt(stato.scenario.soglia || 0, false);
-    el("soglia").onchange = (e) => { const v = euroDa(e.target); if (v === null) return; stato.scenario.soglia = v; ricalcola(); };
+    el("avviso").value = fmt(stato.scenario.soglia || 0, false);
+    el("avviso").onchange = (e) => { const v = euroDa(e.target); if (v === null) return; stato.scenario.soglia = v; ricalcola(); };
     el("esporta").onclick = esporta;
     el("esporta-excel").onclick = esportaExcel;
     el("importa").onclick = () => el("importa-file").click();
@@ -1359,7 +1362,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const fogli = [];
     const nomeSc = stato.nome || "scenario";
     // Minimi
-    fogli.push({ nome: "Minimi", colonne: ["scenario", "società", "mese del minimo", "saldo minimo €", "mesi sotto soglia", "soglia €"], euro: [3, 5],
+    fogli.push({ nome: "Minimi", colonne: ["scenario", "società", "mese del minimo", "saldo minimo €", "mesi sotto l'avviso", "avviso €"], euro: [3, 5],
       righe: SOC.map((s) => [nomeSc, s, ris.minimi[s].mese, E(ris.minimi[s].saldo), ris.minimi[s].sotto_soglia.join(" "), E(stato.scenario.soglia || 0)])
         .concat(SOC.map((s) => ["solo PF", s, D.baseline.minimi[s].mese, E(D.baseline.minimi[s].saldo), "", 0])) });
     // Saldi mese per mese
@@ -1693,13 +1696,13 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     if (VUOTI[soc].size) { const v = [...VUOTI[soc]].sort(); out.push({ stato: "non_registrato", testo: `non pianificato ${intervalloMesi(v)}`, titolo: `il file del PF di ${soc} ha la colonna ma nessuna riga in ${v.length === 1 ? "questo mese" : "questi mesi"}: non è zero, è vuoto; per il minimo conta come senza PF` }); }
     return out;
   }
-  // Rispetto allo scenario aperto: il minimo e i mesi sotto soglia di prima, se qualcosa è cambiato.
+  // Rispetto allo scenario aperto: il minimo e i mesi sotto l'avviso di prima, se qualcosa è cambiato.
   function confrontoOrigine(soc, m) {
     const o = modificato() ? risOrigine() : null;
     if (!o) return "";
     const mo = o.minimi[soc];
     const d = m.saldo - mo.saldo;
-    const sotto = m.sotto_soglia.length !== mo.sotto_soglia.length ? ` · mesi sotto ${stato.scenario.soglia ? "soglia" : "zero"}: ${mo.sotto_soglia.length} → ${m.sotto_soglia.length}` : "";
+    const sotto = m.sotto_soglia.length !== mo.sotto_soglia.length ? ` · mesi sotto ${stato.scenario.soglia ? "l'avviso" : "zero"}: ${mo.sotto_soglia.length} → ${m.sotto_soglia.length}` : "";
     const testo = d === 0 && mo.mese === m.mese ? "come lo scenario aperto" : `${segno(d, false)} rispetto allo scenario aperto (era ${fmt(mo.saldo, false)} a ${meseIt(mo.mese)})`;
     return `<div class="delta num" data-confronto-origine>${testo}${sotto}</div>`;
   }
@@ -1710,7 +1713,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       const m = ris.minimi[soc], b = D.baseline.minimi[soc], a = D.ancore[soc];
       const delta = m.saldo - b.saldo;
       const usc = Object.entries(vociMese(soc, m.mese).U).sort((x, y) => y[1] - x[1]).slice(0, 3);
-      const sotto = m.sotto_soglia.length ? `<div class="piccolo avviso">${stato.scenario.soglia ? `sotto la soglia di ${fmt(stato.scenario.soglia, false)}` : "sotto zero"} ${intervalloMesi(m.sotto_soglia)}</div>` : "";
+      const sotto = m.sotto_soglia.length ? `<div class="piccolo avviso">${stato.scenario.soglia ? `sotto l'avviso di ${fmt(stato.scenario.soglia, false)} €` : "sotto zero"} ${intervalloMesi(m.sotto_soglia)}</div>` : "";
       const eff = IPO.size ? effettoOltrePF(soc) : 0;
       const oltre = IPO.size ? `<div class="oltre">oltre ${meseIt(ULTIMO_PF)}, senza PF: ${eff ? `leve ${segno(eff, false)} entro ${meseIt(ULTIMO)}` : "nessuna leva"}</div>` : "";
       // La card dà la risposta: società, mese critico, il numero, lo scostamento dal solo PF, e il

@@ -526,3 +526,17 @@ def test_manuale_normale_si_aggiunge_al_pf_come_prima():
     b_dic = next(x for x in base.righe if x.societa == "ORTI" and x.mese == "2026-12")
     assert dic.uscite["pf"] == eur(20_000) and dic.uscite["manuale"] == eur(35_000)
     assert dic.fin - b_dic.fin == -eur(35_000)
+
+
+def test_l_avviso_vale_50000_per_default_e_non_e_il_confine():
+    # Deciso da Stefano il 06/11/2026: avviso a 50.000 €; il confine del fabbisogno resta zero.
+    # La chiave `soglia` resta nei documenti per compatibilità: è l'avviso in centesimi.
+    from verticals.condges.cassa_motore import AVVISO_CENT, Scenario
+
+    assert AVVISO_CENT == 5_000_000
+    assert Scenario(nome="x", progetti=[], finanziamenti=[]).soglia == AVVISO_CENT
+    con_avviso = calcola(inp_base(soglia=AVVISO_CENT)).minimi["ORTI"]
+    senza = calcola(inp_base(soglia=0)).minimi["ORTI"]
+    # i mesi «sotto l'avviso» contengono quelli «sotto zero», mai meno
+    assert set(senza.sotto_soglia) <= set(con_avviso.sotto_soglia)
+    assert con_avviso.saldo == senza.saldo and con_avviso.mese == senza.mese
