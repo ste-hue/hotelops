@@ -607,6 +607,8 @@ def controlla_eta_fonti(
             "rilancia con --aggiorna"
         )
     letto = datetime.fromisoformat(str(acquisito_il))
+    # Con o senza fuso, le due date si confrontano sullo stesso piano (ora locale, senza fuso).
+    letto, adesso = (d.astimezone().replace(tzinfo=None) if d.tzinfo else d for d in (letto, adesso))
     eta = adesso - letto
     if eta.days > max_giorni:
         raise ValueError(

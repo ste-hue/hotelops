@@ -1482,6 +1482,10 @@ def test_push_rifiuta_fonti_senza_data_o_vecchie_e_dice_la_data():
     controlla_eta_fonti("2026-10-31T12:00", adesso)  # 6 giorni: passa
     controlla_eta_fonti("2026-10-29T12:00", adesso, max_giorni=10)  # limite cambiato: passa
     assert snapshot_sintetico()["acquisito_il"] == "2026-10-29T12:00"
+    # Una data con fuso (come la scrive un altro orologio) non fa esplodere la sottrazione.
+    controlla_eta_fonti("2026-10-31T12:00:00+00:00", adesso)  # 6 giorni: passa
+    with pytest.raises(ValueError, match=r"\(8 giorni fa\)"):
+        controlla_eta_fonti("2026-10-29T12:00:00+00:00", adesso)
 
 
 def test_prima_riga_della_pagina_tre_eta_in_ordine_e_niente_snapshot():
@@ -1495,5 +1499,9 @@ def test_prima_riga_della_pagina_tre_eta_in_ordine_e_niente_snapshot():
         < riga.index("pagina del ${oraDi(D.generato_il)}")
     )
     assert "${statoSaldi}" in riga
+    # Accanto allo stato, i giorni fra l'ancora dei saldi e «pagina del»: l'ancora è vecchia per
+    # natura e nessun presidio la rifiuta; il lettore deve vederlo.
+    assert "${giorni ? `, ${giorni}` : \"\"}" in riga
+    assert "const giorniDa = (iso) =>" in html and "/ 86400000" in html
     assert "const stati = ancs.map(statoAncora)" in html
     assert "snapshot" not in html.lower()

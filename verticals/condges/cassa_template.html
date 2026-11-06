@@ -1236,10 +1236,14 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     const piani = SOC.map((s) => `PF ${s} ${D.base[s] ? nomeFile(D.base[s].file_sorgente) : "—"}`).join(" · ");
     const ancs = SOC.map((s) => D.ancore[s]).filter(Boolean);
     const date = [...new Set(ancs.map((a) => dataIt(a.data)))];
+    // I giorni fra l'ancora e «pagina del»: l'ancora è vecchia per natura (fine mese chiuso) e
+    // nessun presidio la rifiuta; il numero di giorni non lascia che il lettore non se ne accorga.
+    const giorniDa = (iso) => { const g = Math.floor((new Date(String(D.generato_il).slice(0, 10)) - new Date(String(iso).slice(0, 10))) / 86400000); return Number.isFinite(g) ? `${g} giorni` : ""; };
     const quando = date.length <= 1 ? (date[0] || "—") : SOC.map((s) => `${s} ${D.ancore[s] ? dataIt(D.ancore[s].data) : "—"}`).join(", ");
+    const giorni = date.length <= 1 ? (ancs[0] ? giorniDa(ancs[0].data) : "") : SOC.map((s) => (D.ancore[s] ? `${s} ${giorniDa(D.ancore[s].data)}` : "")).filter(Boolean).join(", ");
     const stati = ancs.map(statoAncora);
     const statoSaldi = !stati.length || stati.includes("non_registrato") ? "non registrati" : stati.every((x) => x === "attestato") ? "attestati" : "dichiarati";
-    el("sub").textContent = `da ${piani} · saldi al ${quando} (${statoSaldi}) · pagina del ${oraDi(D.generato_il)}`;
+    el("sub").textContent = `da ${piani} · saldi al ${quando} (${statoSaldi}${giorni ? `, ${giorni}` : ""}) · pagina del ${oraDi(D.generato_il)}`;
     // Oltre 12 mesi di PF dall'ancora la curva non è più una previsione: lo dice in testa.
     const hPf = Math.max(...SOC.map((s) => hDi(s, ULTIMO_PF)));
     let c = el("cornice");
