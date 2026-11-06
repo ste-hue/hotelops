@@ -1510,7 +1510,8 @@ def test_prima_riga_della_pagina_tre_eta_in_ordine_e_niente_snapshot():
     # Il mese del piano viene dall'ancora (il dato), non dal nome del file; la quota attestata
     # per società accompagna «dichiarati».
     assert "FORMATO.meseLungo(D.ancore[s].data) : FORMATO.meseDelPiano(f)" in html
-    assert "${statoSaldi}${quota}${giorni" in riga and "quadra con i movimenti" in html
+    assert "${statoSaldi}${quota ? `: ${quota}` : \"\"}${giorni" in riga
+    assert "del saldo quadra con i movimenti (${q.ok} ${q.ok === 1 ? \"conto\" : \"conti\"} su ${q.n})" in html
     assert "const stati = ancs.map(statoAncora)" in html
     assert "snapshot" not in html.lower()
 
@@ -1518,7 +1519,8 @@ def test_prima_riga_della_pagina_tre_eta_in_ordine_e_niente_snapshot():
 def test_giorni_in_parole_mese_dall_ancora_e_quota_attestata(tmp_path):
     # «1 giorni» il primo del mese e «−55 giorni» con un'ancora nel futuro non si stampano;
     # «piano ORTI di settembre»: il mese viene dalla data dell'ancora, non dal nome del file;
-    # la quota «quadra con i movimenti» è pesata sugli importi dei conti (ORTI 300 su 500 = 60%).
+    # la quota «quadra con i movimenti» ha UN peso, l'importo (ORTI: 300 attestati su 500 = 60%);
+    # il conteggio dei conti è il dettaglio (1 conto su 2); a importi tutti zero la quota è null.
     html = render_html(build_payload(snapshot_sintetico(), []))
     out = esegui_node_formato(
         tmp_path,
@@ -1534,5 +1536,8 @@ def test_giorni_in_parole_mese_dall_ancora_e_quota_attestata(tmp_path):
         "oggi", "1 giorno", "2 giorni", "37 giorni", "", "",
         "settembre", "gennaio", "", "",
         "settembre", "",
-        60, 100, None, 50,
+        {"quota": 60, "ok": 1, "n": 2},
+        {"quota": 100, "ok": 1, "n": 1},
+        None,
+        {"quota": None, "ok": 1, "n": 2},
     ]
