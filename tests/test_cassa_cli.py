@@ -321,3 +321,30 @@ def test_dettaglio_mese_mostra_quello_che_il_motore_conta(home):
         "ORTI"
     ]
     assert pf["sostituiti"] == []
+
+
+def test_la_modifica_canone_riscrive_solo_l_anno_che_nomina():
+    # Un calendario stagionale (il calendario di un anno vince sulle rate, motore
+    # `flussi_canone`) non va azzerato da `canone: NxRATA@YYYY-MM`: la modifica
+    # riscrive l'anno che nomina (lì contano le rate) e lascia gli altri come sono.
+    doc = {
+        "scenario": {
+            "canone": {
+                "netto_per_anno": {"2026": 11_111_100, "2027": 22_222_200},
+                "rate_n": 3,
+                "da_mese": "2026-06",
+                "calendario": {
+                    "2026-06": 3_333_300,
+                    "2026-09": 7_777_800,
+                    "2027-04": 1_111_100,
+                    "2027-08": 2_222_200,
+                },
+                "aliquota_iva": 10,
+            }
+        }
+    }
+    cc.applica(doc, "canone: 3x111111@2027-06")
+    c = doc["scenario"]["canone"]
+    assert c["netto_per_anno"] == {"2026": 11_111_100, "2027": 33_333_300}
+    assert (c["rate_n"], c["da_mese"], c["aliquota_iva"]) == (3, "2027-06", 10)
+    assert c["calendario"] == {"2026-06": 3_333_300, "2026-09": 7_777_800}

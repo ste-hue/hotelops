@@ -350,12 +350,19 @@ def applica(doc: dict, modifica: str) -> None:
         n, rata, da = int(m[1]), M.to_cent(m[2].replace(",", ".")), m[3]
         if n < 1:
             raise ErroreCassa("canone: almeno una rata")
+        # Riscrive solo l'anno che nomina: netti e calendario degli altri anni restano
+        # (nel motore il calendario di un anno vince sulle rate, quindi quello
+        # dell'anno nominato va tolto, altrimenti la modifica non conta).
+        prima = sc.get("canone") or {}
+        cal = {
+            m: v for m, v in (prima.get("calendario") or {}).items() if m[:4] != da[:4]
+        }
         sc["canone"] = {
-            "netto_per_anno": {da[:4]: n * rata},
+            "netto_per_anno": {**prima.get("netto_per_anno", {}), da[:4]: n * rata},
             "rate_n": n,
             "da_mese": da,
-            "calendario": None,
-            "aliquota_iva": (sc.get("canone") or {}).get("aliquota_iva", 22),
+            "calendario": cal or None,
+            "aliquota_iva": prima.get("aliquota_iva", 22),
         }
     elif tipo in ("accendi", "spegni"):
         progetti = [p for p in sc.get("progetti") or [] if p["id"] == arg]
