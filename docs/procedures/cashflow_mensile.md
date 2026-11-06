@@ -80,9 +80,9 @@ giorno del mese che stai chiudendo, non si parte**, si chiede un export nuovo. N
    scadenziario e controlla che la ragione sociale in alto sia quella della società che stai
    chiudendo**: l'export «ORTI» può contenere INTUR. Sotto, l'app scrive quanti fornitori ha letto
    e i mesi che copre: la riga non deve essere vuota.
-4. **Ultimo mese con saldi banca certificati**: il numero del mese che chiudi (per il PF di
-   ottobre si mette **9**, settembre; per il PF di novembre si mette 10). **Anno**: quello del
-   mese chiuso.
+4. **Ultimo mese con saldi banca certificati**: il numero del mese che stai chiudendo: se chiudi
+   settembre, **9**; se ottobre, **10**. È lo stesso mese che finisce nel nome del file (A7).
+   **Anno**: quello del mese chiuso.
 5. **Saldi banca al cutover** (il campo si chiama così: vuol dire alla data di chiusura, l'ultimo
    giorno del mese chiuso): un campo per conto, già compilato se i saldi sono nel sistema.
    Confrontali con il tuo foglio; se un numero non torna, correggi a mano.
