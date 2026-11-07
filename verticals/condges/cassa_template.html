@@ -1284,6 +1284,8 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     el("scenario").innerHTML = `<div class="strumenti" style="margin-top:0"><label class="piccolo">Scenario <select id="sel-scenari"></select></label>
       <input type="text" id="nome-scenario" class="nome" style="width:180px" placeholder="nome scenario">
       <label class="piccolo" title="avviso, non soglia: il giallo «ci stiamo avvicinando»; il confine resta zero">Avviso € <input type="text" class="eur" id="avviso"></label>
+      <span class="piccolo" id="avviso-glossa">Campanello nostro: i mesi sotto questa cifra si colorano di giallo. <strong>Il limite vero è zero.</strong></span>
+      <span class="piccolo avviso" id="avviso-zero" hidden>Se il campo «Avviso €» è a zero, il giallo non compare mai: vuol dire che nessuno ha messo un campanello, <strong>non</strong> che siamo lontani dal fondo.</span>
       <button id="esporta" class="primario" title="il file .json dello scenario: si riapre con «Apri scenario»">Salva scenario (.json)</button>
       <button id="esporta-excel" title="un file con nove fogli dello scenario in vista: minimi, saldi mese per mese, calendario, canone, progetti, finanziamenti, voci corrette, PF, fonti">Excel (.xlsx)</button>
       <button id="importa">Apri scenario (.json)</button><input type="file" id="importa-file" accept=".json,application/json" hidden>
@@ -1319,7 +1321,9 @@ if (typeof module !== "undefined") module.exports = EXCEL;
     el("nome-scenario").value = stato.nome;
     el("nome-scenario").oninput = (e) => { stato.nome = e.target.value; stato.scenario.nome = e.target.value; };
     el("avviso").value = fmt(stato.scenario.soglia || 0, false);
-    el("avviso").onchange = (e) => { const v = euroDa(e.target); if (v === null) return; stato.scenario.soglia = v; ricalcola(); };
+    // La clausola dello zero: senza campanello il giallo non compare mai, e non è una buona notizia.
+    el("avviso-zero").hidden = !!stato.scenario.soglia;
+    el("avviso").onchange = (e) => { const v = euroDa(e.target); if (v === null) return; stato.scenario.soglia = v; el("avviso-zero").hidden = !!v; ricalcola(); };
     el("esporta").onclick = esporta;
     el("esporta-excel").onclick = esportaExcel;
     el("importa").onclick = () => el("importa-file").click();
@@ -1713,7 +1717,7 @@ if (typeof module !== "undefined") module.exports = EXCEL;
       const m = ris.minimi[soc], b = D.baseline.minimi[soc], a = D.ancore[soc];
       const delta = m.saldo - b.saldo;
       const usc = Object.entries(vociMese(soc, m.mese).U).sort((x, y) => y[1] - x[1]).slice(0, 3);
-      const sotto = m.sotto_soglia.length ? `<div class="piccolo avviso">${stato.scenario.soglia ? `sotto l'avviso di ${fmt(stato.scenario.soglia, false)} €` : "sotto zero"} ${intervalloMesi(m.sotto_soglia)}</div>` : "";
+      const sotto = m.sotto_soglia.length ? `<div class="piccolo avviso">${stato.scenario.soglia ? `sotto l'avviso di ${fmt(stato.scenario.soglia, false)} €` : "sotto zero (nessun campanello: Avviso € a zero)"} ${intervalloMesi(m.sotto_soglia)}</div>` : "";
       const eff = IPO.size ? effettoOltrePF(soc) : 0;
       const oltre = IPO.size ? `<div class="oltre">oltre ${meseIt(ULTIMO_PF)}, senza PF: ${eff ? `leve ${segno(eff, false)} entro ${meseIt(ULTIMO)}` : "nessuna leva"}</div>` : "";
       // La card dà la risposta: società, mese critico, il numero, lo scostamento dal solo PF, e il

@@ -1556,3 +1556,16 @@ def test_la_pagina_dice_avviso_mai_soglia_e_il_js_ha_lo_stesso_default(tmp_path)
     assert "sotto l'avviso di" in html and "mesi sotto l'avviso" in html and "sotto zero" in html
     assert esegui_node_fn(tmp_path, html, "M.AVVISO_CENT") == "5000000"
     assert esegui_node_fn(tmp_path, html, "M.normalizza({nome:'x',progetti:[],finanziamenti:[],manuali:[]}).soglia") == "5000000"
+
+
+def test_glossa_del_campanello_e_clausola_dello_zero_in_pagina():
+    # Dalla bozza di knowledge (07/11): la documentazione del campo sta accanto al campo; e un
+    # «Avviso €» a zero non è una buona notizia: il giallo non compare mai perché nessuno
+    # ha messo un campanello.
+    html = render_html(build_payload(snapshot_sintetico(), []))
+    assert "Campanello nostro: i mesi sotto questa cifra si colorano di giallo." in html
+    assert "Il limite vero è zero." in html
+    assert 'id="avviso-zero" hidden' in html
+    assert "il giallo non compare mai: vuol dire che nessuno ha messo un campanello" in html
+    assert 'el("avviso-zero").hidden = !!stato.scenario.soglia' in html
+    assert "nessun campanello: Avviso € a zero" in html
