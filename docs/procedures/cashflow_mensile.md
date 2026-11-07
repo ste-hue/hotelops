@@ -57,8 +57,9 @@ Il giorno 1 del mese nuovo, o subito dopo. Se manca un pezzo (un saldo, uno scad
 dice e si aspetta: non si parte con i numeri del mese prima.
 
 ### A2. Il foglio «Saldi Banca Fine Mese»
-Nel foglio su Drive, la colonna del mese appena chiuso va compilata per **tutti e sette i conti**:
-ORTI Intesa, MPS, MPS Kross, Unicredit; INTUR Sella, MPS, Intesa. BCP è chiuso e resta fuori.
+Nel foglio su Drive, la colonna del mese appena chiuso va compilata per **tutti i conti
+dell'elenco** (oggi: ORTI Intesa, MPS, MPS Kross, Unicredit; INTUR Sella, MPS, Intesa; BCP è
+chiuso e resta fuori). Se un conto nuovo entra nell'elenco, entra anche qui.
 **Un conto senza numero non è zero**: se un estratto non c'è ancora, la cella resta vuota e lo si
 scrive a Stefano. **Il numero è il saldo dell'ultimo giorno del mese chiuso**, non di quando lo
 guardi: se l'estratto è del 3 novembre, il saldo del 31 ottobre è un'altra riga. Non copiare un
@@ -80,9 +81,10 @@ giorno del mese che stai chiudendo, non si parte**, si chiede un export nuovo. N
    scadenziario e controlla che la ragione sociale in alto sia quella della società che stai
    chiudendo**: l'export «ORTI» può contenere INTUR. Sotto, l'app scrive quanti fornitori ha letto
    e i mesi che copre: la riga non deve essere vuota.
-4. **Ultimo mese con saldi banca certificati**: il numero del mese che stai chiudendo: se chiudi
-   settembre, **9**; se ottobre, **10**. È lo stesso mese che finisce nel nome del file (A7).
-   **Anno**: quello del mese chiuso.
+4. **Ultimo mese con saldi banca certificati**: il numero del mese che stai chiudendo. Se il
+   file che hai caricato ha i saldi al 30/09, stai chiudendo **ottobre**, quindi **10**: è il
+   mese che finirà nel nome del file che stai per produrre (A7), **non** di quello caricato.
+   **Anno**: quello del mese che stai chiudendo.
 5. **Saldi banca al cutover** (il campo si chiama così: vuol dire alla data di chiusura, l'ultimo
    giorno del mese chiuso): un campo per conto, già compilato se i saldi sono nel sistema.
    Confrontali con il tuo foglio; se un numero non torna, correggi a mano.
@@ -119,9 +121,10 @@ ottobre INTUR). Quindi: apri il file, guarda che «Piano Finanziario» e «Contr
 zero, il salvataggio non ha preso** e si rifà.
 
 ### A7. Su Drive con il nome pulito
-Rinomina il file in `ORTI_PF_AAAA-MM.xlsx` (per INTUR uguale, con INTUR): il mese nel nome è il
-**mese dei saldi**, cioè l'ultimo mese chiuso (saldi al 30/09 → `..._2026-09`; deciso il 4/11/2026,
-prima era il mese nuovo). Caricalo
+Rinomina il file in `ORTI_PF_AAAA-MM.xlsx` (per INTUR uguale, con INTUR): il mese nel nome è
+quello del **file che produci**, cioè il mese che hai appena chiuso (saldi al 31/10 →
+`..._2026-10`; deciso il 4/11/2026, prima era il mese nuovo). È lo stesso numero che hai
+messo al punto 4 di A3. Caricalo
 nella cartella «PIANI FINAZIARI › 2026» su Drive, accanto a quelli del mese prima.
 
 ### A8. Dire che è pronto
