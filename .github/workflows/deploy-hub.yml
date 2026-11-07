@@ -60,6 +60,16 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    # Una sola sede per la forma del servizio. Il passo di rilascio la applica e
+    # il passo di rilettura la verifica leggendo LE STESSE variabili: se stessero
+    # scritte due volte, il giorno che una cambia il controllo confronterebbe la
+    # propria copia e non verificherebbe piu' niente, in silenzio.
+    env:
+      HUB_MEMORIA: 2Gi
+      HUB_CPU: "2"
+      HUB_TIMEOUT: "300"
+      HUB_MIN_ISTANZE: "0"
+      HUB_AFFINITA: "si"
     steps:
       - uses: actions/checkout@v4
 
@@ -103,13 +113,77 @@ jobs:
           echo "  gcloud run services update-traffic hotelops-hub --project=hotelops-suite --region=europe-west1 --to-revisions=${REV}=100"
           echo "ROLLBACK_REVISION=${REV}" >> "$GITHUB_ENV"
 
+      # La forma del servizio e' DICHIARATA qui, non ereditata dal servizio vivo.
+      # `gcloud run deploy` non riazzera cio' che non gli passi: eredita dalla
+      # revisione corrente. Lo dice l'esistenza stessa dei `--clear-*`, che
+      # servirebbero a nulla se l'omissione valesse «default». Quindi finche'
+      # nessuno ricrea il servizio, le impostazioni messe a mano sopravvivono --
+      # e questo e' il problema, non la rassicurazione: vivono SOLO come stato
+      # del servizio. Non stanno in nessun file, nessuna PR le mostra, nessuno
+      # le rivede, e il giorno che il servizio viene ricreato o riscritto in
+      # forma dichiarativa (`gcloud run services replace`) tornano ai default
+      # -- 512Mi, 1 cpu, 300s, min 0, nessuna affinita' -- in silenzio.
+      #
+      # memoria / cpu / affinita' di sessione: valori messi a mano su Cloud Run
+      # il 3/11/2026 (rev 00102-lc6). Sono RIFERITI dal coordinatore e NON
+      # misurati da questo ramo: il token gcloud su tong e' scaduto il 6/11 e
+      # `gcloud run services describe hotelops-hub` risponde «Reauthentication
+      # failed». Non sono un'ipotesi: sono il rimedio che ha gia' funzionato in
+      # produzione per mano di chi ha visto l'hub non aprirsi. Qui vengono solo
+      # scritti dove si rivedono.
+      #
+      # timeout e min-instances: nessuno li ha messi a mano, quindi questi sono
+      # i default di oggi -- dichiarati, non cambiati. Se il sintomo «non apre»
+      # e' l'avvio a freddo, il rimedio e' `--min-instances=1`, che tiene
+      # un'istanza sempre accesa e si paga: e' una decisione di Stefano, non di
+      # questa PR. `--min-instances` e' per-revisione (immutabile sulla
+      # revisione); `--min`, nello stesso gcloud, e' la soglia di servizio
+      # modificabile a caldo: se un giorno la si vuole alzare senza rilasciare,
+      # e' quella l'altra bandiera, non questa.
       - name: Deploy hotelops-hub
         run: |
+          # L'affinita' e' una bandiera booleana, non un valore: qui prende la
+          # sua forma negativa invece di essere omessa, perche' `--no-session-
+          # affinity` dichiara una scelta e l'omissione dichiara un'eredita'.
+          AFFINITA=--no-session-affinity
+          if [ "$HUB_AFFINITA" = "si" ]; then AFFINITA=--session-affinity; fi
           gcloud run deploy hotelops-hub \
             --project=hotelops-suite --region=europe-west1 \
             --source=. \
             --service-account=hotelops-hub@hotelops-suite.iam.gserviceaccount.com \
+            --memory="$HUB_MEMORIA" \
+            --cpu="$HUB_CPU" \
+            --timeout="$HUB_TIMEOUT" \
+            --min-instances="$HUB_MIN_ISTANZE" \
+            "$AFFINITA" \
             --labels=commit-sha=${GITHUB_SHA::12}
+
+      # Una bandiera pinnata che nessuno rilegge e' una promessa, non una misura:
+      # questo passo rilegge la forma APPLICATA e la confronta con quella chiesta
+      # sopra, dalle stesse variabili. Il confronto e' codice con test
+      # (`tests/test_forma_servizio_hub.py`, girato dalla suite su questo stesso
+      # SHA dal cancello qui sopra), non un `test "$X" = "$Y"` scritto nel YAML:
+      # `minScale` ASSENTE vuol dire zero, non «sconosciuto», e un controllo
+      # ingenuo fallirebbe sul campo giusto per la ragione sbagliata.
+      #
+      # Modo `osserva`: stampa e NON fa fallire il rilascio. I percorsi JSON del
+      # lettore non sono ancora stati verificati su un payload vero -- al 6/11/2026
+      # il token gcloud su tong e' scaduto -- quindi un rosso qui potrebbe essere
+      # del lettore e non del servizio, e un rosso falso nell'unico percorso che
+      # pubblica costa quanto un verde falso. Quando una lettura vera conferma i
+      # percorsi: `--modo pretendi`, ed e' una parola.
+      - name: Rileggi la forma applicata (memoria, cpu, timeout, min, affinita')
+        run: |
+          python3 -m scripts.cloud.forma_servizio confronta \
+            --servizio hotelops-hub \
+            --progetto hotelops-suite \
+            --regione europe-west1 \
+            --memoria "$HUB_MEMORIA" \
+            --cpu "$HUB_CPU" \
+            --timeout "$HUB_TIMEOUT" \
+            --min-istanze "$HUB_MIN_ISTANZE" \
+            --affinita "$HUB_AFFINITA" \
+            --modo osserva
 
       - name: Verify IAP gate still closed (expect 302)
         run: |
