@@ -334,6 +334,16 @@ versioni» con il file PF nuovo, i saldi di partenza alla data di fine N, i mesi
 «senza PF» e i mesi vuoti come «non pianificati». I file locali accanto al seme (`pf_corretto.json`,
 `canone_dichiarato.json`, `banda_pf.json`) non stanno nel repository: si portano a mano.
 
+**Il giallo (deciso il 06/11/2026: avviso a 50.000 €).** Il campo «Avviso €» della pagina è un
+campanello nostro: i mesi sotto quella cifra si colorano di giallo. **Il limite vero è zero.** Dove
+compare lo stato «AVVISO» (chiusura mensile a video, tesoreria, Excel della tesoreria, app CdG,
+viste `stato_liquidita` su BigQuery) vuol dire che il saldo previsto del mese è sotto il campanello,
+**non** sotto zero: è un avviso, non un blocco. Sotto zero è un'altra cosa e si chiama «sotto zero».
+**Se il campo «Avviso €» è a zero, il giallo non compare mai**: vuol dire che nessuno ha messo un
+campanello, non che siamo lontani dal fondo; i seed salvati prima del 06/11 hanno zero finché chi
+pubblica non scrive 50.000 nel seme. Rosa, nell'app Cashflow (sezione A), questo giallo non lo vede:
+per questo la riga sta qui e non in A.
+
 ---
 
 ## Limitazioni note (aggiornate 2026-11-03)
