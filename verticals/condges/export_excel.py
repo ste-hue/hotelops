@@ -159,7 +159,7 @@ def _build_cashflow_sheet(
                 if value == "PERICOLO":
                     data_cell.font = FONT_DANGER
                     data_cell.fill = FILL_DANGER
-                elif value == "ATTENZIONE":
+                elif value in ("AVVISO", "ATTENZIONE"):  # «ATTENZIONE»: righe di prima del 06/11/2026
                     data_cell.font = _FONT_WARN
                     data_cell.fill = _FILL_WARNING
                 else:

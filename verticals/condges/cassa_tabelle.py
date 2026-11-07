@@ -182,7 +182,7 @@ def tabelle(payload: dict, documento: dict | None = None) -> dict[str, Tabella]:
     )
 
     t["minimi"] = (
-        ["scenario", "societa", "mese_critico", "saldo_minimo", "mesi_sotto_soglia"],
+        ["scenario", "societa", "mese_critico", "saldo_minimo", "mesi_sotto_avviso"],
         [
             [et, s, m.mese, m.saldo, " ".join(m.sotto_soglia)]
             for et, ris in (("solo PF", base), (nome, scen))

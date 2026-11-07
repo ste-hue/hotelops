@@ -63,7 +63,7 @@ def test_ok_stato():
 
 
 def test_attenzione_stato():
-    """saldo between 0 and 50k → ATTENZIONE."""
+    """saldo between 0 and 50k → AVVISO."""
     rows = project_cashflow(
         saldo_iniziale=0,
         mese_inizio=6,
@@ -73,7 +73,7 @@ def test_attenzione_stato():
     )
     assert len(rows) == 1
     assert rows[0].saldo_fine == 20_000
-    assert rows[0].stato == "ATTENZIONE"
+    assert rows[0].stato == "AVVISO"
 
 
 def test_fornitori_added_to_uscite():
@@ -112,7 +112,7 @@ def test_missing_months_default_to_zero():
 
 
 def test_saldo_boundary_exactly_50k_is_attenzione():
-    """saldo_fine exactly 50_000 → ATTENZIONE (< 50k check is strict)."""
+    """saldo_fine exactly 50_000 → AVVISO (< 50k check is strict)."""
     rows = project_cashflow(
         saldo_iniziale=0,
         mese_inizio=7,
@@ -121,7 +121,7 @@ def test_saldo_boundary_exactly_50k_is_attenzione():
         mese_fine=7,
     )
     assert rows[0].saldo_fine == 50_000
-    assert rows[0].stato == "ATTENZIONE"
+    assert rows[0].stato == "AVVISO"
 
 
 def test_saldo_just_above_50k_is_ok():
@@ -135,3 +135,14 @@ def test_saldo_just_above_50k_is_ok():
     )
     assert rows[0].saldo_fine == 50_001
     assert rows[0].stato == "OK"
+
+
+def test_l_avviso_e_una_costante_dichiarata_non_una_soglia():
+    # «avviso» (giallo, ci stiamo avvicinando) ≠ «soglia» (il confine, zero): una sede sola,
+    # letta dalle altre superfici (chiusura mensile, tesoreria, app CdG).
+    from verticals.condges.cashflow import AVVISO_EURO, _semaphore
+
+    assert AVVISO_EURO == 50_000
+    assert _semaphore(-1) == "PERICOLO"
+    assert _semaphore(0) == "AVVISO" and _semaphore(AVVISO_EURO) == "AVVISO"
+    assert _semaphore(AVVISO_EURO + 1) == "OK"

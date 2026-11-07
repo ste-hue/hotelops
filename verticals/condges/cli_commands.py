@@ -603,10 +603,12 @@ def cmd_chiudi(args):
         netto = (r["entrate_prev"] or 0) - (r["uscite_prev"] or 0)
         saldo_running += netto
         fwd_anno = r.get("fwd_anno", anno)
+        from verticals.condges.cashflow import AVVISO_EURO
+
         danger = (
-            " ⛔ PERICOLO"
+            " ⛔ PERICOLO (sotto zero)"
             if saldo_running < 0
-            else (" ⚠ ATTENZIONE" if saldo_running < 50000 else "")
+            else (f" ⚠ AVVISO (sotto l'avviso di {AVVISO_EURO:,})" if saldo_running < AVVISO_EURO else "")
         )
         print(
             f"    Mese {r['mese']:02d}/{fwd_anno}: entrate {fmt_eur(r['entrate_prev'])} - uscite {fmt_eur(r['uscite_prev'])} = netto {fmt_eur(netto)} → saldo {fmt_eur(saldo_running)}{danger}"

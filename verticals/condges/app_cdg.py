@@ -23,6 +23,7 @@ import streamlit as st
 from io import BytesIO
 
 from core import config as cfg
+from verticals.condges.cashflow import AVVISO_EURO
 from verticals.condges.cdg_engine import compute_ce_cascade, compute_indicatori
 
 MESI_NOMI = [
@@ -866,7 +867,7 @@ def page_tesoreria(
         if isinstance(val, (int, float)):
             if val < 0:
                 return "background-color: #fecaca; color: #991b1b"
-            elif val < 50000:
+            elif val < AVVISO_EURO:  # sotto l'avviso (giallo), non sotto zero
                 return "background-color: #fef9c3; color: #854d0e"
         return ""
 
@@ -939,13 +940,14 @@ def page_tesoreria(
 
     # Danger zone
     fig.add_hline(y=0, line_dash="dot", line_color="red", opacity=0.5, yref="y2")
+    # Scelta di disegno (PR avviso): la linea resta, con la parola e il numero scritti accanto.
     fig.add_hline(
-        y=50000,
+        y=AVVISO_EURO,
         line_dash="dot",
-        line_color="orange",
-        opacity=0.3,
+        line_color="gold",
+        opacity=0.5,
         yref="y2",
-        annotation_text="soglia attenzione 50K",
+        annotation_text=f"avviso {AVVISO_EURO:,.0f} €",
         annotation_position="bottom right",
     )
 
@@ -977,9 +979,10 @@ def page_tesoreria(
         st.error(
             f"PERICOLO: saldo negativo a {min_mese} ({min_saldo:,.0f} \u20ac). Necessario intervento."
         )
-    elif min_saldo < 50000:
+    elif min_saldo < AVVISO_EURO:
         st.warning(
-            f"ATTENZIONE: saldo minimo {min_saldo:,.0f} \u20ac a {min_mese}. Margine ridotto."
+            f"Avviso: saldo minimo {min_saldo:,.0f} \u20ac a {min_mese}, "
+            f"sotto l'avviso di {AVVISO_EURO:,.0f} \u20ac (ci stiamo avvicinando)."
         )
     else:
         st.success(f"Liquidita OK: saldo minimo {min_saldo:,.0f} \u20ac a {min_mese}.")
